@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/optional.h"
 #include "base/strings/string_piece.h"
 
 namespace base {
@@ -31,11 +30,11 @@ constexpr size_t PathTypeCount = static_cast<size_t>(PathType::kLastType) + 1;
 
 // Parse the path component of chrome://vivaldi-data/ URLs. Typically it is
 // /type/data, but there are few older formats that deviates from it.
-base::Optional<PathType> ParsePath(base::StringPiece path,
+absl::optional<PathType> ParsePath(base::StringPiece path,
                                    std::string* data = nullptr);
 
 // Parse the full url.
-base::Optional<PathType> ParseUrl(base::StringPiece url,
+absl::optional<PathType> ParseUrl(base::StringPiece url,
                                   std::string* data = nullptr);
 
 std::string GetPathMimeType(base::StringPiece path);

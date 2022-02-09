@@ -71,7 +71,16 @@ enum class ProfileKeepAliveOrigin {
   // A DevTools window is open.
   kDevToolsWindow = 14,
 
-  kMaxValue = kDevToolsWindow,
+  // A web app permission dialog window is open.
+  kWebAppPermissionDialogWindow = 15,
+
+  // Data for Clear on Exit is being deleted.
+  kSessionDataDeleter = 16,
+
+  // Waiting for the provider to be ready in protocol handler web app launch.
+  kWebAppProtocolHandlerLaunch = 17,
+
+  kMaxValue = kWebAppProtocolHandlerLaunch,
 };
 
 std::ostream& operator<<(std::ostream& out,

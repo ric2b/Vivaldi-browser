@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Odoslať odkaz prostredníctvom pošty</translation>
 <translation id="1454726940098520109">Nepýtať sa znova</translation>
 <translation id="1462666970065907900">Naozaj chcete zatvoriť toto okno?</translation>
+<translation id="1480046233931937785">Autorské práva</translation>
 <translation id="1526344461589023948">Počas uloženia stiahnutej aktualizácie došlo k chybe. Skontrolujte si prosím, či váš počítač disponuje dostatkom ukladacieho priestoru a skúste to znova neskôr.</translation>
 <translation id="1657174850639146440">Zlostník (Príšerka 9)</translation>
 <translation id="1676595396635191120">Nové súkromné okno</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Otvoriť v novom liste</translation>
 <translation id="3027988479108856431">Ľutujeme, nastavenia prehliadača Yandex nie sú k dispozícii, kým je tento prehliadač otvorený. Ak chcete importovať tieto nastavenia do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná prehliadača Yandex. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="3084011186245865060">Potok (Krajina 6)</translation>
+<translation id="3093931836425623631">Prehliadač Vivaldi je vytvorený pomocou open source kódu projektu Chromium a iných softvérov typu open source.</translation>
 <translation id="3127383884976966729">Panda (Zviera 7)</translation>
 <translation id="3156398087075132709">Nová záložka</translation>
 <translation id="3255747772218936245">Nainštalovať aktualizáciu</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Noc v horách (Krajina 7)</translation>
 <translation id="7111492742514999492">Veterný mlyn (Krajina 9)</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Prehliadač Vivaldi dokázal vzniknúť vďaka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source projektu a ďalšiemu <ph name="BEGIN_LINK_OSS" /> open source softvéru<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Chyba pri spustení inštalátora aktualizácie. Skontrolujte si prosím, či váš počítač disponuje dostatočným ukladacím priestorom alebo ukladacou pamäťou a skúste to znova neskôr.</translation>
 <translation id="7658239707568436148">Zrušiť</translation>
 <translation id="7715497554424665066">&amp;Odmietnuť aktualizáciu</translation>

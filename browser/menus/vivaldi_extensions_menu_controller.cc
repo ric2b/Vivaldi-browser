@@ -28,9 +28,9 @@ void ExtensionsMenuController::Populate(ui::SimpleMenuModel* menu_model,
     const extensions::Extension* extension,
     content::WebContents* source_web_contents,
     std::u16string printable_selection_text,
-    const base::Callback<bool(const extensions::MenuItem*)>& filter ) {
+    base::RepeatingCallback<bool(const extensions::MenuItem*)> filter ) {
   extension_items_.reset(new extensions::ContextMenuMatcher(
-      rv_context_menu_->GetBrowserContext(), delegate, menu_model, filter));
+      rv_context_menu_->GetBrowserContext(), delegate, menu_model, std::move(filter)));
   AppendAllExtensionItems(printable_selection_text);
   AppendCurrentExtensionItems(extension, source_web_contents,
       printable_selection_text);

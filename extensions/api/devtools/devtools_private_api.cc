@@ -114,8 +114,9 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
 
   PanelType panelType = params->panel_type;
 
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-      dispatcher()->GetAssociatedWebContents());
+  // Note this is always called via an action where the last active browser
+  // makes the most sense.
+  Browser* browser = BrowserList::GetInstance()->GetLastActive();
   content::WebContents* current_tab =
       browser->tab_strip_model()->GetActiveWebContents();
   DevToolsWindow* window =

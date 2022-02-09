@@ -20,7 +20,7 @@ class WebContents;
 }  // namespace content
 
 namespace base {
-class ListValue;
+class Value;
 class Time;
 }  // namespace base
 
@@ -39,12 +39,11 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
 Browser* FindVivaldiBrowser();
 
 void BroadcastEvent(const std::string& eventname,
-                    std::unique_ptr<base::ListValue> args,
+                    std::vector<base::Value> args,
                     content::BrowserContext* context);
 
-void BroadcastEventToAllProfiles(
-    const std::string& eventname,
-    std::unique_ptr<base::ListValue> args = nullptr);
+void BroadcastEventToAllProfiles(const std::string& eventname,
+                                 std::vector<base::Value> args = {});
 
 // Return number of milliseconds for time
 double MilliSecondsFromTime(const base::Time& time);

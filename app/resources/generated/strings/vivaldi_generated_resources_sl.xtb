@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Izhod iz celozaslonskega načina</translation>
 <translation id="2177950615300672361">Zavihek za način brez beleženja zgodovine: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul »Native Client«: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Skrij gumb</translation>
 <translation id="2218515861914035131">Prilepi kot navadno besedilo</translation>
 <translation id="2249605167705922988">npr. 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Dovoli identifikatorje za zaščiteno vsebino (morda je potreben ponovni zagon računalnika)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Vnaprejšnje upodabljanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Izberite korenski imenik razširitve, ki jo želite zapakirati. Če želite posodobiti razširitev, izberite tudi datoteko z zasebnim ključem, ki jo želite znova uporabiti.</translation>
-<translation id="3266179261140759675">Zaprtim spletnim mestom prepreči pošiljanje in prejemanje podatkov</translation>
 <translation id="3280237271814976245">Shrani &amp;kot ...</translation>
 <translation id="3285322247471302225">Nov &amp;zavihek</translation>
 <translation id="3288047731229977326">Razširitve, ki se izvajajo v razvijalskem načinu, lahko škodijo vašemu računalniku. Če niste razvijalec, zaradi varnosti onemogočite razširitve, ki se izvajajo v razvijalskem načinu.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Lahko bere in spreminja podatke spletnega mesta</translation>
 <translation id="3560034655160545939">&amp;Preverjanje črkovanja</translation>
 <translation id="3574917942258583917">Ali želite vseeno zapustiti način brez beleženja zgodovine?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; želi souporabljati tiskalnik &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; s skupino v vaši lasti: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Če sprejmete, bodo lahko tiskalnik uporabljali vsi člani skupine.</translation>
 <translation id="3587482841069643663">Vse</translation>
 <translation id="3627588569887975815">Odpri povezavo v oknu brez bele&amp;ženja zgodovine</translation>
 <translation id="3627879631695760395">Namesti <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Kontrolniki</translation>
 <translation id="3678156199662914018">Razširitev: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Zahteva za skupno rabo zaslona aplikacije <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Ne dovoli, da zaprta spletna mesta dokončajo pošiljanje ali prejemanje podatkov</translation>
 <translation id="3711931198657368127">Pr&amp;ilepi in pojdi na <ph name="URL" /></translation>
 <translation id="3727187387656390258">Preveri pojavna okna</translation>
 <translation id="3744111561329211289">Sinhroniziranje v ozadju</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Ustvarjena je bila ta razširitev:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Sprejmi za skupino</translation>
 <translation id="4096508467498758490">Onemogočanje razširitev za razvijalski način</translation>
 <translation id="4100839878934973028">Drug program v računalniku je dodal aplikacijo, ki lahko spremeni način delovanja Chroma.</translation>
 <translation id="4109898769411476438">Pred uvozom zaprite brskalnik</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Pokaži podrobnosti</translation>
 <translation id="4907306957610201395">Kategorija dovoljenj</translation>
 <translation id="4912643508233590958">Prekinitev mirovanja</translation>
-<translation id="4918086044614829423">Sprejmi</translation>
 <translation id="4927753642311223124">Tu ni ničesar, premik naprej.</translation>
 <translation id="4930714375720679147">Vklop</translation>
 <translation id="4988526792673242964">Strani</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Brisanje podatkov spletnih mest</translation>
 <translation id="6042308850641462728">Več</translation>
 <translation id="6059925163896151826">USB naprave</translation>
-<translation id="6082651258230788217">Prikaži v orodni vrstici</translation>
 <translation id="6086846494333236931">Namesti skrbnik</translation>
 <translation id="6101226222197207147">Nova aplikacija je dodana (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Vaša povezava z internetom je nadzorovana</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simuliraj vnovični zagon brskalnika</translation>
 <translation id="6445450263907939268">Če niste želeli teh sprememb, lahko obnovite prejšnje nastavitve.</translation>
 <translation id="6447842834002726250">Piškotki</translation>
-<translation id="6452181791372256707">Zavrni</translation>
 <translation id="6498249116389603658">&amp;Vsi jeziki</translation>
 <translation id="6503077044568424649">Najpogostejše</translation>
 <translation id="6508261954199872201">Program: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Lahko bere in spreminja podatke spletnega mesta</translation>
 <translation id="708060913198414444">K&amp;opiraj naslov zvočnega zapisa</translation>
 <translation id="7175353351958621980">Naloženo iz:</translation>
-<translation id="7186088072322679094">Obdrži v orodni vrstici</translation>
+<translation id="7186088072322679094">Zadrži v orodni vrstici</translation>
 <translation id="7270858098575133036">Vprašaj, ko spletno mesto želi uporabljati ekskluzivna sporočila sistema za dostop do MIDI naprav</translation>
 <translation id="7287143125007575591">Dostop zavrnjen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Ste pričakovali takšno stran »Nov zavihek«?</translation>
 <translation id="786073089922909430">Storitev: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Nedavni cilji</translation>
-<translation id="7898627924844766532">Obdrži v orodni vrstici</translation>
 <translation id="7903925330883316394">Pripomoček: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Trenutno brez povezave</translation>
 <translation id="7947962633355574091">K&amp;opiraj naslov video posnetka</translation>
@@ -451,7 +444,6 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8725066075913043281">Poskusite znova</translation>
 <translation id="8757090071857742562">Namizja ni mogoče predvajati.  Preverite, ali ste potrdili poziv za začetek skupne rabe zaslona.</translation>
 <translation id="8774934320277480003">Zgornji rob</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; želi z vami souporabljati tiskalnik &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Privzeto</translation>
 <translation id="8800004011501252845">Prikaz ciljev za</translation>
 <translation id="8808478386290700967">Spletna trgovina</translation>

@@ -15,14 +15,14 @@ import org.chromium.chrome.browser.flags.CachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lens.LensFeature;
 import org.chromium.chrome.browser.merchant_viewer.MerchantViewerConfig;
+import org.chromium.chrome.browser.notifications.chime.ChimeFeatures;
 import org.chromium.chrome.browser.page_annotations.PageAnnotationsServiceConfig;
 import org.chromium.chrome.browser.paint_preview.StartupPaintPreviewHelper;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceConfig;
-import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
+import org.chromium.chrome.browser.tasks.tab_management.PriceTrackingUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 
 import java.util.ArrayList;
@@ -65,10 +65,9 @@ public class ChromeCachedFlags {
 
         // clang-format off
         List<String> featuresToCache = Arrays.asList(
-                ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR,
-                ChromeFeatureList.ANDROID_MANAGED_BY_MENU_ITEM,
                 ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE,
                 ChromeFeatureList.APP_MENU_MOBILE_SITE_OPTION,
+                ChromeFeatureList.APP_TO_WEB_ATTRIBUTION,
                 ChromeFeatureList.BOOKMARK_BOTTOM_SHEET,
                 ChromeFeatureList.CCT_INCOGNITO,
                 ChromeFeatureList.CCT_INCOGNITO_AVAILABLE_TO_THIRD_PARTY,
@@ -85,11 +84,15 @@ public class ChromeCachedFlags {
                 ChromeFeatureList.INSTANT_START,
                 ChromeFeatureList.INTEREST_FEED_V2,
                 ChromeFeatureList.LENS_CAMERA_ASSISTED_SEARCH,
+                ChromeFeatureList.NEW_WINDOW_APP_MENU,
+                ChromeFeatureList.OFFLINE_MEASUREMENTS_BACKGROUND_TASK,
+                ChromeFeatureList.OPTIMIZATION_GUIDE_PUSH_NOTIFICATIONS,
                 ChromeFeatureList.PAINT_PREVIEW_DEMO,
                 ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP,
                 ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS,
                 ChromeFeatureList.READ_LATER,
                 ChromeFeatureList.START_SURFACE_ANDROID,
+                ChromeFeatureList.STORE_HOURS,
                 ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT,
                 ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
                 ChromeFeatureList.TAB_GROUPS_ANDROID,
@@ -97,15 +100,14 @@ public class ChromeCachedFlags {
                 ChromeFeatureList.TAB_TO_GTS_ANIMATION,
                 ChromeFeatureList.THEME_REFACTOR_ANDROID,
                 ChromeFeatureList.TOOLBAR_USE_HARDWARE_BITMAP_DRAW,
-                ChromeFeatureList.USE_CHIME_ANDROID_SDK,
-                ChromeFeatureList.OFFLINE_MEASUREMENTS_BACKGROUND_TASK);
+                ChromeFeatureList.USE_CHIME_ANDROID_SDK);
         // clang-format on
         CachedFeatureFlags.cacheNativeFlags(featuresToCache);
         CachedFeatureFlags.cacheAdditionalNativeFlags();
 
         // clang-format off
         List<CachedFieldTrialParameter> fieldTrialsToCache = Arrays.asList(
-                AdaptiveToolbarFeatures.MODE_PARAM,
+                ChimeFeatures.ALWAYS_REGISTER,
                 ConditionalTabStripUtils.CONDITIONAL_TAB_STRIP_INFOBAR_LIMIT,
                 ConditionalTabStripUtils.CONDITIONAL_TAB_STRIP_INFOBAR_PERIOD,
                 ConditionalTabStripUtils.CONDITIONAL_TAB_STRIP_SESSION_TIME_MS,
@@ -120,10 +122,6 @@ public class ChromeCachedFlags {
                 MerchantViewerConfig.TRUST_SIGNALS_SHEET_USE_PAGE_TITLE,
                 PageAnnotationsServiceConfig.PAGE_ANNOTATIONS_BASE_URL,
                 ReturnToChromeExperimentsUtil.TAB_SWITCHER_ON_RETURN_MS,
-                ShoppingPersistedTabData.TIME_TO_LIVE_MS,
-                ShoppingPersistedTabData.DISPLAY_TIME_MS,
-                ShoppingPersistedTabData.STALE_TAB_THRESHOLD_SECONDS,
-                ShoppingPersistedTabData.PRICE_TRACKING_WITH_OPTIMIZATION_GUIDE,
                 StartSurfaceConfiguration.HOME_BUTTON_ON_GRID_TAB_SWITCHER,
                 StartSurfaceConfiguration.NEW_SURFACE_FROM_HOME_BUTTON,
                 StartSurfaceConfiguration.OMNIBOX_FOCUSED_ON_NEW_TAB,
@@ -132,22 +130,18 @@ public class ChromeCachedFlags {
                 StartSurfaceConfiguration.START_SURFACE_HIDE_INCOGNITO_SWITCH_NO_TAB,
                 StartSurfaceConfiguration.START_SURFACE_LAST_ACTIVE_TAB_ONLY,
                 StartSurfaceConfiguration.START_SURFACE_OPEN_NTP_INSTEAD_OF_START,
+                StartSurfaceConfiguration.SHOW_NTP_TILES_ON_OMNIBOX,
                 StartSurfaceConfiguration.START_SURFACE_VARIATION,
-                StartSurfaceConfiguration.START_SURFACE_OMNIBOX_SCROLL_MODE,
                 StartSurfaceConfiguration.SUPPORT_ACCESSIBILITY,
-                StartSurfaceConfiguration.TRENDY_ENABLED,
-                StartSurfaceConfiguration.TRENDY_ENDPOINT,
-                StartSurfaceConfiguration.TRENDY_FAILURE_MIN_PERIOD_MS,
-                StartSurfaceConfiguration.TRENDY_SUCCESS_MIN_PERIOD_MS,
                 StartupPaintPreviewHelper.ACCESSIBILITY_SUPPORT_PARAM,
                 CommerceSubscriptionsServiceConfig.STALE_TAB_LOWER_BOUND_SECONDS,
                 CommerceSubscriptionsServiceConfig.SUBSCRIPTIONS_SERVICE_BASE_URL,
+                PriceTrackingUtilities.ENABLE_PRICE_NOTIFICATION,
+                PriceTrackingUtilities.ENABLE_PRICE_TRACKING,
                 TabContentManager.ALLOW_TO_REFETCH_TAB_THUMBNAIL_VARIATION,
                 TabUiFeatureUtilities.ENABLE_LAUNCH_BUG_FIX,
                 TabUiFeatureUtilities.ENABLE_LAUNCH_POLISH,
                 TabUiFeatureUtilities.ENABLE_SEARCH_CHIP,
-                TabUiFeatureUtilities.ENABLE_PRICE_NOTIFICATION,
-                TabUiFeatureUtilities.ENABLE_PRICE_TRACKING,
                 TabUiFeatureUtilities.ENABLE_SEARCH_CHIP_ADAPTIVE,
                 TabUiFeatureUtilities.ENABLE_TAB_GROUP_AUTO_CREATION,
                 TabUiFeatureUtilities.ZOOMING_MIN_MEMORY,

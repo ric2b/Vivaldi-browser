@@ -7,6 +7,9 @@
 
 #include "content/common/content_export.h"
 
+#include "base/memory/weak_ptr.h"
+#include "components/content/vivaldi_content_delegates.h"
+
 namespace content {
 class OverlayWindow;
 class WebContents;
@@ -28,6 +31,9 @@ class PictureInPictureWindowController {
   // Shows the Picture-in-Picture window.
   virtual void Show() = 0;
 
+  // Called to notify the controller that initiator should be focused.
+  virtual void FocusInitiator() = 0;
+
   // Called to notify the controller that the window was requested to be closed
   // by the user or the content.
   virtual void Close(bool should_pause_video) = 0;
@@ -38,7 +44,7 @@ class PictureInPictureWindowController {
 
   // Called by the window implementation to notify the controller that the
   // window was requested to be closed and destroyed by the system.
-  virtual void OnWindowDestroyed() = 0;
+  virtual void OnWindowDestroyed(bool should_pause_video) = 0;
 
   virtual OverlayWindow* GetWindowForTesting() = 0;
   virtual void UpdateLayerBounds() = 0;
@@ -69,6 +75,10 @@ class PictureInPictureWindowController {
 
   // Called when the user interacts with the "Hang Up" control.
   virtual void HangUp() = 0;
+
+  // Needed for correct tab activation in Vivaldi.
+  virtual void SetVivaldiDelegate(
+      base::WeakPtr<vivaldi_content::TabActivationDelegate> delegate) {}
 
  protected:
   // Use PictureInPictureWindowController::GetOrCreateForWebContents() to

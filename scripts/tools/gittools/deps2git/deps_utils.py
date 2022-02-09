@@ -71,7 +71,7 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
     new_dict = {}
     for key, item in old_dict.items():
       key = key.format(**local_scope["vars"])
-      if isinstance(item, basestring):
+      if isinstance(item, str):
         item = item.format(**local_scope["vars"])
       elif isinstance(item, dict):
         item = update_alternative_variables(item)

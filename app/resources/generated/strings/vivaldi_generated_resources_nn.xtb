@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Avslutt fullskjerm</translation>
 <translation id="2177950615300672361">Privatfane: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Lokalklientmodul: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Gøym knappen</translation>
 <translation id="2218515861914035131">Lim inn som rein tekst</translation>
 <translation id="2249605167705922988">t.d. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillat identifikatorar for verna innhald (du må kanskje starta om att datamaskina)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Førehandsoppteikning: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vel rotkatalogen til utvidinga som skal pakkast. For å oppdatera utvidinga må du ogso velja den private nøkkelen som skal brukast på nytt.</translation>
-<translation id="3266179261140759675">Blokker lukka stadar frå å senda og motta data</translation>
 <translation id="3280237271814976245">Lagra &amp;som …</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Utvidingar som køyrer i utviklarmodus kan skada maskina di. Om du ikkje er ein utviklar, bør du slå av dei utvidingane som nyttar utviklarmodus for å vera trygg.</translation>
@@ -160,7 +158,6 @@
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
 <translation id="3574917942258583917">Avslutta privatmodusen likevel?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ønskjer å dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med ei gruppe du eig: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Om du godtek dette, vil alle gruppemedlemmene kunna bruka skrivaren.</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Opna lenkja i eit privat&amp;vindauge</translation>
 <translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
@@ -194,7 +191,6 @@
 <translation id="4087089424473531098">Laga utvidinga:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Godta for gruppa</translation>
 <translation id="4096508467498758490">Slå av utviklarmodus-utvidingar</translation>
 <translation id="4100839878934973028">Eit anna program på maskina di la til ein app som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="4109898769411476438">Lukk nettlesar før du importerer</translation>
@@ -230,7 +226,6 @@
 <translation id="488785315393301722">Syn detaljane</translation>
 <translation id="4907306957610201395">Løyvekategori</translation>
 <translation id="4912643508233590958">Dvaleoppvaking</translation>
-<translation id="4918086044614829423">Godta</translation>
 <translation id="4927753642311223124">Ingenting å finna her; gå vidare.</translation>
 <translation id="4930714375720679147">Slå på</translation>
 <translation id="4988526792673242964">Sider</translation>
@@ -306,7 +301,6 @@
 <translation id="6011449291337289699">Tøm nettstaddataa</translation>
 <translation id="6042308850641462728">Meir</translation>
 <translation id="6059925163896151826">USB-einingar</translation>
-<translation id="6082651258230788217">Syn på verktøylinja</translation>
 <translation id="6086846494333236931">Installert av administratoren din</translation>
 <translation id="6101226222197207147">Lagt til appen (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internettsambandet ditt vert kontrollert</translation>
@@ -333,7 +327,6 @@
 <translation id="6406303162637086258">Simuler nettlesaromstart</translation>
 <translation id="6445450263907939268">Om du ikkje vil ha desse endringane, kan du føra attende dei gamle innstillingane.</translation>
 <translation id="6447842834002726250">Informasjonskapslar</translation>
-<translation id="6452181791372256707">Avvis</translation>
 <translation id="6498249116389603658">&amp;Alle språka dine</translation>
 <translation id="6503077044568424649">Mest besøkt</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
@@ -364,7 +357,6 @@
 <translation id="7070484045139057854">Denne kan lesa og endra nettsidedata</translation>
 <translation id="708060913198414444">Kopier lydfil&amp;adressa</translation>
 <translation id="7175353351958621980">Lasta frå:</translation>
-<translation id="7186088072322679094">Lås til verktøylinja</translation>
 <translation id="7270858098575133036">Spør om ein nettstad ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar</translation>
 <translation id="7287143125007575591">Tilgang avvist.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +395,6 @@
 <translation id="7857949311770343000">Er dette den nye fanesida du venta å finna?</translation>
 <translation id="786073089922909430">Teneste: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Nylege mål</translation>
-<translation id="7898627924844766532">Lås til verktøylinja</translation>
 <translation id="7903925330883316394">Verktøy: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Er no fråkopla</translation>
 <translation id="7947962633355574091">Kopier v&amp;ideoadressa</translation>
@@ -452,7 +443,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8725066075913043281">Prøv igjen</translation>
 <translation id="8757090071857742562">Klarer ikkje å senda skrivebordet. Sjå om du godtok spørsmålet om å dela skjermen din.</translation>
 <translation id="8774934320277480003">Toppmarg</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ønskjer å dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med deg.</translation>
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8800004011501252845">Syner mål for</translation>
 <translation id="8808478386290700967">Nettbutikk</translation>

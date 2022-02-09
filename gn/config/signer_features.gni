@@ -1,6 +1,7 @@
 
 declare_args() {
   is_full_signer = false
+  sign_executables = false
   if (is_mac) {
     generate_universal_mac = false
   }

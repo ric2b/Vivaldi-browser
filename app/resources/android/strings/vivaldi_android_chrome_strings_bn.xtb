@@ -1,4 +1,7 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bn">
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> টি বুকমার্}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> টি বুকমার্ক}}</translation>
 </translationbundle>

@@ -38,7 +38,7 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   class MediaDecoderClient;
   friend class MediaDecoderClient;
 
-  void MediaDecoderInitialized(const InitializeCB& initialize_cb, bool success);
+  void MediaDecoderInitialized(InitializeCB initialize_cb, bool success);
 
   void DataBufferCapacityAvailable();
   void DataBufferCapacityDepleted();
@@ -48,13 +48,11 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   std::unique_ptr<MediaDecoderClient> media_decoder_client_;
   std::unique_ptr<AVFMediaDecoder> media_decoder_;
 
-  std::unique_ptr<AVFDataBufferQueue>
-      media_queues_[kPlatformMediaDataTypeCount];
+  std::unique_ptr<AVFDataBufferQueue> media_queues_[kPlatformStreamTypeCount];
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<AVFMediaPipeline> weak_ptr_factory_;
 };
-
 
 }  // namespace media
 

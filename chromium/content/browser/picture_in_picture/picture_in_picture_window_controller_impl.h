@@ -58,9 +58,10 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
 
   // PictureInPictureWindowController:
   void Show() override;
+  void FocusInitiator() override;
   void Close(bool should_pause_video) override;
   void CloseAndFocusInitiator() override;
-  void OnWindowDestroyed() override;
+  void OnWindowDestroyed(bool should_pause_video) override;
   OverlayWindow* GetWindowForTesting() override;
   void UpdateLayerBounds() override;
   bool IsPlayerActive() override;
@@ -124,6 +125,9 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
     return active_session_.get();
   }
 
+  void SetVivaldiDelegate(
+      base::WeakPtr<vivaldi_content::TabActivationDelegate> delegate) override;
+
  private:
   friend class WebContentsUserData<PictureInPictureWindowControllerImpl>;
 
@@ -181,6 +185,9 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
   // requests and holding states such as the active player id.
   // The session will be nullptr when there is no active session.
   std::unique_ptr<PictureInPictureSession> active_session_;
+
+  // Vivaldi specific:
+  base::WeakPtr<vivaldi_content::TabActivationDelegate> vivaldi_delegate_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

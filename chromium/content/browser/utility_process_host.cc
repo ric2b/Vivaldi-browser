@@ -128,7 +128,7 @@ void UtilityProcessHost::RunServiceDeprecated(
     mojo::ScopedMessagePipeHandle service_pipe,
     RunServiceDeprecatedCallback callback) {
   if (launch_state_ == LaunchState::kLaunchFailed) {
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
 
@@ -278,6 +278,7 @@ bool UtilityProcessHost::StartProcess() {
       switches::kUseFileForFakeVideoCapture,
       switches::kUseMockCertVerifierForTesting,
       switches::kMockCertVerifierDefaultResultForTesting,
+      switches::kTimeZoneForTesting,
       switches::kUtilityStartupDialog,
       switches::kUseANGLE,
       switches::kUseGL,
@@ -315,6 +316,7 @@ bool UtilityProcessHost::StartProcess() {
       sandbox::policy::switches::kAddXrAppContainerCaps,
 #endif
       network::switches::kUseFirstPartySet,
+      network::switches::kIpAddressSpaceOverrides,
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
       switches::kSchedulerBoostUrgent,
 #endif
@@ -369,7 +371,7 @@ void UtilityProcessHost::OnProcessLaunched() {
 void UtilityProcessHost::OnProcessLaunchFailed(int error_code) {
   launch_state_ = LaunchState::kLaunchFailed;
   for (auto& callback : pending_run_service_callbacks_)
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
   pending_run_service_callbacks_.clear();
 }
 
@@ -392,7 +394,7 @@ void UtilityProcessHost::OnProcessCrashed(int exit_code) {
   client->OnProcessCrashed();
 }
 
-base::Optional<std::string> UtilityProcessHost::GetServiceName() {
+absl::optional<std::string> UtilityProcessHost::GetServiceName() {
   return metrics_name_;
 }
 

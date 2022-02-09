@@ -373,7 +373,7 @@ STR CollapseWhitespaceT(const STR& text, bool trim_sequences_with_line_breaks) {
         --chars_written;
       }
     } else {
-      // Non-whitespace chracters are copied straight across.
+      // Non-whitespace characters are copied straight across.
       in_whitespace = false;
       already_trimmed = false;
       result[chars_written++] = *i;

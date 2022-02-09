@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "base/guid.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
@@ -69,13 +70,10 @@ syncer::UniquePosition ComputeUniquePositionForTrackedNoteNode(
 }
 
 size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
-                             const sync_pb::UniquePosition& unique_position,
+                             const syncer::UniquePosition& position,
                              const SyncedNoteTracker* note_tracker) {
   DCHECK(parent);
   DCHECK(note_tracker);
-
-  const syncer::UniquePosition position =
-      syncer::UniquePosition::FromProto(unique_position);
 
   auto iter = std::partition_point(
       parent->children().begin(), parent->children().end(),
@@ -173,10 +171,19 @@ void NoteRemoteUpdatesHandler::Process(
 
   for (const syncer::UpdateResponseData* update : ReorderUpdates(&updates)) {
     const syncer::EntityData& update_entity = update->entity;
-    // Only non deletions and non premanent node should have valid specifics and
-    // unique positions.
-    if (!update_entity.is_deleted() &&
-        update_entity.server_defined_unique_tag.empty()) {
+
+    // Ignore changes to the permanent nodes (e.g. main folder). We only
+    // care about their children.
+    if (!update_entity.server_defined_unique_tag.empty()) {
+      if (note_tracker_->GetEntityForSyncId(update_entity.id) == nullptr) {
+        DLOG(ERROR)
+            << "Permanent nodes should have been merged during intial sync.";
+      }
+      continue;
+    }
+
+    // Only non-deletions should have valid specifics and unique positions.
+    if (!update_entity.is_deleted()) {
       if (!IsValidNotesSpecifics(update_entity.specifics.notes(),
                                  update_entity.is_folder)) {
         // Ignore updates with invalid specifics.
@@ -184,8 +191,7 @@ void NoteRemoteUpdatesHandler::Process(
             << "Couldn't process an update note with an invalid specifics.";
         continue;
       }
-      if (!syncer::UniquePosition::FromProto(update_entity.unique_position)
-               .IsValid()) {
+      if (!update_entity.unique_position.IsValid()) {
         // Ignore updates with invalid unique position.
         DLOG(ERROR) << "Couldn't process an update note with an invalid "
                        "unique position.";
@@ -208,6 +214,17 @@ void NoteRemoteUpdatesHandler::Process(
                                             &should_ignore_update);
 
     if (should_ignore_update) {
+      continue;
+    }
+
+    // Filter out permanent nodes once again (in case the server tag wasn't
+    // populated and yet the entity ID points to a permanent node). This case
+    // shoudn't be possible with a well-behaving server.
+    if (tracked_entity && tracked_entity->note_node() &&
+        tracked_entity->note_node()->is_permanent_node()) {
+      DLOG(ERROR) << "Ignoring update to permanent node without server defined "
+                     "unique tag for ID "
+                  << update_entity.id;
       continue;
     }
 
@@ -250,11 +267,6 @@ void NoteRemoteUpdatesHandler::Process(
       CHECK_EQ(tracked_entity,
                note_tracker_->GetEntityForSyncId(update_entity.id));
     } else {
-      // Ignore changes to the permanent nodes (e.g. main notes). We only
-      // care about their children.
-      if (notes_model_->is_permanent_node(tracked_entity->note_node())) {
-        continue;
-      }
       ProcessUpdate(*update, tracked_entity);
       // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
       // Should be removed after figuring out the reason for the crash.
@@ -310,7 +322,7 @@ NoteRemoteUpdatesHandler::ReorderUpdatesForTest(
 // static
 size_t NoteRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
     const vivaldi::NoteNode* parent,
-    const sync_pb::UniquePosition& unique_position,
+    const syncer::UniquePosition& unique_position,
     const SyncedNoteTracker* notetracker) {
   return ComputeChildNodeIndex(parent, unique_position, notetracker);
 }
@@ -467,12 +479,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
     const syncer::UpdateResponseData& update) {
   const syncer::EntityData& update_entity = update.entity;
   DCHECK(!update_entity.is_deleted());
-  if (!update_entity.server_defined_unique_tag.empty()) {
-    DLOG(ERROR)
-        << "Permanent nodes should have been merged during intial sync.";
-    return nullptr;
-  }
-
+  DCHECK(update_entity.server_defined_unique_tag.empty());
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes(),
                                update_entity.is_folder));
 
@@ -517,7 +524,7 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
             note_tracker_->GetEntityForSyncId(update_entity.id));
   // Must not be a deletion.
   DCHECK(!update_entity.is_deleted());
-
+  DCHECK(update_entity.server_defined_unique_tag.empty());
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes(),
                                update_entity.is_folder));
   DCHECK(!tracked_entity->IsUnsynced());
@@ -581,11 +588,9 @@ void NoteRemoteUpdatesHandler::ProcessDelete(
   }
 
   const vivaldi::NoteNode* node = tracked_entity->note_node();
-  // Ignore changes to the permanent top-level nodes.  We only care about
-  // their children.
-  if (notes_model_->is_permanent_node(node)) {
-    return;
-  }
+  DCHECK(node);
+  // Changes to permanent nodes have been filtered out earlier.
+  DCHECK(!node->is_permanent_node());
   // Remove the entities of |node| and its children.
   RemoveEntityAndChildrenFromTracker(node);
   // Remove the node and its children from the model.
@@ -603,6 +608,9 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
   DCHECK(tracked_entity);
   DCHECK_EQ(tracked_entity,
             note_tracker_->GetEntityForSyncId(update_entity.id));
+  DCHECK(!tracked_entity->note_node() ||
+         !tracked_entity->note_node()->is_permanent_node());
+  DCHECK(update_entity.server_defined_unique_tag.empty());
 
   if (tracked_entity->metadata()->is_deleted() && update_entity.is_deleted()) {
     // Both have been deleted, delete the corresponding entity from the tracker.
@@ -684,6 +692,9 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
 
 void NoteRemoteUpdatesHandler::RemoveEntityAndChildrenFromTracker(
     const vivaldi::NoteNode* node) {
+  DCHECK(node);
+  DCHECK(!node->is_permanent_node());
+
   const SyncedNoteTracker::Entity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   DCHECK(entity);
@@ -708,12 +719,12 @@ void NoteRemoteUpdatesHandler::ReuploadEntityIfNeeded(
     const SyncedNoteTracker::Entity* tracked_entity) {
   DCHECK(tracked_entity);
   DCHECK_EQ(tracked_entity->metadata()->server_id(), entity_data.id);
-  // Do not initiate reupload if the local entity is a tombstone or a permanent
-  // node.
+  DCHECK(!tracked_entity->note_node() ||
+         !tracked_entity->note_node()->is_permanent_node());
+
+  // Do not initiate reupload if the local entity is a tombstone.
   const bool is_reupload_needed =
-      tracked_entity->note_node() &&
-      !tracked_entity->note_node()->is_permanent_node() &&
-      IsNoteEntityReuploadNeeded(entity_data);
+      tracked_entity->note_node() && IsNoteEntityReuploadNeeded(entity_data);
   if (is_reupload_needed) {
     note_tracker_->IncrementSequenceNumber(tracked_entity);
   }

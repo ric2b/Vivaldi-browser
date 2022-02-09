@@ -47,14 +47,14 @@ std::string ReplacePlaceholders(base::StringPiece format_string,
   return result;
 }
 
-base::Optional<mojom::ItemRunTime> GetNextRunTime(mojom::ItemRunTime current) {
+absl::optional<mojom::ItemRunTime> GetNextRunTime(mojom::ItemRunTime current) {
   switch (current) {
     case mojom::ItemRunTime::kDocumentStart:
       return mojom::ItemRunTime::kDocumentEnd;
     case mojom::ItemRunTime::kDocumentEnd:
       return mojom::ItemRunTime::kDocumentIdle;
     case mojom::ItemRunTime::kDocumentIdle:
-      return base::nullopt;
+      return absl::nullopt;
   }
 }
 }  // namespace
@@ -66,8 +66,8 @@ FrameHandler::FrameHandler(content::RenderFrame* render_frame,
   DCHECK(render_frame);
   render_frame->GetBrowserInterfaceBroker()->GetInterface(
       injection_helper_.BindNewPipeAndPassReceiver());
-  registry->AddInterface(base::Bind(&FrameHandler::BindFrameHandlerReceiver,
-                                    base::Unretained(this)));
+  registry->AddInterface(base::BindRepeating(
+      &FrameHandler::BindFrameHandlerReceiver, base::Unretained(this)));
 }
 
 FrameHandler::~FrameHandler() = default;
@@ -189,7 +189,7 @@ void FrameHandler::InjectScriptsForRunTime(mojom::ItemRunTime run_time) {
   //   reported run time.
   // We don't want to run injected scripts because they may have requirements
   // that the scripts for an earlier run time have run. Better to just not run.
-  base::Optional<mojom::ItemRunTime> next_run_time =
+  absl::optional<mojom::ItemRunTime> next_run_time =
       last_run_time_ ? GetNextRunTime(last_run_time_.value())
                      : mojom::ItemRunTime::kDocumentStart;
   if (!next_run_time || run_time != next_run_time.value()) {
@@ -257,7 +257,8 @@ void FrameHandler::InjectJS(const std::string& content, int world_id) {
 
   render_frame()->GetWebFrame()->RequestExecuteScriptInIsolatedWorld(
       world_id, &sources.front(), sources.size(), false,
-      blink::WebLocalFrame::kSynchronous, nullptr);
+      blink::WebLocalFrame::kSynchronous, nullptr,
+      blink::BackForwardCacheAware::kPossiblyDisallow);
 }
 
 void FrameHandler::InjectPendingScripts() {

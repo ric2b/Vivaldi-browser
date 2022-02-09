@@ -9,16 +9,15 @@
 #include <memory>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
-#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_internal_observer.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/back_forward_cache.h"
@@ -26,7 +25,9 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/common/content_features.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/page/page.mojom.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -43,6 +44,11 @@ class SiteInstance;
 constexpr base::Feature kRecordBackForwardCacheMetricsWithoutEnabling{
     "RecordBackForwardCacheMetricsWithoutEnabling",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Removes the time limit for cached content. This is used on bots to identify
+// accidentally passing tests.
+constexpr base::Feature kBackForwardCacheNoTimeEviction{
+    "BackForwardCacheNoTimeEviction", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // BackForwardCache:
 //
@@ -73,6 +79,12 @@ class CONTENT_EXPORT BackForwardCacheImpl
           std::set<RenderViewHostImpl*> render_view_hosts);
     ~Entry();
 
+    void WriteIntoTrace(perfetto::TracedValue context);
+    // Indicates whether or not all the |render_view_hosts| in this entry have
+    // received the acknowledgement from renderer that it finished running
+    // handlers.
+    bool AllRenderViewHostsReceivedAckFromRenderer();
+
     // The main document being stored.
     std::unique_ptr<RenderFrameHostImpl> render_frame_host;
 
@@ -100,11 +112,21 @@ class CONTENT_EXPORT BackForwardCacheImpl
     DISALLOW_COPY_AND_ASSIGN(Entry);
   };
 
+  // UnloadSupportStrategy is possible actions to take against pages with
+  // "unload" handlers.
+  // TODO(crbug.com/1201653): Consider making this private.
+  enum class UnloadSupportStrategy {
+    kAlways,
+    kOptInHeaderRequired,
+    // TODO(crbug.com/1201653): Consider removing `kNo` to simplify code a bit.
+    kNo,
+  };
+
   // Returns whether MediaSessionImpl::OnServiceCreated is allowed for the
   // BackForwardCache.
   static bool IsMediaSessionImplOnServiceCreatedAllowed();
 
-  explicit BackForwardCacheImpl();
+  BackForwardCacheImpl();
   ~BackForwardCacheImpl() override;
 
   // Returns whether a RenderFrameHost can be stored into the BackForwardCache
@@ -158,9 +180,6 @@ class CONTENT_EXPORT BackForwardCacheImpl
       int navigation_entry_id,
       blink::mojom::PageRestoreParamsPtr page_restore_params);
 
-  // Evict all entries from the BackForwardCache.
-  void Flush();
-
   // Evict all cached pages in the same BrowsingInstance as
   // |site_instance|.
   void EvictFramesInRelatedSiteInstances(SiteInstance* site_instance);
@@ -184,15 +203,20 @@ class CONTENT_EXPORT BackForwardCacheImpl
 
   // The back-forward cache is experimented on a limited set of URLs. This
   // method returns true if the |url| matches one of those. URL not matching
-  // this won't enter the back-forward cache.
-  // This is controlled by GetAllowedURLs method which depends on the
-  // following:
-  //  - feature::kBackForwardCache param -> allowed_websites.
-  //  - kRecordBackForwardCacheMetricsWithoutEnabling param -> allowed_websites.
-
-  // If no param is set all websites are allowed by default. This can still
-  // return true even when BackForwardCache is disabled for metrics purposes.
+  // this won't enter the back-forward cache. This can still return true even
+  // when BackForwardCache is disabled for metrics purposes. It checks
+  // |IsHostPathAllowed| then |IsHostPathAllowed|
   bool IsAllowed(const GURL& current_url);
+  // Returns true if the host and path are allowed according to the
+  // "allowed_websites" and "blocked_webites" parameters of
+  // |feature::kBackForwardCache|. An empty "allowed_websites" implies that all
+  // websites are allowed.
+  bool IsHostPathAllowed(const GURL& current_url);
+  // Returns true if query does not contain any of the parameters in
+  // "blocked_cgi_params" parameter of |feature::kBackForwardCache|. The
+  // comparison is done by splitting the query string on "&" and looking for
+  // exact matches in the list (parameter name and value).
+  bool IsQueryAllowed(const GURL& current_url);
 
   // This is a wrapper around the flag that indicates whether or not the
   // feature usage should be checked only after receiving an ack from the
@@ -201,6 +225,12 @@ class CONTENT_EXPORT BackForwardCacheImpl
   // TODO(crbug.com/1129331): Remove this when we implement the logic to
   // consider cache size limit.
   bool CheckFeatureUsageOnlyAfterAck();
+
+  // Called just before commit for a navigation that's served out of the back
+  // forward cache. This method will disable eviction in renderers and invoke
+  // |done_callback| when they are ready for the navigation to be committed.
+  void WillCommitNavigationToCachedEntry(Entry& bfcache_entry,
+                                         base::OnceClosure done_callback);
 
   // Returns the task runner that should be used by the eviction timer.
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() {
@@ -216,6 +246,8 @@ class CONTENT_EXPORT BackForwardCacheImpl
 
   const std::list<std::unique_ptr<Entry>>& GetEntries();
 
+  // BackForwardCache overrides:
+  void Flush() override;
   void DisableForTesting(DisableForTestingReason reason) override;
 
   // RenderProcessHostInternalObserver methods
@@ -280,11 +312,28 @@ class CONTENT_EXPORT BackForwardCacheImpl
 
   // To enter the back-forward cache, the main document URL's must match one of
   // the field trial parameter "allowed_websites". This is represented here by a
-  // set of host and path prefix.
-  std::map<std::string,              // URL's host,
-           std::vector<std::string>  // URL's path prefix
-           >
+  // set of host and path prefix. When |allowed_urls_| is empty, it means there
+  // are no restrictions on URLs.
+  const std::map<std::string,              // URL's host,
+                 std::vector<std::string>  // URL's path prefix
+                 >
       allowed_urls_;
+
+  // This is an emergency kill switch per url to stop BFCache. The data will be
+  // provided via the field trial parameter "blocked_websites".
+  // "blocked_websites" have priority over "allowed_websites". This is
+  // represented here by a set of host and path prefix.
+  const std::map<std::string,              // URL's host,
+                 std::vector<std::string>  // URL's path prefix
+                 >
+      blocked_urls_;
+
+  // Data provided from the "blocked_cgi_params" feature param. If any of these
+  // occur in the query of the URL then the page is not eligible for caching.
+  // See
+  const std::unordered_set<std::string> blocked_cgi_params_;
+
+  const UnloadSupportStrategy unload_strategy_;
 
   base::WeakPtrFactory<BackForwardCacheImpl> weak_factory_;
 

@@ -118,7 +118,7 @@ void InitialPreferences::InitializeFromCommandLine(
   } else
 #endif
   {
-    initial_dictionary_.reset(new base::DictionaryValue());
+    initial_dictionary_ = std::make_unique<base::DictionaryValue>();
   }
 
   DCHECK(initial_dictionary_.get());

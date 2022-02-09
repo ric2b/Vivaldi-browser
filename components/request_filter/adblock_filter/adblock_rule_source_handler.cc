@@ -586,9 +586,8 @@ void RuleSourceHandler::DownloadRules() {
           }
         })");
 
-  auto url_loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(context_)
-          ->GetURLLoaderFactoryForBrowserProcess();
+  auto url_loader_factory = context_->GetDefaultStoragePartition()
+                                ->GetURLLoaderFactoryForBrowserProcess();
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                  traffic_annotation);

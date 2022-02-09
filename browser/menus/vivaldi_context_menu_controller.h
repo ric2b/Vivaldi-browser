@@ -86,6 +86,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
   // VivaldiRenderViewContextMenu::Delegate
   void OnDestroyed(VivaldiRenderViewContextMenu* menu) override;
+  bool GetShowShortcuts() override;
 
  private:
   void InitModel();
@@ -126,6 +127,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   IdToBoolMap id_to_checked_map_;
   IdToBoolMap id_to_enabled_map_;
   IdToAcceleratorMap id_to_accelerator_map_;
+  bool show_shortcuts_ = true;
   IdToStringMap id_to_action_map_;
   gfx::Rect rect_;
 

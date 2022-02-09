@@ -9,11 +9,13 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.browser.trusted.TrustedWebActivityDisplayMode.ImmersiveMode;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
@@ -116,6 +118,8 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
             // Note: This method will not be called if shouldDisableExternalIntentRequestsForUrl()
             // returns false.
 
+            // TODO(https://crbug.com/1194706): This should probably be using intent#getData
+            // instead.
             boolean isExternalProtocol = !UrlUtilities.isAcceptedScheme(intent.toUri(0));
             boolean hasDefaultHandler = hasDefaultHandler(intent);
             try {
@@ -160,7 +164,8 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
          *         default handler, this method will return false.
          */
         private boolean hasDefaultHandler(Intent intent) {
-            ResolveInfo info = PackageManagerUtils.resolveActivity(intent, 0);
+            ResolveInfo info =
+                    PackageManagerUtils.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY);
             if (info == null) return false;
 
             final String chromePackage = mApplicationContext.getPackageName();
@@ -185,10 +190,11 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         }
 
         @Override
-        public boolean shouldDisableExternalIntentRequestsForUrl(String url) {
+        public boolean shouldDisableExternalIntentRequestsForUrl(GURL url) {
             // http://crbug.com/647569 : Do not forward URL requests to external intents for URLs
             // within the Webapp/TWA's scope.
-            return mVerifier != null && mVerifier.shouldIgnoreExternalIntentHandlers(url);
+            // TODO(https://crbug.com/783819): Migrate verifier hierarchy to GURL.
+            return mVerifier != null && mVerifier.shouldIgnoreExternalIntentHandlers(url.getSpec());
         }
     }
 
@@ -515,6 +521,9 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
      */
     public static @WebDisplayMode int getDisplayMode(
             BrowserServicesIntentDataProvider intentDataProvider) {
+        if (intentDataProvider.getTwaDisplayMode() instanceof ImmersiveMode) {
+            return WebDisplayMode.FULLSCREEN;
+        }
         WebappExtras webappExtras = intentDataProvider.getWebappExtras();
         if (webappExtras != null) {
             return webappExtras.displayMode;

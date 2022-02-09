@@ -89,14 +89,14 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
             SULog(SULogLevelError, @"Failed to listen for application termination");
             // Continue on with the installation anyway?
         }
-		
+
         if (self.shouldShowUI) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SUInstallationTimeLimit * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-				if (!self.isTerminating) {
-					// Show app icon in the dock
-					ProcessSerialNumber psn = { 0, kCurrentProcess };
-					TransformProcessType(&psn, kProcessTransformToForegroundApplication);
-				}
+                if (!self.isTerminating) {
+                    // Show app icon in the dock
+                    ProcessSerialNumber psn = { 0, kCurrentProcess };
+                    TransformProcessType(&psn, kProcessTransformToForegroundApplication);
+                }
             });
         }
         
@@ -136,7 +136,7 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
         self.statusController = [[SUStatusController alloc] initWithHost:host];
         [self.statusController setButtonTitle:SULocalizedString(@"Cancel Update", @"") target:nil action:Nil isDefault:NO];
         [self.statusController beginActionWithTitle:SULocalizedString(@"Installing update...", @"")
-                                   maxProgressValue:100 statusText: @""];
+                                   maxProgressValue:installer.supportsDeterminateProgress ? 100 : 0 statusText: @""];
         [self.statusController showWindow:self];
     }
     
@@ -153,7 +153,9 @@ static const NSTimeInterval SUTerminationTimeDelay = 0.5;
         
         void(^progressBlock)(double) = ^(double progress){
             dispatch_async(dispatch_get_main_queue(), ^(){
-                self.statusController.progressValue = progress * 100.0;
+                if (installer.supportsDeterminateProgress) {
+                    self.statusController.progressValue = progress * 100.0;
+                }
             });
         };
 

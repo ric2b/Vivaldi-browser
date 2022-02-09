@@ -10,9 +10,9 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
-#include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/content/browser/optimization_guide_decider.h"
+#include "components/optimization_guide/core/optimization_guide_model_provider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/models.pb.h"
 
@@ -27,6 +27,7 @@ class NavigationHandle;
 
 namespace optimization_guide {
 namespace android {
+class AndroidPushNotificationManagerJavaTest;
 class OptimizationGuideBridge;
 }  // namespace android
 class OptimizationGuideStore;
@@ -49,7 +50,8 @@ class OptimizationGuideHintsManager;
 // and no information will be retrieved.
 class OptimizationGuideKeyedService
     : public KeyedService,
-      public optimization_guide::OptimizationGuideDecider {
+      public optimization_guide::OptimizationGuideDecider,
+      public optimization_guide::OptimizationGuideModelProvider {
  public:
   explicit OptimizationGuideKeyedService(
       content::BrowserContext* browser_context);
@@ -64,13 +66,6 @@ class OptimizationGuideKeyedService
       optimization_guide::proto::OptimizationTarget optimization_target,
       optimization_guide::OptimizationGuideTargetDecisionCallback callback)
       override;
-  void AddObserverForOptimizationTargetModel(
-      optimization_guide::proto::OptimizationTarget optimization_target,
-      const base::Optional<optimization_guide::proto::Any>& model_metadata,
-      optimization_guide::OptimizationTargetModelObserver* observer) override;
-  void RemoveObserverForOptimizationTargetModel(
-      optimization_guide::proto::OptimizationTarget optimization_target,
-      optimization_guide::OptimizationTargetModelObserver* observer) override;
   void RegisterOptimizationTypes(
       const std::vector<optimization_guide::proto::OptimizationType>&
           optimization_types) override;
@@ -83,6 +78,15 @@ class OptimizationGuideKeyedService
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationMetadata* optimization_metadata) override;
 
+  // optimization_guide::OptimizationGuideModelProvider implementation:
+  void AddObserverForOptimizationTargetModel(
+      optimization_guide::proto::OptimizationTarget optimization_target,
+      const absl::optional<optimization_guide::proto::Any>& model_metadata,
+      optimization_guide::OptimizationTargetModelObserver* observer) override;
+  void RemoveObserverForOptimizationTargetModel(
+      optimization_guide::proto::OptimizationTarget optimization_target,
+      optimization_guide::OptimizationTargetModelObserver* observer) override;
+
   // Adds hints for a URL with provided metadata to the optimization guide.
   // For testing purposes only. This will flush any callbacks for |url| that
   // were registered via |CanApplyOptimizationAsync|. If no applicable callbacks
@@ -90,13 +94,13 @@ class OptimizationGuideKeyedService
   void AddHintForTesting(
       const GURL& url,
       optimization_guide::proto::OptimizationType optimization_type,
-      const base::Optional<optimization_guide::OptimizationMetadata>& metadata);
+      const absl::optional<optimization_guide::OptimizationMetadata>& metadata);
 
   // Override the model file sent to observers of |optimization_target|. For
   // testing purposes only.
   void OverrideTargetModelFileForTesting(
       optimization_guide::proto::OptimizationTarget optimization_target,
-      const base::Optional<optimization_guide::proto::Any>& model_metadata,
+      const absl::optional<optimization_guide::proto::Any>& model_metadata,
       const base::FilePath& file_path);
 
  private:
@@ -106,6 +110,8 @@ class OptimizationGuideKeyedService
   friend class OptimizationGuideWebContentsObserver;
   friend class optimization_guide::PredictionModelDownloadClient;
   friend class optimization_guide::PredictionManagerBrowserTestBase;
+  friend class optimization_guide::android::
+      AndroidPushNotificationManagerJavaTest;
   friend class optimization_guide::android::OptimizationGuideBridge;
 
   // Initializes |this|.

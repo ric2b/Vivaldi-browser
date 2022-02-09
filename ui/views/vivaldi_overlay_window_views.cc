@@ -4,6 +4,7 @@
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/compositor/layer.h"
 #include "ui/views/controls/mute_button.h"
 #include "ui/views/controls/video_progress.h"
 

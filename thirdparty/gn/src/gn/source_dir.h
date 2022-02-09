@@ -31,9 +31,8 @@ class SourceDir {
  public:
   SourceDir() = default;
 
-  SourceDir(const std::string_view s);
-  SourceDir(const std::string_view p,
-            const std::string& p_act);
+  SourceDir(std::string_view s);
+  SourceDir(std::string_view p, const std::string_view& p_act);
 
   // Resolves a file or dir name (based on as_file parameter) relative
   // to this source directory. Will return an empty string on error
@@ -50,47 +49,39 @@ class SourceDir {
       bool as_file,
       const Value& v,
       Err* err,
-      const std::string_view& source_root = std::string_view(),
+      std::string_view source_root = std::string_view(),
       const std::string* v_value = nullptr) const;
 
-  // Like ResolveRelativeAs above, but allows to produce result
+  // Like ResolveRelativeAs above, but allows one to produce result
   // without overhead for string conversion (on input value).
-  template <typename StringType>
   std::string ResolveRelativeAs(
       bool as_file,
       const Value& blame_input_value,
-      const StringType& input_value,
+      std::string_view input_value,
       Err* err,
-      const std::string_view& source_root = std::string_view(),
-      const std::string_view& actual_path_in = std::string_view(),
+      std::string_view source_root = std::string_view(),
+      std::string_view actual_path_in = std::string_view(),
       StringAtom* actual_path_out = nullptr) const;
 
   // Wrapper for ResolveRelativeAs.
   SourceFile ResolveRelativeFile(
       const Value& p,
       Err* err,
-      const std::string_view& source_root = std::string_view()) const;
+      std::string_view source_root = std::string_view()) const;
 
   // Wrapper for ResolveRelativeAs.
-  template <typename StringType>
   SourceDir ResolveRelativeDir(
       const Value& blame_input_value,
-      const StringType& input_value,
+      std::string_view input_value,
       Err* err,
-      const std::string_view& source_root = std::string_view()) const {
-    SourceDir ret;
-    ret.value_ = StringAtom(ResolveRelativeAs<StringType>(
-        false, blame_input_value, input_value, err, source_root, actual_path_,
-        &ret.actual_path_));
-    return ret;
-  }
+      std::string_view source_root = std::string_view()) const;
 
   // Wrapper for ResolveRelativeDir where input_value equals to
   // v.string_value().
   SourceDir ResolveRelativeDir(
       const Value& v,
       Err* err,
-      const std::string_view& source_root = std::string_view()) const;
+      std::string_view source_root = std::string_view()) const;
 
   // Resolves this source file relative to some given source root. Returns
   // an empty file path on error.

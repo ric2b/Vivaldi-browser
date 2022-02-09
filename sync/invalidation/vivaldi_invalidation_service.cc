@@ -131,9 +131,9 @@ VivaldiInvalidationService::GetInvalidationLogger() {
 }
 
 void VivaldiInvalidationService::RequestDetailedStatus(
-    base::Callback<void(const base::DictionaryValue&)> caller) const {
+    base::RepeatingCallback<void(const base::DictionaryValue&)> caller) const {
   base::DictionaryValue value;
-  caller.Run(value);
+  std::move(caller).Run(value);
 }
 
 void VivaldiInvalidationService::PerformInvalidation(
@@ -199,7 +199,7 @@ void VivaldiInvalidationService::OnInvalidation(base::Value invalidation) {
   constexpr char kTypeKey[] = "notification_type";
 
   std::string* client_id = invalidation.FindStringKey(kClientIdKey);
-  base::Optional<int64_t> version =
+  absl::optional<int64_t> version =
       util::ValueToInt64(invalidation.FindKey(kVersionKey));
   std::string* type = invalidation.FindStringKey(kTypeKey);
 

@@ -4,6 +4,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
@@ -16,18 +17,18 @@ using extensions::vivaldi::infobars::ButtonAction;
 using extensions::vivaldi::infobars::InfobarButton;
 
 ConfirmInfoBarWebProxy::ConfirmInfoBarWebProxy(
-    std::unique_ptr<ConfirmInfoBarDelegate> delegate,
-    content::WebContents* contents)
-    : infobars::InfoBar(std::move(delegate)),
-      profile_(Profile::FromBrowserContext(contents->GetBrowserContext())),
-      tab_id_(sessions::SessionTabHelper::IdForTab(contents).id()) {
-}
+    std::unique_ptr<ConfirmInfoBarDelegate> delegate)
+    : infobars::InfoBar(std::move(delegate)) {}
 
 ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {
 }
 
 void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   ConfirmInfoBarDelegate* delegate = GetDelegate();
+  content::WebContents* web_contents =
+      infobars::ContentInfoBarManager::WebContentsFromInfoBar(this);
+  profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  tab_id_ = sessions::SessionTabHelper::IdForTab(web_contents).id();
 
   extensions::vivaldi::infobars::Infobar infobar;
 
@@ -59,7 +60,7 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   infobar.tab_id = tab_id_;
   infobar.identifier = delegate->GetIdentifier();
 
-  std::unique_ptr<base::ListValue> args(
+  std::vector<base::Value> args(
       extensions::vivaldi::infobars::OnInfobarCreated::Create(infobar));
   vivaldi::BroadcastEvent(
       extensions::vivaldi::infobars::OnInfobarCreated::kEventName,
@@ -95,7 +96,7 @@ void InfoBarContainerWebProxy::PlatformSpecificRemoveInfoBar(
       static_cast<ConfirmInfoBarWebProxy*>(infobar);
   ConfirmInfoBarDelegate* delegate = infobar_proxy->GetDelegate();
 
-  std::unique_ptr<base::ListValue> args(
+  std::vector<base::Value> args(
       extensions::vivaldi::infobars::OnInfobarRemoved::Create(
         infobar_proxy->tab_id(), delegate->GetIdentifier()));
   ::vivaldi::BroadcastEvent(

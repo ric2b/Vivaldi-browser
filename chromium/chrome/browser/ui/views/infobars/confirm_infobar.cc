@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
 #include "ui/base/window_open_disposition.h"
@@ -18,25 +17,6 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/view_class_properties.h"
-
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "ui/infobar_container_web_proxy.h"
-
-// InfoBarService -------------------------------------------------------------
-
-std::unique_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
-    std::unique_ptr<ConfirmInfoBarDelegate> delegate) {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  if (browser && browser->is_vivaldi()) {
-    return std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
-        std::move(delegate), web_contents());
-  }
-  return std::make_unique<ConfirmInfoBar>(std::move(delegate));
-}
-
-
-// ConfirmInfoBar -------------------------------------------------------------
 
 ConfirmInfoBar::ConfirmInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate)
     : InfoBarView(std::move(delegate)) {

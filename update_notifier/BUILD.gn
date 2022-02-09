@@ -71,6 +71,14 @@ generate_embedded_i18n("generate_strings") {
       ] ]
 
   output_file_name_base = "update_notifier_strings"
+
+  # generate_embedded_i18n does not support generating dependency information
+  # for *.grdp files it includes. So add this manually to the list of input
+  # files.
+  inputs = [
+    "//vivaldi/app/native_resources/vivaldi_update_notifier_strings.grdp"
+  ]
+
 }
 
 # Compile the generated .rc file.

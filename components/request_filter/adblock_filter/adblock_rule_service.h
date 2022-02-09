@@ -71,7 +71,7 @@ class RuleService : public KeyedService {
   virtual void SetRuleGroupEnabled(RuleGroup group, bool enabled) = 0;
 
   // Returns the rule source matching the given ID, if it is an existing ID.
-  virtual base::Optional<RuleSource> GetRuleSource(RuleGroup group,
+  virtual absl::optional<RuleSource> GetRuleSource(RuleGroup group,
                                                    uint32_t source_id) = 0;
   virtual std::map<uint32_t, RuleSource> GetRuleSources(
       RuleGroup group) const = 0;

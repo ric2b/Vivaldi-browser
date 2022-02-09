@@ -35,7 +35,7 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
 
   std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
   sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
-  const std::u16string wild(base::UTF8ToUTF16("%"));
+  const std::u16string wild(u"%");
   const std::string wild8("%");
   statement.BindString(0, wild8 + query + wild8);
   statement.BindString16(1, wild + lower_query + wild);
@@ -44,7 +44,7 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
     statement.BindString16(
         3, wild +
                lower_query.substr(
-                   lower_query.find_first_of(base::UTF8ToUTF16(" ")) + 1) +
+                   lower_query.find_first_of(u" ") + 1) +
                wild);
     statement.BindInt(4, max_results);
   } else {

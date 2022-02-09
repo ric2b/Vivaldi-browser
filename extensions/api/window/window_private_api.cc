@@ -6,6 +6,8 @@
 #include <memory>
 #include <string>
 
+#include "base/no_destructor.h"
+#include "base/strings/stringprintf.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
@@ -158,6 +160,10 @@ void VivaldiBrowserObserver::OnBrowserSetLastActive(Browser* browser) {
 void VivaldiBrowserObserver::TabChangedAt(content::WebContents* web_contents,
                                           int index,
                                           TabChangeType change_type) {
+  // Ignore 'loading' and 'title' changes.
+  if (change_type != TabChangeType::kAll)
+    return;
+
   TabsPrivateAPI::FromBrowserContext(web_contents->GetBrowserContext())
       ->NotifyTabChange(web_contents);
 }
@@ -267,8 +273,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
-    profile =
-        profile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID());
+    profile = profile->GetOffTheRecordProfile(
+        Profile::OTRProfileID::PrimaryID(), true);
   } else {
     profile = profile->GetOriginalProfile();
   }

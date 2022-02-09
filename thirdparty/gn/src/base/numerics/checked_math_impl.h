@@ -466,7 +466,7 @@ class CheckedNumericState {};
 template <typename T>
 class CheckedNumericState<T, NUMERIC_INTEGER> {
  private:
-  // is_valid_ precedes value_ because member intializers in the constructors
+  // is_valid_ precedes value_ because member initializers in the constructors
   // are evaluated in field order, and is_valid_ must be read when initializing
   // value_.
   bool is_valid_;

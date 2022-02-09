@@ -122,7 +122,9 @@ gfx::Size VivaldiWindowFrameViewAura::CalculatePreferredSize() const {
       .size();
 }
 
-void VivaldiWindowFrameViewAura::Layout() {}
+void VivaldiWindowFrameViewAura::Layout() {
+  NonClientFrameView::Layout();
+}
 
 void VivaldiWindowFrameViewAura::OnPaint(gfx::Canvas* canvas) {}
 

@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
+<translation id="3830627370375585318">Configureu el tallafoc o l'antivirus per permetre que Vivaldi accedeixi
+          a la xarxa.</translation>
+<translation id="4200102020577305737">Aneu al
+          menú de Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Configuració LAN
+          i desmarqueu "Utilitza un servidor intermediari per a la LAN".</translation>
+<translation id="4932161901409251843">Aneu al
+          menú de Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          i assegureu-vos que la configuració estigui definida com a "sense servidor intermediari" o com a "directa".</translation>
+<translation id="5248344925342018662">Esteu consultant una pàgina segura de Vivaldi</translation>
+<translation id="7023871570427738255">Aneu al
+        menú de Vivaldi &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        i desmarqueu "<ph name="NO_PREFETCH_DESCRIPTION" />".
+        Si això no resol el problema, us recomanem que torneu a seleccionar
+        aquesta opció per obtenir un rendiment millorat.</translation>
+<translation id="8187289872471304532">Aneu a
+          Aplicacions &gt; Preferències del sistema &gt; Xarxa &gt; Configuració avançada &gt; Servidors intermediaris
+          i desmarqueu tots els servidors intermediaris que s'hagin seleccionat.</translation>
 </translationbundle>

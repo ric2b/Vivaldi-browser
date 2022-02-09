@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "url/third_party/mozilla/url_parse.h"
 

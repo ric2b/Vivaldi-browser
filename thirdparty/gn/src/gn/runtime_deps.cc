@@ -19,6 +19,7 @@
 #include "gn/output_file.h"
 #include "gn/scheduler.h"
 #include "gn/settings.h"
+#include "gn/string_output_buffer.h"
 #include "gn/switches.h"
 #include "gn/target.h"
 #include "gn/trace.h"
@@ -202,12 +203,13 @@ bool WriteRuntimeDepsFile(const OutputFile& output_file,
   base::FilePath data_deps_file =
       target->settings()->build_settings()->GetFullPath(output_as_source);
 
-  std::stringstream contents;
+  StringOutputBuffer storage;
+  std::ostream contents(&storage);
   for (const auto& pair : ComputeRuntimeDeps(target))
     contents << pair.first.value() << std::endl;
 
   ScopedTrace trace(TraceItem::TRACE_FILE_WRITE, output_as_source.value());
-  return WriteFileIfChanged(data_deps_file, contents.str(), err);
+  return storage.WriteToFileIfChanged(data_deps_file, err);
 }
 
 }  // namespace

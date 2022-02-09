@@ -187,10 +187,6 @@
     "dependencies": ["permission:browsingData"],
     "contexts": ["blessed_extension"]
   },
-  "cast.channel": {
-    "dependencies": ["permission:cast"],
-    "contexts": ["blessed_extension"]
-  },
   "certificateProvider": {
     "dependencies": ["permission:certificateProvider"],
     "contexts": ["blessed_extension"]
@@ -603,10 +599,6 @@
       "chrome://settings/*"
     ]
   }],
-  "launcherSearchProvider": {
-    "dependencies": ["permission:launcherSearchProvider"],
-    "contexts": ["blessed_extension"]
-  },
   "login": {
     "dependencies": ["permission:login"],
     "contexts": ["blessed_extension"],
@@ -649,11 +641,6 @@
     "channel": "stable",
     "matches": ["<all_urls>"]
   },
-  "networking.castPrivate": {
-    "channel": "stable",
-    "contexts": ["blessed_extension"],
-    "dependencies": ["permission:networking.castPrivate"]
-  },
   "notifications": {
     "dependencies": ["permission:notifications"],
     "contexts": ["blessed_extension"]
@@ -664,8 +651,7 @@
   },
   "pageAction": {
     "dependencies": ["manifest:page_action"],
-    "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
+    "contexts": ["blessed_extension"]
   },
   "pageCapture": {
     "dependencies": ["permission:pageCapture"],

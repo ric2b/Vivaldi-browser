@@ -26,7 +26,7 @@ class BottomControlsViewBinder {
          * @param bottomControlsRootView The Android View based bottom controls.
          */
         public ViewHolder(ScrollingBottomViewResourceFrameLayout bottomControlsRootView,
-                          ScrollingBottomViewSceneLayer layer) {
+                ScrollingBottomViewSceneLayer layer) {
             root = bottomControlsRootView;
             sceneLayer = layer;
         }
@@ -41,8 +41,8 @@ class BottomControlsViewBinder {
             view.sceneLayer.setYOffset(model.get(BottomControlsProperties.Y_OFFSET));
         } else if (BottomControlsProperties.ANDROID_VIEW_VISIBLE == propertyKey) {
             view.root.setVisibility(model.get(BottomControlsProperties.ANDROID_VIEW_VISIBLE)
-                    ? View.VISIBLE
-                    : View.INVISIBLE);
+                            ? View.VISIBLE
+                            : View.INVISIBLE);
         } else if (BottomControlsProperties.COMPOSITED_VIEW_VISIBLE == propertyKey) {
             final boolean showCompositedView =
                     model.get(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE);
@@ -53,7 +53,7 @@ class BottomControlsViewBinder {
     }
 
     static void bindCompositorMCP(PropertyModel model, ScrollingBottomViewSceneLayer sceneLayer,
-                                  PropertyKey propertyKey) {
+            PropertyKey propertyKey) {
         assert propertyKey == null;
     }
 }

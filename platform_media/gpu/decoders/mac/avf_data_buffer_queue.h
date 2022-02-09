@@ -27,10 +27,10 @@ namespace media {
 
 class MEDIA_EXPORT AVFDataBufferQueue {
  public:
-  AVFDataBufferQueue(PlatformMediaDataType type,
+  AVFDataBufferQueue(PlatformStreamType stream_type,
                      const base::TimeDelta& capacity,
-                     const base::Closure& capacity_available_cb,
-                     const base::Closure& capacity_depleted_cb);
+                     const base::RepeatingClosure& capacity_available_cb,
+                     const base::RepeatingClosure& capacity_depleted_cb);
   ~AVFDataBufferQueue();
 
   void Read(IPCDecodingBuffer decoding_buffer);
@@ -51,10 +51,10 @@ class MEDIA_EXPORT AVFDataBufferQueue {
   std::string DescribeBufferSize() const;
   void SatisfyPendingRead();
 
-  const PlatformMediaDataType type_;
+  const PlatformStreamType stream_type_;
   const base::TimeDelta capacity_;
-  base::Closure capacity_available_cb_;
-  base::Closure capacity_depleted_cb_;
+  base::RepeatingClosure capacity_available_cb_;
+  base::RepeatingClosure capacity_depleted_cb_;
   IPCDecodingBuffer ipc_decoding_buffer_;
   std::unique_ptr<Queue> buffer_queue_;
 

@@ -12,6 +12,17 @@ update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/browser/shell_integration/vivaldi_shell_integration_win.cc",
     ]
+
+    # With Vivaldi we do not use registry to communicate the update version,
+    # so use a directory-based watcher on Windows instead.
+    sources -= [
+      "upgrade_detector/registry_monitor.cc",
+      "upgrade_detector/registry_monitor.h",
+    ]
+    sources += [
+      "upgrade_detector/directory_monitor.cc",
+      "upgrade_detector/directory_monitor.h",
+    ]
   }
   if (is_linux) {
     sources += [
@@ -62,6 +73,10 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/autofill/form_data_android.h",
       "//vivaldi/browser/android/autofill/form_field_data_android.cc",
       "//vivaldi/browser/android/autofill/form_field_data_android.h",
+      "//vivaldi/browser/android/autofill/autofill_provider.h",
+      "//vivaldi/browser/android/autofill/autofill_provider.cc",
+      "//vivaldi/browser/android/autofill/android_autofill_manager.h",
+      "//vivaldi/browser/android/autofill/android_autofill_manager.cc",
     ]
   }
 }
@@ -132,5 +147,8 @@ if (!is_android) {
     sources += [
       "//vivaldi/browser/stats_reporter_unittest.cc"
     ]
+    if (is_win) {
+      sources -= [ "../browser/upgrade_detector/registry_monitor_unittest.cc" ]
+    }
   }
 }

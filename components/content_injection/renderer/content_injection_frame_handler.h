@@ -4,7 +4,6 @@
 #define COMPONENTS_CONTENT_INJECTION_RENDERER_CONTENT_INJECTION_FRAME_STATE_H_
 
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "components/content_injection/content_injection_types.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
@@ -64,7 +63,7 @@ class FrameHandler : public content::RenderFrameObserver,
   mojo::Remote<mojom::FrameInjectionHelper> injection_helper_;
   mojom::InjectionsForFramePtr pending_injections_;
   std::set<std::string> injected_static_scripts_;
-  base::Optional<mojom::ItemRunTime> last_run_time_;
+  absl::optional<mojom::ItemRunTime> last_run_time_;
   mojo::ReceiverSet<mojom::FrameHandler> receivers_;
 };
 

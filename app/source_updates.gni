@@ -11,6 +11,7 @@ update_target("//base:base") {
     sources = []
   }
   sources += [
+    "//vivaldi/app/vivaldi_apptools.cpp",
     "//vivaldi/app/vivaldi_apptools.h",
   ]
   allow_circular_includes_from = [
@@ -20,8 +21,6 @@ update_target("//base:base") {
 
 update_target("//base:base_static") {
   sources += [
-    "//vivaldi/app/vivaldi_apptools.cpp",
-    "//vivaldi/app/vivaldi_apptools.h",
     "//vivaldi/app/vivaldi_constants.cc",
     "//vivaldi/app/vivaldi_constants.h",
   ]

@@ -68,14 +68,14 @@ bool GeneratedFileTargetGenerator::FillContents() {
 }
 
 bool GeneratedFileTargetGenerator::IsMetadataCollectionTarget(
-    const std::string_view& variable,
+    std::string_view variable,
     const ParseNode* origin) {
   if (contents_defined_) {
     *err_ =
         Err(origin, std::string(variable) + " won't be used.",
             "\"contents\" is defined on this target, and so setting " +
                 std::string(variable) +
-                " will have no effect as no metdata collection will occur.");
+                " will have no effect as no metadata collection will occur.");
     return false;
   }
   return true;

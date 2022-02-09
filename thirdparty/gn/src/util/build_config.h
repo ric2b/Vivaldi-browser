@@ -34,6 +34,8 @@
 // we really are using glibc, not uClibc pretending to be glibc
 #define LIBC_GLIBC 1
 #endif
+#elif defined(__MSYS__)
+#define OS_MSYS 1
 #elif defined(_WIN32)
 #define OS_WIN 1
 #elif defined(__Fuchsia__)
@@ -71,7 +73,8 @@
 #if defined(OS_AIX) || defined(OS_ANDROID) || defined(OS_ASMJS) ||    \
     defined(OS_FREEBSD) || defined(OS_LINUX) || defined(OS_MACOSX) || \
     defined(OS_NACL) || defined(OS_NETBSD) || defined(OS_OPENBSD) ||  \
-    defined(OS_QNX) || defined(OS_SOLARIS) || defined(OS_HAIKU)
+    defined(OS_QNX) || defined(OS_SOLARIS) || defined(OS_HAIKU) || \
+    defined(OS_MSYS)
 #define OS_POSIX 1
 #endif
 
@@ -161,6 +164,12 @@
 #define ARCH_CPU_32_BITS 1
 #define ARCH_CPU_BIG_ENDIAN 1
 #endif
+#elif defined(__e2k__)
+#define ARCH_CPU_64_BITS 1
+#define ARCH_CPU_LITTLE_ENDIAN 1
+#elif defined(__riscv) && (__riscv_xlen == 64)
+#define ARCH_CPU_64_BITS 1
+#define ARCH_CPU_LITTLE_ENDIAN 1
 #else
 #error Please add support for your architecture in build_config.h
 #endif

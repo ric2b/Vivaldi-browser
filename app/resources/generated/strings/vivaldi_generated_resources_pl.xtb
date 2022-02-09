@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Zamknij pełny ekran</translation>
 <translation id="2177950615300672361">Karta prywatna: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Moduł klienta natywnego: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Ukryj przycisk</translation>
 <translation id="2218515861914035131">Wklej jako zwykły tekst</translation>
 <translation id="2249605167705922988">np. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Zezwalaj na identyfikatory treści chronionych (może wymagać restartu komputera)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Wstępne renderowanie: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wybierz katalog główny rozszerzenia, które chcesz umieścić w pakiecie. Aby zaktualizować rozszerzenie, wybierz również plik kluczy prywatnych do ponownego użycia.</translation>
-<translation id="3266179261140759675">Nie zezwalaj zamkniętym stronom na wysyłanie i odbieranie danych</translation>
 <translation id="3280237271814976245">Zapisz &amp;jako...</translation>
 <translation id="3285322247471302225">Nowa &amp;karta</translation>
 <translation id="3288047731229977326">Rozszerzenia działające w trybie programisty mogą uszkodzić twój komputer. Jeśli nie jesteś programistą, wyłącz je dla bezpieczeństwa.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Może odczytywać i modyfikować dane stron</translation>
 <translation id="3560034655160545939">&amp;Sprawdzanie pisowni</translation>
 <translation id="3574917942258583917">Czy na pewno chcesz zamknąć tryb prywatny?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; należącej do ciebie grupie: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jeśli się na to zgodzisz, wszyscy członkowie grupy będą mogli na niej drukować.</translation>
 <translation id="3587482841069643663">Wszystkie</translation>
 <translation id="3627588569887975815">Otwórz link w oknie &amp;prywatnym</translation>
 <translation id="3627879631695760395">Zainstaluj <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Moduły obsługi</translation>
 <translation id="3678156199662914018">Rozszerzenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Żądanie udostępnienia ekranu od <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Nie zezwalaj stronom na kontynuowanie przesyłania lub odbierania danych po ich zamknięciu</translation>
 <translation id="3711931198657368127">Wklej i &amp;przejdź <ph name="URL" /></translation>
 <translation id="3727187387656390258">Zbadaj wyskakujące okno</translation>
 <translation id="3744111561329211289">Synchronizacja w tle</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Utworzono rozszerzenie:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Akceptuj dla grupy</translation>
 <translation id="4096508467498758490">Wyłącz rozszerzenia trybu programisty</translation>
 <translation id="4100839878934973028">Inny program na twoim komputerze dodał aplikację, która może zmienić działanie Vivaldi.</translation>
 <translation id="4109898769411476438">Zamknij przeglądarkę przed rozpoczęciem importu</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Pokaż szczegóły</translation>
 <translation id="4907306957610201395">Kategoria uprawnień</translation>
 <translation id="4912643508233590958">Wznowienia z bezczynności</translation>
-<translation id="4918086044614829423">Akceptuj</translation>
 <translation id="4927753642311223124">Nie ma tu nic do oglądania, przejdź dalej.</translation>
 <translation id="4930714375720679147">Włącz</translation>
 <translation id="4988526792673242964">Strony</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Zapisz</translation>
 <translation id="5334142896108694079">Pamięć podręczna skryptów</translation>
 <translation id="5355926466126177564">Rozszerzenie "<ph name="EXTENSION_NAME" />" zmieniło stronę wyświetlaną przy wyszukiwaniu w polu adresu.</translation>
-<translation id="5360150013186312835">Pokaż na pasku narzędzi</translation>
+<translation id="5360150013186312835">Pokazuj na pasku narzędzi</translation>
 <translation id="5362741141255528695">Wybierz plik kluczy prywatnych.</translation>
 <translation id="536638840841140142">Brak</translation>
 <translation id="5370819323174483825">&amp;Odśwież</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Wyczyść dane witryny</translation>
 <translation id="6042308850641462728">Więcej</translation>
 <translation id="6059925163896151826">Urządzenia USB</translation>
-<translation id="6082651258230788217">Pokaż na pasku narzędzi</translation>
 <translation id="6086846494333236931">Zainstalowane przez twojego administratora</translation>
 <translation id="6101226222197207147">Dodano nową aplikację (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Twoje połączenie internetowe jest kontrolowane</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Symuluj ponowne uruchomienie przeglądarki</translation>
 <translation id="6445450263907939268">Jeśli nie chcesz tych zmian, możesz przywrócić poprzednie ustawienia.</translation>
 <translation id="6447842834002726250">Pliki cookie</translation>
-<translation id="6452181791372256707">Odrzuć</translation>
 <translation id="6498249116389603658">&amp;Wszystkie twoje języki</translation>
 <translation id="6503077044568424649">Najczęstsze</translation>
 <translation id="6508261954199872201">Aplikacja: <ph name="APP_NAME" /></translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Czy to oczekiwana strona nowej karty?</translation>
 <translation id="786073089922909430">Usługa: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Ostatnie drukarki</translation>
-<translation id="7898627924844766532">Trzymaj na pasku narzędzi</translation>
 <translation id="7903925330883316394">Narzędzie: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Aktualnie offline</translation>
 <translation id="7947962633355574091">K&amp;opiuj adres filmu</translation>
@@ -451,7 +444,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8725066075913043281">Spróbuj ponownie</translation>
 <translation id="8757090071857742562">Nie udało się przesłać pulpitu. Sprawdź, czy potwierdzono prośbę o rozpoczęcie udostępniania ekranu.</translation>
 <translation id="8774934320277480003">Górny margines</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić ci drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Domyślny</translation>
 <translation id="8800004011501252845">Pokaż drukarki dla</translation>
 <translation id="8808478386290700967">Web Store</translation>

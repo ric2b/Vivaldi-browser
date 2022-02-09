@@ -277,6 +277,30 @@ bool Menu_Model::SetParameter(Menu_Node* node, const std::string& parameter) {
   return true;
 }
 
+bool Menu_Model::SetShowShortcut(Menu_Node* node, bool show_shortcut) {
+  const Menu_Node* menu = node->GetMenu();
+  if (!menu) {
+    NOTREACHED();
+    return false;
+  }
+
+  if (node->showShortcut().has_value() &&
+      (*node->showShortcut() == show_shortcut)) {
+    return true;
+  }
+
+  RemoveBundleTag(node, false);
+
+  node->SetShowShortcut(show_shortcut);
+
+  Save();
+
+  for (auto& observer : observers_)
+    observer.MenuModelChanged(this, -1, menu->action());
+
+  return true;
+}
+
 bool Menu_Model::SetContainerMode(Menu_Node* node, const std::string& mode) {
   if (!node->is_container()) {
     NOTREACHED();
@@ -350,6 +374,33 @@ bool Menu_Model::Remove(Menu_Node* node) {
 
   for (auto& observer : observers_)
     observer.MenuModelChanged(this, -1, menu->action());
+
+  return true;
+}
+
+bool Menu_Model::RemoveAction(Menu_Node* root, const std::string& action) {
+  for (auto& child : root->children()) {
+    Menu_Node* menu = const_cast<Menu_Node*>(child->GetMenu());
+    if (menu) {
+      bool did_remove = false;
+
+      Menu_Node* item = menu->GetByAction(action);
+      while (item) {
+        RemoveBundleTag(item, false);
+        Menu_Node* parent = item->parent();
+        int index = parent->GetIndexOf(item);
+        parent->Remove(index);
+        did_remove = true;
+        item = menu->GetByAction(action);
+      }
+
+      if (did_remove) {
+        for (auto& observer : observers_) {
+          observer.MenuModelChanged(this, -1, menu->action());
+        }
+      }
+    }
+  }
 
   return true;
 }

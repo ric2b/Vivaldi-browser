@@ -9,12 +9,13 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/win/scoped_handle.h"
+
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
@@ -30,7 +31,7 @@ namespace vivaldi_update_notifier {
 
 class UpdateNotifierWindow;
 
-class UpdateNotifierManager : public winsparkle::UIDelegate {
+class UpdateNotifierManager : public UIDelegate {
  public:
   UpdateNotifierManager();
   ~UpdateNotifierManager() override;
@@ -40,7 +41,6 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   ExitCode RunNotifier();
 
   void StartUpdateCheck();
-  static bool IsSilentDownload();
   static void OnNotificationAcceptance();
 
  private:
@@ -56,21 +56,21 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   void OnCheckForUpdatesEvent(base::WaitableEvent* waitable_event);
   void OnQuitEvent(base::WaitableEvent* waitable_event);
 
-  void OnUpdateCheckResult(std::unique_ptr<winsparkle::Appcast> appcast,
-                           winsparkle::Error error);
+  void OnUpdateCheckResult(std::unique_ptr<Appcast> appcast,
+                           Error error);
   void StartDownload();
   void EnsureOldDownloadsDeleted();
-  void OnUpdateDownloadReport(JobId job_id, winsparkle::DownloadReport report);
+  void OnUpdateDownloadReport(JobId job_id, DownloadReport report);
   void OnUpdateDownloadResult(
       JobId job_id,
-      std::unique_ptr<winsparkle::InstallerLaunchData> launch_data,
-      winsparkle::Error error);
+      std::unique_ptr<InstallerLaunchData> launch_data,
+      Error error);
   void LaunchInstaller();
   void FinishCheck();
 
   void ShowUpdateNotification(const base::Version& version);
 
-  // winsparkle::UIDelegate implementation.
+  // UIDelegate implementation.
 
   void WinsparkleStartDownload() override;
   void WinsparkleLaunchInstaller() override;
@@ -82,21 +82,21 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
   base::RunLoop run_loop_;
 
-  base::Optional<base::WaitableEvent> check_for_updates_event_;
+  absl::optional<base::WaitableEvent> check_for_updates_event_;
   base::WaitableEventWatcher check_for_updates_event_watch_;
 
-  base::Optional<base::WaitableEvent> quit_event_;
+  absl::optional<base::WaitableEvent> quit_event_;
   base::WaitableEventWatcher quit_event_watch_;
 
-  base::Optional<base::WaitableEvent> global_quit_event_;
+  absl::optional<base::WaitableEvent> global_quit_event_;
   base::WaitableEventWatcher global_quit_event_watch_;
 
   base::Time check_start_time_;
   bool active_winsparkle_ui_ = false;
   bool active_version_check_ = false;
   bool active_download_ = false;
-  std::unique_ptr<winsparkle::Appcast> appcast_;
-  std::unique_ptr<winsparkle::InstallerLaunchData> launch_data_;
+  std::unique_ptr<Appcast> appcast_;
+  std::unique_ptr<InstallerLaunchData> launch_data_;
 
   // When active_download_ is true, this id denotes the current download job to
   // track cancellations. Each time the user cancels an active download via

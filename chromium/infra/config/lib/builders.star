@@ -28,6 +28,7 @@ through `builders.cpu`, `builders.os` and `builders.goma` respectively.
 load("//project.star", "settings")
 load("./args.star", "args")
 load("./branches.star", "branches")
+load("./listify.star", "listify")
 
 ################################################################################
 # Constants for use with the builder function                                  #
@@ -91,14 +92,14 @@ os = struct(
     MAC_10_13 = os_enum("Mac-10.13", os_category.MAC),
     MAC_10_14 = os_enum("Mac-10.14", os_category.MAC),
     MAC_10_15 = os_enum("Mac-10.15", os_category.MAC),
-    MAC_11 = os_enum("Mac-11|Mac-10.16", os_category.MAC),
+    MAC_11 = os_enum("Mac-11", os_category.MAC),
     MAC_DEFAULT = os_enum("Mac-10.15", os_category.MAC),
     MAC_ANY = os_enum("Mac", os_category.MAC),
     WINDOWS_7 = os_enum("Windows-7", os_category.WINDOWS),
     WINDOWS_8_1 = os_enum("Windows-8.1", os_category.WINDOWS),
     WINDOWS_10 = os_enum("Windows-10", os_category.WINDOWS),
     WINDOWS_10_1703 = os_enum("Windows-10-15063", os_category.WINDOWS),
-    WINDOWS_10_1909 = os_enum("Windows-10-18363", os_category.WINDOWS),
+    WINDOWS_10_20h2 = os_enum("Windows-10-19042", os_category.WINDOWS),
     WINDOWS_DEFAULT = os_enum("Windows-10", os_category.WINDOWS),
     WINDOWS_ANY = os_enum("Windows", os_category.WINDOWS),
 )
@@ -150,6 +151,19 @@ goma = struct(
     ),
 )
 
+def _rotation(name):
+    return branches.value({branches.MAIN: [name]})
+
+# Sheriff rotations that a builder can be added to (only takes effect on trunk)
+# Arbitrary elements can't be added, new rotations must be added in SoM code
+sheriff_rotations = struct(
+    ANDROID = _rotation("android"),
+    CHROMIUM = _rotation("chromium"),
+    CHROMIUM_CLANG = _rotation("chromium.clang"),
+    CHROMIUM_GPU = _rotation("chromium.gpu"),
+    IOS = _rotation("ios"),
+)
+
 def xcode_enum(version):
     return struct(
         version = version,
@@ -167,6 +181,8 @@ xcode = struct(
     x12a7209 = xcode_enum("12a7209"),
     # (current default for iOS) xc12.4 gm seed
     x12d4e = xcode_enum("12d4e"),
+    # Xcode 12.5. Requires Mac11+ OS.
+    x12e262 = xcode_enum("12e262"),
 )
 
 ################################################################################
@@ -188,31 +204,20 @@ def _chromium_tests_property(*, project_trigger_overrides):
 
     return chromium_tests or None
 
-def _goma_property(*, goma_backend, goma_debug, goma_enable_ats, goma_jobs, os):
+def _goma_property(*, goma_backend, goma_debug, goma_enable_ats, goma_jobs):
     goma_properties = {}
 
     goma_backend = defaults.get_value("goma_backend", goma_backend)
-    if goma_backend != None:
-        goma_properties.update(goma_backend)
+    if goma_backend == None:
+        return None
+    goma_properties.update(goma_backend)
 
     goma_debug = defaults.get_value("goma_debug", goma_debug)
     if goma_debug:
         goma_properties["debug"] = True
 
-    goma_enable_ats = defaults.get_value("goma_enable_ats", goma_enable_ats)
-
-    # TODO(crbug.com/1040754): Remove this flag.
-    if goma_enable_ats == args.COMPUTE:
-        goma_enable_ats = (
-            os and os.category in (os_category.LINUX, os_category.WINDOWS) and
-            goma_backend in (
-                goma.backend.RBE_TOT,
-                goma.backend.RBE_STAGING,
-                goma.backend.RBE_PROD,
-            )
-        )
-    if goma_enable_ats:
-        goma_properties["enable_ats"] = True
+    if goma_enable_ats != None:
+        goma_properties["enable_ats"] = goma_enable_ats
 
     goma_jobs = defaults.get_value("goma_jobs", goma_jobs)
     if goma_jobs != None:
@@ -317,6 +322,7 @@ defaults = args.defaults(
     os = None,
     project_trigger_overrides = None,
     pool = None,
+    sheriff_rotations = None,
     xcode = None,
     ssd = args.COMPUTE,
     use_clang_coverage = False,
@@ -355,6 +361,7 @@ def builder(
         builder_group = args.DEFAULT,
         pool = args.DEFAULT,
         ssd = args.DEFAULT,
+        sheriff_rotations = None,
         xcode = args.DEFAULT,
         console_view_entry = None,
         list_view = args.DEFAULT,
@@ -377,6 +384,7 @@ def builder(
         reclient_service = args.DEFAULT,
         reclient_jobs = args.DEFAULT,
         reclient_rewrapper_env = args.DEFAULT,
+        experiments = None,
         **kwargs):
     """Define a builder.
 
@@ -432,6 +440,9 @@ def builder(
         If True, emits a 'ssd:1' dimension. If False, emits a 'ssd:0' parameter.
         By default, considered False if builderless is considered True and
         otherwise None.
+      * sheriff_rotations - A string or list of strings identifying the sheriff
+        rotations that the builder should be included in. Will be merged with
+        the module-level default.
       * xcode - a member of the `xcode` enum indicating the xcode version the
         builder requires. Emits a cache declaration of the form
         ```{
@@ -463,8 +474,14 @@ def builder(
         True, the 'debug' field will be set in the '$build/goma' property. By
         default, considered False.
       * goma_enable_ats - a boolean indicating whether ats should be enabled for
-        goma. If True, the 'enable_ats' field will be set in the '$build/goma'
-        property. By default, considered False.
+        goma or args.COMPUTE if ats should be enabled where it is needed.
+        If True or False are explicitly set, the 'enable_ats' field will be set
+        in the '$build/goma' property.  By default, args.COMPUTE is set and
+        'enable_ats' fields is set only if ats need to be enabled by default.
+        The 'enable_ats' on Windows will control cross compiling in server
+        side. cross compile if `enable_ats` is False.
+        Note: if goma_enable_ats is not set, goma recipe modules sets
+        GOMA_ARBITRARY_TOOLCHAIN_SUPPORT=true on windows by default.
       * goma_jobs - a member of the `goma.jobs` enum indicating the number of jobs
         to be used by the builder. Sets the 'jobs' field of the '$build/goma'
         property will be set according to the enum member. By default, the 'jobs'
@@ -503,6 +520,8 @@ def builder(
         compilations to run when using re-client as the compiler.
       * reclient_rewrapper_env - a map that sets the rewrapper flags via the
         environment variables. All such vars must start with the "RBE_" prefix.
+      * experiments - a dict of experiment name to the percentage chance (0-100)
+        that it will apply to builds generated from this builder.
       * kwargs - Additional keyword arguments to forward on to `luci.builder`.
     """
 
@@ -515,6 +534,9 @@ def builder(
     dimensions = {}
 
     properties = kwargs.pop("properties", {})
+    if "sheriff_rotations" in properties:
+        fail('Setting "sheriff_rotations" property is not supported: ' +
+             "use sheriff_rotations instead")
     if "$kitchen" in properties:
         fail('Setting "$kitchen" property is not supported: ' +
              "use configure_kitchen instead")
@@ -578,6 +600,10 @@ def builder(
     if pool:
         dimensions["pool"] = pool
 
+    sheriff_rotations = listify(defaults.sheriff_rotations.get(), sheriff_rotations)
+    if sheriff_rotations:
+        properties["sheriff_rotations"] = sheriff_rotations
+
     ssd = defaults.get_value("ssd", ssd)
     if ssd == args.COMPUTE:
         ssd = None
@@ -586,6 +612,14 @@ def builder(
             ssd = False
     if ssd != None:
         dimensions["ssd"] = str(int(ssd))
+
+    # TODO(crbug.com/1143122): remove this.
+    experiments = experiments or {}
+    if os and os.category == os_category.MAC:
+        experiments["chromium.chromium_tests.use_rbe_cas"] = 50
+    elif os and os.category == os_category.WINDOWS:
+        experiments["chromium.chromium_tests.use_rbe_cas"] = 20
+    kwargs["experiments"] = experiments
 
     configure_kitchen = defaults.get_value("configure_kitchen", configure_kitchen)
     if configure_kitchen:
@@ -602,15 +636,22 @@ def builder(
     if chromium_tests != None:
         properties["$build/chromium_tests"] = chromium_tests
 
-    goma = _goma_property(
+    goma_enable_ats = defaults.get_value("goma_enable_ats", goma_enable_ats)
+
+    # Enable ATS on linux by default.
+    if goma_enable_ats == args.COMPUTE:
+        if os and os.category == os_category.LINUX:
+            goma_enable_ats = True
+        else:
+            goma_enable_ats = None
+    gp = _goma_property(
         goma_backend = goma_backend,
         goma_debug = goma_debug,
         goma_enable_ats = goma_enable_ats,
         goma_jobs = goma_jobs,
-        os = os,
     )
-    if goma != None:
-        properties["$build/goma"] = goma
+    if gp != None:
+        properties["$build/goma"] = gp
 
     code_coverage = _code_coverage_property(
         use_clang_coverage = use_clang_coverage,
@@ -737,5 +778,6 @@ builders = struct(
     defaults = defaults,
     goma = goma,
     os = os,
+    sheriff_rotations = sheriff_rotations,
     xcode = xcode,
 )

@@ -71,38 +71,43 @@ class MailClientService : public KeyedService {
   // want to check state during their own initializer.
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
-  typedef base::Callback<void(std::shared_ptr<MessageResult>)> MessageCallback;
+  typedef base::OnceCallback<void(std::shared_ptr<MessageResult>)>
+      MessageCallback;
 
-  typedef base::Callback<void(std::shared_ptr<SearchListIdRows>)>
+  typedef base::OnceCallback<void(std::shared_ptr<SearchListIdRows>)>
       EmailSearchCallback;
 
-  typedef base::Callback<void(std::shared_ptr<bool>)> ResultCallback;
+  typedef base::OnceCallback<void(std::shared_ptr<bool>)> ResultCallback;
 
   base::CancelableTaskTracker::TaskId CreateMessages(
       mail_client::MessageRows rows,
-      const ResultCallback& callback,
+      ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteMessages(
       std::vector<SearchListID> search_list_ids,
-      const ResultCallback& callback,
+      ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId AddMessageBody(
       SearchListID search_list_id,
       std::u16string body,
-      const MessageCallback& callback,
+      MessageCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId SearchEmail(
       std::u16string search,
-      const EmailSearchCallback& callback,
+      EmailSearchCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId MatchMessage(
       SearchListID search_list_id,
       std::u16string search,
-      const ResultCallback& callback,
+      ResultCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId RebuildDatabase(
+      ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
  private:
@@ -110,10 +115,6 @@ class MailClientService : public KeyedService {
   friend class base::RefCountedThreadSafe<MailClientService>;
   friend class MailClientBackendDelegate;
   friend class MailClientBackend;
-
-  friend std::unique_ptr<MailClientService> CreateMailClientService(
-      const base::FilePath& mail_client_dir,
-      bool create_db);
 
   void OnDBLoaded();
 

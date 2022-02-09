@@ -123,9 +123,9 @@ const base::Feature kTLS13KeyUpdate{"TLS13KeyUpdate",
 const base::Feature kPostQuantumCECPQ2{"PostQuantumCECPQ2",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kPostQuantumCECPQ2SomeDomains{
-    "PostQuantumCECPQ2SomeDomains", base::FEATURE_ENABLED_BY_DEFAULT};
+    "PostQuantumCECPQ2SomeDomains", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::FeatureParam<std::string>
-    kPostQuantumCECPQ2Prefix(&kPostQuantumCECPQ2SomeDomains, "prefix", "aa");
+    kPostQuantumCECPQ2Prefix(&kPostQuantumCECPQ2SomeDomains, "prefix", "a");
 
 const base::Feature kNetUnusedIdleSocketTimeout{
     "NetUnusedIdleSocketTimeout", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -226,12 +226,21 @@ const base::Feature kSameSiteCookiesBugfix1166211{
     "SameSiteCookiesBugfix1166211", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNoCookieChangeNotificationOnLoad{
-    "NoCookieChangeNotificationOnLoad", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NoCookieChangeNotificationOnLoad", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if BUILDFLAG(ENABLE_REPORTING)
 const base::Feature kDocumentReporting{"DocumentReporting",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(ENABLE_REPORTING)
+
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+const base::Feature kUdpSocketPosixAlwaysUpdateBytesReceived{
+    "UdpSocketPosixAlwaysUpdateBytesReceived",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
+
+const base::Feature kCookieSameSiteConsidersRedirectChain{
+    "CookieSameSiteConsidersRedirectChain", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace net

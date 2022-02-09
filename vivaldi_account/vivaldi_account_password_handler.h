@@ -6,7 +6,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/optional.h"
 #include "chromium/components/password_manager/core/browser/password_store.h"
 #include "chromium/components/password_manager/core/browser/password_store_consumer.h"
 

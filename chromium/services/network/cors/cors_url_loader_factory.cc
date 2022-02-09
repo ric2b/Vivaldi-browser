@@ -209,7 +209,17 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
       &CorsURLLoaderFactory::DeleteIfNeeded, base::Unretained(this)));
 }
 
-CorsURLLoaderFactory::~CorsURLLoaderFactory() = default;
+CorsURLLoaderFactory::~CorsURLLoaderFactory() {
+  // Delete loaders one at a time, since deleting one loader can cause another
+  // loader waiting on it to fail synchronously, which could result in the other
+  // loader calling DestroyURLLoader().
+  while (!loaders_.empty()) {
+    // No need to call context_->LoaderDestroyed(), since this method is only
+    // called from the NetworkContext's destructor, or when there are no
+    // remaining URLLoaders.
+    loaders_.erase(loaders_.begin());
+  }
+}
 
 void CorsURLLoaderFactory::OnLoaderCreated(
     std::unique_ptr<mojom::URLLoader> loader) {
@@ -246,10 +256,17 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
   if (resource_request.destination ==
       network::mojom::RequestDestination::kWebBundle) {
     DCHECK(resource_request.web_bundle_token_params.has_value());
+
+    mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer;
+    if (resource_request.devtools_request_id.has_value()) {
+      devtools_observer = GetDevToolsObserver(resource_request);
+    }
+
     base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
         context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
             resource_request.url, *resource_request.web_bundle_token_params,
-            process_id_, request_initiator_origin_lock_);
+            process_id_, request_initiator_origin_lock_,
+            std::move(devtools_observer), resource_request.devtools_request_id);
     client =
         web_bundle_url_loader_factory->WrapURLLoaderClient(std::move(client));
   }
@@ -259,19 +276,8 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
                         : network_loader_factory_.get();
   DCHECK(inner_url_loader_factory);
   if (!disable_web_security_) {
-    mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer;
-    if (resource_request.trusted_params &&
-        resource_request.trusted_params->devtools_observer) {
-      ResourceRequest::TrustedParams cloned_params =
-          *resource_request.trusted_params;
-      devtools_observer = std::move(cloned_params.devtools_observer);
-    } else {
-      mojom::DevToolsObserver* observer =
-          factory_override_ ? factory_override_->GetDevToolsObserver()
-                            : network_loader_factory_->GetDevToolsObserver();
-      if (observer)
-        observer->Clone(devtools_observer.InitWithNewPipeAndPassReceiver());
-    }
+    mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer =
+        GetDevToolsObserver(resource_request);
 
     auto loader = std::make_unique<CorsURLLoader>(
         std::move(receiver), process_id_, request_id, options,
@@ -527,8 +533,8 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
 InitiatorLockCompatibility
 CorsURLLoaderFactory::VerifyRequestInitiatorLockWithPluginCheck(
     uint32_t process_id,
-    const base::Optional<url::Origin>& request_initiator_origin_lock,
-    const base::Optional<url::Origin>& request_initiator) {
+    const absl::optional<url::Origin>& request_initiator_origin_lock,
+    const absl::optional<url::Origin>& request_initiator) {
   if (process_id == mojom::kBrowserProcessId)
     return InitiatorLockCompatibility::kBrowserProcess;
 
@@ -548,6 +554,25 @@ CorsURLLoaderFactory::VerifyRequestInitiatorLockWithPluginCheck(
 bool CorsURLLoaderFactory::GetAllowAnyCorsExemptHeaderForBrowser() const {
   return context_ && process_id_ == mojom::kBrowserProcessId &&
          context_->allow_any_cors_exempt_header_for_browser();
+}
+
+mojo::PendingRemote<mojom::DevToolsObserver>
+CorsURLLoaderFactory::GetDevToolsObserver(
+    const ResourceRequest& resource_request) const {
+  mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer;
+  if (resource_request.trusted_params &&
+      resource_request.trusted_params->devtools_observer) {
+    ResourceRequest::TrustedParams cloned_params =
+        *resource_request.trusted_params;
+    devtools_observer = std::move(cloned_params.devtools_observer);
+  } else {
+    mojom::DevToolsObserver* observer =
+        factory_override_ ? factory_override_->GetDevToolsObserver()
+                          : network_loader_factory_->GetDevToolsObserver();
+    if (observer)
+      observer->Clone(devtools_observer.InitWithNewPipeAndPassReceiver());
+  }
+  return devtools_observer;
 }
 
 }  // namespace cors

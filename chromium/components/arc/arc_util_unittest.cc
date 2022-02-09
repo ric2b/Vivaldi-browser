@@ -23,6 +23,8 @@
 #include "chromeos/dbus/upstart/fake_upstart_client.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_features.h"
+#include "components/arc/test/arc_util_test_support.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
@@ -300,6 +302,14 @@ TEST_F(ArcUtilTest, IsArcVmRtVcpuEnabled) {
   }
 }
 
+TEST_F(ArcUtilTest, IsArcVmUseHugePages) {
+  EXPECT_FALSE(IsArcVmUseHugePages());
+
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv({"", "--arcvm-use-hugepages"});
+  EXPECT_TRUE(IsArcVmUseHugePages());
+}
+
 TEST_F(ArcUtilTest, IsArcVmDevConfIgnored) {
   EXPECT_FALSE(IsArcVmDevConfIgnored());
 
@@ -309,15 +319,26 @@ TEST_F(ArcUtilTest, IsArcVmDevConfIgnored) {
 }
 
 TEST_F(ArcUtilTest, GetArcVmUreadaheadMode) {
+  constexpr char kArcMemProfile4GbName[] = "4G";
+  constexpr char kArcMemProfile8GbName[] = "8G";
+  auto callback_disabled = base::BindRepeating(&GetSystemMemoryInfoForTesting,
+                                               kArcMemProfile4GbName);
+  auto callback_readahead = base::BindRepeating(&GetSystemMemoryInfoForTesting,
+                                                kArcMemProfile8GbName);
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->InitFromArgv({""});
-  EXPECT_EQ(ArcVmUreadaheadMode::READAHEAD, GetArcVmUreadaheadMode());
+  EXPECT_EQ(ArcVmUreadaheadMode::READAHEAD,
+            GetArcVmUreadaheadMode(callback_readahead));
+  EXPECT_EQ(ArcVmUreadaheadMode::DISABLED,
+            GetArcVmUreadaheadMode(callback_disabled));
 
   command_line->InitFromArgv({"", "--arcvm-ureadahead-mode=generate"});
-  EXPECT_EQ(ArcVmUreadaheadMode::GENERATE, GetArcVmUreadaheadMode());
+  EXPECT_EQ(ArcVmUreadaheadMode::GENERATE,
+            GetArcVmUreadaheadMode(callback_readahead));
 
   command_line->InitFromArgv({"", "--arcvm-ureadahead-mode=disabled"});
-  EXPECT_EQ(ArcVmUreadaheadMode::DISABLED, GetArcVmUreadaheadMode());
+  EXPECT_EQ(ArcVmUreadaheadMode::DISABLED,
+            GetArcVmUreadaheadMode(callback_readahead));
 }
 
 // TODO(hidehiko): Add test for IsArcKioskMode().
@@ -338,6 +359,8 @@ TEST_F(ArcUtilTest, IsArcAllowedForUser) {
       new user_manager::FakeUserManager();
   user_manager::ScopedUserManager scoped_user_manager(
       base::WrapUnique(fake_user_manager));
+  TestingPrefServiceSimple local_state;
+  fake_user_manager->set_local_state(&local_state);
 
   struct {
     user_manager::UserType user_type;
@@ -395,6 +418,7 @@ TEST_F(ArcUtilTest, ScaleFactorToDensity) {
   EXPECT_EQ(160, GetLcdDensityForDeviceScaleFactor(1.25f));
   EXPECT_EQ(213, GetLcdDensityForDeviceScaleFactor(1.6f));
   EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(display::kDsf_1_777));
+  EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(display::kDsf_1_8));
   EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(2.0f));
   EXPECT_EQ(280, GetLcdDensityForDeviceScaleFactor(display::kDsf_2_252));
   EXPECT_EQ(280, GetLcdDensityForDeviceScaleFactor(2.4f));

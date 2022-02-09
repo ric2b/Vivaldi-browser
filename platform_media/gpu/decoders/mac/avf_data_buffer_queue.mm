@@ -11,11 +11,11 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/optional.h"
 #include "base/strings/stringprintf.h"
 #include "common/platform_media_pipeline_types.h"
 #include "media/base/data_buffer.h"
 #include "media/base/timestamp_constants.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media {
 
@@ -37,8 +37,7 @@ class AVFDataBufferQueue::Queue {
   size_t data_size_;
 };
 
-void AVFDataBufferQueue::Queue::Push(
-    const scoped_refptr<DataBuffer>& buffer) {
+void AVFDataBufferQueue::Queue::Push(const scoped_refptr<DataBuffer>& buffer) {
   DCHECK(buffer->timestamp() != media::kNoTimestamp);
   DCHECK(buffers_.empty() || buffer->timestamp() > buffers_.back()->timestamp())
       << "Out-of-order buffer @" << buffer->timestamp().InMicroseconds();
@@ -67,13 +66,12 @@ base::TimeDelta AVFDataBufferQueue::Queue::GetDuration() const {
   return buffers_.back()->timestamp() - buffers_.front()->timestamp();
 }
 
-
 AVFDataBufferQueue::AVFDataBufferQueue(
-    PlatformMediaDataType type,
+    PlatformStreamType stream_type,
     const base::TimeDelta& capacity,
-    const base::Closure& capacity_available_cb,
-    const base::Closure& capacity_depleted_cb)
-    : type_(type),
+    const base::RepeatingClosure& capacity_available_cb,
+    const base::RepeatingClosure& capacity_depleted_cb)
+    : stream_type_(stream_type),
       capacity_(capacity),
       capacity_available_cb_(capacity_available_cb),
       capacity_depleted_cb_(capacity_depleted_cb),
@@ -91,29 +89,26 @@ void AVFDataBufferQueue::Read(IPCDecodingBuffer ipc_decoding_buffer) {
   DCHECK(ipc_decoding_buffer);
   DCHECK(!ipc_decoding_buffer_);
 
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Read()";
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Read()";
 
   ipc_decoding_buffer_ = std::move(ipc_decoding_buffer);
   SatisfyPendingRead();
 }
 
-void AVFDataBufferQueue::BufferReady(
-    const scoped_refptr<DataBuffer>& buffer) {
+void AVFDataBufferQueue::BufferReady(const scoped_refptr<DataBuffer>& buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(buffer.get() != NULL);
+  DCHECK(buffer.get());
   DCHECK(!end_of_stream_) << "Can't enqueue buffers anymore";
 
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << (type_ == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO ? " AUDIO"
-                                                                   : " VIDEO")
+          << GetStreamTypeName(stream_type_)
           << " buffer ready: timestamp=" << buffer->timestamp().InMicroseconds()
           << " duration=" << buffer->duration().InMicroseconds()
           << " size=" << buffer->data_size();
 
   buffer_queue_->Push(buffer);
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " " << DescribeBufferSize();
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " "
+          << DescribeBufferSize();
 
   if (!HasAvailableCapacity())
     catching_up_ = false;
@@ -135,8 +130,8 @@ void AVFDataBufferQueue::Flush() {
   buffer_queue_->Clear();
   catching_up_ = false;
 
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " " << DescribeBufferSize();
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " "
+          << DescribeBufferSize();
 }
 
 bool AVFDataBufferQueue::HasAvailableCapacity() const {
@@ -150,19 +145,17 @@ size_t AVFDataBufferQueue::memory_usage() const {
 }
 
 std::string AVFDataBufferQueue::DescribeBufferSize() const {
-  return base::StringPrintf(
-      "Have %lld us of queued %s data, queue size: %zu",
-      buffer_queue_->GetDuration().InMicroseconds(),
-      (type_ == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO ? " AUDIO"
-                                                            : " VIDEO"),
-      buffer_queue_->data_size());
+  return base::StringPrintf("Have %lld us of queued %s data, queue size: %zu",
+                            buffer_queue_->GetDuration().InMicroseconds(),
+                            GetStreamTypeName(stream_type_),
+                            buffer_queue_->data_size());
 }
 
 void AVFDataBufferQueue::SatisfyPendingRead() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (ipc_decoding_buffer_) {
-    base::Optional<MediaDataStatus> status;
+    absl::optional<MediaDataStatus> status;
     scoped_refptr<DataBuffer> buffer;
 
     if (end_of_stream_) {

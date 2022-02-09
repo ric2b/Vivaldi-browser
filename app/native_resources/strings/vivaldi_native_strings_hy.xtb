@@ -41,6 +41,7 @@
 <translation id="2989805286512600854">Բացել նոր ներդիրում</translation>
 <translation id="3027988479108856431">Ցավոք՝ Ձեր Yandex-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերն աշխատում է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր գործն ու փակեք Yandex-ի բոլոր պատուհանները։ Հետո սեղմեք «Շարունակել»։</translation>
 <translation id="3084011186245865060">Բնապատկեր 6</translation>
+<translation id="3093931836425623631">Vivaldi֊ի ստեղծումը հնարավոր է դարձել շնորհիվ Chromium բաց կոդով նախագծի և այլ բաց կոդով ծրագրակազմերի։</translation>
 <translation id="3127383884976966729">Գազան 7</translation>
 <translation id="3156398087075132709">Նոր էջանիշ</translation>
 <translation id="3255747772218936245">Տեղակայել թարմացումը</translation>
@@ -127,7 +128,6 @@
 <translation id="7086554968911045110">Բնապատկեր 7</translation>
 <translation id="7111492742514999492">Բնապատկեր 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi-ն ստեղծվել է՝ օգտագործելով <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> բաց կոդով նախագիծն ու այլ <ph name="BEGIN_LINK_OSS" />բաց կոդով ծրագրեր<ph name="END_LINK_OSS" />։</translation>
 <translation id="7581266044164103589">Չհաջողվեց գործարկել թարմացման տեղակայիչը։ Խնդրում ենք ստուգել համակարգչի հիշողության կամ սկավառակի մեջ բավարար ծավալի առկայությունն ու փորձել նորից։</translation>
 <translation id="7658239707568436148">Չեղարկել</translation>
 <translation id="7715497554424665066">Ա&amp;նտեսել թարմացումը</translation>

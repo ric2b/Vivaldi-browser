@@ -24,14 +24,12 @@ enum class TreeDumpMode {
   kJSON
 };
 
-bool FormatFileToString(Setup* setup,
-                        const SourceFile& file,
-                        TreeDumpMode dump_tree,
-                        std::string* output);
+bool FormatJsonToString(const std::string& input, std::string* output);
 
 bool FormatStringToString(const std::string& input,
                           TreeDumpMode dump_tree,
-                          std::string* output);
+                          std::string* output,
+                          std::string* dump_output);
 
 }  // namespace commands
 

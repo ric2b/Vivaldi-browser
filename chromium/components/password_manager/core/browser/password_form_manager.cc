@@ -114,7 +114,7 @@ bool IsUsernameFirstFlowFeatureEnabled() {
 
 // Find a field in |predictions| with given renderer id.
 const PasswordFieldPrediction* FindFieldPrediction(
-    const base::Optional<FormPredictions>& predictions,
+    const absl::optional<FormPredictions>& predictions,
     autofill::FieldRendererId field_renderer_id) {
   if (!predictions)
     return nullptr;
@@ -697,6 +697,7 @@ bool PasswordFormManager::ProvisionallySave(
     const PasswordManagerDriver* driver,
     const PossibleUsernameData* possible_username) {
   DCHECK(DoesManage(submitted_form.unique_renderer_id, driver));
+  DCHECK(client_->IsSavingAndFillingEnabled(submitted_form.url));
   std::unique_ptr<PasswordForm> parsed_submitted_form =
       ParseFormAndMakeLogging(submitted_form, FormDataParser::Mode::kSaving);
   RecordMetricOnReadonly(parser_.readonly_status(), !!parsed_submitted_form,

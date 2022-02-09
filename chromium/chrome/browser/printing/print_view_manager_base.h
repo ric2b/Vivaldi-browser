@@ -86,9 +86,11 @@ class PrintViewManagerBase : public content::NotificationObserver,
 #endif
   void GetDefaultPrintSettings(
       GetDefaultPrintSettingsCallback callback) override;
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void UpdatePrintSettings(int32_t cookie,
                            base::Value job_settings,
                            UpdatePrintSettingsCallback callback) override;
+#endif
   void ScriptedPrint(mojom::ScriptedPrintParamsPtr params,
                      ScriptedPrintCallback callback) override;
   void ShowInvalidPrinterSettingsError() override;
@@ -117,6 +119,8 @@ class PrintViewManagerBase : public content::NotificationObserver,
 
   // Makes sure the current print_job_ has all its data before continuing, and
   // disconnect from it.
+  // WARNING: `this` may not be alive after DisconnectFromCurrentPrintJob()
+  // returns.
   void DisconnectFromCurrentPrintJob();
 
   // Manages the low-level talk to the printer.
@@ -155,7 +159,22 @@ class PrintViewManagerBase : public content::NotificationObserver,
                           uint32_t page_count,
                           int cookie,
                           PrinterHandler::PrintCallback callback);
+
+  // Runs `callback` with `params` to reply to UpdatePrintSettings().
+  void UpdatePrintSettingsReply(
+      mojom::PrintManagerHost::UpdatePrintSettingsCallback callback,
+      mojom::PrintPagesParamsPtr params,
+      bool canceled);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+
+  // Runs `callback` with `params` to reply to GetDefaultPrintSettings().
+  void GetDefaultPrintSettingsReply(GetDefaultPrintSettingsCallback callback,
+                                    mojom::PrintParamsPtr params);
+
+  // Runs `callback` with `params` to reply to ScriptedPrint().
+  void ScriptedPrintReply(ScriptedPrintCallback callback,
+                          int process_id,
+                          mojom::PrintPagesParamsPtr params);
 
   // Processes a NOTIFY_PRINT_JOB_EVENT notification.
   void OnNotifyPrintJobEvent(const JobEventDetails& event_details);
@@ -163,6 +182,7 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // Requests the RenderView to render all the missing pages for the print job.
   // No-op if no print job is pending. Returns true if at least one page has
   // been requested to the renderer.
+  // WARNING: `this` may not be alive after RenderAllMissingPagesNow() returns.
   bool RenderAllMissingPagesNow();
 
   // Checks that synchronization is correct with |print_job_| based on |cookie|.
@@ -196,6 +216,7 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // while the blocking inner message loop is running. This is useful in cases
   // where the RenderView is about to be destroyed while a printing job isn't
   // finished.
+  // WARNING: `this` may not be alive after RunInnerMessageLoop() returns.
   bool RunInnerMessageLoop();
 
   // In the case of Scripted Printing, where the renderer is controlling the

@@ -176,8 +176,7 @@ ExtensionFunction::ResponseAction ZoomSetDefaultZoomFunction::Run() {
   }
   double zoom_factor = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
 
-  content::StoragePartition* partition =
-      profile->GetDefaultStoragePartition(profile);
+  content::StoragePartition* partition = profile->GetDefaultStoragePartition();
 
   ChromeZoomLevelPrefs* zoom_prefs =
       static_cast<ChromeZoomLevelPrefs*>(partition->GetZoomLevelDelegate());

@@ -8,5 +8,8 @@ include_rules = [
   "+media",
   "+mojo/public/cpp/bindings",
   "+services/media_session/public",
+  "+ui/events/devices",
   "+testing",
+  "+third_party/abseil-cpp/absl",
+  "+third_party/cros_system_api/dbus",
 ]

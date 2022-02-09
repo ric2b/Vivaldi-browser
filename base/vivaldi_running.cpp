@@ -5,8 +5,13 @@
 #include "base/command_line.h"
 #include "base/no_destructor.h"
 #include "base/vivaldi_switches.h"
+#include "build/build_config.h"
 
 namespace vivaldi {
+
+#ifdef OS_WIN
+bool g_cancelled_drag = false;
+#endif
 
 namespace {
 bool g_checked_vivaldi_status = false;

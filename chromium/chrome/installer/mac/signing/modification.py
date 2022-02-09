@@ -12,7 +12,7 @@ import os.path
 
 from . import commands, parts
 
-from signing_util import vivaldi_modify_plists
+from .signing_util import vivaldi_modify_plists
 
 _CF_BUNDLE_DISPLAY_NAME = 'CFBundleDisplayName'
 _CF_BUNDLE_EXE = 'CFBundleExecutable'

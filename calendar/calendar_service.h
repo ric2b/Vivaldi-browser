@@ -67,78 +67,79 @@ class CalendarService : public KeyedService {
   // Provides the result of a query. See QueryResults in calendar_types.h.
   // The common use will be to use QueryResults.Swap to suck the contents of
   // the results out of the passed in parameter and take ownership of them.
-  typedef base::Callback<void(std::shared_ptr<EventQueryResults>)>
+  typedef base::OnceCallback<void(std::shared_ptr<EventQueryResults>)>
       QueryCalendarCallback;
 
-  typedef base::Callback<void(std::shared_ptr<CalendarQueryResults>)>
+  typedef base::OnceCallback<void(std::shared_ptr<CalendarQueryResults>)>
       GetALLQueryCalendarCallback;
 
   // Provides the result of a event create. See EventResultCB in
   // event_type.h.
-  typedef base::Callback<void(std::shared_ptr<EventResultCB>)>
+  typedef base::OnceCallback<void(std::shared_ptr<EventResultCB>)>
       EventResultCallback;
 
   // Provides the results of multiple event create. See CreateEventsResult in
   // event_type.h.
-  typedef base::Callback<void(std::shared_ptr<CreateEventsResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<CreateEventsResult>)>
       CreateEventsCallback;
 
   // Provides the result of a delete calendar event. See DeleteEventResult in
   // event_type.h.
-  typedef base::Callback<void(std::shared_ptr<DeleteEventResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<DeleteEventResult>)>
       DeleteEventCallback;
 
   // Provides the result of a create calendar. See CreateCalendarResult in
   // calendar_type.h.
-  typedef base::Callback<void(std::shared_ptr<CreateCalendarResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<CreateCalendarResult>)>
       CreateCalendarCallback;
 
-  typedef base::Callback<void(std::shared_ptr<UpdateCalendarResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<UpdateCalendarResult>)>
       UpdateCalendarCallback;
 
-  typedef base::Callback<void(std::shared_ptr<DeleteCalendarResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<DeleteCalendarResult>)>
       DeleteCalendarCallback;
 
-  typedef base::Callback<void(std::shared_ptr<EventTypeRows>)>
+  typedef base::OnceCallback<void(std::shared_ptr<EventTypeRows>)>
       GetALLEventTypesCallback;
 
-  typedef base::Callback<void(std::shared_ptr<CreateEventTypeResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<CreateEventTypeResult>)>
       CreateEventTypeCallback;
 
-  typedef base::Callback<void(std::shared_ptr<UpdateEventTypeResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<UpdateEventTypeResult>)>
       UpdateEventTypeCallback;
 
-  typedef base::Callback<void(std::shared_ptr<DeleteEventTypeResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<DeleteEventTypeResult>)>
       DeleteEventTypeCallback;
 
-  typedef base::Callback<void(std::shared_ptr<GetAllNotificationResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<GetAllNotificationResult>)>
       GetAllNotificationsCallback;
 
-  typedef base::Callback<void(std::shared_ptr<NotificationResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<NotificationResult>)>
       NotificationCallback;
 
-  typedef base::Callback<void(std::shared_ptr<DeleteNotificationResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<DeleteNotificationResult>)>
       DeleteNotificationCallback;
 
-  typedef base::Callback<void(std::shared_ptr<InviteResult>)> InviteCallback;
+  typedef base::OnceCallback<void(std::shared_ptr<InviteResult>)>
+      InviteCallback;
 
-  typedef base::Callback<void(std::shared_ptr<DeleteInviteResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<DeleteInviteResult>)>
       DeleteInviteCallback;
 
-  typedef base::Callback<void(std::shared_ptr<CreateAccountResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<CreateAccountResult>)>
       CreateAccountCallback;
 
-  typedef base::Callback<void(std::shared_ptr<DeleteAccountResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<DeleteAccountResult>)>
       DeleteAccountCallback;
 
-  typedef base::Callback<void(std::shared_ptr<UpdateAccountResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<UpdateAccountResult>)>
       UpdateAccountCallback;
 
-  typedef base::Callback<void(std::shared_ptr<AccountRows>)>
+  typedef base::OnceCallback<void(std::shared_ptr<AccountRows>)>
       GetALLAccounsCallback;
 
   base::CancelableTaskTracker::TaskId GetAllEvents(
-      const QueryCalendarCallback& callback,
+      QueryCalendarCallback callback,
       base::CancelableTaskTracker* tracker);
   // Returns true if this calendar service is currently in a mode where
   // extensive changes might happen, such as for import and sync. This is
@@ -148,126 +149,126 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId CreateCalendarEvent(
       EventRow ev,
-      const EventResultCallback& callback,
+      EventResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateCalendarEvents(
       std::vector<calendar::EventRow> events,
-      const CreateEventsCallback& callback,
+      CreateEventsCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateCalendarEvent(
       EventID event_id,
       EventRow event,
-      const EventResultCallback& callback,
+      EventResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteCalendarEvent(
       EventID event_id,
-      const DeleteEventCallback& callback,
+      DeleteEventCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateCalendar(
       CalendarRow ev,
-      const CreateCalendarCallback& callback,
+      CreateCalendarCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllCalendars(
-      const GetALLQueryCalendarCallback& callback,
+      GetALLQueryCalendarCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateCalendar(
       CalendarID calendar_id,
       Calendar calendar,
-      const UpdateCalendarCallback& callback,
+      UpdateCalendarCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteCalendar(
       CalendarID event_id,
-      const DeleteCalendarCallback& callback,
+      DeleteCalendarCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllEventTypes(
-      const GetALLEventTypesCallback& callback,
+      GetALLEventTypesCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateEventType(
       EventTypeRow ev,
-      const CreateEventTypeCallback& callback,
+      CreateEventTypeCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateEventType(
       EventTypeID event_type_id,
       EventType ev,
-      const UpdateEventTypeCallback& callback,
+      UpdateEventTypeCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteEventType(
       EventTypeID event_type_id,
-      const DeleteEventTypeCallback& callback,
+      DeleteEventTypeCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateRecurrenceException(
       RecurrenceExceptionRow ev,
-      const EventResultCallback& callback,
+      EventResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllNotifications(
-      const GetAllNotificationsCallback& callback,
+      GetAllNotificationsCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateNotification(
       NotificationRow notification,
-      const NotificationCallback& callback,
+      NotificationCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateNotification(
       NotificationID notification_id,
       UpdateNotificationRow notification,
-      const NotificationCallback& callback,
+      NotificationCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteNotification(
       NotificationID notification_id,
-      const DeleteNotificationCallback& callback,
+      DeleteNotificationCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateInvite(
       InviteRow invite,
-      const InviteCallback& callback,
+      InviteCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteInvite(
       InviteID invite_id,
-      const DeleteInviteCallback& callback,
+      DeleteInviteCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateInvite(
       UpdateInviteRow invite,
-      const InviteCallback& callback,
+      InviteCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateAccount(
       AccountRow ev,
-      const CreateAccountCallback& callback,
+      CreateAccountCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteAccount(
       AccountID id,
-      const DeleteAccountCallback& callback,
+      DeleteAccountCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateAccount(
       AccountRow invite,
-      const UpdateAccountCallback& callback,
+      UpdateAccountCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllAccounts(
-      const GetALLAccounsCallback& callback,
+      GetALLAccounsCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllEventTemplates(
-      const QueryCalendarCallback& callback,
+      QueryCalendarCallback callback,
       base::CancelableTaskTracker* tracker);
 
  private:

@@ -53,7 +53,7 @@ CONTENT_EXPORT
 
 // Private interface.
 // TODO(ccameron): Document these functions.
-- (id)initWithViewsHostableView:(ui::ViewsHostableView*)v;
+- (instancetype)initWithViewsHostableView:(ui::ViewsHostableView*)v;
 - (void)registerDragTypes;
 - (void)startDragWithDropData:(const content::DropData&)dropData
             dragOperationMask:(NSDragOperation)operationMask

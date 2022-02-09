@@ -108,8 +108,7 @@ ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&FindMailFiles, file_path),
       base::BindOnce(&MailPrivateGetFilePathsFunction::OnFinished, this));
 
@@ -143,8 +142,7 @@ ExtensionFunction::ResponseAction MailPrivateGetMailFilePathsFunction::Run() {
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&FindMailFiles, file_path),
       base::BindOnce(&MailPrivateGetMailFilePathsFunction::OnFinished, this));
 
@@ -243,8 +241,7 @@ MailPrivateWriteTextToMessageFileFunction::Run() {
   base::FilePath file_path = profile->GetPath();
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Save, file_path, string_paths, file_name, data),
       base::BindOnce(&MailPrivateWriteTextToMessageFileFunction::OnFinished,
                      this));
@@ -275,8 +272,7 @@ MailPrivateWriteBufferToMessageFileFunction::Run() {
   base::FilePath file_path = profile->GetPath();
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&SaveBuffer, file_path, string_paths, file_name,
                      params->raw),
       base::BindOnce(&MailPrivateWriteBufferToMessageFileFunction::OnFinished,
@@ -316,8 +312,7 @@ ExtensionFunction::ResponseAction MailPrivateDeleteMessageFileFunction::Run() {
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Delete, file_path, file_name),
       base::BindOnce(&MailPrivateDeleteMessageFileFunction::OnFinished, this));
 
@@ -368,8 +363,7 @@ ExtensionFunction::ResponseAction MailPrivateReadFileToBufferFunction::Run() {
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
       base::BindOnce(&MailPrivateReadFileToBufferFunction::OnFinished, this));
 
@@ -409,8 +403,7 @@ MailPrivateReadMessageFileToBufferFunction::Run() {
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
       base::BindOnce(&MailPrivateReadMessageFileToBufferFunction::OnFinished,
                      this));
@@ -438,8 +431,7 @@ ExtensionFunction::ResponseAction MailPrivateReadFileToTextFunction::Run() {
   base::FilePath file_path = base_path.AppendASCII(path);
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
       base::BindOnce(&MailPrivateReadFileToTextFunction::OnFinished, this));
 
@@ -485,8 +477,7 @@ ExtensionFunction::ResponseAction MailPrivateGetFileDirectoryFunction::Run() {
   file_path = file_path.Append(hashed_account_id);
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&GetDirectory, file_path),
       base::BindOnce(&MailPrivateGetFileDirectoryFunction::OnFinished, this));
 
@@ -515,8 +506,7 @@ MailPrivateCreateFileDirectoryFunction::Run() {
   base::FilePath file_path = profile->GetPath();
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&CreateDirectory, file_path, hashed_account_id),
       base::BindOnce(&MailPrivateCreateFileDirectoryFunction::OnFinished,
                      this));
@@ -588,8 +578,8 @@ ExtensionFunction::ResponseAction MailPrivateCreateMessagesFunction::Run() {
 
   client_service->CreateMessages(
       message_rows,
-      base::Bind(&MailPrivateCreateMessagesFunction::CreateMessagesComplete,
-                 this),
+      base::BindOnce(&MailPrivateCreateMessagesFunction::CreateMessagesComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();  // CreateMessagesComplete() will be called
@@ -618,8 +608,8 @@ ExtensionFunction::ResponseAction MailPrivateDeleteMessagesFunction::Run() {
       MailClientServiceFactory::GetForProfile(GetProfile());
   service->DeleteMessages(
       search_list,
-      base::Bind(&MailPrivateDeleteMessagesFunction::DeleteMessagesComplete,
-                 this),
+      base::BindOnce(&MailPrivateDeleteMessagesFunction::DeleteMessagesComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();
@@ -644,8 +634,8 @@ ExtensionFunction::ResponseAction MailPrivateAddMessageBodyFunction::Run() {
 
   service->AddMessageBody(
       search_list_id, body,
-      base::Bind(&MailPrivateAddMessageBodyFunction::AddMessageBodyComplete,
-                 this),
+      base::BindOnce(&MailPrivateAddMessageBodyFunction::AddMessageBodyComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();
@@ -674,8 +664,8 @@ ExtensionFunction::ResponseAction MailPrivateSearchMessagesFunction::Run() {
 
   service->SearchEmail(
       searchParam,
-      base::Bind(&MailPrivateSearchMessagesFunction::MessagesSearchComplete,
-                 this),
+      base::BindOnce(&MailPrivateSearchMessagesFunction::MessagesSearchComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();  // MessagesSearchComplete() will be called
@@ -709,7 +699,8 @@ ExtensionFunction::ResponseAction MailPrivateMatchMessageFunction::Run() {
 
   service->MatchMessage(
       search_list_id, searchParam,
-      base::Bind(&MailPrivateMatchMessageFunction::MatchMessageComplete, this),
+      base::BindOnce(&MailPrivateMatchMessageFunction::MatchMessageComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();  // MatchMessageComplete() will be called
@@ -719,6 +710,25 @@ ExtensionFunction::ResponseAction MailPrivateMatchMessageFunction::Run() {
 void MailPrivateMatchMessageFunction::MatchMessageComplete(
     std::shared_ptr<bool> match) {
   Respond(ArgumentList(mail_private::MatchMessage::Results::Create(*match)));
+}
+
+ExtensionFunction::ResponseAction MailPrivateRebuildDatabaseFunction::Run() {
+  MailClientService* service =
+      MailClientServiceFactory::GetForProfile(GetProfile());
+
+  service->RebuildDatabase(
+      base::BindOnce(
+          &MailPrivateRebuildDatabaseFunction::RebuildStartedCallback, this),
+      &task_tracker_);
+
+  return RespondLater();  // RebuildStartedCallback() will be called
+                          // asynchronously.
+}
+
+void MailPrivateRebuildDatabaseFunction::RebuildStartedCallback(
+    std::shared_ptr<bool> started) {
+  Respond(
+      ArgumentList(mail_private::RebuildDatabase::Results::Create(*started)));
 }
 
 }  //  namespace extensions

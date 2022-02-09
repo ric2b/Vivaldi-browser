@@ -64,8 +64,6 @@ constexpr base::TimeDelta kPeriodicAutomaticCheckInterval =
 constexpr base::TimeDelta kOldDownloadsCleanupDelay =
     base::TimeDelta::FromSeconds(30);
 
-constexpr bool g_silent_download = true;
-
 constexpr base::win::i18n::LanguageSelector::LangToOffset
     kLanguageOffsetPairs[] = {
 #define HANDLE_LANGUAGE(l_, o_) {L## #l_, o_},
@@ -261,7 +259,7 @@ std::wstring ReadLocaleStateLanguage() {
     LOG(WARNING) << "Failed to read " << local_state_path;
     return std::wstring();
   }
-  base::Optional<base::Value> json = base::JSONReader::Read(json_text);
+  absl::optional<base::Value> json = base::JSONReader::Read(json_text);
   if (!json) {
     LOG(WARNING) << "Failed to parse " << local_state_path << " as json";
     return std::wstring();
@@ -278,11 +276,11 @@ std::wstring ReadLocaleStateLanguage() {
 class UpdateNotifierManager::UpdateCheckThread
     : public vivaldi::DetachedThread {
  public:
-  UpdateCheckThread(int download_flags) : download_flags_(download_flags) {}
+  UpdateCheckThread() = default;
 
   void Run() override {
-    winsparkle::Error error;
-    std::unique_ptr<winsparkle::Appcast> appcast = CheckForUpdates(error);
+    Error error;
+    std::unique_ptr<Appcast> appcast = CheckForUpdates(error);
     if (error) {
       LOG(ERROR) << error.log_message();
     }
@@ -292,24 +290,22 @@ class UpdateNotifierManager::UpdateCheckThread
                                   std::move(appcast), std::move(error)));
   }
 
-  std::unique_ptr<winsparkle::Appcast> CheckForUpdates(
-      winsparkle::Error& error) {
+  std::unique_ptr<Appcast> CheckForUpdates(Error& error) {
     if (error)
       return nullptr;
 
     GURL url = init_sparkle::GetAppcastUrl();
     LOG(INFO) << "Downloading an appcast from " << url.spec();
-    winsparkle::FileDownloader downloader(url, download_flags_, error);
-    std::string appcast_xml = downloader.FetchAll(error);
+    downloader_.Connect(url, error);
+    std::string appcast_xml = downloader_.FetchAll(error);
     if (error)
       return nullptr;
     if (appcast_xml.size() == 0) {
-      error.set(winsparkle::Error::kFormat, "Appcast XML data incomplete.");
+      error.set(Error::kFormat, "Appcast XML data incomplete.");
       return nullptr;
     }
 
-    std::unique_ptr<winsparkle::Appcast> appcast =
-        winsparkle::Appcast::Load(appcast_xml, error);
+    std::unique_ptr<Appcast> appcast = Appcast::Load(appcast_xml, error);
     if (!appcast)
       return nullptr;
     DCHECK(appcast->IsValid());
@@ -319,22 +315,22 @@ class UpdateNotifierManager::UpdateCheckThread
     return appcast;
   }
 
-  bool download_flags_ = 0;
+  FileDownloader downloader_;
 };
 
 class UpdateNotifierManager::UpdateDownloadThread
     : public vivaldi::DetachedThread,
-      public winsparkle::DownloadUpdateDelegate {
+      public DownloadUpdateDelegate {
  public:
-  UpdateDownloadThread(JobId job_id, const winsparkle::Appcast& appcast)
+  UpdateDownloadThread(JobId job_id, const Appcast& appcast)
       : job_id_(job_id), appcast_(appcast) {}
 
  protected:
   // DetachedThread implementation
   void Run() override {
-    winsparkle::Error error;
-    std::unique_ptr<winsparkle::InstallerLaunchData> launch_data =
-        winsparkle::DownloadUpdate(appcast_, *this, error);
+    Error error;
+    std::unique_ptr<InstallerLaunchData> launch_data =
+        DownloadUpdate(appcast_, *this, error);
     if (error) {
       LOG(ERROR) << error.log_message();
     }
@@ -346,15 +342,14 @@ class UpdateNotifierManager::UpdateDownloadThread
   }
 
   // DownloadUpdateDelegate implementation
-  void SendReport(const winsparkle::DownloadReport& report,
-                  winsparkle::Error& error) override {
+  void SendReport(const DownloadReport& report, Error& error) override {
     if (error)
       return;
     if (job_id_ != GetInstance().download_job_id_.load()) {
-      error.set(winsparkle::Error::kCancelled);
+      error.set(Error::kCancelled);
       return;
     }
-    if (report.kind == winsparkle::DownloadReport::kMoreData) {
+    if (report.kind == DownloadReport::kMoreData) {
       // only update at most 10 times/sec so that we don't flood the UI:
       clock_t now = clock();
       if (report.downloaded_length != report.content_length &&
@@ -375,7 +370,7 @@ class UpdateNotifierManager::UpdateDownloadThread
 
  private:
   JobId job_id_ = 0;
-  winsparkle::Appcast appcast_;
+  Appcast appcast_;
   clock_t last_more_data_time_ = 0;
 };
 
@@ -407,12 +402,12 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
   // download the vivaldi update twice, but then the installer ensures that only
   // its single instance can run globally.
   std::wstring check_for_updates_event_name;
-  if (winsparkle::g_install_mode) {
+  if (g_mode == UpdateMode::kNetworkInstall) {
     // Only obe instance of the network installer per user.
     check_for_updates_event_name = kNetworkInstallerUniquenessEventName;
   } else {
     check_for_updates_event_name = vivaldi::GetUpdateNotifierEventName(
-        kCheckForUpdatesEventPrefix, winsparkle::GetExeDir());
+        kCheckForUpdatesEventPrefix, GetExeDir());
   }
   base::win::ScopedHandle check_for_updates_event_handle(
       CreateEvent(nullptr, TRUE, FALSE, check_for_updates_event_name.c_str()));
@@ -431,10 +426,10 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
       main_thread_runner_);
   DLOG(INFO) << "Listening " << check_for_updates_event_name;
 
-  if (!winsparkle::g_install_mode) {
+  if (g_mode != UpdateMode::kNetworkInstall) {
     // Update listen for quit events from the installer.
-    std::wstring quit_event_name = vivaldi::GetUpdateNotifierEventName(
-        kQuitEventPrefix, winsparkle::GetExeDir());
+    std::wstring quit_event_name =
+        vivaldi::GetUpdateNotifierEventName(kQuitEventPrefix, GetExeDir());
     base::win::ScopedHandle quit_event_handle(
         CreateEvent(nullptr, TRUE, FALSE, quit_event_name.c_str()));
     PCHECK(quit_event_handle.IsValid());
@@ -446,11 +441,11 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
         main_thread_runner_);
     DLOG(INFO) << "Listening " << quit_event_name;
 
-    if (winsparkle::g_install_type == vivaldi::InstallType::kForAllUsers) {
+    if (g_install_type == vivaldi::InstallType::kForAllUsers) {
       // For system-wide installations listen to the global event to exit the
       // notifier for any user during update or uninstall.
       std::wstring global_quit_event_name = vivaldi::GetUpdateNotifierEventName(
-          kGlobalQuitEventPrefix, winsparkle::GetExeDir());
+          kGlobalQuitEventPrefix, GetExeDir());
       base::win::ScopedHandle global_quit_handle =
           MakeGlobalEvent(global_quit_event_name);
       if (global_quit_handle.IsValid()) {
@@ -471,8 +466,7 @@ ExitCode UpdateNotifierManager::RunNotifier() {
   InitEvents(already_runs);
   if (already_runs) {
     LOG(INFO) << "Notifier already runs, will quit";
-    DCHECK(!winsparkle::g_install_mode || winsparkle::g_manual_check);
-    if (winsparkle::g_manual_check) {
+    if (g_mode == UpdateMode::kManualCheck) {
       // NOTE(jarle@vivaldi.com): These events will be sent to another running
       // instance of the update notifier, then our process will exit.
       if (!::SetEvent(check_for_updates_event_->handle())) {
@@ -486,12 +480,13 @@ ExitCode UpdateNotifierManager::RunNotifier() {
   EnableHighDPISupport();
   chrome::RegisterPathProvider();
 
-  vivaldi::InitInstallerLanguage(
-      kLanguageOffsetPairs,
-      winsparkle::g_install_mode ? nullptr : &ReadLocaleStateLanguage);
-  winsparkle::UI::Init(*this);
+  vivaldi::InitInstallerLanguage(kLanguageOffsetPairs,
+                                 g_mode == UpdateMode::kNetworkInstall
+                                     ? nullptr
+                                     : &ReadLocaleStateLanguage);
+  UI::Init(*this);
 
-  if (winsparkle::IsUsingTaskScheduler()) {
+  if (IsUsingTaskScheduler()) {
     // When we run the first time after been enabled from the installer, this
     // may fail as the installer may still be running preventing to remove its
     // setup.exe file. But then we will remove the leftovers the next time we
@@ -502,7 +497,7 @@ ExitCode UpdateNotifierManager::RunNotifier() {
     //
     // TODO(igor@vivaldi.com): Consider waiting for the installer process to
     // finish and delete the leftovers then.
-    winsparkle::CleanDownloadLeftovers();
+    CleanDownloadLeftovers();
   } else {
     main_thread_runner_->PostDelayedTask(
         FROM_HERE,
@@ -546,31 +541,27 @@ void UpdateNotifierManager::StartUpdateCheck() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
   check_start_time_ = base::Time::Now();
-  LOG(INFO) << "Starting a new update check, manual_check="
-            << winsparkle::g_manual_check;
+  LOG(INFO) << "Starting a new update check, mode=" << static_cast<int>(g_mode);
   if (active_winsparkle_ui_) {
-    winsparkle::UI::BringToFocus();
+    DCHECK_EQ(g_mode, UpdateMode::kManualCheck);
+    UI::BringToFocus();
     return;
   }
-  if (winsparkle::g_manual_check) {
-    // If active_version_check_ is true, we upgrade the automated check to a
-    // manual form.
+  if (g_mode == UpdateMode::kManualCheck) {
     active_winsparkle_ui_ = true;
-    if (g_silent_download || winsparkle::g_silent_update) {
-      if (active_download_ || launch_data_) {
-        // We are downloading or showing an installation notification. Show the
-        // WinSparkle UI while continueing to download or hold launch data. If
-        // the user agree to install, we will re-use the downloaded data instead
-        // of fetching them again.
-        DCHECK(appcast_);
-        if (appcast_) {
-          winsparkle::UI::NotifyUpdateCheckDone(appcast_.get(),
-                                                winsparkle::Error());
-          return;
-        }
+    if (active_download_ || launch_data_) {
+      // We are upgrading to a manual form an automated check that is
+      // downloading or showing an installation notification. Show the
+      // WinSparkle UI while continueing to download or hold launch data. If the
+      // user agree to install, we will re-use the downloaded data instead of
+      // fetching them again.
+      DCHECK(appcast_);
+      if (appcast_) {
+        UI::NotifyUpdateCheckDone(appcast_.get(), Error(), false);
+        return;
       }
     }
-    winsparkle::UI::NotifyCheckingUpdates();
+    UI::NotifyCheckingUpdates();
   }
 
   if (active_version_check_)
@@ -578,37 +569,35 @@ void UpdateNotifierManager::StartUpdateCheck() {
 
   active_version_check_ = true;
 
-  int download_flags = 0;
-  if (winsparkle::g_manual_check) {
+  auto update_check = std::make_unique<UpdateCheckThread>();
+  if (WithVersionCheckUI(g_mode)) {
     // Manual check should always connect to the server and bypass any
     // caching. This is good for finding updates that are too new to propagate
     // through caches yet.
-    download_flags = winsparkle::Download_NoCached;
+    update_check->downloader_.DisableCaching();
   }
-  vivaldi::DetachedThread::Start(
-      std::make_unique<UpdateCheckThread>(download_flags));
+  vivaldi::DetachedThread::Start(std::move(update_check));
 }
 
 void UpdateNotifierManager::OnUpdateCheckResult(
-    std::unique_ptr<winsparkle::Appcast> appcast,
-    winsparkle::Error error) {
+    std::unique_ptr<Appcast> appcast,
+    Error error) {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
   // If the user has previously chosen "Skip version", the following automated
   // update check should skip it. But a new manual check should still show
   // this version to allow the user to reconsider. This is the semantics in
   // Sparkle for Mac.
-  if (appcast && !winsparkle::g_manual_check) {
-    base::Version toSkip(winsparkle::ReadRegistryIem(
-        winsparkle::RegistryItem::kSkipThisVersion));
+  if (appcast && !WithVersionCheckUI(g_mode)) {
+    base::Version toSkip(ReadRegistryIem(RegistryItem::kSkipThisVersion));
     if (toSkip.IsValid() && toSkip == appcast->Version) {
       appcast.reset();
     }
   }
 
-  if (appcast && winsparkle::g_app_version.IsValid()) {
+  if (appcast && g_app_version.IsValid()) {
     // Check if our version is out of date.
-    if (appcast->Version <= winsparkle::g_app_version) {
+    if (appcast->Version <= g_app_version) {
       // The same or newer version is already installed.
       appcast.reset();
     }
@@ -627,24 +616,32 @@ void UpdateNotifierManager::OnUpdateCheckResult(
   if (appcast) {
     appcast_ = std::move(appcast);
   } else if (appcast_ && error) {
-    error = winsparkle::Error();
+    error = Error();
   }
   if (active_winsparkle_ui_) {
-    winsparkle::UI::NotifyUpdateCheckDone(appcast_.get(), error);
-    if (appcast_ && winsparkle::g_install_mode) {
+    bool pending_update = false;
+    if (!appcast_ && !error) {
+      // The user has the latest version installed. If it is in a pending state
+      // waiting for the browser to restart, inform the user about it.
+      if (vivaldi::GetPendingUpdateVersion(GetExeDir())) {
+        pending_update = true;
+      }
+    }
+    UI::NotifyUpdateCheckDone(appcast_.get(), error, pending_update);
+    if (appcast_ && g_mode == UpdateMode::kNetworkInstall) {
       // For the network installer start the download immediately.
       StartDownload();
     }
   } else if (!appcast_) {
     FinishCheck();
-  } else if (!g_silent_download && !winsparkle::g_silent_update) {
+  } else if (WithDownloadUI(g_mode)) {
     ShowUpdateNotification(appcast_->Version);
   } else if (launch_data_ && launch_data_->version == appcast_->Version) {
     // We can be here if we downloaded data, presented the install
     // notification to the user but it was ignored and we run the next
     // periodic check. Re-use already downloaded data and ask the user to
     // confirm the installation again.
-    if (winsparkle::g_silent_update) {
+    if (g_mode == UpdateMode::kSilentUpdate) {
       GetInstance().LaunchInstaller();
     } else {
       ShowUpdateNotification(launch_data_->version);
@@ -655,11 +652,6 @@ void UpdateNotifierManager::OnUpdateCheckResult(
 }
 
 /* static */
-bool UpdateNotifierManager::IsSilentDownload() {
-  return g_silent_download || winsparkle::g_silent_update;
-}
-
-/* static */
 void UpdateNotifierManager::OnNotificationAcceptance() {
   if (GetInstance().active_winsparkle_ui_) {
     // This can happen when the automated check detected an update and
@@ -667,18 +659,17 @@ void UpdateNotifierManager::OnNotificationAcceptance() {
     // check. Then, when the manual UI runs, the user went back to the
     // original notification and activated it. Just bring the UI to focus
     // then.
-    winsparkle::UI::BringToFocus();
+    UI::BringToFocus();
     return;
   }
 
-  if (!winsparkle::g_silent_update) {
+  if (g_mode != UpdateMode::kSilentUpdate) {
     if (!GetInstance().appcast_)
       return;
 
     // Activate the UI and jump into the show update info section.
     GetInstance().active_winsparkle_ui_ = true;
-    winsparkle::UI::NotifyUpdateCheckDone(GetInstance().appcast_.get(),
-                                          winsparkle::Error());
+    UI::NotifyUpdateCheckDone(GetInstance().appcast_.get(), Error(), false);
     return;
   }
   GetInstance().LaunchInstaller();
@@ -687,7 +678,7 @@ void UpdateNotifierManager::OnNotificationAcceptance() {
 void UpdateNotifierManager::StartDownload() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
-  if (!winsparkle::IsUsingTaskScheduler()) {
+  if (!IsUsingTaskScheduler()) {
     // Make sure that at this point no downloads from the previous invocation of
     // the notifier process exists.
     EnsureOldDownloadsDeleted();
@@ -698,7 +689,7 @@ void UpdateNotifierManager::StartDownload() {
     return;
   if (active_winsparkle_ui_ && launch_data_) {
     // Resend the notification about a successful download to UI.
-    winsparkle::UI::NotifyDownloadResult(winsparkle::Error());
+    UI::NotifyDownloadResult(Error());
     return;
   }
   active_download_ = true;
@@ -706,8 +697,7 @@ void UpdateNotifierManager::StartDownload() {
   if (launch_data_ && launch_data_->version == appcast_->Version) {
     // The user closed the update UI when the UI was about to start the
     // installer. On the next check re-use the download.
-    OnUpdateDownloadResult(job_id, std::move(launch_data_),
-                           winsparkle::Error());
+    OnUpdateDownloadResult(job_id, std::move(launch_data_), Error());
     return;
   }
   vivaldi::DetachedThread::Start(
@@ -719,28 +709,27 @@ void UpdateNotifierManager::EnsureOldDownloadsDeleted() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
   static bool cleanup_done = false;
   if (!cleanup_done) {
-    winsparkle::CleanDownloadLeftovers();
+    CleanDownloadLeftovers();
     cleanup_done = true;
   }
 }
 
-void UpdateNotifierManager::OnUpdateDownloadReport(
-    JobId job_id,
-    winsparkle::DownloadReport report) {
+void UpdateNotifierManager::OnUpdateDownloadReport(JobId job_id,
+                                                   DownloadReport report) {
   if (job_id != download_job_id_.load()) {
     // The download was cancelled.
     return;
   }
   DCHECK(active_download_);
   if (active_winsparkle_ui_) {
-    winsparkle::UI::NotifyDownloadProgress(report);
+    UI::NotifyDownloadProgress(report);
   }
 }
 
 void UpdateNotifierManager::OnUpdateDownloadResult(
     JobId job_id,
-    std::unique_ptr<winsparkle::InstallerLaunchData> launch_data,
-    winsparkle::Error error) {
+    std::unique_ptr<InstallerLaunchData> launch_data,
+    Error error) {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
   if (job_id != download_job_id_.load()) {
     // The download was cancelled.
@@ -755,18 +744,17 @@ void UpdateNotifierManager::OnUpdateDownloadResult(
   if (launch_data) {
     launch_data_ = std::move(launch_data);
   } else if (launch_data_ && error) {
-    error = winsparkle::Error();
+    error = Error();
   }
   if (active_winsparkle_ui_) {
-    if (!winsparkle::g_install_mode || error) {
-      winsparkle::UI::NotifyDownloadResult(error);
+    if (g_mode != UpdateMode::kNetworkInstall || error) {
+      UI::NotifyDownloadResult(error);
     } else {
       // The network installer launches the installer immediately.
       LaunchInstaller();
     }
-  } else if ((g_silent_download || winsparkle::g_silent_update) &&
-             launch_data_) {
-    if (winsparkle::g_silent_update) {
+  } else if (launch_data_ && !WithDownloadUI(g_mode)) {
+    if (g_mode == UpdateMode::kSilentUpdate) {
       LaunchInstaller();
     } else {
       ShowUpdateNotification(launch_data_->version);
@@ -781,16 +769,15 @@ void UpdateNotifierManager::LaunchInstaller() {
   if (!launch_data_)
     return;
 
-  winsparkle::Error error;
-  base::Process process =
-      winsparkle::RunInstaller(std::move(launch_data_), error);
+  Error error;
+  base::Process process = RunInstaller(std::move(launch_data_), error);
   if (active_winsparkle_ui_) {
     // Close Winsparkle UI.
-    winsparkle::UI::NotifyStartedInstaller(error);
-  } else if (g_silent_download && !winsparkle::g_silent_update && error) {
+    UI::NotifyStartedInstaller(error);
+  } else if (error && g_mode != UpdateMode::kSilentUpdate) {
     // Notify the user about the launch error.
     active_winsparkle_ui_ = true;
-    winsparkle::UI::NotifyStartedInstaller(error);
+    UI::NotifyStartedInstaller(error);
   } else {
     FinishCheck();
   }
@@ -799,7 +786,7 @@ void UpdateNotifierManager::LaunchInstaller() {
   // update notifier from the same exe path again. But for the network installer
   // there will be no new invocation from the same exe path. So wait for the
   // process to finish and remove the main installer then.
-  if (winsparkle::g_install_mode && !error) {
+  if (g_mode == UpdateMode::kNetworkInstall && !error) {
     int exit_code = 0;
     bool success = process.WaitForExit(&exit_code);
     if (!success) {
@@ -807,7 +794,7 @@ void UpdateNotifierManager::LaunchInstaller() {
     } else if (exit_code != 0) {
       LOG(ERROR) << "Installer exit with non-zero exit_code " << exit_code;
     }
-    winsparkle::CleanDownloadLeftovers();
+    CleanDownloadLeftovers();
   }
 }
 
@@ -826,10 +813,9 @@ void UpdateNotifierManager::FinishCheck() {
   base::TimeDelta check_duration = base::Time::Now() - check_start_time_;
   LOG(INFO) << "Update check finished in " << check_duration;
 
-  if (!winsparkle::IsUsingTaskScheduler() && !winsparkle::g_install_mode &&
-      winsparkle::g_install_type != vivaldi::InstallType::kStandalone) {
-    bool keep_running =
-        vivaldi::IsUpdateNotifierEnabledAsAutorun(winsparkle::GetExeDir());
+  if (!IsUsingTaskScheduler() && g_mode != UpdateMode::kNetworkInstall &&
+      g_install_type != vivaldi::InstallType::kStandalone) {
+    bool keep_running = vivaldi::IsUpdateNotifierEnabledAsAutorun(GetExeDir());
     if (keep_running) {
       base::TimeDelta next_check_delay;
       if (kPeriodicAutomaticCheckInterval > check_duration) {
@@ -838,7 +824,11 @@ void UpdateNotifierManager::FinishCheck() {
       LOG(INFO) << "Scheduling the next check in " << next_check_delay;
 
       // Switch to automatic update check.
-      winsparkle::g_manual_check = false;
+      if (g_install_type == vivaldi::InstallType::kForAllUsers) {
+        g_mode = UpdateMode::kSilentDownload;
+      } else {
+        g_mode = UpdateMode::kSilentUpdate;
+      }
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(&UpdateNotifierManager::StartUpdateCheck,
@@ -875,7 +865,7 @@ void UpdateNotifierManager::OnCheckForUpdatesEvent(
 
   // Make sure if we run an automatic update check it will be switched to the
   // manual mode.
-  winsparkle::g_manual_check = true;
+  g_mode = UpdateMode::kManualCheck;
   StartUpdateCheck();
 }
 

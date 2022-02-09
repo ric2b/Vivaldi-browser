@@ -67,7 +67,7 @@ bool SubstitutionPattern::Parse(const std::string& str,
       }
     }
 
-    // Expect all occurrances of {{ to resolve to a pattern.
+    // Expect all occurrences of {{ to resolve to a pattern.
     if (!found_match) {
       // Could make this error message more friendly if it comes up a lot. But
       // most people will not be writing substitution patterns and the code

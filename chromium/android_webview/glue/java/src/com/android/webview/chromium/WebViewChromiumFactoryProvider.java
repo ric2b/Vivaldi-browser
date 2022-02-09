@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
 import android.provider.Settings;
-import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PacProcessor;
@@ -29,6 +28,8 @@ import android.webkit.WebViewFactory;
 import android.webkit.WebViewFactoryProvider;
 import android.webkit.WebViewProvider;
 
+import androidx.annotation.IntDef;
+
 import com.android.webview.chromium.WebViewDelegateFactory.WebViewDelegate;
 
 import org.chromium.android_webview.ApkType;
@@ -36,6 +37,7 @@ import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.BrowserSafeModeActionList;
 import org.chromium.android_webview.ProductConfig;
 import org.chromium.android_webview.WebViewChromiumRunQueue;
 import org.chromium.android_webview.common.AwSwitches;
@@ -43,6 +45,7 @@ import org.chromium.android_webview.common.CommandLineUtil;
 import org.chromium.android_webview.common.DeveloperModeUtils;
 import org.chromium.android_webview.common.FlagOverrideHelper;
 import org.chromium.android_webview.common.ProductionSupportedFlagList;
+import org.chromium.android_webview.common.SafeModeController;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
@@ -55,15 +58,17 @@ import org.chromium.base.annotations.VerifiesOnN;
 import org.chromium.base.annotations.VerifiesOnP;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
+import org.chromium.build.BuildConfig;
 import org.chromium.build.NativeLibraries;
-import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.components.embedder_support.application.FirebaseConfig;
+import org.chromium.components.version_info.VersionConstants;
 import org.chromium.content_public.browser.LGEmailActionModeWorkaround;
 
 import java.io.File;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 
@@ -317,6 +322,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 CommandLine cl = CommandLine.getInstance();
                 cl.appendSwitch(AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
             }
+            // Using concatenation rather than %s to allow values to be inlined by R8.
+            Log.i(TAG,
+                    "Loaded version=" + VersionConstants.PRODUCT_VERSION + " minSdkVersion="
+                            + BuildConfig.MIN_SDK_VERSION + " isBundle=" + ProductConfig.IS_BUNDLE
+                            + " multiprocess=%s packageId=%s",
+                    multiProcess, packageId);
 
             // Enable modern SameSite cookie behavior if the app targets at least S.
             if (BuildInfo.targetsAtLeastS()) {
@@ -390,6 +401,36 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 AwContentsStatics.logFlagOverridesWithNative(flagOverrides);
             }
 
+            SafeModeController controller = SafeModeController.getInstance();
+            controller.registerActions(BrowserSafeModeActionList.sList);
+            long safeModeStart = SystemClock.elapsedRealtime();
+            boolean isSafeModeEnabled = controller.isSafeModeEnabled(webViewPackageName);
+            long safeModeEnd = SystemClock.elapsedRealtime();
+            RecordHistogram.recordTimesHistogram(
+                    "Android.WebView.SafeMode.CheckStateBlockingTime", safeModeEnd - safeModeStart);
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.WebView.SafeMode.SafeModeEnabled", isSafeModeEnabled);
+            if (isSafeModeEnabled) {
+                try {
+                    long safeModeQueryExecuteStart = SystemClock.elapsedRealtime();
+                    Set<String> actions = controller.queryActions(webViewPackageName);
+                    Log.w(TAG, "WebViewSafeMode is enabled: received %d SafeModeActions",
+                            actions.size());
+                    RecordHistogram.recordCount100Histogram(
+                            "Android.WebView.SafeMode.ActionsCount", actions.size());
+                    controller.executeActions(actions);
+                    long safeModeQueryExecuteEnd = SystemClock.elapsedRealtime();
+                    RecordHistogram.recordTimesHistogram(
+                            "Android.WebView.SafeMode.QueryAndExecuteBlockingTime",
+                            safeModeQueryExecuteEnd - safeModeQueryExecuteStart);
+                    logSafeModeExecutionResult(SafeModeExecutionResult.SUCCESS);
+                } catch (Throwable t) {
+                    // Don't let SafeMode crash WebView. Instead just log the error.
+                    Log.e(TAG, "WebViewSafeMode threw exception: ", t);
+                    logSafeModeExecutionResult(SafeModeExecutionResult.UNKNOWN_ERROR);
+                }
+            }
+
             mAwInit.startVariationsInit();
 
             mShouldDisableThreadChecking = shouldDisableThreadChecking(ctx);
@@ -415,6 +456,20 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                     SystemClock.uptimeMillis() - startTime);
         }
         */
+    }
+
+    // These values are persisted to logs. Entries should not be renumbered and
+    // numeric values should never be reused.
+    @IntDef({SafeModeExecutionResult.SUCCESS, SafeModeExecutionResult.UNKNOWN_ERROR})
+    private @interface SafeModeExecutionResult {
+        int SUCCESS = 0;
+        int UNKNOWN_ERROR = 1;
+        int COUNT = 2;
+    }
+
+    private static void logSafeModeExecutionResult(@SafeModeExecutionResult int result) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.WebView.SafeMode.ExecutionResult", result, SafeModeExecutionResult.COUNT);
     }
 
     /* package */ static void checkStorageIsNotDeviceProtected(Context context) {
@@ -646,11 +701,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                      "WebViewChromiumFactoryProvider.insideCreateWebViewContentsClientAdapter")) {
             return new WebViewContentsClientAdapter(webView, context, mWebViewDelegate);
         }
-    }
-
-    AutofillProvider createAutofillProvider(Context context, ViewGroup containerView) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
-        return new AutofillProvider(context, containerView, "Android WebView");
     }
 
     void startYourEngines(boolean onMainThread) {

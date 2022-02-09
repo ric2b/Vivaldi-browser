@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -90,7 +89,7 @@ class RequestFilterProxyingWebSocket
   static void StartProxying(
       WebSocketFactory factory,
       const GURL& site_for_cookies,
-      const base::Optional<std::string>& user_agent,
+      const absl::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>

@@ -22,7 +22,7 @@ Visibility::Visibility() = default;
 Visibility::~Visibility() = default;
 
 bool Visibility::Set(const SourceDir& current_dir,
-                     const std::string_view& source_root,
+                     std::string_view source_root,
                      const Value& value,
                      Err* err) {
   patterns_.clear();

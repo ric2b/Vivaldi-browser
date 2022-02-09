@@ -4,6 +4,8 @@
 
 #include "chrome/installer/util/installation_state.h"
 
+#include <memory>
+
 #include "base/check.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -53,8 +55,7 @@ bool ProductState::Initialize(bool system_install) {
   // the executable and ignore any registry settings.
   if (kVivaldi) {
     Clear();
-    base::Version version =
-        vivaldi::GetInstallVersion(vivaldi::GetInstallBinaryDir());
+    base::Version version = vivaldi::GetInstallVersion();
     if (!version.IsValid())
       return false;
     version_ = std::make_unique<base::Version>(version);
@@ -75,7 +76,8 @@ bool ProductState::Initialize(bool system_install) {
     std::wstring version_str;
     if (key.ReadValue(google_update::kRegVersionField, &version_str) ==
         ERROR_SUCCESS) {
-      version_.reset(new base::Version(base::WideToASCII(version_str)));
+      version_ =
+          std::make_unique<base::Version>(base::WideToASCII(version_str));
       if (!version_->IsValid())
         version_.reset();
     }
@@ -85,7 +87,8 @@ bool ProductState::Initialize(bool system_install) {
     // only be accessible via InstallationState::GetNonVersionedProductState.
     if (key.ReadValue(google_update::kRegOldVersionField, &version_str) ==
         ERROR_SUCCESS) {
-      old_version_.reset(new base::Version(base::WideToASCII(version_str)));
+      old_version_ =
+          std::make_unique<base::Version>(base::WideToASCII(version_str));
       if (!old_version_->IsValid())
         old_version_.reset();
     }

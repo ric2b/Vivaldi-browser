@@ -56,6 +56,11 @@
             "optional": true,
             "description": "Node title. If not present the title is determined using the action."
           },
+          "showshortcut": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Show shortcut string."
+          },
           "radiogroup": {
             "type": "string",
             "optional": true,
@@ -217,6 +222,27 @@
         }
       },
       {
+        "name": "removeAction",
+        "type": "function",
+        "description": "Deletes one or more actions from all models",
+        "parameters": [
+          {
+            "name": "actions",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
         "name": "update",
         "type": "function",
         "description": "Updates the properties of a node.",
@@ -239,6 +265,10 @@
               },
               "parameter": {
                 "type": "string",
+                "optional": true
+              },
+              "showshortcut": {
+                "type": "boolean",
                 "optional": true
               },
               "containerMode": {
@@ -304,7 +334,7 @@
             "type": "string",
             "description": "Unique identifier for the named menu."
           },
-           {
+          {
             "name": "selectId",
             "type": "string",
             "description": "If non-negative this id can be used to set selected element."

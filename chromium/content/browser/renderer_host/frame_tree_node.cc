@@ -23,7 +23,6 @@
 #include "content/browser/renderer_host/navigator_delegate.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
-#include "content/common/frame_messages.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/browser_thread.h"
@@ -121,6 +120,7 @@ FrameTreeNode::FrameTreeNode(
       frame_tree_node_id_(next_frame_tree_node_id_++),
       parent_(parent),
       depth_(parent ? parent->frame_tree_node()->depth_ + 1 : 0u),
+      frame_owner_element_type_(owner_type),
       replication_state_(blink::mojom::FrameReplicationState::New(
           url::Origin(),
           name,
@@ -129,16 +129,13 @@ FrameTreeNode::FrameTreeNode(
           network::mojom::WebSandboxFlags::kNone,
           blink::FramePolicy(),
           scope,
-          blink::mojom::InsecureRequestPolicy::
-              kLeaveInsecureRequestsAlone /* should enforce strict mixed content
-                                             checking */
-          ,
-          std::vector<uint32_t>()
-          /* hashes of hosts for insecure request upgrades */,
+          // should enforce strict mixed content checking
+          blink::mojom::InsecureRequestPolicy::kLeaveInsecureRequestsAlone,
+          // hashes of hosts for insecure request upgrades
+          std::vector<uint32_t>(),
           false /* is a potentially trustworthy unique origin */,
           false /* has an active user gesture */,
           false /* has received a user gesture before nav */,
-          owner_type,
           blink::mojom::AdFrameType::kNonAd)),
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
@@ -155,27 +152,25 @@ FrameTreeNode::FrameTreeNode(
 }
 
 FrameTreeNode::~FrameTreeNode() {
-  // The current frame host may be null when destroying the old frame tree
-  // during prerender activation. However, in such cases, the FrameTree and its
-  // root FrameTreeNode objects are deleted immediately with activation. In all
-  // other cases, there should always be a current frame host.
-  //
-  // TODO(https://crbug.com/1170277): Need to find a solution for being notified
-  // in various places. They do not support having no current_frame_host().
+  // There should always be a current RenderFrameHost except during prerender
+  // activation. Prerender activation moves the current RenderFrameHost from
+  // the old FrameTree's FrameTreeNode to the new FrameTree's FrameTreeNode and
+  // then destroys the old FrameTree. See
+  // `RenderFrameHostManager::TakePrerenderedPage()`.
   if (current_frame_host()) {
     // Remove the children.
     current_frame_host()->ResetChildren();
 
     current_frame_host()->ResetLoadingState();
   } else {
-    DCHECK(blink::features::IsPrerenderMPArchEnabled());
+    DCHECK(blink::features::IsPrerender2Enabled());
     DCHECK(!parent());  // Only main documents can be activated.
     DCHECK(!opener());  // Prerendered frame trees can't have openers.
 
     // Activation is not allowed during ongoing navigations.
     DCHECK(!navigation_request_);
 
-    // TODO(https://crbug.com/1170277): Need to determine how to handle pending
+    // TODO(https://crbug.com/1199693): Need to determine how to handle pending
     // deletions, as observers will be notified.
     DCHECK(!render_manager()->speculative_frame_host());
   }
@@ -214,37 +209,34 @@ FrameTreeNode::~FrameTreeNode() {
 
   g_frame_tree_node_id_map.Get().erase(frame_tree_node_id_);
 
+  // If a frame with a pending navigation is detached, make sure the
+  // WebContents (and its observers) update their loading state.
+  // TODO(dcheng): This should just check `IsLoading()`, but `IsLoading()`
+  // assumes that `current_frame_host_` is not null. This is incompatible with
+  // prerender activation when destroying the old frame tree (see above).
   bool did_stop_loading = false;
 
   if (navigation_request_) {
     navigation_request_.reset();
-    // If a frame with a pending navigation is detached, make sure the
-    // WebContents (and its observers) update their loading state.
     did_stop_loading = true;
   }
 
   // ~SiteProcessCountTracker DCHECKs in some tests if the speculative
   // RenderFrameHostImpl is not destroyed last. Ideally this would be closer to
   // (possible before) the ResetLoadingState() call above.
-  //
-  // There is an inherent race condition causing bugs 838348/915179/et al, where
-  // the renderer may have committed the speculative main frame and the browser
-  // has not heard about it yet. If this is a main frame, then in that case the
-  // speculative RenderFrame was unable to be deleted (it is owned by the
-  // renderer) and we should not be able to cancel the navigation at this point.
-  // CleanUpNavigation() would normally be called here but it will try to undo
-  // the navigation and expose the race condition. When it replaces the main
-  // frame with a RenderFrameProxy, that leaks the committed main frame, leaving
-  // the frame and its friend group with pointers that will become invalid
-  // shortly as we are shutting everything down and deleting the RenderView etc.
-  // We avoid this problematic situation by not calling CleanUpNavigation() or
-  // DiscardUnusedFrame() here. The speculative RenderFrameHost is simply
-  // returned and deleted immediately. This satisfies the requirement that the
-  // speculative RenderFrameHost is removed from the RenderFrameHostManager
-  // before it is destroyed.
   if (render_manager_.speculative_frame_host()) {
+    // TODO(dcheng): Shouldn't a FrameTreeNode with a speculative
+    // RenderFrameHost always be considered loading?
     did_stop_loading |= render_manager_.speculative_frame_host()->is_loading();
-    render_manager_.UnsetSpeculativeRenderFrameHost();
+    // `FrameTree::Shutdown()` has special handling for the main frame's
+    // speculative RenderFrameHost, and the speculative RenderFrameHost should
+    // already be reset for main frames.
+    DCHECK(!IsMainFrame());
+
+    // This does not use `UnsetSpeculativeRenderFrameHost()`: if the speculative
+    // RenderFrameHost has already reached kPendingCommit, it would needlessly
+    // re-create a proxy for a frame that's going away.
+    render_manager_.DiscardSpeculativeRenderFrameHostForShutdown();
   }
 
   if (did_stop_loading)
@@ -266,8 +258,7 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
-void FrameTreeNode::ResetForNavigation(
-    bool was_served_from_back_forward_cache) {
+void FrameTreeNode::ResetForNavigation() {
   // This frame has had its user activation bits cleared in the renderer before
   // arriving here. We just need to clear them here and in the other renderer
   // processes that may have a reference to this frame.
@@ -364,7 +355,7 @@ void FrameTreeNode::SetCollapsed(bool collapsed) {
 }
 
 void FrameTreeNode::SetFrameTree(FrameTree& frame_tree) {
-  DCHECK(blink::features::IsPrerenderMPArchEnabled());
+  DCHECK(blink::features::IsPrerender2Enabled());
   frame_tree_ = &frame_tree;
 }
 
@@ -445,6 +436,8 @@ bool FrameTreeNode::IsLoading() const {
 
   RenderFrameHostImpl* speculative_frame_host =
       render_manager_.speculative_frame_host();
+  // TODO(dcheng): Shouldn't a FrameTreeNode with a speculative RenderFrameHost
+  // always be considered loading?
   if (speculative_frame_host && speculative_frame_host->is_loading())
     return true;
   return current_frame_host->is_loading();
@@ -809,7 +802,7 @@ void FrameTreeNode::SetPopupCreatorOrigin(
   popup_creator_origin_ = popup_creator_origin;
 }
 
-void FrameTreeNode::WriteIntoTracedValue(perfetto::TracedValue context) const {
+void FrameTreeNode::WriteIntoTrace(perfetto::TracedValue context) const {
   auto dict = std::move(context).WriteDictionary();
   dict.Add("id", frame_tree_node_id());
   dict.Add("is_main_frame", IsMainFrame());

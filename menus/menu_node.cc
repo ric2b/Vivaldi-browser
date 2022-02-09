@@ -70,6 +70,13 @@ const Menu_Node* Menu_Node::GetMenu() const {
   }
 }
 
+void Menu_Node::SetShowShortcut(absl::optional<bool> show_shortcut) {
+  show_shortcut_ = show_shortcut;
+  for (auto& child : children()) {
+    child->SetShowShortcut(show_shortcut);
+  }
+}
+
 void Menu_Node::DumpTree(int indent) {
   if (type_ == CONTAINER) {
     printf("%*s%d %d (mode: %s)\n", indent, "", type_, static_cast<int>(id_),

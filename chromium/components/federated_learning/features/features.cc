@@ -8,6 +8,12 @@
 
 namespace federated_learning {
 
+// If enabled, the check for whether the IP address is publicly routable will be
+// bypassed when determining the eligibility for a page to be included in floc
+// computation. This is useful for developers to test FLoC in local environment.
+const base::Feature kFlocBypassIPIsPubliclyRoutableCheck{
+    "FlocBypassIPIsPubliclyRoutableCheck", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables the FlocIdComputed event logging, which happens when a
 // floc id is first computed for a browsing session or is refreshed due to a
 // long period of time has passed since the last computation.
@@ -28,7 +34,11 @@ const base::Feature kFlocPagesWithAdResourcesDefaultIncludedInFlocComputation{
 // required.
 // TODO(yaoxia): merge other floc features into this one.
 const base::Feature kFederatedLearningOfCohorts{
+#if defined(VIVALDI_BUILD)
+    "FederatedLearningOfCohorts", base::FEATURE_DISABLED_BY_DEFAULT};
+#else
     "FederatedLearningOfCohorts", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
 constexpr base::FeatureParam<base::TimeDelta> kFlocIdScheduledUpdateInterval{
     &kFederatedLearningOfCohorts, "update_interval",
     base::TimeDelta::FromDays(7)};

@@ -20,7 +20,6 @@
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
 #include "content/browser/renderer_host/pepper/pepper_file_ref_host.h"
 #include "content/browser/renderer_host/pepper/pepper_file_system_browser_host.h"
-#include "content/common/frame_messages.h"
 #include "content/common/pepper_renderer_instance_data.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -108,7 +107,9 @@ class PepperRendererConnection::OpenChannelToPpapiPluginCallback
                            int* renderer_id) override {
     // base::kNullProcessHandle indicates that the channel will be used by the
     // browser itself. Make sure we never output that value here.
-    CHECK_NE(base::kNullProcessHandle, filter_->PeerHandle());
+    if (filter_->PeerHandle() == base::kNullProcessHandle) {
+      return;
+    }
     *renderer_handle = filter_->PeerHandle();
     *renderer_id = filter_->render_process_id_;
   }
@@ -149,7 +150,9 @@ PepperRendererConnection::~PepperRendererConnection() {}
 
 BrowserPpapiHostImpl* PepperRendererConnection::GetHostForChildProcess(
     int child_process_id) const {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
 
   // Find the plugin which this message refers to. Check NaCl plugins first.
   BrowserPpapiHostImpl* host = static_cast<BrowserPpapiHostImpl*>(
@@ -342,7 +345,7 @@ void PepperRendererConnection::DidDeleteOutOfProcessPepperInstance(
 void PepperRendererConnection::OpenChannelToPepperPlugin(
     const url::Origin& embedder_origin,
     const base::FilePath& path,
-    const base::Optional<url::Origin>& origin_lock,
+    const absl::optional<url::Origin>& origin_lock,
     OpenChannelToPepperPluginCallback callback) {
   // Enforce that the sender of the IPC (i.e. |render_process_id_|) is actually
   // able/allowed to host a frame with |embedder_origin|.

@@ -7,6 +7,7 @@
 
 #include <iosfwd>
 #include <map>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -56,7 +57,7 @@ class NinjaBuildWriter {
   bool WriteSubninjas(Err* err);
   bool WritePhonyAndAllRules(Err* err);
 
-  void WritePhonyRule(const Target* target, const std::string& phony_name);
+  void WritePhonyRule(const Target* target, std::string_view phony_name);
 
   const BuildSettings* build_settings_;
 

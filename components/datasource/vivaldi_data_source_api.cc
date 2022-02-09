@@ -132,7 +132,7 @@ bool ParseDataUrl(base::StringPiece url,
                   std::string* id) {
   using PathType = vivaldi_data_url_utils::PathType;
 
-  base::Optional<PathType> type = vivaldi_data_url_utils::ParseUrl(url, id);
+  absl::optional<PathType> type = vivaldi_data_url_utils::ParseUrl(url, id);
   if (type == PathType::kThumbnail) {
     *url_kind = VivaldiDataSourcesAPI::THUMBNAIL_URL;
     return true;

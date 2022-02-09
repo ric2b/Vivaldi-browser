@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Esci da schermo intero</translation>
 <translation id="2177950615300672361">Scheda di navigazione in incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modulo Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Nascondi pulsante</translation>
 <translation id="2218515861914035131">Incolla come testo semplice</translation>
 <translation id="2249605167705922988">ad es. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autorizza gli identificatori a mostrare contenuti protetti (potrebbe essere necessario un riavvio del computer)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Prerenderizza: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfono</translation>
 <translation id="3241680850019875542">Seleziona la directory principale dell'estensione di cui creare il pacchetto. Per aggiornare un'estensione, seleziona anche il file delle chiave privata da riutilizzare.</translation>
-<translation id="3266179261140759675">Impedisci ai siti chiusi di inviare e ricevere dati</translation>
 <translation id="3280237271814976245">Salv&amp;a come...</translation>
 <translation id="3285322247471302225">Nuova &amp;Scheda</translation>
 <translation id="3288047731229977326">Le estensioni in esecuzione in modalità sviluppatore potrebbero danneggiare il computer. Se non sei uno sviluppatore, dovresti disattivare queste estensioni per la tua sicurezza.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Può leggere e cambiare i dati del sito</translation>
 <translation id="3560034655160545939">&amp;Controllo ortografico</translation>
 <translation id="3574917942258583917">Vuoi uscire comunque dalla modalità di navigazione in incognito?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vuole condividere una stampante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un gruppo gestito da te: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Se accetti, tutti i membri del gruppo potranno utilizzare la stampante.</translation>
 <translation id="3587482841069643663">Tutte</translation>
 <translation id="3627588569887975815">Apri link in finestra di navigazione in inco&amp;gnito</translation>
 <translation id="3627879631695760395">Installa <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Gestori</translation>
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Richiesta di condivisione dello schermo da parte di <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Non consentire ai siti chiusi di terminare l'invio o la ricezione di dati</translation>
 <translation id="3711931198657368127">I&amp;ncolla e Vai all'indirizzo <ph name="URL" /></translation>
 <translation id="3727187387656390258">Ispeziona popup</translation>
 <translation id="3744111561329211289">Sincronizzazione in secondo piano</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">È stata creata l'estensione:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Accetta per gruppo</translation>
 <translation id="4096508467498758490">Disattiva estensioni in modalità sviluppatore</translation>
 <translation id="4100839878934973028">Un altro programma sul computer ha aggiunto un'applicazione che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="4109898769411476438">Chiudi il browser prima di importare</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Mostra dettagli</translation>
 <translation id="4907306957610201395">Categoria di autorizzazione</translation>
 <translation id="4912643508233590958">Riattivazioni</translation>
-<translation id="4918086044614829423">Accetto</translation>
 <translation id="4927753642311223124">Niente da vedere qui, vai avanti.</translation>
 <translation id="4930714375720679147">Attiva</translation>
 <translation id="4988526792673242964">Pagine</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Cancella i dati del sito</translation>
 <translation id="6042308850641462728">Di più</translation>
 <translation id="6059925163896151826">Dispositivi USB</translation>
-<translation id="6082651258230788217">Mostra nella barra degli strumenti</translation>
 <translation id="6086846494333236931">Installato dall'amministratore</translation>
 <translation id="6101226222197207147">Nuova applicazione aggiunta (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">La tua connessione Internet è controllata</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simula riavvio browser</translation>
 <translation id="6445450263907939268">Se non volevi apportare queste modifiche, puoi ripristinare le impostazioni precedenti.</translation>
 <translation id="6447842834002726250">Cookie</translation>
-<translation id="6452181791372256707">Rifiuto</translation>
 <translation id="6498249116389603658">&amp;Tutte le tue lingue</translation>
 <translation id="6503077044568424649">Più visitati</translation>
 <translation id="6508261954199872201">Applicazione: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Può leggere e cambiare i dati del sito</translation>
 <translation id="708060913198414444">C&amp;opia l'indirizzo dell'audio</translation>
 <translation id="7175353351958621980">Caricato da:</translation>
-<translation id="7186088072322679094">Mantieni in Barra degli strumenti</translation>
+<translation id="7186088072322679094">Tieni nella barra degli strumenti</translation>
 <translation id="7270858098575133036">Chiedi conferma quando un sito vuole utilizzare messaggi esclusivi di sistema per accedere a dispositivi MIDI</translation>
 <translation id="7287143125007575591">Accesso negato.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Questa è la pagina nuova scheda che ti aspettavi?</translation>
 <translation id="786073089922909430">Servizio: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Destinazioni recenti</translation>
-<translation id="7898627924844766532">Mantieni nella barra degli strumenti</translation>
 <translation id="7903925330883316394">Utilità <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Attualmente offline</translation>
 <translation id="7947962633355574091">C&amp;opia l'indirizzo del video</translation>
@@ -452,7 +445,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8725066075913043281">Riprova</translation>
 <translation id="8757090071857742562">Impossibile trasmettere il desktop. Verifica di avere confermato la richiesta di avvio della condivisione dello schermo.</translation>
 <translation id="8774934320277480003">Margine superiore</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vuole condividere una stampante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con te.</translation>
 <translation id="8798099450830957504">Predefinito</translation>
 <translation id="8800004011501252845">Mostra destinazioni per</translation>
 <translation id="8808478386290700967">Web Store</translation>

@@ -11,15 +11,17 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/context_menu_params.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "include/core/SkBitmap.h"
+#include "skia/ext/image_operations.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/vivaldi_context_menu.h"
-#include "skia/ext/image_operations.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -72,6 +74,8 @@ ContextMenuController::ContextMenuController(
     rv_context_menu_->SetMenuDelegate(this);
   }
 
+  show_shortcuts_ = browser_->profile()->GetPrefs()->GetBoolean(
+      vivaldiprefs::kKeyboardShortcutsEnable);
 }
 
 ContextMenuController::~ContextMenuController() {}
@@ -199,6 +203,13 @@ void ContextMenuController::PopulateModel(const Element& child,
     if (item.shortcut && !item.shortcut->empty()) {
       id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
           *item.shortcut, true);
+    }
+    // We will show an accelerator unless explicitly registered to false. Note
+    // that we transfer display information in each item, but all items are set
+    // to the same value within a menu. So we set the flag that controls the
+    // whole menu if an item is false.
+    if (item.showshortcut && *item.showshortcut == false) {
+      show_shortcuts_ = false;
     }
     if (item.action) {
       id_to_action_map_[id] = item.action.get();
@@ -340,8 +351,8 @@ void ContextMenuController::LoadFavicon(int command_id,
   }
 
   favicon_base::FaviconImageCallback callback =
-      base::Bind(&ContextMenuController::OnFaviconDataAvailable,
-                 base::Unretained(this), command_id);
+      base::BindOnce(&ContextMenuController::OnFaviconDataAvailable,
+                     base::Unretained(this), command_id);
 
   favicon_service_->GetFaviconImageForPageURL(GURL(url), std::move(callback),
                                               &cancelable_task_tracker_);
@@ -386,7 +397,6 @@ std::u16string ContextMenuController::GetLabelForCommandId(
   return std::u16string();
 }
 
-// We do not specify accelerators in context menus in JS so mostly return false.
 bool ContextMenuController::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
@@ -430,6 +440,10 @@ void ContextMenuController::OnMenuWillShow(ui::SimpleMenuModel* source) {
   }
 }
 
+bool ContextMenuController::GetShowShortcuts() {
+  return show_shortcuts_;
+}
+
 // Called when the VivaldiRenderViewContextMenu object is destroyed by events
 // outside the menu itself (eg, when parent view is destructed).
 // A simple way to test this is to use a timeout when closing a tab and open a
@@ -462,8 +476,8 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
       // sense of.
       timer_.reset(new base::OneShotTimer());
       timer_->Start(FROM_HERE, base::TimeDelta::FromMilliseconds(1),
-          base::Bind(&ContextMenuController::Delete, base::Unretained(
-              this)));
+                    base::BindOnce(&ContextMenuController::Delete,
+                                   base::Unretained(this)));
     } else {
       Delete();
     }

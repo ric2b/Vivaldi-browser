@@ -18,6 +18,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 
 namespace vivaldi {
 
@@ -58,7 +59,7 @@ class RequestFilterProxyingURLLoaderFactory
         const std::vector<std::string>& removed_headers,
         const net::HttpRequestHeaders& modified_headers,
         const net::HttpRequestHeaders& modified_cors_exempt_headers,
-        const base::Optional<GURL>& new_url) override;
+        const absl::optional<GURL>& new_url) override;
     void SetPriority(net::RequestPriority priority,
                      int32_t intra_priority_value) override;
     void PauseReadingBodyFromNet() override;
@@ -147,7 +148,7 @@ class RequestFilterProxyingURLLoaderFactory
 
     RequestFilterProxyingURLLoaderFactory* const factory_;
     network::ResourceRequest request_;
-    const base::Optional<url::Origin> original_initiator_;
+    const absl::optional<url::Origin> original_initiator_;
     const uint64_t request_id_ = 0;
     const int32_t network_service_request_id_ = 0;
     const int32_t view_routing_id_ = MSG_ROUTING_NONE;
@@ -157,7 +158,7 @@ class RequestFilterProxyingURLLoaderFactory
     mojo::Receiver<network::mojom::URLLoader> proxied_loader_receiver_;
     mojo::Remote<network::mojom::URLLoaderClient> target_client_;
 
-    base::Optional<FilteredRequestInfo> info_;
+    absl::optional<FilteredRequestInfo> info_;
 
     mojo::Receiver<network::mojom::URLLoaderClient> proxied_client_receiver_{
         this};
@@ -202,7 +203,7 @@ class RequestFilterProxyingURLLoaderFactory
       std::vector<std::string> removed_headers;
       net::HttpRequestHeaders modified_headers;
       net::HttpRequestHeaders modified_cors_exempt_headers;
-      base::Optional<GURL> new_url;
+      absl::optional<GURL> new_url;
 
       DISALLOW_COPY_AND_ASSIGN(FollowRedirectParams);
     };
@@ -221,7 +222,7 @@ class RequestFilterProxyingURLLoaderFactory
       int view_routing_id,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
-      base::Optional<int64_t> navigation_id,
+      absl::optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           target_factory_remote,
@@ -241,7 +242,7 @@ class RequestFilterProxyingURLLoaderFactory
       int view_routing_id,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
-      base::Optional<int64_t> navigation_id,
+      absl::optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           target_factory_remote,
@@ -291,7 +292,7 @@ class RequestFilterProxyingURLLoaderFactory
   const int view_routing_id_;
   RequestFilterManager::RequestHandler* request_handler_;
   RequestFilterManager::RequestIDGenerator* const request_id_generator_;
-  base::Optional<int64_t> navigation_id_;
+  absl::optional<int64_t> navigation_id_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
   mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
   mojo::Receiver<network::mojom::TrustedURLLoaderHeaderClient>

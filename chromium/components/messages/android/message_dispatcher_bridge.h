@@ -22,9 +22,10 @@ class MessageDispatcherBridge {
 
   static void SetInstanceForTesting(MessageDispatcherBridge* instance);
 
-  virtual void EnqueueMessage(MessageWrapper* message,
+  virtual bool EnqueueMessage(MessageWrapper* message,
                               content::WebContents* web_contents,
-                              MessageScopeType scopeType);
+                              MessageScopeType scope_type,
+                              MessagePriority priority);
   virtual void DismissMessage(MessageWrapper* message,
                               content::WebContents* web_contents,
                               DismissReason dismiss_reason);

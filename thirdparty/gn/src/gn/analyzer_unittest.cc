@@ -226,6 +226,40 @@ TEST_F(AnalyzerTest, TargetRefersToInputs) {
       "}");
 }
 
+// Tests that a target is marked as affected if a sub-config is modified.
+//
+// This test uses two levels of sub-configs to ensure the config hierarchy
+// is completely traversed.
+TEST_F(AnalyzerTest, SubConfigIsModified) {
+  std::unique_ptr<Config> ssc = MakeConfig("//dir3", "subsubconfig_name");
+  ssc->build_dependency_files().insert(SourceFile("//dir3/BUILD.gn"));
+
+  std::unique_ptr<Config> sc = MakeConfig("//dir2", "subconfig_name");
+  sc->configs().push_back(LabelConfigPair(ssc->label()));
+
+  std::unique_ptr<Config> c = MakeConfig("//dir", "config_name");
+  c->configs().push_back(LabelConfigPair(sc->label()));
+
+  std::unique_ptr<Target> t = MakeTarget("//dir", "target_name");
+  t->configs().push_back(LabelConfigPair(c.get()));
+
+  builder_.ItemDefined(std::move(ssc));
+  builder_.ItemDefined(std::move(sc));
+  builder_.ItemDefined(std::move(c));
+  builder_.ItemDefined(std::move(t));
+  RunAnalyzerTest(
+      R"({
+       "files": [ "//dir3/BUILD.gn" ],
+       "additional_compile_targets": [],
+       "test_targets": [ "//dir:target_name" ]
+       })",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"Found dependency",)/"
+      R"("test_targets":["//dir:target_name"])"
+      "}");
+}
+
 // Tests that a target is marked as affected if its data are modified.
 TEST_F(AnalyzerTest, TargetRefersToData) {
   std::unique_ptr<Target> t = MakeTarget("//dir", "target_name");
@@ -558,8 +592,7 @@ TEST_F(AnalyzerTest, WrongInputFields) {
       })",
       "{"
       R"("error":)"
-      R"("Input does not have a key named )"
-      R"(\"additional_compile_targets\" with a list value.",)"
+      R"("Unknown analyze input key \"compile_targets\".",)"
       R"("invalid_targets":[])"
       "}");
 }

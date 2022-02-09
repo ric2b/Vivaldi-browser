@@ -24,7 +24,6 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
-#include "content/common/frame_messages.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/layout.h"
@@ -507,7 +506,7 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
   if (needs_transform_point) {
     if (!root_view->TransformPointToCoordSpaceForView(
             event.PositionInWidget(), target, &transformed_point)) {
-      return {nullptr, false, base::nullopt, latched_target};
+      return {nullptr, false, absl::nullopt, latched_target};
     }
   }
   return {target, false, transformed_point, latched_target};
@@ -523,7 +522,7 @@ RenderWidgetHostInputEventRouter::FindMouseWheelEventTarget(
     target = root_view->host()->delegate()->GetMouseLockWidget()->GetView();
     if (!root_view->TransformPointToCoordSpaceForView(
             event.PositionInWidget(), target, &transformed_point)) {
-      return {nullptr, false, base::nullopt, true};
+      return {nullptr, false, absl::nullopt, true};
     }
     return {target, false, transformed_point, true};
   }
@@ -536,7 +535,7 @@ RenderWidgetHostInputEventRouter::FindMouseWheelEventTarget(
   }
   // For non-begin events, the target found for the previous phaseBegan is
   // used.
-  return {nullptr, false, base::nullopt, true};
+  return {nullptr, false, absl::nullopt, true};
 }
 
 RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
@@ -608,7 +607,7 @@ void RenderWidgetHostInputEventRouter::DispatchMouseEvent(
     RenderWidgetHostViewBase* target,
     const blink::WebMouseEvent& mouse_event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location) {
+    const absl::optional<gfx::PointF>& target_location) {
   // TODO(wjmaclean): Should we be sending a no-consumer ack to the root_view
   // if there is no target?
   if (!target)
@@ -690,7 +689,7 @@ void RenderWidgetHostInputEventRouter::DispatchMouseWheelEvent(
     RenderWidgetHostViewBase* target,
     const blink::WebMouseWheelEvent& mouse_wheel_event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location) {
+    const absl::optional<gfx::PointF>& target_location) {
   if (!root_view->IsMouseLocked()) {
     if (mouse_wheel_event.phase == blink::WebMouseWheelEvent::kPhaseBegan) {
       wheel_target_ = target;
@@ -831,7 +830,7 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindTouchEventTarget(
   // explicitly here.
   if (active_touches_ ||
       event.GetType() != blink::WebInputEvent::Type::kTouchStart)
-    return {nullptr, false, base::nullopt, true};
+    return {nullptr, false, absl::nullopt, true};
 
   active_touches_ += CountChangedTouchPoints(event);
   gfx::PointF original_point = gfx::PointF(event.touches[0].PositionInWidget());
@@ -846,7 +845,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchEvent(
     RenderWidgetHostViewBase* target,
     const blink::WebTouchEvent& touch_event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location,
+    const absl::optional<gfx::PointF>& target_location,
     bool is_emulated_touchevent) {
   DCHECK(blink::WebInputEvent::IsTouchEventType(touch_event.GetType()) &&
          touch_event.GetType() !=
@@ -854,6 +853,20 @@ void RenderWidgetHostInputEventRouter::DispatchTouchEvent(
 
   bool is_sequence_start = !touch_target_ && target;
   if (is_sequence_start) {
+    // TODO(wjmaclean): Remove this once investigation for
+    // https://crbug.com/1197154 is complete.
+    if (RenderWidgetHostViewBase::IsValidRWHVBPointer(target) != 1 &&
+        !has_dumped_) {
+      has_dumped_ = true;
+      auto* invalid_rwhvb_ptr_string = base::debug::AllocateCrashKeyString(
+          "invalid_rwhvb_pointer_status", base::debug::CrashKeySize::Size32);
+      base::debug::ScopedCrashKeyString key(
+          invalid_rwhvb_ptr_string,
+          base::StringPrintf(
+              "Invalid RWHVB ptr: status = %d",
+              RenderWidgetHostViewBase::IsValidRWHVBPointer(target)));
+      base::debug::DumpWithoutCrashing();
+    }
     touch_target_ = target;
     DCHECK(touchscreen_gesture_target_map_.find(
                touch_event.unique_touch_event_id) ==
@@ -1445,7 +1458,7 @@ RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
 
   // Remaining gesture events will defer to the gesture event target queue
   // during dispatch.
-  return {nullptr, false, base::nullopt, true};
+  return {nullptr, false, absl::nullopt, true};
 }
 
 bool RenderWidgetHostInputEventRouter::IsViewInMap(
@@ -1462,7 +1475,7 @@ bool RenderWidgetHostInputEventRouter::ViewMapIsEmpty() const {
 namespace {
 
 bool IsPinchCurrentlyAllowedInTarget(RenderWidgetHostViewBase* target) {
-  base::Optional<cc::TouchAction> target_active_touch_action(
+  absl::optional<cc::TouchAction> target_active_touch_action(
       cc::TouchAction::kNone);
   if (target) {
     target_active_touch_action =
@@ -1488,7 +1501,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
     RenderWidgetHostViewBase* target,
     const blink::WebGestureEvent& gesture_event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location) {
+    const absl::optional<gfx::PointF>& target_location) {
   if (gesture_event.GetType() ==
       blink::WebInputEvent::Type::kGesturePinchBegin) {
     if (root_view == touchscreen_gesture_target_) {
@@ -1571,11 +1584,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
   const bool is_gesture_start =
       gesture_event.GetType() == blink::WebInputEvent::Type::kGestureTapDown;
 
-  base::Optional<gfx::PointF> fallback_target_location;
-
-  // Adding crash logs to track the reason of stale pointer value of |target|.
-  LogTouchscreenGestureTargetCrashKeys(
-      "RWHIER::DispatchTouchscreenGestureEvent target set from caller");
+  absl::optional<gfx::PointF> fallback_target_location;
 
   if (gesture_event.unique_touch_event_id == 0) {
     // On Android it is possible for touchscreen gesture events to arrive that
@@ -1604,18 +1613,10 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
     // this is the best we can do until we fix https://crbug.com/595422.
     target = result.view;
 
-    // Adding crash logs to track the reason of stale pointer value of |target|.
-    LogTouchscreenGestureTargetCrashKeys(
-        "RWHIER::DispatchTouchscreenGestureEvent target from "
-        "FindViewAtLocation");
     fallback_target_location = transformed_point;
   } else if (is_gesture_start) {
     target = gesture_target_it->second.get();
 
-    // Adding crash logs to track the reason of stale pointer value of |target|.
-    LogTouchscreenGestureTargetCrashKeys(
-        "RWHIER::DispatchTouchscreenGestureEvent target from "
-        "touchscreen_gesture_target_map_");
     touchscreen_gesture_target_map_.erase(gesture_target_it);
 
     // Abort any scroll bubbling in progress to avoid double entry.
@@ -1714,7 +1715,7 @@ RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
   if (event.GetType() != blink::WebInputEvent::Type::kGesturePinchBegin &&
       event.GetType() != blink::WebInputEvent::Type::kGestureFlingCancel &&
       event.GetType() != blink::WebInputEvent::Type::kGestureDoubleTap) {
-    return {nullptr, false, base::nullopt, true};
+    return {nullptr, false, absl::nullopt, true};
   }
 
   gfx::PointF transformed_point;
@@ -1735,7 +1736,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchpadGestureEvent(
     RenderWidgetHostViewBase* target,
     const blink::WebGestureEvent& touchpad_gesture_event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location) {
+    const absl::optional<gfx::PointF>& target_location) {
   // Touchpad gesture flings should be treated as mouse wheels for the purpose
   // of routing.
   if (touchpad_gesture_event.GetType() ==
@@ -1904,7 +1905,7 @@ void RenderWidgetHostInputEventRouter::DispatchEventToTarget(
     RenderWidgetHostViewBase* target,
     blink::WebInputEvent* event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location) {
+    const absl::optional<gfx::PointF>& target_location) {
   DCHECK(event);
   if (target && target->ScreenRectIsUnstableFor(*event))
     event->SetTargetFrameMovedRecently();
@@ -2006,7 +2007,7 @@ void RenderWidgetHostInputEventRouter::SetCursor(const WebCursor& cursor) {
     return;
 
   last_device_scale_factor_ =
-      last_mouse_move_root_view_->current_device_scale_factor();
+      last_mouse_move_root_view_->GetCurrentDeviceScaleFactor();
   if (auto* cursor_manager = last_mouse_move_root_view_->GetCursorManager()) {
     for (auto it : owner_map_) {
       // NOTE(david@vivaldi.com): In Vivaldi we need to check if the device
@@ -2035,7 +2036,7 @@ void RenderWidgetHostInputEventRouter::OnAggregatedHitTestRegionListUpdated(
     const std::vector<viz::AggregatedHitTestRegion>& hit_test_data) {
   for (auto& region : hit_test_data) {
     auto iter = owner_map_.find(region.frame_sink_id);
-    if (iter != owner_map_.end())
+    if (iter != owner_map_.end() && iter->second)
       iter->second->NotifyHitTestRegionUpdated(region);
   }
 }
@@ -2055,23 +2056,9 @@ void RenderWidgetHostInputEventRouter::SetMouseCaptureTarget(
     mouse_capture_target_ = nullptr;
 }
 
-RenderWidgetHostImpl*
-RenderWidgetHostInputEventRouter::GetMouseCaptureWidgetForTests() const {
-  if (mouse_capture_target_)
-    return mouse_capture_target_->host();
-  return nullptr;
-}
-
 void RenderWidgetHostInputEventRouter::SetAutoScrollInProgress(
     bool is_autoscroll_in_progress) {
   event_targeter_->SetIsAutoScrollInProgress(is_autoscroll_in_progress);
-}
-
-void RenderWidgetHostInputEventRouter::LogTouchscreenGestureTargetCrashKeys(
-    const std::string& log_message) {
-  static auto* target_crash_key = base::debug::AllocateCrashKeyString(
-      "target_crash_key", base::debug::CrashKeySize::Size256);
-  base::debug::SetCrashKeyString(target_crash_key, log_message);
 }
 
 }  // namespace content

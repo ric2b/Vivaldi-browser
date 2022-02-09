@@ -12,6 +12,7 @@
 #include "base/base64.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
@@ -80,7 +81,7 @@ bool SyncedNoteTracker::Entity::MatchesDataIgnoringParent(
     return metadata_->is_deleted() == data.is_deleted();
   }
   if (!syncer::UniquePosition::FromProto(metadata_->unique_position())
-           .Equals(syncer::UniquePosition::FromProto(data.unique_position))) {
+           .Equals(data.unique_position)) {
     return false;
   }
   return MatchesSpecificsHash(data.specifics);
@@ -116,7 +117,10 @@ size_t SyncedNoteTracker::Entity::EstimateMemoryUsage() const {
 // static
 syncer::ClientTagHash SyncedNoteTracker::GetClientTagHashFromGUID(
     const base::GUID& guid) {
-  return syncer::ClientTagHash::FromUnhashed(syncer::NOTES,
+  // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to verify
+  // the type, so we temporarily produce tags using the BOOKMARKS type.
+  // Change this to NOTES in a few version. 07-2021
+  return syncer::ClientTagHash::FromUnhashed(syncer::BOOKMARKS,
                                              guid.AsLowercaseString());
 }
 
@@ -229,7 +233,7 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
     const std::string& sync_id,
     int64_t server_version,
     base::Time creation_time,
-    const sync_pb::UniquePosition& unique_position,
+    const syncer::UniquePosition& unique_position,
     const sync_pb::EntitySpecifics& specifics) {
   DCHECK_GT(specifics.ByteSize(), 0);
   DCHECK(note_node);
@@ -246,7 +250,7 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
   metadata->set_modification_time(syncer::TimeToProtoTime(creation_time));
   metadata->set_sequence_number(0);
   metadata->set_acked_sequence_number(0);
-  metadata->mutable_unique_position()->CopyFrom(unique_position);
+  *metadata->mutable_unique_position() = unique_position.ToProto();
   metadata->set_client_tag_hash(client_tag_hash.value());
   HashSpecifics(specifics, metadata->mutable_specifics_hash());
   auto entity = std::make_unique<Entity>(note_node, std::move(metadata));
@@ -268,7 +272,7 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
 void SyncedNoteTracker::Update(const Entity* entity,
                                int64_t server_version,
                                base::Time modification_time,
-                               const sync_pb::UniquePosition& unique_position,
+                               const syncer::UniquePosition& unique_position,
                                const sync_pb::EntitySpecifics& specifics) {
   DCHECK_GT(specifics.ByteSize(), 0);
   DCHECK(entity);
@@ -277,7 +281,8 @@ void SyncedNoteTracker::Update(const Entity* entity,
   mutable_entity->metadata()->set_server_version(server_version);
   mutable_entity->metadata()->set_modification_time(
       syncer::TimeToProtoTime(modification_time));
-  *mutable_entity->metadata()->mutable_unique_position() = unique_position;
+  *mutable_entity->metadata()->mutable_unique_position() =
+      unique_position.ToProto();
   HashSpecifics(specifics,
                 mutable_entity->metadata()->mutable_specifics_hash());
   // TODO(crbug.com/516866): in case of conflict, the entity might exist in

@@ -6,6 +6,9 @@ package org.chromium.chrome.browser.tabmodel;
 
 import org.chromium.chrome.browser.tab.Tab;
 
+// Vivaldi
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
 /**
  * An empty implementation of {@link TabModelFilter} interface. This is a {@link TabList} that
  * contains the same {@link Tab}s as {@link TabModel} does.
@@ -63,5 +66,13 @@ public class EmptyTabModelFilter extends TabModelFilter {
     @Override
     public boolean isClosurePending(int tabId) {
         return getTabModel().isClosurePending(tabId);
+    }
+
+    /**
+     * Vivaldi: Only notify observers when tab stack is disabled.
+     */
+    @Override
+    protected boolean shouldNotifyObservers() {
+        return !SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", false);
     }
 }

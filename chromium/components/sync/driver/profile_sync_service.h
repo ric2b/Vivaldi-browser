@@ -67,6 +67,7 @@ class ProfileSyncService : public SyncService,
                            public SyncEngineHost,
                            public SyncPrefObserver,
                            public DataTypeManagerObserver,
+                           public SyncServiceCrypto::Delegate,
                            public signin::IdentityManager::Observer {
  public:
   // If AUTO_START, sync will set IsFirstSetupComplete() automatically and sync
@@ -141,6 +142,7 @@ class ProfileSyncService : public SyncService,
   void AddTrustedVaultRecoveryMethodFromWeb(
       const std::string& gaia_id,
       const std::vector<uint8_t>& public_key,
+      int method_type_hint,
       base::OnceClosure callback) override;
   void AddObserver(SyncServiceObserver* observer) override;
   void RemoveObserver(SyncServiceObserver* observer) override;
@@ -180,6 +182,13 @@ class ProfileSyncService : public SyncService,
   // DataTypeManagerObserver implementation.
   void OnConfigureDone(const DataTypeManager::ConfigureResult& result) override;
   void OnConfigureStart() override;
+
+  // SyncServiceCrypto::Delegate implementation.
+  void CryptoStateChanged() override;
+  void CryptoRequiredUserActionChanged() override;
+  void ReconfigureDataTypesDueToCrypto() override;
+  void EncryptionBootstrapTokenChanged(
+      const std::string& bootstrap_token) override;
 
   // IdentityManager::Observer implementation.
   void OnAccountsInCookieUpdated(
@@ -366,22 +375,15 @@ class ProfileSyncService : public SyncService,
   // Called when a SetupInProgressHandle issued by this instance is destroyed.
   void OnSetupInProgressHandleDestroyed();
 
-  // Called by SyncServiceCrypto when a passphrase is required or accepted.
-  void ReconfigureDueToPassphrase(ConfigureReason reason);
-
-  // Called by SyncServiceCrypto when its required user action changes.
-  void OnRequiredUserActionChanged();
-
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
   const std::unique_ptr<SyncClient> sync_client_;
 
+ protected:
   // The class that handles getting, setting, and persisting sync preferences.
   SyncPrefs sync_prefs_;
-  // TODO(crbug.com/938894): Remove this member and interact with SyncEngine
-  // instead.
-  SyncTransportDataPrefs sync_transport_data_prefs_;
 
+ private:
   // Encapsulates user signin - used to set/get the user's authenticated
   // email address and sign-out upon error.
   // May be null (if local Sync is enabled).
@@ -446,8 +448,8 @@ class ProfileSyncService : public SyncService,
   bool sync_allowed_by_platform_ = true;
 
   // Information describing an unrecoverable error.
-  base::Optional<UnrecoverableErrorReason> unrecoverable_error_reason_ =
-      base::nullopt;
+  absl::optional<UnrecoverableErrorReason> unrecoverable_error_reason_ =
+      absl::nullopt;
   std::string unrecoverable_error_message_;
   base::Location unrecoverable_error_location_;
 
@@ -456,7 +458,7 @@ class ProfileSyncService : public SyncService,
 
   // Note: This is an Optional so that we can control its destruction - in
   // particular, to trigger the "check_empty" test in Shutdown().
-  base::Optional<base::ObserverList<SyncServiceObserver,
+  absl::optional<base::ObserverList<SyncServiceObserver,
                                     /*check_empty=*/true>::Unchecked>
       observers_;
 

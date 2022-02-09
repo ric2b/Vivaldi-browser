@@ -195,31 +195,28 @@ void ContactEventRouter::ExtensiveContactChangesEnded(ContactService* model) {}
 void ContactEventRouter::OnContactCreated(ContactService* service,
                                           const contact::ContactRow& row) {
   Contact createdEvent = GetContact(row);
-  std::unique_ptr<base::ListValue> args =
-      OnContactCreated::Create(createdEvent);
+  std::vector<base::Value> args = OnContactCreated::Create(createdEvent);
   DispatchEvent(OnContactCreated::kEventName, std::move(args));
 }
 
 void ContactEventRouter::OnContactDeleted(ContactService* service,
                                           const contact::ContactRow& row) {
   Contact deletedEvent = GetContact(row);
-  std::unique_ptr<base::ListValue> args =
-      OnContactRemoved::Create(deletedEvent);
+  std::vector<base::Value> args = OnContactRemoved::Create(deletedEvent);
   DispatchEvent(OnContactRemoved::kEventName, std::move(args));
 }
 
 void ContactEventRouter::OnContactChanged(ContactService* service,
                                           const contact::ContactRow& row) {
   Contact changedEvent = GetContact(row);
-  std::unique_ptr<base::ListValue> args =
-      OnContactChanged::Create(changedEvent);
+  std::vector<base::Value> args = OnContactChanged::Create(changedEvent);
   DispatchEvent(OnContactChanged::kEventName, std::move(args));
 }
 
 // Helper to actually dispatch an event to extension listeners.
 void ContactEventRouter::DispatchEvent(
     const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
+    std::vector<base::Value> event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(base::WrapUnique(
@@ -294,7 +291,7 @@ ExtensionFunction::ResponseAction ContactsGetAllFunction::Run() {
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllContacts(
-      base::Bind(&ContactsGetAllFunction::GetAllComplete, this),
+      base::BindOnce(&ContactsGetAllFunction::GetAllComplete, this),
       &task_tracker_);
 
   return RespondLater();  // GetAllComplete() will be called
@@ -323,7 +320,7 @@ ExtensionFunction::ResponseAction ContactsGetAllEmailAddressesFunction::Run() {
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllEmailAddresses(
-      base::Bind(
+      base::BindOnce(
           &ContactsGetAllEmailAddressesFunction::GetAllEmailAddressesComplete,
           this),
       &task_tracker_);
@@ -404,7 +401,7 @@ ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
 
   model->UpdateContact(
       contact_id, updated_contact,
-      base::Bind(&ContactsUpdateFunction::UpdateContactComplete, this),
+      base::BindOnce(&ContactsUpdateFunction::UpdateContactComplete, this),
       &task_tracker_);
 
   return RespondLater();  // UpdateContactComplete() will be called
@@ -436,7 +433,7 @@ ExtensionFunction::ResponseAction ContactsDeleteFunction::Run() {
 
   model->DeleteContact(
       contact_id,
-      base::Bind(&ContactsDeleteFunction::DeleteContactComplete, this),
+      base::BindOnce(&ContactsDeleteFunction::DeleteContactComplete, this),
       &task_tracker_);
 
   return RespondLater();  // DeleteContactComplete() will be called
@@ -462,7 +459,8 @@ ExtensionFunction::ResponseAction ContactsCreateFunction::Run() {
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->CreateContact(
-      createContact, base::Bind(&ContactsCreateFunction::CreateComplete, this),
+      createContact,
+      base::BindOnce(&ContactsCreateFunction::CreateComplete, this),
       &task_tracker_);
   return RespondLater();
 }
@@ -500,7 +498,8 @@ ExtensionFunction::ResponseAction ContactsCreateManyFunction::Run() {
 
   model->CreateContacts(
       contact_rows,
-      base::Bind(&ContactsCreateManyFunction::CreateManyComplete, this),
+      base::BindOnce(&ContactsCreateManyFunction::CreateManyComplete,
+                          this),
       &task_tracker_);
 
   return RespondLater();
@@ -539,7 +538,8 @@ ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
 
   model->AddProperty(
       add_property,
-      base::Bind(&ContactsAddPropertyItemFunction::AddPropertyComplete, this),
+      base::BindOnce(&ContactsAddPropertyItemFunction::AddPropertyComplete,
+                          this),
       &task_tracker_);
   return RespondLater();
 }
@@ -587,8 +587,8 @@ ExtensionFunction::ResponseAction ContactsUpdatePropertyItemFunction::Run() {
 
   model->UpdateProperty(
       update_property,
-      base::Bind(&ContactsUpdatePropertyItemFunction::UpdatePropertyComplete,
-                 this),
+      base::BindOnce(
+          &ContactsUpdatePropertyItemFunction::UpdatePropertyComplete, this),
       &task_tracker_);
   return RespondLater();
 }
@@ -636,8 +636,8 @@ ExtensionFunction::ResponseAction ContactsRemovePropertyItemFunction::Run() {
 
   model->RemoveProperty(
       remove_property,
-      base::Bind(&ContactsRemovePropertyItemFunction::RemovePropertyComplete,
-                 this),
+      base::BindOnce(
+          &ContactsRemovePropertyItemFunction::RemovePropertyComplete, this),
       &task_tracker_);
   return RespondLater();
 }
@@ -696,8 +696,8 @@ ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
 
   model->AddEmailAddress(
       add_email,
-      base::Bind(&ContactsAddEmailAddressFunction::AddEmailAddressComplete,
-                 this),
+      base::BindOnce(
+          &ContactsAddEmailAddressFunction::AddEmailAddressComplete, this),
       &task_tracker_);
   return RespondLater();
 }
@@ -733,7 +733,7 @@ ExtensionFunction::ResponseAction ContactsRemoveEmailAddressFunction::Run() {
 
   model->RemoveEmailAddress(
       contact_id, email_address_id,
-      base::Bind(
+      base::BindOnce(
           &ContactsRemoveEmailAddressFunction::RemoveEmailAddressComplete,
           this),
       &task_tracker_);
@@ -800,7 +800,7 @@ ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
 
   model->UpdateEmailAddress(
       updated_email,
-      base::Bind(
+      base::BindOnce(
           &ContactsUpdateEmailAddressFunction::UpdateEmailAddressComplete,
           this),
       &task_tracker_);

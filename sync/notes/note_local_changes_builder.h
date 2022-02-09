@@ -5,8 +5,6 @@
 #ifndef SYNC_NOTES_NOTE_LOCAL_CHANGES_BUILDER_H_
 #define SYNC_NOTES_NOTE_LOCAL_CHANGES_BUILDER_H_
 
-#include <vector>
-
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
 namespace vivaldi {

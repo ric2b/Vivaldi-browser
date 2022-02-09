@@ -11,6 +11,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/android_image_reader_compat.h"
 #include "base/android/build_info.h"
+#include "base/android/sys_utils.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
@@ -57,12 +58,25 @@ const base::Feature kUseGles2ForOopR{"UseGles2ForOopR",
 // and using overlays on Android. Also used by webview to disable surface
 // SurfaceControl.
 const base::Feature kAndroidSurfaceControl{"AndroidSurfaceControl",
+// NOTE(jarle@vivaldi.com): Temp. solution for black page bug.
+// https://bugs.vivaldi.com/browse/VAB-4056
+// https://bugs.vivaldi.com/browse/VAB-4019
+#if defined(VIVALDI_BUILD)
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+#else
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
 
 // https://crbug.com/1176185 List of devices on which SurfaceControl should be
 // disabled.
-const base::FeatureParam<std::string> kAndroidSurfaceControlBlocklist{
-    &kAndroidSurfaceControl, "AndroidSurfaceControlBlocklist", "capri|caprip"};
+const base::FeatureParam<std::string> kAndroidSurfaceControlDeviceBlocklist{
+    &kAndroidSurfaceControl, "AndroidSurfaceControlDeviceBlocklist",
+    "capri|caprip"};
+
+// List of models on which SurfaceControl should be disabled.
+const base::FeatureParam<std::string> kAndroidSurfaceControlModelBlocklist{
+    &kAndroidSurfaceControl, "AndroidSurfaceControlModelBlocklist",
+    "SM-F9*|SM-W202?|SCV44|SCG05|SCG11|SC-55B"};
 
 // Hardware Overlays for WebView.
 const base::Feature kWebViewSurfaceControl{"WebViewSurfaceControl",
@@ -94,6 +108,15 @@ const base::Feature kLimitAImageReaderMaxSizeToOne{
 const base::FeatureParam<std::string> kLimitAImageReaderMaxSizeToOneBlocklist{
     &kLimitAImageReaderMaxSizeToOne, "LimitAImageReaderMaxSizeToOneBlocklist",
     "MIBOX"};
+
+// Increase number of buffers and pipeline depth for high frame rate devices.
+const base::Feature kIncreaseBufferCountForHighFrameRate{
+    "IncreaseBufferCountForHighFrameRate", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::FeatureParam<std::string>
+    kDisableIncreaseBufferCountForHighFrameRate{
+        &kIncreaseBufferCountForHighFrameRate,
+        "DisableIncreaseBufferCountForHighFrameRate", ""};
 #endif
 
 // Enable GPU Rasterization by default. This can still be overridden by
@@ -170,7 +193,9 @@ const base::Feature kVaapiWebPImageDecodeAcceleration{
 // Note Android WebView uses kWebViewVulkan instead of this.
 const base::Feature kVulkan {
   "Vulkan",
-#if defined(OS_ANDROID)
+// NOTE(jarle@vivaldi.com): Temp. solution for white video bug.
+// https://bugs.vivaldi.com/browse/VAB-4124
+#if defined(OS_ANDROID) && !defined(VIVALDI_BUILD)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -195,7 +220,8 @@ const base::FeatureParam<std::string> kVulkanBlockListByModel{
     &kVulkan, "BlockListByModel", ""};
 
 const base::FeatureParam<std::string> kVulkanBlockListByBoard{
-    &kVulkan, "BlockListByBoard", ""};
+    &kVulkan, "BlockListByBoard",
+    "RM67*|RM68*|k68*|mt67*|oppo67*|oppo68*|QM215|rk30sdk"};
 
 const base::FeatureParam<std::string> kVulkanBlockListByAndroidBuildFP{
     &kVulkan, "BlockListByAndroidBuildFP", ""};
@@ -213,6 +239,10 @@ const base::Feature kEnableGrShaderCacheForVulkan{
 // Enable persistent storage of VkPipelineCache data.
 const base::Feature kEnableVkPipelineCache{"EnableVkPipelineCache",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable Skia reduceOpsTaskSplitting to reduce render passes.
+const base::Feature kReduceOpsTaskSplitting{
+    "ReduceOpsTaskSplitting", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsUsingVulkan() {
 #if defined(OS_ANDROID)
@@ -276,7 +306,9 @@ bool IsAImageReaderEnabled() {
 bool IsAndroidSurfaceControlEnabled() {
   const auto* build_info = base::android::BuildInfo::GetInstance();
   if (IsDeviceBlocked(build_info->device(),
-                      kAndroidSurfaceControlBlocklist.Get())) {
+                      kAndroidSurfaceControlDeviceBlocklist.Get()) ||
+      IsDeviceBlocked(build_info->model(),
+                      kAndroidSurfaceControlModelBlocklist.Get())) {
     return false;
   }
 
@@ -326,6 +358,23 @@ bool IsWebViewZeroCopyVideoEnabled() {
 
   return !(FieldIsInBlocklist(base::android::BuildInfo::GetInstance()->model(),
                               kWebViewZeroCopyVideoBlocklist.Get()));
+}
+
+bool IncreaseBufferCountForHighFrameRate() {
+  // TODO(crbug.com/1211332): We don't have a way to dynamically adjust number
+  // of buffers. So these checks, espeically the RAM one, is to limit the impact
+  // of more buffers to devices that can handle them.
+  // 8GB of ram with large margin for error.
+  constexpr int RAM_8GB_CUTOFF = 7200 * 1024;
+  static bool increase =
+      base::android::BuildInfo::GetInstance()->sdk_int() >=
+          base::android::SdkVersion::SDK_VERSION_R &&
+      IsAndroidSurfaceControlEnabled() && IsAImageReaderEnabled() &&
+      base::android::SysUtils::AmountOfPhysicalMemoryKB() > RAM_8GB_CUTOFF &&
+      base::FeatureList::IsEnabled(kIncreaseBufferCountForHighFrameRate) &&
+      !IsDeviceBlocked(base::android::BuildInfo::GetInstance()->device(),
+                       kDisableIncreaseBufferCountForHighFrameRate.Get());
+  return increase;
 }
 
 #endif

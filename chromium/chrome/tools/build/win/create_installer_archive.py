@@ -12,7 +12,7 @@
 
 """
 
-import ConfigParser
+import configparser
 import fnmatch
 import glob
 import optparse
@@ -139,7 +139,7 @@ def CopyAllFilesToStagingDir(config, distribution, staging_dir, build_dir,
     CopySectionFilesToStagingDir(config, 'FFMPEG', staging_dir, build_dir,
                                  verbose)
 
-# The 'SafeConfigParser' makes all strings lowercase - which works fine on
+# The 'ConfigParser' makes all strings lowercase - which works fine on
 # a cases-insensitive NTFS partition, but makes no sense when trying to build
 # mini_installer.exe on a linux box. This function can be used to make glob
 # matches case insensitive to bypass this issue.
@@ -187,7 +187,7 @@ def SignTarget(options, target):
   if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
     return
 
-  print "Starting Signing of", target
+  print("Starting Signing of", target)
   signcommand = ([options.vivaldi_sign_cmd,
       "sign",
       "/v",
@@ -202,7 +202,7 @@ def SignTarget(options, target):
     raise Exception("Signing %s failed", target)
 
 def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
-  print "Start Signing"
+  print("Start Signing")
   sections = ['GENERAL']
   if distribution:
     if len(distribution) > 1 and distribution[0] == '_':
@@ -224,7 +224,7 @@ def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
       src_paths = glob.glob(os.path.join(src_dir, os.path.basename(option) if src_dir[-1] in ["\\", "/"] else option))
       for target in src_paths:
         SignTarget(options, target)
-  print "Completed signing"
+  print("Completed signing")
 
 def SignWidevineTargets(config, options, staging_dir, distro, blessed=0, versioned=False):
   print ("Start Widevine Signing %s" % distro)
@@ -239,7 +239,7 @@ def SignWidevineTargets(config, options, staging_dir, distro, blessed=0, version
     target_file = os.path.join(staging_dir, config.get(distro, option))
 
     cmd = [
-          sys.executable,
+          "python",
           options.vivaldi_widevine_sign_cmd,
           "--input", src_file,
           "--output", target_file,
@@ -250,10 +250,10 @@ def SignWidevineTargets(config, options, staging_dir, distro, blessed=0, version
       cmd.extend(["--flags", "1"])
 
     print ("Signing cmd: %s"% str(cmd))
-    subprocess.check_call(cmd)
+    subprocess.check_call(cmd, shell=True)
 
     cmd = [
-          sys.executable,
+          "python",
           options.vivaldi_widevine_verify_cmd,
           "--input", src_file,
           "--sig_file", target_file,
@@ -262,7 +262,7 @@ def SignWidevineTargets(config, options, staging_dir, distro, blessed=0, version
       cmd.extend(["--flags", "1"])
 
     print ("Verifying cmd: %s"% str(cmd))
-    subprocess.check_call(cmd)
+    subprocess.check_call(cmd, shell=True)
 
     g_archive_inputs.append(target_file)
 
@@ -320,7 +320,7 @@ def Readconfig(input_file, current_version):
   variables['ChromeDir'] = CHROME_DIR
   variables['VersionDir'] = os.path.join(variables['ChromeDir'],
                                           current_version)
-  config = ConfigParser.SafeConfigParser(variables)
+  config = configparser.ConfigParser(variables)
   config.read(input_file)
   return config
 
@@ -384,9 +384,10 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
 
     # Finally, write the depfile referencing the inputs.
     with open(options.depfile, 'wb') as f:
-      f.write(path_fixup(os.path.relpath(archive_file, options.build_dir)) +
-              ': \\\n')
-      f.write('  ' + ' \\\n  '.join(path_fixup(x) for x in g_archive_inputs))
+      f.write((path_fixup(os.path.relpath(archive_file, options.build_dir)) +
+              ': \\\n').encode())
+      f.write(('  ' + ' \\\n  '.join(path_fixup(x)
+              for x in g_archive_inputs)).encode())
 
   # It is important to use abspath to create the path to the directory because
   # if you use a relative path without any .. sequences then 7za.exe uses the
@@ -536,7 +537,7 @@ def CopyAndAugmentManifest(build_dir, output_dir, manifest_name,
 
   insert_line = -1
   insert_pos = -1
-  for i in xrange(len(manifest_lines)):
+  for i in range(len(manifest_lines)):
     insert_pos = manifest_lines[i].find(insert_before)
     if insert_pos != -1:
       insert_line = i

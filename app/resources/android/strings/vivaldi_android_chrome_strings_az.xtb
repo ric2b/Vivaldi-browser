@@ -1,45 +1,54 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
-<translation id="1397811292916898096"><ph name="PRODUCT_NAME" />-də/da axtarmaq</translation>
-<translation id="1598449788754183301">Adi və məxfi vərəqlər arası keçid</translation>
+<translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> ilə axtarın</translation>
+<translation id="1598449788754183301">Adi və gizli vərəqlər arası keçid</translation>
 <translation id="1644574205037202324">Tarixçə</translation>
-<translation id="17513872634828108">Vərəqləri açmaq</translation>
-<translation id="1829244130665387512">Səhifədə tapmaq</translation>
-<translation id="2038563949887743358">Masaüstü versiyanı açmaq</translation>
+<translation id="17513872634828108">Vərəqləri açın</translation>
+<translation id="1829244130665387512">Səhifədə tapın</translation>
+<translation id="2038563949887743358">Kompyuter versiyanı açın</translation>
+<translation id="2306442503286132111">Əlfəcin <ph name="FOLDER_NAME" /> qovluğunda saxlanıldı</translation>
 <translation id="2433507940547922241">Xarici görünüş</translation>
 <translation id="2501278716633472235">Geriyə</translation>
 <translation id="2633278372998075009">Məxfi vərəqlər</translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT,plural,
+          =1{<ph name="BOOKMARKS_COUNT_ONE" /> əlfəcin}
+          other{<ph name="BOOKMARKS_COUNT_MANY" /> əlfəcinlər}}</translation>
 <translation id="3076631378407175873">Müəllif Hüquqları <ph name="YEAR" /> Vivaldi Technologies AS aiddir. Bütün hüquqlar qorunur.</translation>
 <translation id="3234355010754616171">Yeni məxfi vərəq</translation>
-<translation id="3518985090088779359">Qəbul etmək və davam etmək</translation>
+<translation id="3377025655491224618">Məxfi vərəq</translation>
+<translation id="3518985090088779359">Qəbul edin və davam edin</translation>
 <translation id="3700829948786686853">Vivaldi'yə Xoş Gəldiniz</translation>
 <translation id="3719826155360621982">Ev səhifəsi</translation>
 <translation id="385051799172605136">Geriyə</translation>
 <translation id="4121750346708795461">Bu tətbiqi istifadə etməklə Siz Vivaldi'nin <ph name="BEGIN_LINK1" /> İstifadə Şərtlərini <ph name="END_LINK1" /> və <ph name="BEGIN_LINK2" /> Məxfilik Siyasətini <ph name="END_LINK2" /> qəbul etmiş olursunuz.</translation>
-<translation id="4243710787042215766">Məxfi pəncərədə açmaq</translation>
+<translation id="4243710787042215766">Məxfi pəncərədə açın</translation>
 <translation id="4526803704855831732">Məxfi vərəqlər</translation>
 <translation id="4759238208242260848">Endirmələr</translation>
-<translation id="4883379392681899581">Məxfi rejimdən çıxmaq</translation>
+<translation id="4865987431642283918">İlkin cihaz dili</translation>
+<translation id="4883379392681899581">Məxfi rejimdən çıxın</translation>
 <translation id="4943872375798546930">Nəticə yoxdur</translation>
-<translation id="49576331685473090">Məzmunun əngəllənmsi</translation>
+<translation id="49576331685473090">Məzmun əngəlləyici</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> saxlama yeri</translation>
-<translation id="5186185447130319458">Məxfi</translation>
+<translation id="5186185447130319458">Gizli</translation>
 <translation id="5233638681132016545">Yeni vərəq</translation>
 <translation id="572328651809341494">Əvvəlki vərəqlər</translation>
-<translation id="5840488417521835756">Məlumatları səhifəni tərk etmədən axtarın. Vivaldi'də sürətli axtarış yalnız, standart axtarış vasitəsi Google təyin edildiyində işləyir. Sadəcə sözü seçin və o məzmunu ilə birlikdə Google'də axtarışa veriləcəkdir.
+<translation id="5840488417521835756">Mövzuları səhifəni tərk etmədən öyrənin. Vivaldi'də sürətli axtarış, yalnız standart axtarış vasitəsi Google təyin edildiyində işləyir. Sadəcə sözü seçin və o, Google'də axtarışa veriləcəkdir.
 
-Yeni axtarış sorğusu üçün, lazımi sözün üzərində basaraq saxlayın. Sorğunu dəqiqləşdirmək üçün, paneli yuxarı sürüşdürün və axtarış pəncərəsinə toxunun.</translation>
+Yeni axtarış sorğusu üçün, lazımi sözün üzərinə basaraq saxlayın. Sorğunu dəqiqləşdirmək üçün, paneli yuxarı sürüşdürün və axtarış pəncərəsinə toxunun.</translation>
+<translation id="6150320133806434356">Əlfəcin saxlanıldı</translation>
 <translation id="6336451774241870485">Yeni məxfi vərəq</translation>
-<translation id="6593061639179217415">Masaüstü versiyası</translation>
-<translation id="6610147964972079463">Məxfi vərəqləri bağlamaq</translation>
+<translation id="6585139692466700358">Vivaldi'nin tərcümə xidmətindən istifadə edərək, səhifələrin digər dillərə tərcüməsi təklif olunsun</translation>
+<translation id="6593061639179217415">Komputer versiyası</translation>
+<translation id="6610147964972079463">Məxfi vərəqləri bağlayın</translation>
 <translation id="706339621163631076">Veb-bələdçi məxfilik siyasəti</translation>
+<translation id="732145680195464316">Əlfəcin <ph name="PRODUCT_NAME" /> tətbiqinə əlavə edildi</translation>
 <translation id="7427132068601343474">Vivaldi veb-bələdçisi haqqında</translation>
-<translation id="7465104139234185284">Bütün məsxi vərəqləri bağlamaq</translation>
-<translation id="7519434535192513364">Sürətli axtarış yalnız, Vivaldi'də standart axtarış vasitəsi Google təyin olunduğundaişləyir. Seçilmiş söz məzmunu ilə birlikdə axtarışa göndəriləcəkdir. Bu funksiyanı <ph name="END_LINK" /> ayarlarında, <ph name="BEGIN_LINK" /> keçidindən söndürmək olar.</translation>
+<translation id="7465104139234185284">Bütün məxfii vərəqləri bağlayın</translation>
+<translation id="7519434535192513364">Sürətli axtarış yalnız, Vivaldi'də standart axtarış vasitəsi Google təyin olunduğunda işləyir. Seçilmiş söz, məzmunu ilə birlikdə axtarışa göndəriləcəkdir. Bu funksiyanı <ph name="END_LINK" /> ayarlarında, <ph name="BEGIN_LINK" /> keçidindən söndürmək olar.</translation>
 <translation id="804786196054284061">Son İstifadəçi Lisenziya Razılaşması</translation>
-<translation id="85991616550051997">Ev səhifəsinə keçmək</translation>
+<translation id="85991616550051997">Ev səhifəsinə keçin</translation>
 <translation id="8820817407110198400">Əlfəcinlər</translation>
-<translation id="9063523880881406963">Masaüstü versiyasını söndürmək</translation>
-<translation id="9080642952018487277">Məxfi işləmək</translation>
+<translation id="9063523880881406963">Komputer versiyasını söndürün</translation>
+<translation id="9080642952018487277">Gizli işləmək</translation>
 </translationbundle>

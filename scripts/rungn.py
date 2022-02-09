@@ -65,6 +65,7 @@ checkout_oculus_sdk=false
 checkout_openxr=false
 build_with_chromium=true
 checkout_google_benchmark=false
+generate_location_tags = false
 """
 
 gclient_gni_file_name = os.path.join(sourcedir, "chromium/build/config/gclient_args.gni")

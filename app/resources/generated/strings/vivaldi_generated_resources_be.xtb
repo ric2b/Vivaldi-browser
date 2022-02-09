@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Выйсці з поўнаэкраннага рэжыму</translation>
 <translation id="2177950615300672361">Укладка ў рэжыме інкогніта: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модуль натыўнага кліента: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Схаваць кнопку</translation>
 <translation id="2218515861914035131">Уставіць як звычайны тэкст</translation>
 <translation id="2249605167705922988">Напрыклад: 1-5, 7, 16-18</translation>
 <translation id="225240747099314620">Дазволіць ідэнтыфікатары для абароненага змесціва (можа спатрэбіцца перазапуск камп'ютара)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Папярэдняя адмалёўка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Мікрафон</translation>
 <translation id="3241680850019875542">Абярыце каранёвы каталог пашырэння, якое запакоўваецца. Каб абнавіць пашырэнне, абярыце яшчэ і прыватны ключ.</translation>
-<translation id="3266179261140759675">Забараніць сайтам, якія былі закрытыя, адпраўляць і атрымліваць даныя</translation>
 <translation id="3280237271814976245">Захаваць &amp;як...</translation>
 <translation id="3285322247471302225">Новая &amp;ўкладка</translation>
 <translation id="3288047731229977326">Пашырэнні, запушчаныя ў рэжыме распрацоўніка, могуць нашкодзіць вашаму камп'ютару. Калі вы не распрацоўнік, то іх трэба адключыць, каб даныя былі ў бяспецы.</translation>
@@ -160,7 +158,6 @@
 <translation id="354068948465830244">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="3560034655160545939">&amp;Праверка правапісу</translation>
 <translation id="3574917942258583917">Усё адно выйсці з рэжыму інкогніта?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоча даць доступ да прынтара &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; вашай групе:&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Калі вы ўхваліце гэтае дзеянне, то ўсе удзельнікі групы змогуць карыстацца прынтарам.</translation>
 <translation id="3587482841069643663">Усе</translation>
 <translation id="3627588569887975815">Адкрыць спасылку ў акне ў рэжыме і&amp;нкогніта</translation>
 <translation id="3627879631695760395">Усталяваць <ph name="APP" />...</translation>
@@ -194,7 +191,6 @@
 <translation id="4087089424473531098">Створана пашырэнне:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Ухваліць для групы</translation>
 <translation id="4096508467498758490">Адключыць пашырэнні ў рэжыме распрацоўніка</translation>
 <translation id="4100839878934973028">Іншая праграма на вашым камп'ютары дадала тэму, якая можа ўплываць на працу Vivaldi.</translation>
 <translation id="4109898769411476438">Закрыйце браўзер перад імпартам</translation>
@@ -230,7 +226,6 @@
 <translation id="488785315393301722">Паказаць падрабязнасці</translation>
 <translation id="4907306957610201395">Катэгорыя права доступу</translation>
 <translation id="4912643508233590958">Пераход у актыўны рэжым</translation>
-<translation id="4918086044614829423">Пагадзіцца</translation>
 <translation id="4927753642311223124">Тут нічога няма, пераходзьце далей.</translation>
 <translation id="4930714375720679147">Уключыць</translation>
 <translation id="4988526792673242964">Старонкі</translation>
@@ -260,7 +255,7 @@
 <translation id="5317780077021120954">Захаваць</translation>
 <translation id="5334142896108694079">Кэш скрыпта</translation>
 <translation id="5355926466126177564">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла сістэму пошуку.</translation>
-<translation id="5360150013186312835">Паказваць на панэлі інструментаў</translation>
+<translation id="5360150013186312835">Адлюстраваць на панэлі</translation>
 <translation id="5362741141255528695">Абярыце файл прыватнага ключа.</translation>
 <translation id="536638840841140142">Няма</translation>
 <translation id="5370819323174483825">&amp;Перазагрузіць</translation>
@@ -306,7 +301,6 @@
 <translation id="6011449291337289699">Выдаленне даных сайтаў</translation>
 <translation id="6042308850641462728">Падрабязней</translation>
 <translation id="6059925163896151826">Прылады USB</translation>
-<translation id="6082651258230788217">Паказваць на панэлі інструментаў</translation>
 <translation id="6086846494333236931">Усталявана адміністратарам</translation>
 <translation id="6101226222197207147">Дададзена новая праграма (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Пашырэнне змяніла налады проксі</translation>
@@ -333,7 +327,6 @@
 <translation id="6406303162637086258">Сімуляваць перазапуск браўзера</translation>
 <translation id="6445450263907939268">Вы можаце аднавіць папярэднія налады.</translation>
 <translation id="6447842834002726250">Файлы cookie</translation>
-<translation id="6452181791372256707">Адхіліць</translation>
 <translation id="6498249116389603658">&amp;Усе Мовы</translation>
 <translation id="6503077044568424649">Найбольш часта наведаныя</translation>
 <translation id="6508261954199872201">Праграма: <ph name="APP_NAME" /></translation>
@@ -364,7 +357,7 @@
 <translation id="7070484045139057854">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="708060913198414444">С&amp;капіяваць адрас аўдыё</translation>
 <translation id="7175353351958621980">Загружана з:</translation>
-<translation id="7186088072322679094">Размясціць на панэлі</translation>
+<translation id="7186088072322679094">Трымаць на панэлі</translation>
 <translation id="7270858098575133036">Папярэджваць, калі сайты спрабуюць выкарыстаць сістэмныя паведамленні для доступу да MIDI-прылад</translation>
 <translation id="7287143125007575591">Достут забаронены.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />х<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +396,6 @@
 <translation id="7857949311770343000">Вы хочаце прызначыць гэтую ўкладку?</translation>
 <translation id="786073089922909430">Служба: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Нядаўна выкарыстаныя прынтары</translation>
-<translation id="7898627924844766532">Размясціць на панэлі</translation>
 <translation id="7903925330883316394">Утыліта: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Зараз па-за сецівам</translation>
 <translation id="7947962633355574091">С&amp;капіяваць адрас відэа</translation>
@@ -451,7 +443,6 @@
 <translation id="8725066075913043281">Паўтарыць спробу</translation>
 <translation id="8757090071857742562">Немагчыма выканаць трансляцыю працоўнага стала. Пераканайцеся, што вы адкрылі доступ да экрана.</translation>
 <translation id="8774934320277480003">Верхняе поле</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоча даць вам доступ да прынтара &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Прадвызначана</translation>
 <translation id="8800004011501252845">Паказаць месца прызначэння для</translation>
 <translation id="8808478386290700967">Сеціўная крама</translation>

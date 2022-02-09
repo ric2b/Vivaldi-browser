@@ -10,15 +10,27 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Browser;
 import android.provider.Settings;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.notifications.NotificationIntentInterceptor;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
+import org.chromium.chrome.browser.subscriptions.CommerceSubscription;
+import org.chromium.chrome.browser.subscriptions.CommerceSubscription.CommerceSubscriptionType;
+import org.chromium.chrome.browser.subscriptions.CommerceSubscription.SubscriptionManagementType;
+import org.chromium.chrome.browser.subscriptions.CommerceSubscription.TrackingIdType;
+import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceFactory;
+import org.chromium.chrome.browser.subscriptions.SubscriptionsManagerImpl;
 import org.chromium.chrome.browser.tasks.tab_management.PriceTrackingUtilities;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
@@ -32,6 +44,10 @@ public class PriceDropNotificationManager {
             "android.settings.APP_NOTIFICATION_SETTINGS";
     private static final String EXTRA_APP_PACKAGE = "app_package";
     private static final String EXTRA_APP_UID = "app_uid";
+    // The action ids should be the same as defined in the server, see {@link
+    // HandleProductUpdateEventsProducerModule}.
+    private static final String ACTION_ID_VISIT_SITE = "visit_site";
+    private static final String ACTION_ID_TURN_OFF_ALERT = "turn_off_alert";
 
     private static NotificationManagerProxy sNotificationManagerForTesting;
 
@@ -41,6 +57,14 @@ public class PriceDropNotificationManager {
     public PriceDropNotificationManager() {
         mContext = ContextUtils.getApplicationContext();
         mNotificationManager = new NotificationManagerProxyImpl(mContext);
+    }
+
+    /**
+     * @return Whether the price drop notification type is enabled. For now it is used in downstream
+     *         which could influence the Chime registration.
+     */
+    public boolean isEnabled() {
+        return PriceTrackingUtilities.ENABLE_PRICE_NOTIFICATION.getValue();
     }
 
     /**
@@ -70,6 +94,70 @@ public class PriceDropNotificationManager {
     public void onNotificationPosted(@Nullable Notification notification) {
         NotificationUmaTracker.getInstance().onNotificationShown(
                 NotificationUmaTracker.SystemNotificationType.PRICE_DROP_ALERTS, notification);
+    }
+
+    /**
+     * When user clicks the notification, they will be sent to the tab with price drop which
+     * triggered the notification.
+     *
+     * @param url of the tab which triggered the notification.
+     */
+    public void onNotificationClicked(String url) {
+        mContext.startActivity(getNotificationClickIntent(url));
+        NotificationUmaTracker.getInstance().onNotificationContentClick(
+                NotificationUmaTracker.SystemNotificationType.PRICE_DROP_ALERTS,
+                NotificationIntentInterceptor.INVALID_CREATE_TIME);
+    }
+
+    /**
+     * Handles the notification action click events.
+     *
+     * @param actionId the id used to identify certain action.
+     * @param url of the tab which triggered the notification.
+     * @param offerId the id of the offer associated with this notification.
+     */
+    public void onNotificationActionClicked(String actionId, String url, @Nullable String offerId) {
+        if (actionId.equals(ACTION_ID_VISIT_SITE)) {
+            mContext.startActivity(getNotificationClickIntent(url));
+            NotificationUmaTracker.getInstance().onNotificationActionClick(
+                    NotificationUmaTracker.ActionType.PRICE_DROP_VISIT_SITE,
+                    NotificationUmaTracker.SystemNotificationType.PRICE_DROP_ALERTS,
+                    NotificationIntentInterceptor.INVALID_CREATE_TIME);
+        } else if (actionId.equals(ACTION_ID_TURN_OFF_ALERT)) {
+            if (offerId == null) return;
+            SubscriptionsManagerImpl subscriptionsManager =
+                    (new CommerceSubscriptionsServiceFactory())
+                            .getForLastUsedProfile()
+                            .getSubscriptionsManager();
+            subscriptionsManager.unsubscribe(
+                    new CommerceSubscription(CommerceSubscriptionType.PRICE_TRACK, offerId,
+                            SubscriptionManagementType.CHROME_MANAGED, TrackingIdType.OFFER_ID),
+                    (didSucceed) -> { assert didSucceed : "Failed to remove subscriptions."; });
+            NotificationUmaTracker.getInstance().onNotificationActionClick(
+                    NotificationUmaTracker.ActionType.PRICE_DROP_TURN_OFF_ALERT,
+                    NotificationUmaTracker.SystemNotificationType.PRICE_DROP_ALERTS,
+                    NotificationIntentInterceptor.INVALID_CREATE_TIME);
+        }
+    }
+
+    /**
+     * @return The intent that we will use to send users to the tab which triggered the
+     *         notification.
+     *
+     * @param url of the tab which triggered the notification.
+     */
+    @VisibleForTesting
+    public Intent getNotificationClickIntent(String url) {
+        Intent intent =
+                new Intent()
+                        .setAction(Intent.ACTION_VIEW)
+                        .setData(Uri.parse(url))
+                        .setClass(mContext, ChromeLauncherActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+                        .putExtra(Browser.EXTRA_APPLICATION_ID, mContext.getPackageName())
+                        .putExtra(ShortcutHelper.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, true);
+        IntentHandler.addTrustedIntentExtras(intent);
+        return intent;
     }
 
     /**

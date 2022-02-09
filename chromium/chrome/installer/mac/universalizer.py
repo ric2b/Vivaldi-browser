@@ -222,6 +222,7 @@ def _universalize(input_paths, output_path, root):
                 os.path.basename(input_paths[index]).find('Sparkle') == -1 and
                 os.path.basename(input_paths[index]).find('fileop') == -1 and
                 os.path.basename(input_paths[index]).find('Autoupdate') == -1 and
+                input_paths[index].find('.pak') == -1 and
                 input_paths[index].find('/Resources/vivaldi/') == -1):
                 identical = False
                 if (os.path.basename(output_path) == 'Info.plist' or

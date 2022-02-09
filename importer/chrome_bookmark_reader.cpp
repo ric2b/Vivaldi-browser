@@ -41,7 +41,7 @@ void ChromeBookmarkFileReader::LoadFile(const base::FilePath& file) {
   std::string input;
   ReadFileToString(file, &input);
 
-  base::Optional<base::Value> root(base::JSONReader::Read(input));
+  absl::optional<base::Value> root(base::JSONReader::Read(input));
 
   base::DictionaryValue* dict = NULL;
 

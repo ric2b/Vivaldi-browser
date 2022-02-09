@@ -1,4 +1,46 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
+<translation id="1127811143501539442">{DAYS, plural, =1 {1 gün və }one{# gün }few{# gün }many{# gün}other{# gün}}</translation>
+<translation id="1156623771253174079">{SECONDS, plural, =1 {1 dəqiqə əvvəl} other {# dəqiqə əvvəl}}</translation>
+<translation id="1368832886055348810">Soldan sağa</translation>
+<translation id="1591184457164800433">{MINUTES, plural, =1 {1 dəqiqə } other {# dəqiqə}}</translation>
+<translation id="1752946267035950200">{MINUTES, plural, =1 {1 dəqiqə} other {# dəqiqələr}}</translation>
+<translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
+<translation id="1801827354178857021">Dövr</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/san</translation>
+<translation id="1830179671306812954">{HOURS, plural, =1 {1 saat əvvəl } other {# saat əvvəl }}</translation>
+<translation id="1859234291848436338">Yazı istiqaməti</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/san</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3291688615589870984">{DAYS, plural, =1 {1 gün} other {# gün}}</translation>
+<translation id="3600566671520689681">{DAYS, plural, =1 {1 gün qaldı} other {# gün qaldı}}</translation>
+<translation id="3618849550573277856">"<ph name="LOOKUP_STRING" /> axtarmaq</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> QB/san</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> QB</translation>
+<translation id="3889424535448813030">Ox sağa</translation>
+<translation id="4968171027979920686">{SECONDS, plural, =1 {1 saniyə} other {# saniyə}}</translation>
+<translation id="5076340679995252485">&amp;Yerləşdirmək</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
+<translation id="5613020302032141669">Ox sola</translation>
+<translation id="5754277640426581776">{MINUTES, plural, =1 {1 dəq} digər {# dəq}}</translation>
+<translation id="5768079895599174203">{DAYS, plural, =1 {1 gün və }one{# gün }few{# gün }many{# gün}other{# gün}}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, =1 {1 saniyə qaldı} other {# saniyə qaldı}}</translation>
+<translation id="5943826764092288734">{HOURS, plural, =1 {1 saat} other {# saat}}</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> B/san</translation>
+<translation id="6404817160109697034">{SECONDS, plural, =1 {1 san əvvəl} other {# san əvvəl}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, =1 {1 saniyə qaldı} other {# saniyə qaldı}}</translation>
+<translation id="6863590663815976734">{HOURS, plural, =1 {1 saat qaldı} other {# saat qaldı}}</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/san</translation>
+<translation id="6974053822202609517">Sağdan Sola</translation>
+<translation id="7238427729722629793">{MINUTES, plural, =1 {1 dəq qaldı} other {# dəq qaldı}}</translation>
+<translation id="7365057348334984696">{MINUTES, plural, =1 {1 dəq əvvəl} other {# dəq əvvəl}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, =1 {1 dəqiqə qaldıt} other {# dəqiqə qaldı}}</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="8106081041558092062">{HOURS, plural, =1 {1 saat əvvəl} other {# saat əvvəl}}</translation>
+<translation id="8131263257437993507">{SECONDS, plural, =1 {1 san qaldı} other {# san qaldı}}</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> KB/san</translation>
+<translation id="8798099450830957504">Standart</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
+<translation id="9044832324875206639">{SECONDS, plural, =1 {1 san} other {# san}}</translation>
 </translationbundle>

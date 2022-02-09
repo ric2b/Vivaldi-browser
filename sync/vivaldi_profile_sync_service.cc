@@ -62,7 +62,7 @@ void VivaldiProfileSyncService::ClearSyncData() {
   // This isn't handled by the engine anymore, so we instead do the whole
   // request right here and shut down sync.
 
-  std::string client_id = sync_transport_data_prefs_.GetCacheGuid();
+  std::string client_id = engine_->GetCacheGuid();
   std::string auth_token = auth_manager_->GetCredentials().access_token;
   is_clearing_sync_data_ = true;
   StopAndClear();
@@ -124,9 +124,8 @@ void VivaldiProfileSyncService::ClearSyncData() {
   clear_data_url_loader_->AttachStringForUpload(request_content,
                                                 "application/octet-stream");
 
-  auto url_loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(profile_)
-          ->GetURLLoaderFactoryForBrowserProcess();
+  auto url_loader_factory = profile_->GetDefaultStoragePartition()
+                                ->GetURLLoaderFactoryForBrowserProcess();
 
   clear_data_url_loader_->DownloadHeadersOnly(
       url_loader_factory.get(),
@@ -155,8 +154,8 @@ void VivaldiProfileSyncService::OnEngineInitialized(
   error.action = syncer::RESET_LOCAL_SYNC_DATA;
 
   base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::Bind(&ProfileSyncService::OnActionableError,
-                            base::Unretained(this), error));
+                 base::BindOnce(&ProfileSyncService::OnActionableError,
+                                base::Unretained(this), error));
 }
 
 void VivaldiProfileSyncService::ShutdownImpl(syncer::ShutdownReason reason) {
@@ -174,13 +173,13 @@ void VivaldiProfileSyncService::OnClearDataComplete(
 }
 
 std::string VivaldiProfileSyncService::GetEncryptionBootstrapToken() const {
-  return sync_transport_data_prefs_.GetEncryptionBootstrapToken();
+  return sync_prefs_.GetEncryptionBootstrapToken();
 }
 
 void VivaldiProfileSyncService::SetEncryptionBootstrapToken(
     const std::string& token) {
   StopImpl(CLEAR_DATA);
-  sync_transport_data_prefs_.SetEncryptionBootstrapToken(token);
+  sync_prefs_.SetEncryptionBootstrapToken(token);
   GetUserSettings()->SetSyncRequested(true);
 }
 }  // namespace vivaldi

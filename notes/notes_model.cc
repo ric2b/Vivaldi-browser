@@ -202,8 +202,8 @@ NoteNode* NotesModel::AddNote(const NoteNode* parent,
                               const std::u16string& title,
                               const GURL& url,
                               const std::u16string& content,
-                              base::Optional<base::Time> creation_time,
-                              base::Optional<base::GUID> guid) {
+                              absl::optional<base::Time> creation_time,
+                              absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 
@@ -251,7 +251,7 @@ NoteNode* NotesModel::ImportNote(const NoteNode* parent,
 NoteNode* NotesModel::AddFolder(const NoteNode* parent,
                                 size_t index,
                                 const std::u16string& name,
-                                base::Optional<base::GUID> guid) {
+                                absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 
@@ -267,9 +267,9 @@ NoteNode* NotesModel::AddFolder(const NoteNode* parent,
 
 NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
                                    size_t index,
-                                   base::Optional<std::u16string> name,
-                                   base::Optional<base::Time> creation_time,
-                                   base::Optional<base::GUID> guid) {
+                                   absl::optional<std::u16string> name,
+                                   absl::optional<base::Time> creation_time,
+                                   absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 

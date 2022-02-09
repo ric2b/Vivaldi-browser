@@ -93,7 +93,6 @@
 <translation id="3494769164076977169">Pregunta-mi cando unu giassu web provat a iscarrigare files a sa sola pustis de su primu file (cunsigiadu)</translation>
 <translation id="3505030558724226696">No permites a s'aplicu de impreare sos dispositivos</translation>
 <translation id="3560034655160545939">Cuntrollu de sa sillabatzione</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; cheret cumpartzire un'imprentadora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; cun d-una truma chi t'apartenet: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si as a atzetare totus sos membros de sa truma ant a podere impreare s'imprentadora.</translation>
 <translation id="3587482841069643663">Totu</translation>
 <translation id="3668823961463113931">Intestatziones</translation>
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
@@ -117,7 +116,6 @@
 <translation id="4087089424473531098">Estensione fraigada:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Atzeta pro una truma</translation>
 <translation id="4096508467498758490">Istuda sas estensione in modalidade isvilupadore</translation>
 <translation id="4100839878934973028">B'at aterun'aplicu in su'elaboradore chi at agiuntu un'aplicu chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="4115080753528843955">B'ant servitzios de contenutos chi impreant identificadores unicos pro donare sas autoritzatziones a bidere sos contenutos protetos</translation>
@@ -136,7 +134,6 @@
 <translation id="4726710629007580002">B'ant bistados avisos cando as provadu a assetare cust'estensione:</translation>
 <translation id="488785315393301722">Ammustra sos detallios</translation>
 <translation id="4907306957610201395">Categoria de òrdine</translation>
-<translation id="4918086044614829423">Atzeta</translation>
 <translation id="4927753642311223124">No b'at nudda de ite bìdere inighe, bae adenanti.</translation>
 <translation id="4988526792673242964">Pàginas</translation>
 <translation id="4994474651455208930">Permiti a zassos web de preguntare si podent diventare sos handlers predefinidos pro sos protocollos</translation>
@@ -194,7 +191,6 @@
 <translation id="6295158916970320988">Totus is giassus web</translation>
 <translation id="6295855836753816081">Ammentande...</translation>
 <translation id="6385543213911723544">Sos giassos web podent ammentare e leghere is datos de sos cookie</translation>
-<translation id="6452181791372256707">Refuda</translation>
 <translation id="6498249116389603658">Totus sas limbas tuas</translation>
 <translation id="6508261954199872201">Aplicu: <ph name="APP_NAME" /></translation>
 <translation id="6550675742724504774">Optziones</translation>
@@ -264,7 +260,6 @@ Mantene su file cun sa crae in d-unu zassu siguru. Podet dare puru chi as a depe
 <translation id="8708000541097332489">Burra in bessida</translation>
 <translation id="8714838604780058252">Graficas de lugania</translation>
 <translation id="8774934320277480003">Oru de subra</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; cheret cumpartzire s'imprentadora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; cun tegus.</translation>
 <translation id="8798099450830957504">Predefinidu</translation>
 <translation id="8800004011501252845">Sas destinatziones pro</translation>
 <translation id="8808478386290700967">Web Store</translation>

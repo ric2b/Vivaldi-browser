@@ -13,11 +13,11 @@
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/gpu/data_source/ipc_data_source_impl.h"
 #include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
+#include "platform_media/gpu/pipeline/propmedia_gpu_channel.h"
 
 #include "base/memory/weak_ptr.h"
-#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/threading/thread_checker.h"
-#include "ipc/ipc_listener.h"
+#include "gpu/ipc/common/gpu_channel.mojom.h"
 
 #include <map>
 #include <string>
@@ -37,21 +37,22 @@ namespace media {
 
 class IPCDataSourceImpl;
 class PlatformMediaPipeline;
-class PlatformMediaPipelineFactory;
 
 // The IPC-facing participant of the media decoding implementation in the GPU
 // process.  It owns a PlatformMediaPipeline and uses it to handle media
 // decoding requests.  It owns an IPCDataSource object that provides the
 // PlatformMediaPipeline with raw media data by requesting it from a DataSource
 // living in the render process.
-class IPCMediaPipeline : public IPC::Listener {
+class IPCMediaPipeline : public gpu::PropmediaGpuChannel::PipelineBase {
  public:
-  IPCMediaPipeline(IPC::Sender* channel,
-                   int32_t routing_id,
-                   PlatformMediaPipelineFactory* pipeline_factory);
+  IPCMediaPipeline();
   ~IPCMediaPipeline() override;
 
-  // IPC::Listener implementation.
+  static std::unique_ptr<gpu::PropmediaGpuChannel::PipelineBase> Create();
+
+  // PipelineBase implementation.
+  void Initialize(IPC::Sender* channel,
+                  gpu::mojom::VivaldiMediaPipelineParamsPtr params) override;
   bool OnMessageReceived(const IPC::Message& msg) override;
 
  private:
@@ -59,7 +60,7 @@ class IPCMediaPipeline : public IPC::Listener {
   // state.
   //
   //   CONSTRUCTED
-  //       | OnInitialize()
+  //       | Initialize()
   //       v
   //     BUSY ----------------------------------------> STOPPED
   //    |     ^               init failure / OnStop()      ^
@@ -67,10 +68,6 @@ class IPCMediaPipeline : public IPC::Listener {
   //   DECODING -------------------------------------------
   enum State { CONSTRUCTED, BUSY, DECODING, STOPPED };
 
-  void OnInitialize(int64_t data_source_size,
-                    bool is_data_source_streaming,
-                    const std::string& mime_type,
-                    base::ReadOnlySharedMemoryRegion data_source_region);
   void Initialized(bool success,
                    int bitrate,
                    const PlatformMediaTimeInfo& time_info,
@@ -90,20 +87,18 @@ class IPCMediaPipeline : public IPC::Listener {
 
   void OnStop();
 
-  void OnReadDecodedData(PlatformMediaDataType type);
+  void OnReadDecodedData(PlatformStreamType stream_type);
 
-  bool has_media_type(PlatformMediaDataType type) const {
-    DCHECK_LT(type, kPlatformMediaDataTypeCount);
-    return has_media_type_[type];
+  bool has_media_type(PlatformStreamType stream_type) const {
+    return GetElem(has_media_type_, stream_type);
   }
 
-  State state_;
+  State state_ = CONSTRUCTED;
 
-  bool has_media_type_[kPlatformMediaDataTypeCount];
+  bool has_media_type_[kPlatformStreamTypeCount];
 
-  IPC::Sender* const channel_;
-  const int32_t routing_id_;
-  PlatformMediaPipelineFactory* const pipeline_factory_;
+  IPC::Sender* channel_ = nullptr;
+  int32_t routing_id_ = -1;
 
   std::unique_ptr<IPCDataSourceImpl> data_source_;
   std::unique_ptr<PlatformMediaPipeline> media_pipeline_;
@@ -112,9 +107,9 @@ class IPCMediaPipeline : public IPC::Listener {
 
   // A buffer for decoded media data, shared with the render process.  Filled in
   // the GPU process, consumed in the renderer process.
-  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];
+  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformStreamTypeCount];
 
-  base::WeakPtrFactory<IPCMediaPipeline> weak_ptr_factory_;
+  base::WeakPtrFactory<IPCMediaPipeline> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(IPCMediaPipeline);
 };

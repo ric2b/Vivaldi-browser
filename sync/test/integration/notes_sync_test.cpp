@@ -21,26 +21,26 @@ using vivaldi::NotesModelFactory;
 // quit.
 class NotesLoadObserver : public NotesModelObserver {
  public:
-  explicit NotesLoadObserver(const base::Closure& quit_task);
+  explicit NotesLoadObserver(base::OnceClosure quit_task);
   ~NotesLoadObserver() override;
 
  private:
   // NotesBaseModelObserver:
   void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
 
-  base::Closure quit_task_;
+  base::OnceClosure quit_task_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesLoadObserver);
 };
 
-NotesLoadObserver::NotesLoadObserver(const base::Closure& quit_task)
-    : quit_task_(quit_task) {}
+NotesLoadObserver::NotesLoadObserver(base::OnceClosure quit_task)
+    : quit_task_(std::move(quit_task)) {}
 
 NotesLoadObserver::~NotesLoadObserver() {}
 
 void NotesLoadObserver::NotesModelLoaded(NotesModel* model,
                                          bool ids_reassigned) {
-  quit_task_.Run();
+  std::move(quit_task_).Run();
 }
 
 void WaitForNotesModelToLoad(NotesModel* model) {

@@ -17,6 +17,9 @@ import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** A provider that notifies its observers when the number of tabs changes. */
 public class TabCountProvider {
     /** An observer that is notified of changes to the number of open tabs. */
@@ -145,7 +148,7 @@ public class TabCountProvider {
                 mTabModelFilterObserver);
 
         if (mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter()
-                        instanceof TabGroupModelFilter) {
+                        instanceof TabGroupModelFilter || BuildConfig.IS_VIVALDI) {
             mTabGroupModelFilterObserver = new EmptyTabGroupModelFilterObserver() {
                 @Override
                 public void didMergeTabToGroup(Tab movedTab, int selectedTabIdInGroup) {
@@ -165,7 +168,7 @@ public class TabCountProvider {
             };
 
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                            .getCurrentTabModelFilter())
+                            .getCurrentTabModelFilter(true)) // Vivaldi
                     .addTabGroupObserver(mTabGroupModelFilterObserver);
         }
 
@@ -183,7 +186,7 @@ public class TabCountProvider {
 
         if (mTabGroupModelFilterObserver != null) {
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                            .getCurrentTabModelFilter())
+                            .getCurrentTabModelFilter(true)) // Vivaldi
                     .removeTabGroupObserver(mTabGroupModelFilterObserver);
         }
 
@@ -209,5 +212,10 @@ public class TabCountProvider {
         for (TabCountObserver observer : mTabCountObservers) {
             observer.onTabCountChanged(tabCount, isIncognito);
         }
+    }
+
+    /** Vivaldi: Manually force a update of the tab count */
+    public void forceUpdate() {
+        updateTabCount();
     }
 }

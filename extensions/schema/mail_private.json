@@ -448,6 +448,23 @@
             }
           ]
         }
+      },
+      {
+        "name": "rebuildDatabase",
+        "type": "function",
+        "description": "Rebuilds the full text database index.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean",
+              "description": "Returns true if the operation is successful, false otherwise."
+            }
+          ]
+        }
       }
     ]
   }

@@ -106,6 +106,7 @@
 <translation id="329838636886466101">Repară</translation>
 <translation id="3303818374450886607">Cópii</translation>
 <translation id="3305661444342691068">Deschide PDF-ul în previzualizare</translation>
+<translation id="3308134619352333507">Ascunde butonul</translation>
 <translation id="3317459757438853210">Față-verso</translation>
 <translation id="3341703758641437857">Permite accesul la URL-urile fișierului</translation>
 <translation id="3347086966102161372">C&amp;opiază adresa imaginii</translation>
@@ -115,7 +116,6 @@
 <translation id="3494769164076977169">Întreabă atunci când un site web încearcă să descarce automat fișiere după primul fișier (recomandat)</translation>
 <translation id="3505030558724226696">Revocă accesul la dispozitiv</translation>
 <translation id="3560034655160545939">&amp;Verificare ortografică</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; dorește să partajeze o imprimantă &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; cu un grup pe care îl dețineți: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Dacă acceptați, toți membrii grupului vor putea tipări la imprimantă.</translation>
 <translation id="3587482841069643663">Toate</translation>
 <translation id="3668823961463113931">Handlere</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
@@ -143,7 +143,6 @@
 <translation id="4087089424473531098">A fost creată extensia:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Acceptă pentru grup</translation>
 <translation id="4096508467498758490">Dezactivați extensiile care rulează în modul pentru dezvoltatori</translation>
 <translation id="4100839878934973028">Un alt program de pe calculator a adăugat o aplicație care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="4109898769411476438">Închide browserul înainte de a importa</translation>
@@ -168,7 +167,6 @@
 <translation id="479536056609751218">Pagină web, numai HTML</translation>
 <translation id="488785315393301722">Arată detaliile</translation>
 <translation id="4907306957610201395">Categorie de permisiuni</translation>
-<translation id="4918086044614829423">Acceptă</translation>
 <translation id="4927753642311223124">Nu este nimic de văzut aici, mergi mai departe.</translation>
 <translation id="4988526792673242964">Pagini</translation>
 <translation id="4994474651455208930">Permiteți site-urilor web să solicite să devină gestionarele implicite pentru protocoale</translation>
@@ -187,6 +185,7 @@
 <translation id="5301954838959518834">OK, am înțeles</translation>
 <translation id="5317780077021120954">Salvează</translation>
 <translation id="5355926466126177564">Extensia „<ph name="EXTENSION_NAME" />” a modificat pagina care este afișată la căutarea din Omnibox.</translation>
+<translation id="5360150013186312835">Arată în bara de instrumente</translation>
 <translation id="5362741141255528695">Selectează fișierul cu cheia privată.</translation>
 <translation id="536638840841140142">Fără</translation>
 <translation id="5370819323174483825">&amp;Reîncarcă</translation>
@@ -239,7 +238,6 @@
 <translation id="6398765197997659313">Ieșire din modul ecran complet</translation>
 <translation id="6445450263907939268">Dacă nu doriți aceste modificări, puteți restabili setările anterioare.</translation>
 <translation id="6447842834002726250">Cookie-uri</translation>
-<translation id="6452181791372256707">Respinge</translation>
 <translation id="6498249116389603658">&amp;Toate limbile</translation>
 <translation id="6503077044568424649">Cele mai vizitate</translation>
 <translation id="6508261954199872201">Aplicație: <ph name="APP_NAME" /></translation>
@@ -261,6 +259,7 @@
 <translation id="7053983685419859001">Blochează</translation>
 <translation id="708060913198414444">C&amp;opiază adresa audioului</translation>
 <translation id="7175353351958621980">Încărcată de la:</translation>
+<translation id="7186088072322679094">Păstrează în bara de instrumente</translation>
 <translation id="7270858098575133036">Întreabă când un site web intenționează să folosească mesaje rezervate sistemului pentru accesarea dispozitivelor MIDI</translation>
 <translation id="7287143125007575591">Acces refuzat.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -325,7 +324,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8714838604780058252">Grafică de fundal</translation>
 <translation id="8757090071857742562">Desktopul nu poate fi proiectat. Verificați dacă ați confirmat solicitarea de pornire a partajării ecranului.</translation>
 <translation id="8774934320277480003">Marginea de sus</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; dorește să partajați împreună o imprimantă &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Implicit</translation>
 <translation id="8800004011501252845">Se afișează destinații pentru</translation>
 <translation id="8808478386290700967">Magazin web</translation>

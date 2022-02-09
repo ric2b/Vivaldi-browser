@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Quitter le mode plein écran</translation>
 <translation id="2177950615300672361">Onglet de navigation privée : <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Module Native Client : <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Masquer le bouton</translation>
 <translation id="2218515861914035131">Coller en texte brut</translation>
 <translation id="2249605167705922988">par exemple : 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autoriser les identifiants d’accès aux contenus protégés (ceci nécessite le redémarrage de votre ordinateur)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Pré-rendu : <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microphone</translation>
 <translation id="3241680850019875542">Sélectionnez le répertoire racine de l’extension à empaqueter. Pour mettre à jour une extension, sélectionnez également le fichier de clé privée à réutiliser.</translation>
-<translation id="3266179261140759675">Empêcher les sites fermés d'envoyer et de recevoir des données</translation>
 <translation id="3280237271814976245">Enregistrer &amp;sous…</translation>
 <translation id="3285322247471302225">Nouvel ongle&amp;t</translation>
 <translation id="3288047731229977326">Les extensions exécutées en mode développeur peuvent nuire à votre ordinateur. Si vous n’êtes pas un développeur, nous vous recommandons de désactiver celles-ci afin d’assurer la sécurité de votre ordinateur.</translation>
@@ -145,7 +143,7 @@
 <translation id="33022249435934718">Handles GDI</translation>
 <translation id="3303818374450886607">Copies</translation>
 <translation id="3305661444342691068">Ouvrir l’aperçu du PDF</translation>
-<translation id="3308134619352333507">Masquer le bouton</translation>
+<translation id="3308134619352333507">Cacher le bouton</translation>
 <translation id="3317459757438853210">Recto verso</translation>
 <translation id="3341703758641437857">Autoriser l’accès aux URLs de fichiers</translation>
 <translation id="3347086966102161372">C&amp;opier l’adresse de l’image</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Possibilité de lire et de modifier les données du site</translation>
 <translation id="3560034655160545939">&amp;Correcteur orthographique</translation>
 <translation id="3574917942258583917">Voulez-vous vraiment quitter le mode navigation privée ?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; souhaite partager une imprimante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; avec un groupe que vous gérez : &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si vous acceptez, tous les membres du groupe seront en mesure d’imprimer sur cette imprimante.</translation>
 <translation id="3587482841069643663">Tous</translation>
 <translation id="3627588569887975815">Ouvrir le lien dans une fenêtre en navi&amp;gation privée</translation>
 <translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Gestionnaire de protocoles</translation>
 <translation id="3678156199662914018">Extension : <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Partage de l’écran demandé par <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Ne pas autoriser les sites fermés à terminer l'envoi ni la réception de données</translation>
 <translation id="3711931198657368127">Coller et accéder à <ph name="URL" /></translation>
 <translation id="3727187387656390258">I&amp;nspecter le popup</translation>
 <translation id="3744111561329211289">Synchronisation en arrière-plan</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Extension créée :
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Accepter pour le groupe</translation>
 <translation id="4096508467498758490">Désactiver les extensions exécutées en mode « développeur »</translation>
 <translation id="4100839878934973028">Un autre programme sur votre ordinateur a ajouté une application qui risque de modifier le fonctionnement de Vivaldi.</translation>
 <translation id="4109898769411476438">Fermer le navigateur avant l’importation de ses données</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Afficher les détails</translation>
 <translation id="4907306957610201395">Catégorie d’autorisation</translation>
 <translation id="4912643508233590958">Sorties de veille</translation>
-<translation id="4918086044614829423">Accepter</translation>
 <translation id="4927753642311223124">Circulez, il n’y a rien à voir ici.</translation>
 <translation id="4930714375720679147">Activer</translation>
 <translation id="4988526792673242964">Pages</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Effacer les données de sites</translation>
 <translation id="6042308850641462728">Plus</translation>
 <translation id="6059925163896151826">Appareils USB</translation>
-<translation id="6082651258230788217">Afficher dans la barre d’outils</translation>
 <translation id="6086846494333236931">Installée par votre administrateur</translation>
 <translation id="6101226222197207147">Nouvelle application (<ph name="EXTENSION_NAME" />) ajoutée</translation>
 <translation id="6122081475643980456">Une extension a modifié les réglages de votre proxy</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simuler le redémarrage du navigateur</translation>
 <translation id="6445450263907939268">Si vous ne souhaitiez pas effectuer ces modifications, vous pouvez restaurer les paramètres précédents.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Refuser</translation>
 <translation id="6498249116389603658">&amp;Toutes vos langues</translation>
 <translation id="6503077044568424649">Les + visités</translation>
 <translation id="6508261954199872201">Application : <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Possibilité de lire et de modifier les données du site</translation>
 <translation id="708060913198414444">C&amp;opier l’adresse du fichier audio</translation>
 <translation id="7175353351958621980">Chargée depuis :</translation>
-<translation id="7186088072322679094">Garder dans la barre d’outils</translation>
+<translation id="7186088072322679094">Conserver dans la barre d’outils</translation>
 <translation id="7270858098575133036">Demander lorsqu’un site souhaite utiliser des messages spécifiques au système pour accéder aux appareils MIDI</translation>
 <translation id="7287143125007575591">Accès refusé.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> points par pouce</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Est-ce bien la page de nouvel onglet que vous attendiez ?</translation>
 <translation id="786073089922909430">Service : <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Destinations récentes</translation>
-<translation id="7898627924844766532">Conserver dans la barre d’outils</translation>
 <translation id="7903925330883316394">Utilitaire : <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Actuellement hors connexion</translation>
 <translation id="7947962633355574091">C&amp;opier l‘adresse de la vidéo</translation>
@@ -452,7 +445,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8725066075913043281">Réessayer</translation>
 <translation id="8757090071857742562">Impossible de caster le bureau. Vérifiez si vous avez bien confirmé le partage de votre écran via l’invite.</translation>
 <translation id="8774934320277480003">Marge supérieure</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; souhaite partager une imprimante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; avec vous.</translation>
 <translation id="8798099450830957504">Par défaut</translation>
 <translation id="8800004011501252845">Affichage des destinations pour</translation>
 <translation id="8808478386290700967">Web Store</translation>

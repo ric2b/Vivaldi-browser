@@ -48,19 +48,19 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   void StartWaitingForSeek() override;
   void Seek(base::TimeDelta time,
             PipelineStatusCallback status_cb) override;
-  void ReadDecodedData(
-      PlatformMediaDataType type,
-      DemuxerStream::ReadCB read_cb) override;
+  void ReadDecodedData(PlatformStreamType stream_type,
+                       DemuxerStream::ReadCB read_cb) override;
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
 
  private:
-  typedef base::Callback<void(MediaDataStatus status,
-                              const uint8_t* data,
-                              int data_size,
-                              base::TimeDelta timestamp,
-                              base::TimeDelta duration)> DecodedDataErrorCB;
+  typedef base::RepeatingCallback<void(MediaDataStatus status,
+                                       const uint8_t* data,
+                                       int data_size,
+                                       base::TimeDelta timestamp,
+                                       base::TimeDelta duration)>
+      DecodedDataErrorCB;
 
   bool is_connected() const;
 
@@ -94,8 +94,8 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   void OnAudioConfigChanged(const PlatformAudioConfig& new_audio_config);
   void OnVideoConfigChanged(const PlatformVideoConfig& new_video_config);
 
-  bool is_read_in_progress(PlatformMediaDataType type) const {
-    return !decoded_data_read_callbacks_[type].is_null();
+  bool is_read_in_progress(PlatformStreamType stream_type) const {
+    return !GetElem(decoded_data_read_callbacks_, stream_type).is_null();
   }
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
@@ -107,7 +107,7 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   // Cached buffers for decoded media data, shared with the GPU process. Filled in
   // the GPU process, consumed in the renderer process.
   base::ReadOnlySharedMemoryMapping
-      decoded_mappings_[kPlatformMediaDataTypeCount];
+      decoded_mappings_[kPlatformStreamTypeCount];
 
   scoped_refptr<gpu::GpuChannelHost> channel_;
   int32_t routing_id_;
@@ -115,7 +115,7 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   InitializeCB init_callback_;
   PipelineStatusCallback seek_callback_;
   DemuxerStream::ReadCB
-      decoded_data_read_callbacks_[kPlatformMediaDataTypeCount];
+      decoded_data_read_callbacks_[kPlatformStreamTypeCount];
   bool reading_raw_data_ = false;
 
   base::WeakPtrFactory<IPCMediaPipelineHostImpl> weak_ptr_factory_;

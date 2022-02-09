@@ -194,7 +194,7 @@ class JSONParser {
   // parser is wound to the first character of any of those.
   std::optional<Value> ConsumeLiteral();
 
-  // Helper function that returns true if the byte squence |match| can be
+  // Helper function that returns true if the byte sequence |match| can be
   // consumed at the current parser position. Returns false if there are fewer
   // than |match|-length bytes or if the sequence does not match, and the
   // parser state is unchanged.

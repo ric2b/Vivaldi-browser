@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/optional.h"
 #include "base/strings/string_util.h"
 #include "base/win/i18n.h"
 #include "chrome/installer/util/google_update_constants.h"
@@ -27,7 +26,7 @@ struct LanguageState {
 
   // We need to change the selector, but it does not support assignments, so go
   // via Optional and explicit emplace.
-  base::Optional<base::win::i18n::LanguageSelector> selector;
+  absl::optional<base::win::i18n::LanguageSelector> selector;
   std::wstring language_code;
 };
 

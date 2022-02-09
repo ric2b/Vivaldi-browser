@@ -144,7 +144,6 @@
 <translation id="5838278095973806738">No deberías ingresar información confidencial en este sitio (p. ej. tarjetas de crédito o contraseñas), porque los atacantes podrían robarla.</translation>
 <translation id="5869405914158311789">Este sitio es inaccesible</translation>
 <translation id="5932224571077948991">El sitio muestra anuncios invasivos o engañosos</translation>
-<translation id="5990559369517809815">Una extensión ha bloqueado el envío de solicitudes al servidor.</translation>
 <translation id="6051221802930200923">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web usa fijación de certificados (certificate pinning). Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="6146055958333702838">Revisa los cables y reinicia el enrutador, módem o cualquier otro
     dispositivo de red que estés usando.</translation>

@@ -231,7 +231,7 @@ bool ExecProcess(const base::CommandLine& cmdline,
       fd_shuffle1.push_back(
           base::InjectionArc(err_write.get(), STDERR_FILENO, true));
       fd_shuffle1.push_back(base::InjectionArc(dev_null, STDIN_FILENO, true));
-      // Adding another element here? Remeber to increase the argument to
+      // Adding another element here? Remember to increase the argument to
       // reserve(), above.
 
       // DANGER: Do NOT convert to range-based for loop!

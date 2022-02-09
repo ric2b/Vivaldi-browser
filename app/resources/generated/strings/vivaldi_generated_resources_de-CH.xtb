@@ -102,6 +102,7 @@
 <translation id="329838636886466101">Flicke</translation>
 <translation id="3303818374450886607">Kopie</translation>
 <translation id="3305661444342691068">PDF Vorschau</translation>
+<translation id="3308134619352333507">Schaltflächi usblende</translation>
 <translation id="3317459757438853210">Bedsitig</translation>
 <translation id="3341703758641437857">Zuegreff uf Datei-URLs erlaube</translation>
 <translation id="3360297538363969800">Fähler bem Drocke. Bitte öberprüefet Sie Ehre Drocker ond probieret Sies nomal.</translation>
@@ -110,7 +111,6 @@
 <translation id="3494769164076977169">Nachefroge, wenn en Internetsite versuecht, nach dä erste Datei witeri dateie automatisch abezlade (empfohle)</translation>
 <translation id="3505030558724226696">Grätezuegreff ufhebe</translation>
 <translation id="3560034655160545939">&amp;Rechtschriebprüefig</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wott dä Drocker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; för en Groppe freigäh, vo dere Sie dä Inhaber send: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Wenn Sie zuestemmed, chönd alli Groppemetglieder dä Drocker bruche.</translation>
 <translation id="3587482841069643663">Alli</translation>
 <translation id="3668823961463113931">Handhaber</translation>
 <translation id="3678156199662914018">Erwiterig: <ph name="EXTENSION_NAME" /></translation>
@@ -137,7 +137,6 @@
 <translation id="4087089424473531098">Die folgend Erwiterig hets erstell:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">För Groppe ahnäh</translation>
 <translation id="4096508467498758490">Erwiiterige im Entwecklermodus deaktiviere</translation>
 <translation id="4100839878934973028">Es anders Programm uf Ehrem Computer hed es App dezue doh, wo sech vellecht ofd Fonktionswiis vo Viwaldi uswerkt.</translation>
 <translation id="4115080753528843955">Einigi Inhaltsdienst verwendet eidütigi Identifikatore, om dä Zuegreff uf gschützi Inhält z'autorisiere</translation>
@@ -161,7 +160,6 @@
 <translation id="479536056609751218">Internetsite, nome HTML</translation>
 <translation id="488785315393301722">Details ahzeige</translation>
 <translation id="4907306957610201395">Berechtigungskategorie</translation>
-<translation id="4918086044614829423">Ahnäh</translation>
 <translation id="4927753642311223124">Da gets nüt z gseh, gang witer.</translation>
 <translation id="4988526792673242964">Site</translation>
 <translation id="4994474651455208930">Registrierig vo Internetsite als Standard-Handler för Protokoll zueloh</translation>
@@ -180,6 +178,7 @@
 <translation id="5301954838959518834">OK</translation>
 <translation id="5317780077021120954">Speichere</translation>
 <translation id="5355926466126177564">D'Erwiterig <ph name="EXTENSION_NAME" /> het d'Site veränderet, wo bi dä Suechi öber d'Adressliste ahzeigt werd.</translation>
+<translation id="5360150013186312835">Ih dä Symbolleiste ahzeige</translation>
 <translation id="5362741141255528695">Privati Schlösseldatei uswähle.</translation>
 <translation id="536638840841140142">Keini</translation>
 <translation id="5370819323174483825">&amp;Neu lade</translation>
@@ -227,7 +226,6 @@
 <translation id="6385543213911723544">Internetsite chönd Guetzli (Cookie) Date speichere ond läse</translation>
 <translation id="6445450263907939268">Wenn die Änderig ned vo Ehne gwönscht esch, chönd Sie Ehri alte Ihstellige weder herstelle.</translation>
 <translation id="6447842834002726250">Guetzli (Cookies)</translation>
-<translation id="6452181791372256707">Ablehne</translation>
 <translation id="6498249116389603658">&amp;Alli Ehri Sproche</translation>
 <translation id="6503077044568424649">am hüfigste bsuecht</translation>
 <translation id="6508261954199872201">Ahwendig: <ph name="APP_NAME" /></translation>
@@ -246,6 +244,7 @@
 <translation id="7006634003215061422">Ondere Rand</translation>
 <translation id="7053983685419859001">verbiete</translation>
 <translation id="7175353351958621980">Glade vo:</translation>
+<translation id="7186088072322679094">Ih dä Symbolleiste bhalte</translation>
 <translation id="7270858098575133036">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf MIDI-Grät wott zuegrife</translation>
 <translation id="7287143125007575591">Zuegreff verweigeret.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -303,7 +302,6 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="8714838604780058252">Hentergrondgrafike</translation>
 <translation id="8757090071857742562">Dä Desktop chan ned öbertreiht werde. Öberprüefet Sie, öb Sie d'Ufforderig zor Freigab vo Ehrem Beldscherm bestätigt hend.</translation>
 <translation id="8774934320277480003">Obere Rand</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wott dä Drocker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; för Sie freigäh.</translation>
 <translation id="8798099450830957504">Standardihstellig</translation>
 <translation id="8800004011501252845">Ziel werdet ahzeigt för</translation>
 <translation id="8808478386290700967">Web Store</translation>

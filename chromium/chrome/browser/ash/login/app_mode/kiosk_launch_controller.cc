@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
 
+#include <memory>
+
 #include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/syslog_logging.h"
@@ -194,9 +196,9 @@ void KioskLaunchController::Start(const KioskAppId& kiosk_app_id,
                            base::BindOnce(&KioskLaunchController::OnTimerFire,
                                           weak_ptr_factory_.GetWeakPtr()));
 
-  kiosk_profile_loader_.reset(
-      new KioskProfileLoader(*kiosk_app_id_.account_id, kiosk_app_id_.type,
-                             /*use_guest_mount=*/false, /*delegate=*/this));
+  kiosk_profile_loader_ = std::make_unique<KioskProfileLoader>(
+      *kiosk_app_id_.account_id, kiosk_app_id_.type,
+      /*use_guest_mount=*/false, /*delegate=*/this);
   kiosk_profile_loader_->Start();
 }
 
@@ -257,6 +259,9 @@ void KioskLaunchController::OnConfigureNetwork() {
 }
 
 void KioskLaunchController::OnCancelAppLaunch() {
+  if (cleaned_up_)
+    return;
+
   if (KioskAppManager::Get()->GetDisableBailoutShortcut())
     return;
 
@@ -304,6 +309,9 @@ bool KioskLaunchController::IsNetworkRequired() {
 }
 
 void KioskLaunchController::CleanUp() {
+  DCHECK(!cleaned_up_);
+  cleaned_up_ = true;
+
   extension_wait_timer_.Stop();
   network_wait_timer_.Stop();
   splash_wait_timer_.Stop();
@@ -328,6 +336,8 @@ void KioskLaunchController::OnTimerFire() {
 }
 
 void KioskLaunchController::CloseSplashScreen() {
+  if (cleaned_up_)
+    return;
   CleanUp();
 }
 
@@ -437,6 +447,9 @@ bool KioskLaunchController::ShouldSkipAppInstallation() const {
 }
 
 void KioskLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
+  if (cleaned_up_)
+    return;
+
   DCHECK_NE(KioskAppLaunchError::Error::kNone, error);
   SYSLOG(ERROR) << "Kiosk launch failed, error=" << static_cast<int>(error);
 

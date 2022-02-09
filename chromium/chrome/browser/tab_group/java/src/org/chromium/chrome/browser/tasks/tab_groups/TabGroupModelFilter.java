@@ -33,6 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// Vivaldi
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
 /**
  * An implementation of {@link TabModelFilter} that puts {@link Tab}s into a group
  * structure.
@@ -193,7 +196,7 @@ public class TabGroupModelFilter extends TabModelFilter {
     private boolean mIsResetting;
 
     // Create group automatically for target_blank links.
-    private final boolean mGroupAutoCreation;
+    private boolean mGroupAutoCreation; // Vivaldi
 
     public TabGroupModelFilter(TabModel tabModel) {
         this(tabModel, true);
@@ -527,6 +530,13 @@ public class TabGroupModelFilter extends TabModelFilter {
             throw new IllegalStateException("Attempting to open tab in the wrong model");
         }
 
+        int newTabPositionSetting =
+                SharedPreferencesManager.getInstance().readInt("new_tab_position", 1);
+        // Due to dependency issue we need to use a macig number here. We check for
+        // NewTabPositionSetting.AS_TAB_STACK_WITH_RELATED_TAB which creates automatically a
+        // group for target_blank links.
+        mGroupAutoCreation = (newTabPositionSetting == 3);
+
         if (isTabModelRestored() && !mIsResetting
                 && (mGroupAutoCreation
                         || (tab.getLaunchType() == TabLaunchType.FROM_TAB_GROUP_UI
@@ -544,8 +554,14 @@ public class TabGroupModelFilter extends TabModelFilter {
             if (mGroupIdToGroupMap.get(groupId).size() == 1) {
                 mActualGroupCount++;
                 // TODO(crbug.com/1188370): Update UMA for Context menu creation.
-                if (mShouldRecordUma && mGroupAutoCreation
-                        && tab.getLaunchType() == TabLaunchType.FROM_LONGPRESS_BACKGROUND) {
+                if (mShouldRecordUma
+                        && ((mGroupAutoCreation
+                                    && tab.getLaunchType()
+                                            == TabLaunchType.FROM_LONGPRESS_BACKGROUND)
+                                || (!mGroupAutoCreation
+                                        && tab.getLaunchType()
+                                                == TabLaunchType
+                                                           .FROM_LONGPRESS_BACKGROUND_IN_GROUP))) {
                     RecordUserAction.record("TabGroup.Created.OpenInNewTab");
                 }
             }
@@ -555,6 +571,9 @@ public class TabGroupModelFilter extends TabModelFilter {
             tabGroup.addTab(tab.getId());
             mGroupIdToGroupMap.put(groupId, tabGroup);
             mGroupIdToGroupIndexMap.put(groupId, mGroupIdToGroupIndexMap.size());
+            // Note(david@vivaldi.com): We need to reoderd the tab filter when a new tab was
+            // created. Magic number used due to dep issues.
+            if (!mIsResetting) reorder();
         }
 
         if (mAbsentSelectedTab != null) {
@@ -606,6 +625,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void selectTab(Tab tab) {
+        if (!org.chromium.build.BuildConfig.IS_VIVALDI)
         assert mAbsentSelectedTab == null;
         int groupId = getRootId(tab);
         if (mGroupIdToGroupMap.get(groupId) == null) {
@@ -848,5 +868,13 @@ public class TabGroupModelFilter extends TabModelFilter {
     @VisibleForTesting
     int getGroupLastShownTabIdForTesting(int groupId) {
         return mGroupIdToGroupMap.get(groupId).getLastShownTabId();
+    }
+
+    /**
+     * Vivaldi: Only notify observers when tab stack is enabled.
+     */
+    @Override
+    protected boolean shouldNotifyObservers() {
+        return (SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", false));
     }
 }

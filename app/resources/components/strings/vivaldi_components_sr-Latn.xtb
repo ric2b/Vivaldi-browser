@@ -1,4 +1,36 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr-Latn">
+<translation id="3830627370375585318">Dozvoli Vivaldi pregledaču pristup mreži u podešavanjima
+zaštitnog zida ili antivirusa.</translation>
+<translation id="4200102020577305737">Idite u
+          Vivaldi meni &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Podešavanja lokalne mreže
+          i opozovite izbor opcije „Koristi proksi server za lokalnu mrežu".</translation>
+<translation id="4932161901409251843">Idite u
+          Vivaldi meni &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          i proverite da li je konfiguracija podešena na „bez proksija“ ili „direktno“.</translation>
+<translation id="5248344925342018662">Gledate bezbednu Vivaldi stranicu</translation>
+<translation id="7023871570427738255">Idite u
+          Vivaldi meni &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          i opozovite izbor opcije „<ph name="NO_PREFETCH_DESCRIPTION" />“.
+          Ako vam to ne reši problem, preporučujemo da ponovo izaberete
+          ovu opciju radi boljih performansi.</translation>
+<translation id="8187289872471304532">Idite na
+Aplikacije &gt; Podešavanja sistema &gt; Mreža &gt; Više opcija &gt; Proksiji
+i opozovite izbor svih proksija koji su izabrani.</translation>
 </translationbundle>

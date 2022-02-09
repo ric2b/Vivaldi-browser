@@ -39,19 +39,20 @@ update_target("//media/gpu/ipc/service:service") {
   sources += [
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.cc",
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.h",
-#  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_buffer_source.cc",
-#  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_buffer_source.h",
   "//vivaldi/platform_media/gpu/data_source/ipc_data_source_impl.cc",
   "//vivaldi/platform_media/gpu/data_source/ipc_data_source_impl.h",
   "//vivaldi/platform_media/gpu/pipeline/ipc_media_pipeline.cc",
   "//vivaldi/platform_media/gpu/pipeline/ipc_media_pipeline.h",
-  "//vivaldi/platform_media/gpu/pipeline/propmedia_gpu_channel.cc",
-  "//vivaldi/platform_media/gpu/pipeline/propmedia_gpu_channel.h",
-  "//vivaldi/platform_media/gpu/pipeline/propmedia_gpu_channel_manager.cc",
-  "//vivaldi/platform_media/gpu/pipeline/propmedia_gpu_channel_manager.h",
   ]
   deps += [
   "//third_party/blink/public:blink_headers",
+  ]
+}
+
+update_target("//gpu/ipc/service:service") {
+  sources += [
+    "//vivaldi/platform_media/gpu/pipeline/propmedia_gpu_channel.cc",
+    "//vivaldi/platform_media/gpu/pipeline/propmedia_gpu_channel.h",
   ]
 }
 

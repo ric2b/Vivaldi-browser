@@ -39,12 +39,13 @@
 <translation id="2359808026110333948">繼續</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />正在執行網路診斷<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">通知</translation>
+<translation id="2491414235131909199">此頁面已由擴充元件封鎖</translation>
 <translation id="2501278716633472235">返回</translation>
 <translation id="2539524384386349900">偵測</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 傳送的回應無效。</translation>
 <translation id="2586657967955657006">剪貼簿</translation>
 <translation id="2609632851001447353">變化版本</translation>
-<translation id="2634124572758952069">找不到 <ph name="HOST_NAME" /> 的伺服器 IP 位址。</translation>
+<translation id="2634124572758952069">找不到 <ph name="HOST_NAME" /> 的伺服器 IP位置。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" />，<ph name="CITY" /></translation>
 <translation id="2650446666397867134">存取檔案遭拒</translation>
 <translation id="2705137772291741111">已儲存 (快取) 這個網站的複本，但無法讀取。</translation>
@@ -143,7 +144,6 @@
 <translation id="5838278095973806738">請勿在這個網站上輸入任何機密資訊 (例如密碼或信用卡號碼)，以免遭到攻擊者竊取。</translation>
 <translation id="5869405914158311789">無法存取這個網站</translation>
 <translation id="5932224571077948991">網站顯示干擾性或誤導性廣告</translation>
-<translation id="5990559369517809815">延伸套件已封鎖要傳送至伺服器的要求。</translation>
 <translation id="6051221802930200923">目前無法造訪 <ph name="SITE" />，因為這個網站使用憑證鎖定功能。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="6146055958333702838">檢查您的網路線是否穩固連接。重新啟動您可能正在使用的任何
 路由器、數據機或其他網路裝置。</translation>
@@ -215,7 +215,7 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的回應時間過長。</translation>
 <translation id="8503813439785031346">使用者名稱</translation>
 <translation id="8703575177326907206">你到 <ph name="DOMAIN" /> 的連線未加密。</translation>
-<translation id="8740359287975076522">找不到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS 位址&lt;/abbr&gt;，正在診斷問題。</translation>
+<translation id="8740359287975076522">找不到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS位置&lt;/abbr&gt;，正在診斷問題。</translation>
 <translation id="8820817407110198400">書籤</translation>
 <translation id="8940028675168378100">已遭 <ph name="BLOCKER_NAME" /> 封鎖</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> Proxy 要求提供使用者名稱和密碼。</translation>

@@ -25,7 +25,7 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 
-#include "base/optional.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
@@ -195,17 +195,6 @@ void PaintLayerCompositor::UpdateAssignmentsIfNeededRecursiveInternal(
     CompositingReasonsStats& compositing_reasons_stats) {
   if (target_state == DocumentLifecycle::kCompositingInputsClean)
     return;
-
-  {
-    // TODO(szager): Remove this after diagnosing crash.
-    DisableCompositingQueryAsserts query_assert_disabler;
-    CHECK_EQ(InCompositingMode(), (bool)RootGraphicsLayer());
-    if (auto* owner = layout_view_->GetFrame()->OwnerLayoutObject()) {
-      auto* parent_compositor = owner->View()->Compositor();
-      CHECK(parent_compositor->StaleInCompositingMode() ||
-            !RootGraphicsLayer());
-    }
-  }
 
   if (layout_view_->GetFrameView()->ShouldThrottleRendering())
     return;

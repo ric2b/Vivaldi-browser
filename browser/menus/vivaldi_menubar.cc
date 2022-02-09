@@ -341,6 +341,7 @@ views::MenuItemView* Menubar::GetNextSiblingMenu(bool next, bool* has_mnemonics,
       params_->siblings.at(index).rect.origin(), rect);
 }
 
+// Note: This is not used by bookmarks. That uses a separate system.
 void Menubar::RequestFavicon(int id, int menu_id, const std::string& url) {
   if (!favicon_service_) {
     favicon_service_ = FaviconServiceFactory::GetForProfile(
@@ -349,9 +350,8 @@ void Menubar::RequestFavicon(int id, int menu_id, const std::string& url) {
       return;
   }
 
-  favicon_base::FaviconImageCallback callback =
-      base::Bind(&Menubar::OnFaviconAvailable,
-                 base::Unretained(this), id, menu_id);
+  favicon_base::FaviconImageCallback callback = base::BindOnce(
+      &Menubar::OnFaviconAvailable, base::Unretained(this), id, menu_id);
 
   favicon_service_->GetFaviconImageForPageURL(GURL(url), std::move(callback),
                                               &cancelable_task_tracker_);
@@ -363,7 +363,8 @@ void Menubar::OnFaviconAvailable(int id, int menu_id,
     std::map<int, views::MenuItemView*>::iterator it =
         id_to_menu_map_.find(menu_id);
     if (it != id_to_menu_map_.end()) {
-      it->second->SetIcon(*image_result.image.ToImageSkia(), id);
+      it->second->GetMenuItemByID(id)
+          ->SetIcon(ui::ImageModel::FromImage(image_result.image));
     }
   }
 }

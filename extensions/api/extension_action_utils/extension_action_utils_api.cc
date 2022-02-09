@@ -53,6 +53,7 @@
 #include "skia/ext/image_operations.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/vivaldi_skia_utils.h"
@@ -61,16 +62,6 @@
 namespace extensions {
 
 namespace {
-
-// Copied from "chrome/browser/devtools/devtools_ui_bindings.cc"
-std::string SkColorToRGBAString(SkColor color) {
-  // We avoid StringPrintf because it will use locale specific formatters for
-  // the double (e.g. ',' instead of '.' in German).
-  return "rgba(" + base::NumberToString(SkColorGetR(color)) + "," +
-         base::NumberToString(SkColorGetG(color)) + "," +
-         base::NumberToString(SkColorGetB(color)) + "," +
-         base::NumberToString(SkColorGetA(color) / 255.0) + ")";
-}
 
 std::string GetShortcutTextForExtensionAction(
     ExtensionAction* action,
@@ -316,11 +307,12 @@ void ExtensionActionUtil::FillInfoForTabId(
   info->badge_text.reset(
     new std::string(action->GetExplicitlySetBadgeText(tab_id)));
 
-  info->badge_background_color.reset(new std::string(
-    SkColorToRGBAString(action->GetBadgeBackgroundColor(tab_id))));
+  info->badge_background_color.reset(
+      new std::string(color_utils::SkColorToRgbaString(
+          action->GetBadgeBackgroundColor(tab_id))));
 
-  info->badge_text_color.reset(
-    new std::string(SkColorToRGBAString(action->GetBadgeTextColor(tab_id))));
+  info->badge_text_color.reset(new std::string(
+      color_utils::SkColorToRgbaString(action->GetBadgeTextColor(tab_id))));
 
   info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
     ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
@@ -331,8 +323,8 @@ void ExtensionActionUtil::FillInfoForTabId(
   info->allow_in_incognito.reset(
       new bool(util::IsIncognitoEnabled(action->extension_id(), profile_)));
 
-  bool is_user_hidden =
-    Contains(*user_hidden_extensions_, base::Value(action->extension_id()));
+  bool is_user_hidden = Contains(user_hidden_extensions_->GetList(),
+                                 base::Value(action->extension_id()));
 
   info->action_is_hidden.reset(new bool(is_user_hidden));
 
@@ -476,8 +468,8 @@ void ExtensionActionUtil::OnExtensionLoaded(
         extensions::ImageLoader::Get(browser_context);
     loader->LoadImageAsync(
         extension, *icon_resource.get(), gfx::Size(icon_size, icon_size),
-        base::Bind(&ExtensionActionUtil::SendIconLoaded,
-                   browser_context, extension->id()));
+        base::BindOnce(&ExtensionActionUtil::SendIconLoaded,
+                       browser_context, extension->id()));
   }
 }
 
@@ -696,7 +688,8 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
 
   base::ListValue updated_hidden_extensions(hidden_extensions->GetList());
 
-  if (Contains(updated_hidden_extensions, base::Value(params->extension_id))) {
+  if (Contains(updated_hidden_extensions.GetList(),
+               base::Value(params->extension_id))) {
     updated_hidden_extensions.Remove(base::Value(params->extension_id),
                                      nullptr);
   } else {

@@ -51,7 +51,7 @@ class RuleServiceImpl : public RuleService {
   bool IsLoaded() const override;
   bool IsRuleGroupEnabled(RuleGroup group) const override;
   void SetRuleGroupEnabled(RuleGroup group, bool enabled) override;
-  base::Optional<RuleSource> GetRuleSource(RuleGroup group,
+  absl::optional<RuleSource> GetRuleSource(RuleGroup group,
                                            uint32_t source_id) override;
   std::map<uint32_t, RuleSource> GetRuleSources(RuleGroup group) const override;
   bool FetchRuleSourceNow(RuleGroup group, uint32_t source_id) override;
@@ -113,25 +113,25 @@ class RuleServiceImpl : public RuleService {
              kRuleGroupCount>
       exceptions_;
 
-  std::array<base::Optional<RulesIndexManager>, kRuleGroupCount>
+  std::array<absl::optional<RulesIndexManager>, kRuleGroupCount>
       index_managers_;
 
   // We can't have one injection manager per rule group, because they all use
   // the same resources and we only want to provide one copy of the static
   // injections to the content injection module.
-  base::Optional<ContentInjectionProvider> content_injection_provider_;
+  absl::optional<ContentInjectionProvider> content_injection_provider_;
 
   // Keeps track of the request filters we have set up, to allow tearing them
   // down if needed. These pointers are not guaranteed to be valid at any time.
   std::array<AdBlockRequestFilter*, kRuleGroupCount> request_filters_ = {
       nullptr, nullptr};
 
-  base::Optional<BlockedUrlsReporter> blocked_urls_reporter_;
-  base::Optional<RuleServiceStorage> state_store_;
-  base::Optional<Resources> resources_;
+  absl::optional<BlockedUrlsReporter> blocked_urls_reporter_;
+  absl::optional<RuleServiceStorage> state_store_;
+  absl::optional<Resources> resources_;
 
   bool is_loaded_ = false;
-  base::Optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
+  absl::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

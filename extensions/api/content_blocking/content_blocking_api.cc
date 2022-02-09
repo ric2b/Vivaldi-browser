@@ -3,7 +3,6 @@
 #include "extensions/api/content_blocking/content_blocking_api.h"
 
 #include "base/lazy_instance.h"
-#include "base/optional.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
@@ -16,7 +15,7 @@ namespace extensions {
 
 namespace {
 
-base::Optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
+absl::optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
     vivaldi::content_blocking::RuleGroup rule_group) {
   switch (rule_group) {
     case vivaldi::content_blocking::RuleGroup::RULE_GROUP_TRACKING:
@@ -25,7 +24,7 @@ base::Optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
       return adblock_filter::RuleGroup::kAdBlockingRules;
     default:
       NOTREACHED();
-      return base::nullopt;
+      return absl::nullopt;
   }
 }
 
@@ -39,7 +38,7 @@ vivaldi::content_blocking::RuleGroup ToVivaldiContentBlockingRuleGroup(
   }
 }
 
-base::Optional<adblock_filter::RuleService::ExceptionsList>
+absl::optional<adblock_filter::RuleService::ExceptionsList>
 FromVivaldiContentBlockingExceptionList(
     vivaldi::content_blocking::ExceptionList exception_list) {
   switch (exception_list) {
@@ -49,7 +48,7 @@ FromVivaldiContentBlockingExceptionList(
       return adblock_filter::RuleService::kExemptList;
     default:
       NOTREACHED();
-      return base::nullopt;
+      return absl::nullopt;
   }
 }
 

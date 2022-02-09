@@ -34,6 +34,7 @@ const char* kAddToCart[] = {
   "cnc/checkout/cartItems/addItemToCart", // kohls.com
   "\"event\":\"product_added_to_cart\"", // staples.com
   "checkout/basket/add_and_show", // wayfair.com
+  "isQuickAddToCartButton=true", // costco.com
 };
 
 const char* kNotAddToCart[] = {
@@ -131,6 +132,7 @@ const char* kVisitCart[] = {
     "https://www.dickssportinggoods.com/OrderItemDisplay",
     "https://www.dillards.com/webapp/wcs/stores/servlet/OrderItemDisplay",
     "https://www.dsw.com/en/us/shopping-bag",
+    "https://www.electronicexpress.com/cart",
     "https://www.etsy.com/cart",
     "https://www.etsy.com/cart/",
     "https://www.etsy.com/cart/listing.php",
@@ -147,6 +149,7 @@ const char* kVisitCart[] = {
     "https://www.harborfreight.com/checkout/cart",
     "https://www.hmhco.com/hmhstorefront/cart",
     "https://www.homedepot.com/mycart/home",
+    "https://www.homesquare.com/Checkout/Cart.aspx",
     "https://www.hottopic.com/cart",
     "https://www.hsn.com/checkout/bag",
     "https://www.ikea.com/us/en/shoppingcart/",
@@ -214,8 +217,10 @@ const char* kVisitCart[] = {
     "https://www.weightwatchers.com/us/shop/checkout/cart",
     "https://www.westelm.com/shoppingcart/",
     "https://www.wiley.com/en-us/cart",
+    "https://www.wish.com/cart"
     "https://www.williams-sonoma.com/shoppingcart/",
     "https://www.zappos.com/cart",
+    "https://www.zazzle.com/co/cart",
     "https://www.zennioptical.com/shoppingCart",
     "https://www2.hm.com/en_gb/cart",
     "https://www2.hm.com/en_us/cart",
@@ -744,6 +749,21 @@ const char kSkipPattern[] = "(^|\\W)(?i)(skipped|萬國碼)(\\W|$)";
 std::map<std::string, std::string> kSkipParams = {
     {"product-skip-pattern", kSkipPattern}};
 
+std::map<std::string, std::string> kSkipAddToCartRequests = {
+    {"https://www.electronicexpress.com", "https://www.electronicexpress.com"},
+    {"https://www.electronicexpress.com", "https://www.google.com"},
+    {"https://www.costco.com", "https://www.clicktale.net"},
+    {"https://www.hsn.com", "https://www.granify.com"},
+    {"https://www.lululemon.com", "https://www.launchdarkly.com"},
+    {"https://www.qvc.com", "https://www.qvc.com"},
+    {"https://www.qvc.com", "https://www.google.com"},
+};
+
+std::map<std::string, std::string> kNotSkipAddToCartRequests = {
+    {"https://www.costco.com", "https://www.granify.com"},
+    {"https://www.hsn.com", "https://www.launchdarkly.com"},
+    {"https://www.lululemon.com", "https://www.clicktale.net"},
+};
 }  // namespace
 
 using cart::CommerceHintAgent;
@@ -786,10 +806,10 @@ TEST(CommerceHintAgentTest, IsPurchaseByURL) {
 
 TEST(CommerceHintAgentTest, IsPurchaseByForm) {
   for (auto* str : kPurchaseText) {
-    EXPECT_TRUE(CommerceHintAgent::IsPurchase(str)) << str;
+    EXPECT_TRUE(CommerceHintAgent::IsPurchase(GURL(), str)) << str;
   }
   for (auto* str : kNotPurchaseText) {
-    EXPECT_FALSE(CommerceHintAgent::IsPurchase(str)) << str;
+    EXPECT_FALSE(CommerceHintAgent::IsPurchase(GURL(), str)) << str;
   }
 }
 
@@ -803,6 +823,18 @@ TEST(CommerceHintAgentTest, ShouldSkip) {
   }
   for (auto* str : kNotSkipText) {
     EXPECT_FALSE(CommerceHintAgent::ShouldSkip(str)) << str;
+  }
+}
+
+TEST(CommerceHintAgentTest, ShouldSkipAddToCartFromResource) {
+  for (auto const& entry : kSkipAddToCartRequests) {
+    EXPECT_TRUE(CommerceHintAgent::ShouldSkipAddToCartRequest(
+        GURL(entry.first), GURL(entry.second)));
+  }
+
+  for (auto const& entry : kNotSkipAddToCartRequests) {
+    EXPECT_FALSE(CommerceHintAgent::ShouldSkipAddToCartRequest(
+        GURL(entry.first), GURL(entry.second)));
   }
 }
 
@@ -845,10 +877,10 @@ float BenchmarkIsVisitCheckout(const GURL& url) {
   return elapsed_us;
 }
 
-float BenchmarkIsPurchase(base::StringPiece str) {
+float BenchmarkIsPurchase(const GURL& url, base::StringPiece str) {
   const base::TimeTicks now = base::TimeTicks::Now();
   for (int i = 0; i < kTestIterations; ++i) {
-    CommerceHintAgent::IsPurchase(str);
+    CommerceHintAgent::IsPurchase(url, str);
   }
   const base::TimeTicks end = base::TimeTicks::Now();
   float elapsed_us =
@@ -875,6 +907,19 @@ float BenchmarkShouldSkip(base::StringPiece str) {
   return elapsed_us;
 }
 
+float BenchmarkShouldSkipAddToCart(const GURL& url) {
+  const base::TimeTicks now = base::TimeTicks::Now();
+  for (int i = 0; i < kTestIterations; ++i) {
+    CommerceHintAgent::ShouldSkipAddToCartRequest(url, url);
+  }
+  const base::TimeTicks end = base::TimeTicks::Now();
+  float elapsed_us =
+      static_cast<float>((end - now).InMicroseconds()) / kTestIterations;
+  LOG(INFO) << "ShouldSkip(" << url.spec().size()
+            << " chars) took: " << elapsed_us << " µs";
+  return elapsed_us;
+}
+
 // TSAN builds are 20~50X slower than Release build.
 #if defined(THREAD_SANITIZER) || defined(ADDRESS_SANITIZER) ||             \
     defined(MEMORY_SANITIZER) || BUILDFLAG(CFI_CAST_CHECK) ||              \
@@ -892,7 +937,7 @@ TEST(CommerceHintAgentTest, MAYBE_RegexBenchmark) {
   CommerceHintAgent::IsAddToCart(str);
   CommerceHintAgent::IsVisitCart(basic_url);
   CommerceHintAgent::IsVisitCheckout(basic_url);
-  CommerceHintAgent::IsPurchase(str);
+  CommerceHintAgent::IsPurchase(basic_url, str);
   for (int length = 16; length <= (1L << 20); length *= 4) {
     const GURL url("http://example.com/" + str);
 
@@ -922,11 +967,15 @@ TEST(CommerceHintAgentTest, MAYBE_RegexBenchmark) {
     // Without capping the length, it would take at least 2000us.
     EXPECT_LT(elapsed_us, 50.0 * slow_factor);
 
-    elapsed_us = BenchmarkIsPurchase(str);
+    elapsed_us = BenchmarkIsPurchase(basic_url, str);
     // Typical value is ~0.1us.
-    EXPECT_LT(elapsed_us, 1.0 * slow_factor);
+    EXPECT_LT(elapsed_us, 5.0 * slow_factor);
 
     elapsed_us = BenchmarkShouldSkip(str);
+    // Typical value is ~10us.
+    EXPECT_LT(elapsed_us, 50.0 * slow_factor);
+
+    elapsed_us = BenchmarkShouldSkipAddToCart(url);
     // Typical value is ~10us.
     EXPECT_LT(elapsed_us, 50.0 * slow_factor);
 

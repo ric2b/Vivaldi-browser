@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/optional.h"
 #include "base/strings/string_util.h"
 #include "components/request_filter/adblock_filter/adblock_resources.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
@@ -170,8 +169,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
 
   RulesIndex::ActivationsFound activations =
       rules_index_manager_->rules_index()->GetActivationsForFrame(
-          base::Bind(&IsOriginWanted, browser_context,
-                     rules_index_manager_->group()),
+          base::BindRepeating(&IsOriginWanted, browser_context,
+                              rules_index_manager_->group()),
           (is_frame && frame) ? frame->GetParent() : frame);
 
   if (is_frame && frame) {
@@ -211,7 +210,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                                          request->request.url, frame);
 
   if (rule->redirect() && rule->redirect()->size() && resources_) {
-    base::Optional<std::string> resource(
+    absl::optional<std::string> resource(
         resources_->GetRedirect(rule->redirect()->c_str(), reource_type));
     if (resource) {
       std::move(callback).Run(false, false, GURL(resource.value()));
@@ -270,8 +269,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
 
   RulesIndex::ActivationsFound activations =
       rules_index_manager_->rules_index()->GetActivationsForFrame(
-          base::Bind(&IsOriginWanted, browser_context,
-                     rules_index_manager_->group()),
+          base::BindRepeating(&IsOriginWanted, browser_context,
+                              rules_index_manager_->group()),
           (is_frame && frame) ? frame->GetParent() : frame);
 
   if (is_frame && frame) {

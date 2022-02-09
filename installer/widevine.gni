@@ -1,6 +1,7 @@
 
 assert(is_win || is_mac)
 
+import("//build/config/python.gni")
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
@@ -15,7 +16,7 @@ template("widevine_sign") {
   signing_target_name = "${target_name}_sign"
   verify_target_name = "${target_name}_verify"
 
-  action(signing_target_name) {
+  python2_action(signing_target_name) {
     forward_variables_from(invoker,
                            [
                              "file",
@@ -60,7 +61,7 @@ template("widevine_sign") {
     }
   }
 
-  action(verify_target_name) {
+  python2_action(verify_target_name) {
     forward_variables_from(invoker,
                            [
                              "file",

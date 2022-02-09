@@ -10,13 +10,14 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/time/time.h"
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_message_start.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "media/base/ipc/media_param_traits.h"
 
 #define IPC_MESSAGE_START MediaPipelineMsgStart
 
-IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDataType,
-                          media::kPlatformMediaDataTypeCount - 1)
+IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformStreamType,
+                          media::kPlatformStreamTypeCount - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaDataStatus,
                           media::kMediaDataStatusCount - 1)
@@ -47,19 +48,12 @@ IPC_STRUCT_TRAITS_BEGIN(media::PlatformVideoConfig)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(MediaPipelineMsg_DecodedDataReady_Params)
-  IPC_STRUCT_MEMBER(media::PlatformMediaDataType, type)
+  IPC_STRUCT_MEMBER(media::PlatformStreamType, stream_type)
   IPC_STRUCT_MEMBER(media::MediaDataStatus, status)
   IPC_STRUCT_MEMBER(int, size)
   IPC_STRUCT_MEMBER(base::TimeDelta, timestamp)
   IPC_STRUCT_MEMBER(base::TimeDelta, duration)
 IPC_STRUCT_END()
-
-IPC_SYNC_MESSAGE_CONTROL1_0(
-    MediaPipelineMsg_New,
-    int32_t /* route_id */)
-
-IPC_MESSAGE_CONTROL1(MediaPipelineMsg_Destroy,
-                     int32_t /* route_id */)
 
 IPC_MESSAGE_ROUTED3(MediaPipelineMsg_ReadRawData,
                     int64_t /* tag */,
@@ -71,18 +65,12 @@ IPC_MESSAGE_ROUTED2(MediaPipelineMsg_RawDataReady,
                     int /* size (DataSource::kReadError on error, 0 on EOS) */)
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_ReadDecodedData,
-                    media::PlatformMediaDataType /* type */)
+                    media::PlatformStreamType /* stream_type */)
 
 IPC_MESSAGE_ROUTED2(MediaPipelineMsg_DecodedDataReady,
                     MediaPipelineMsg_DecodedDataReady_Params /* data */,
                     base::ReadOnlySharedMemoryRegion
                     /* new region or not valid to reuse cached one*/)
-
-IPC_MESSAGE_ROUTED4(MediaPipelineMsg_Initialize,
-                    int64_t /* data_source_size (<0 means "unknown") */,
-                    bool /* is_data_source_streaming */,
-                    std::string /* mime_type */,
-                    base::ReadOnlySharedMemoryRegion /* data source buffer */)
 
 IPC_MESSAGE_ROUTED5(MediaPipelineMsg_Initialized,
                     bool /* status */,

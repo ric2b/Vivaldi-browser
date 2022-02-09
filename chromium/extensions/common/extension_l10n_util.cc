@@ -10,14 +10,14 @@
 #include <string>
 #include <vector>
 
-#include "app/vivaldi_apptools.h"
+#include "base/containers/contains.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
-#include "base/stl_util.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -34,6 +34,8 @@
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace errors = extensions::manifest_errors;
 namespace keys = extensions::manifest_keys;
@@ -562,13 +564,13 @@ ScopedLocaleForTest::ScopedLocaleForTest(base::StringPiece locale)
 ScopedLocaleForTest::ScopedLocaleForTest(base::StringPiece process_locale,
                                          base::StringPiece preferred_locale)
     : ScopedLocaleForTest() {
-  SetProcessLocale(process_locale.as_string());
-  SetPreferredLocale(preferred_locale.as_string());
+  SetProcessLocale(std::string(process_locale));
+  SetPreferredLocale(std::string(preferred_locale));
 }
 
 ScopedLocaleForTest::~ScopedLocaleForTest() {
-  SetProcessLocale(process_locale_.as_string());
-  SetPreferredLocale(preferred_locale_.as_string());
+  SetProcessLocale(std::string(process_locale_));
+  SetPreferredLocale(std::string(preferred_locale_));
 }
 
 const std::string& GetPreferredLocaleForTest() {

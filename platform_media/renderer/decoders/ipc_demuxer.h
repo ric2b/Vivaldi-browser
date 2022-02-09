@@ -66,7 +66,7 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   void OnSelectedVideoTrackChanged(const std::vector<MediaTrack::Id>& track_ids,
                                    base::TimeDelta currTime,
                                    TrackChangeCB change_completed_cb) override;
-  base::Optional<container_names::MediaContainerName> GetContainerForMetrics()
+  absl::optional<container_names::MediaContainerName> GetContainerForMetrics()
       const override;
 
   // Used to tell the demuxer that a seek request is about to arrive on the

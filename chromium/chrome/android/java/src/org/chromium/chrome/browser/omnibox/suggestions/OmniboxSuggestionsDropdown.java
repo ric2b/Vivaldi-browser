@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.suggestions.SearchEngineSuggestionView.LayoutMargins;
 
 
 /** A widget for showing a list of omnibox suggestions. */
@@ -71,6 +72,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     private int mTopControlsHeight;
     private int mBottomControlsHeight;
     private static Callback mSearchEngineSuggestionCallback;
+    private LayoutMargins layoutMargins = new LayoutMargins(0,0,0,0);
 
     /** Interface that will receive notifications and callbacks from OmniboxSuggestionsDropdown. */
     public interface Observer {
@@ -315,10 +317,13 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
             // Note(nagamani@vivaldi.com):  Return the calculated margin value to properly anchor
             // the search engine suggestion layout
-            if (mSearchEngineSuggestionCallback != null)
-                mSearchEngineSuggestionCallback.onResult(shouldAnchorToBottom()
-                                ? mBottomControlsHeight
-                                : anchorBottomRelativeToContent);
+            if (mSearchEngineSuggestionCallback != null) {
+                if (mAlignmentView != null)
+                    layoutMargins.leftMargin = mAlignmentView.getLeft();
+                layoutMargins.topMargin = anchorBottomRelativeToContent;
+                layoutMargins.bottomMargin = mBottomControlsHeight;
+                mSearchEngineSuggestionCallback.onResult(layoutMargins);
+            }
         }
     }
 
@@ -526,7 +531,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     }
 
     /** Vivaldi: Callback returns the anchor height for our search engine suggestion layout */
-    public static void getAnchorMarginValue(Callback<Integer> callback) {
+    public static void getAnchorMarginValue(Callback<LayoutMargins> callback) {
         mSearchEngineSuggestionCallback = callback;
     }
 

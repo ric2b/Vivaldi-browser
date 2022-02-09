@@ -47,8 +47,8 @@ CoreAudioDemuxer::CoreAudioDemuxer(DataSource* data_source)
 
   url_protocol_.reset(new BlockingUrlProtocol(
       data_source_,
-      BindToCurrentLoop(base::Bind(&CoreAudioDemuxer::OnDataSourceError,
-                                   base::Unretained(this)))));
+      BindToCurrentLoop(base::BindRepeating(
+          &CoreAudioDemuxer::OnDataSourceError, base::Unretained(this)))));
 }
 
 CoreAudioDemuxer::~CoreAudioDemuxer() {
@@ -207,10 +207,9 @@ void CoreAudioDemuxer::ReadDataSourceWithCallback(
 }
 
 void CoreAudioDemuxer::ReadAudioFormatInfo(PipelineStatusCallback status_cb) {
-  ReadDataSourceWithCallback(
-      base::Bind(&CoreAudioDemuxer::OnReadAudioFormatInfoDone,
-                 weak_factory_.GetWeakPtr(),
-                 base::Passed(std::move(status_cb))));
+  ReadDataSourceWithCallback(base::BindRepeating(
+      &CoreAudioDemuxer::OnReadAudioFormatInfoDone, weak_factory_.GetWeakPtr(),
+      base::Passed(std::move(status_cb))));
 }
 
 void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
@@ -372,8 +371,8 @@ void CoreAudioDemuxer::ReadDataSourceIfNeeded() {
     return;
   }
 
-  ReadDataSourceWithCallback(base::Bind(&CoreAudioDemuxer::OnReadDataSourceDone,
-                                        weak_factory_.GetWeakPtr()));
+  ReadDataSourceWithCallback(base::BindRepeating(
+      &CoreAudioDemuxer::OnReadDataSourceDone, weak_factory_.GetWeakPtr()));
 }
 
 void CoreAudioDemuxer::OnReadDataSourceDone(int read_size) {
@@ -396,9 +395,9 @@ bool CoreAudioDemuxer::IsSupported(const std::string& content_type,
   return false;
 }
 
-base::Optional<container_names::MediaContainerName>
+absl::optional<container_names::MediaContainerName>
 CoreAudioDemuxer::GetContainerForMetrics() const {
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 }  // namespace media

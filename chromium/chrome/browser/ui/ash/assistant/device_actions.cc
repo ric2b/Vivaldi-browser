@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
+#include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/mojom/intent_helper.mojom.h"
@@ -41,20 +42,20 @@ constexpr char kPackage[] = "package";
 constexpr char kLaunchFlags[] = "launchFlags";
 constexpr char kEndSuffix[] = "end";
 
-base::Optional<std::string> GetActivity(const std::string& package_name) {
+absl::optional<std::string> GetActivity(const std::string& package_name) {
   auto* prefs = ArcAppListPrefs::Get(ProfileManager::GetActiveUserProfile());
   if (!prefs) {
     LOG(ERROR) << "ArcAppListPrefs is not available.";
-    return base::nullopt;
+    return absl::nullopt;
   }
   std::string app_id = prefs->GetAppIdByPackageName(package_name);
 
   if (!app_id.empty()) {
     std::unique_ptr<ArcAppListPrefs::AppInfo> app_info = prefs->GetApp(app_id);
-    return base::Optional<std::string>(app_info->activity);
+    return absl::optional<std::string>(app_info->activity);
   }
 
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 std::string GetLaunchIntent(const AndroidAppInfo& app_info) {
@@ -112,6 +113,7 @@ DeviceActions::DeviceActions(std::unique_ptr<DeviceActionsDelegate> delegate)
 DeviceActions::~DeviceActions() = default;
 
 void DeviceActions::SetWifiEnabled(bool enabled) {
+  NET_LOG(USER) << __func__ << ":" << enabled;
   NetworkHandler::Get()->network_state_handler()->SetTechnologyEnabled(
       NetworkTypePattern::WiFi(), enabled,
       chromeos::network_handler::ErrorCallback());
@@ -130,7 +132,7 @@ void DeviceActions::SetBluetoothEnabled(bool enabled) {
 
 void HandleScreenBrightnessCallback(
     DeviceActions::GetScreenBrightnessLevelCallback callback,
-    base::Optional<double> level) {
+    absl::optional<double> level) {
   if (level.has_value()) {
     std::move(callback).Run(true, level.value() / 100.0);
   } else {
@@ -218,8 +220,8 @@ void DeviceActions::AddAndFireAppListEventSubscriber(
 
   app_list_subscribers_.AddObserver(subscriber);
 
-  if (prefs && !scoped_prefs_observer_.IsObserving(prefs))
-    scoped_prefs_observer_.Add(prefs);
+  if (prefs && !scoped_prefs_observations_.IsObservingSource(prefs))
+    scoped_prefs_observations_.AddObservation(prefs);
 }
 
 void DeviceActions::RemoveAppListEventSubscriber(
@@ -227,11 +229,11 @@ void DeviceActions::RemoveAppListEventSubscriber(
   app_list_subscribers_.RemoveObserver(subscriber);
 }
 
-base::Optional<std::string> DeviceActions::GetAndroidAppLaunchIntent(
+absl::optional<std::string> DeviceActions::GetAndroidAppLaunchIntent(
     const AndroidAppInfo& app_info) {
   auto status = delegate_->GetAndroidAppStatus(app_info.package_name);
   if (status != AppStatus::kAvailable)
-    return base::nullopt;
+    return absl::nullopt;
 
   return GetLaunchIntent(std::move(app_info));
 }

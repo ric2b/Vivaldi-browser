@@ -87,8 +87,8 @@ CalendarRow::CalendarRow(const CalendarRow& other)
       lastmodified_(other.lastmodified_) {}
 
 Calendar::Calendar()
-    : name(base::ASCIIToUTF16("")),
-      description(base::ASCIIToUTF16("")),
+    : name(u""),
+      description(u""),
       supported_component_set(0),
       updateFields(0) {}
 

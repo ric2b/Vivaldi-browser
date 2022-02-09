@@ -23,6 +23,7 @@
 #include "gn/ninja_utils.h"
 #include "gn/output_file.h"
 #include "gn/scheduler.h"
+#include "gn/string_output_buffer.h"
 #include "gn/string_utils.h"
 #include "gn/substitution_writer.h"
 #include "gn/target.h"
@@ -51,7 +52,8 @@ std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
 
   // It's ridiculously faster to write to a string and then write that to
   // disk in one operation than to use an fstream here.
-  std::stringstream rules;
+  StringOutputBuffer storage;
+  std::ostream rules(&storage);
 
   // Call out to the correct sub-type of writer. Binary targets need to be
   // written to separate files for compiler flag scoping, but other target
@@ -101,8 +103,7 @@ std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
     SourceFile ninja_file = GetNinjaFileForTarget(target);
     base::FilePath full_ninja_file =
         settings->build_settings()->GetFullPath(ninja_file);
-    base::CreateDirectory(full_ninja_file.DirName());
-    WriteFileIfChanged(full_ninja_file, rules.str(), nullptr);
+    storage.WriteToFileIfChanged(full_ninja_file, nullptr);
 
     EscapeOptions options;
     options.mode = ESCAPE_NINJA;
@@ -117,7 +118,7 @@ std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
   }
 
   // No separate file required, just return the rules.
-  return rules.str();
+  return storage.str();
 }
 
 void NinjaTargetWriter::WriteEscapedSubstitution(const Substitution* type) {
@@ -139,9 +140,15 @@ void NinjaTargetWriter::WriteSharedVars(const SubstitutionBits& bits) {
     written_anything = true;
   }
 
-  // Target label name
+  // Target label name.
   if (bits.used.count(&SubstitutionLabelName)) {
     WriteEscapedSubstitution(&SubstitutionLabelName);
+    written_anything = true;
+  }
+
+  // Target label name without toolchain.
+  if (bits.used.count(&SubstitutionLabelNoToolchain)) {
+    WriteEscapedSubstitution(&SubstitutionLabelNoToolchain);
     written_anything = true;
   }
 
@@ -182,7 +189,7 @@ void NinjaTargetWriter::WriteSharedVars(const SubstitutionBits& bits) {
 }
 
 std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
-    const std::vector<const Target*>& extra_hard_deps,
+    const std::vector<const Target*>& additional_hard_deps,
     size_t num_stamp_uses) const {
   CHECK(target_->toolchain()) << "Toolchain not set on target "
                               << target_->label().GetUserVisibleName(true);
@@ -200,7 +207,7 @@ std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
     input_deps_sources.push_back(&target_->action_values().script());
 
   // Input files are only considered for non-binary targets which use an
-  // implicit dependency instead. The implicit depedency in this case is
+  // implicit dependency instead. The implicit dependency in this case is
   // handled separately by the binary target writer.
   if (!target_->IsBinary()) {
     for (ConfigValuesIterator iter(target_); !iter.done(); iter.Next()) {
@@ -226,12 +233,18 @@ std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
   // Hard dependencies that are direct or indirect dependencies.
   // These are large (up to 100s), hence why we check other
   const std::set<const Target*>& hard_deps(target_->recursive_hard_deps());
-  for (const Target* target : hard_deps)
-    input_deps_targets.push_back(target);
+  for (const Target* target : hard_deps) {
+    // BUNDLE_DATA should normally be treated as a data-only dependency
+    // (see Target::IsDataOnly()). Only the CREATE_BUNDLE target, that actually
+    // consumes this data, needs to have the BUNDLE_DATA as an input dependency.
+    if (target->output_type() != Target::BUNDLE_DATA ||
+        target_->output_type() == Target::CREATE_BUNDLE)
+      input_deps_targets.push_back(target);
+  }
 
-  // Extra hard dependencies passed in. These are usually empty or small, and
-  // we don't want to duplicate the explicit hard deps of the target.
-  for (const Target* target : extra_hard_deps) {
+  // Additional hard dependencies passed in. These are usually empty or small,
+  // and we don't want to duplicate the explicit hard deps of the target.
+  for (const Target* target : additional_hard_deps) {
     if (!hard_deps.count(target))
       input_deps_targets.push_back(target);
   }

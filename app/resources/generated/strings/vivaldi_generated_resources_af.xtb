@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Verlaat Volskerm</translation>
 <translation id="2177950615300672361">Privaatmodusoortjie: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Eie Kliënt-module: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Versteek knop</translation>
 <translation id="2218515861914035131">Plak as skoonteks</translation>
 <translation id="2249605167705922988">bv. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Laat identifiseerders vir beskermde inhoud toe (rekenaar moet dalk herbegin word)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Voorverbeeld: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoon</translation>
 <translation id="3241680850019875542">Kies die stamgids van die uitbreidings om in te pak. Om ’n uitbreiding by te werk, kies ook die privaatsleutellêer om dit weer te gebruik.</translation>
-<translation id="3266179261140759675">Keer dat werwe wat toe is inligting stuur en ontvang</translation>
 <translation id="3280237271814976245">Bewaar &amp;as…</translation>
 <translation id="3285322247471302225">Nuwe &amp;Oortjie</translation>
 <translation id="3288047731229977326">Uitbreidings wat in ontwikkelaarsmodus loop kan u rekenaar beskadig. Indien u nie ’n ontwikkelaar is nie moet u die uitbreidings veiligheidshalwe deaktiveer.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Dit kan werfdata lees en verander</translation>
 <translation id="3560034655160545939">&amp;Speltoets</translation>
 <translation id="3574917942258583917">Verlaat ingocnito-modus in elk geval?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil ’n drukker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met ’n groep wat u besit, deel: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Indien u aanvaar sal alle groeplede na daardie drukker kan afdruk.</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Open skakel in &amp;privaatvenster</translation>
 <translation id="3627879631695760395">Installeer <ph name="APP" /> …</translation>
 <translation id="3668823961463113931">Hanteerders</translation>
 <translation id="3678156199662914018">Uitbreiding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skermdeelversoek</translation>
+<translation id="3708684582558000260">Geslote werwe mag nie data klaar verstuur of ontvang nie</translation>
 <translation id="3711931198657368127">Pl&amp;ak en Gaan na <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspekteer opwip</translation>
 <translation id="3744111561329211289">Agtergrondsinchronisering</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Die volgende uitbreiding is geskep:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Aanvaar vir groep</translation>
 <translation id="4096508467498758490">Deaktiveer uitbreidings in ontwikkelaarsmodus</translation>
 <translation id="4100839878934973028">’n Ander program op u rekenaar het ’n toep toegevoeg wat Vivaldi se werkswyse kan verander.</translation>
 <translation id="4109898769411476438">Sluit Blaaier Voor Ingevoer Word</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Toon Details</translation>
 <translation id="4907306957610201395">Toestemmingskategorie</translation>
 <translation id="4912643508233590958">Wek Vanuit Luierstand</translation>
-<translation id="4918086044614829423">Aanvaar</translation>
 <translation id="4927753642311223124">Hier is niks te sien nie, beweeg aan.</translation>
 <translation id="4930714375720679147">Aktiveer</translation>
 <translation id="4988526792673242964">Bladsye</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Wis werfdata</translation>
 <translation id="6042308850641462728">Nog</translation>
 <translation id="6059925163896151826">USB-toestelle</translation>
-<translation id="6082651258230788217">Toon in nutsbalk</translation>
 <translation id="6086846494333236931">Deur u administrateur geïnstalleer</translation>
 <translation id="6101226222197207147">Nuwe toep toegevoeg (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">U Internetverbinding word deur ’n uitbreiding beheer</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simuleer blaaierherbegin</translation>
 <translation id="6445450263907939268">Indien u nie hierdie veranderinge wil hê nie, kan u u vorige instellings terugstel.</translation>
 <translation id="6447842834002726250">Koekies</translation>
-<translation id="6452181791372256707">Wys Af</translation>
 <translation id="6498249116389603658">&amp;Al u tale</translation>
 <translation id="6503077044568424649">Meeste besoek</translation>
 <translation id="6508261954199872201">Toep: <ph name="APP_NAME" /></translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Is dit die ‘nuwe oortjie’-blad wat u verwag het?</translation>
 <translation id="786073089922909430">Diens: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Onlangse Bestemmings</translation>
-<translation id="7898627924844766532">Hou in nutsbalk</translation>
 <translation id="7903925330883316394">Nutsprogram: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Tans vanlyn</translation>
 <translation id="7947962633355574091">K&amp;opieer Videoadres</translation>
@@ -452,7 +445,6 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8725066075913043281">Probeer Weer</translation>
 <translation id="8757090071857742562">Kan nie werkskerm send nie. Bevestig dat u ingestem het op die porboodskap om u skerm te deel.</translation>
 <translation id="8774934320277480003">Boonste kantlyn</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil ’n drukker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met u deel.</translation>
 <translation id="8798099450830957504">Verstek</translation>
 <translation id="8800004011501252845">Toon tans bestemmings vir</translation>
 <translation id="8808478386290700967">Webwinkel</translation>

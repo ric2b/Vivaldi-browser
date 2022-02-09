@@ -115,3 +115,11 @@ bool StringOutputBuffer::WriteToFile(const base::FilePath& file_path,
   }
   return success;
 }
+
+bool StringOutputBuffer::WriteToFileIfChanged(const base::FilePath& file_path,
+                                              Err* err) const {
+  if (ContentsEqual(file_path))
+    return true;
+
+  return WriteToFile(file_path, err);
+}

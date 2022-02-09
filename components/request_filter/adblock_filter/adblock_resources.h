@@ -10,7 +10,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/optional.h"
 #include "base/values.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
 
@@ -36,7 +35,7 @@ class Resources {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  base::Optional<std::string> GetRedirect(
+  absl::optional<std::string> GetRedirect(
       const std::string& name,
       flat::ResourceType resource_type) const;
 

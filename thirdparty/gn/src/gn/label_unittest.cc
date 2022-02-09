@@ -121,7 +121,7 @@ TEST(Label, ResolveAboveRootBuildDir) {
   EXPECT_EQ("/foo/", result.dir().value()) << result.dir().value();
   EXPECT_EQ("target", result.name());
 
-  // It should't go up higher than the system root.
+  // It shouldn't go up higher than the system root.
   result = Label::Resolve(cur_dir, source_root, default_toolchain,
                           Value(nullptr, "../../../../..:target"), &err);
   EXPECT_FALSE(err.has_error());

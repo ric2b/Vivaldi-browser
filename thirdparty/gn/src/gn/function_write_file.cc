@@ -8,6 +8,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "gn/build_settings.h"
 #include "gn/err.h"
 #include "gn/filesystem_utils.h"
 #include "gn/functions.h"
@@ -15,6 +16,7 @@
 #include "gn/output_conversion.h"
 #include "gn/parse_tree.h"
 #include "gn/scheduler.h"
+#include "gn/string_output_buffer.h"
 #include "util/build_config.h"
 
 namespace functions {
@@ -87,7 +89,8 @@ Value RunWriteFile(Scope* scope,
     output_conversion = args[2];
 
   // Compute output.
-  std::ostringstream contents;
+  StringOutputBuffer storage;
+  std::ostream contents(&storage);
   ConvertValueToOutput(scope->settings(), args[1], output_conversion, contents,
                        err);
   if (err->has_error())
@@ -97,8 +100,10 @@ Value RunWriteFile(Scope* scope,
       scope->settings()->build_settings()->GetFullPath(source_file);
 
   // Make sure we're not replacing the same contents.
-  if (!WriteFileIfChanged(file_path, contents.str(), err))
+  if (!storage.WriteToFileIfChanged(file_path, err)) {
     *err = Err(function->function(), err->message(), err->help_text());
+    return Value();
+  }
 
   return Value();
 }

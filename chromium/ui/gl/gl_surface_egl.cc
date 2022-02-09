@@ -907,7 +907,8 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   }
 
   if (supports_angle_swiftshader) {
-    if (requested_renderer == kANGLEImplementationSwiftShaderName) {
+    if (requested_renderer == kANGLEImplementationSwiftShaderName ||
+        requested_renderer == kANGLEImplementationSwiftShaderForWebGLName) {
       AddInitDisplay(init_displays, ANGLE_SWIFTSHADER);
     }
   }
@@ -1362,7 +1363,7 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
 #if defined(USE_X11)
     // Unset DISPLAY env, so the vulkan can be initialized successfully, if the
     // X server doesn't support Vulkan surface.
-    base::Optional<ui::ScopedUnsetDisplay> unset_display;
+    absl::optional<ui::ScopedUnsetDisplay> unset_display;
     if (display_type == ANGLE_VULKAN && !ui::IsVulkanSurfaceSupported())
       unset_display.emplace();
 #endif  // defined(USE_X11)
@@ -1601,6 +1602,9 @@ void NativeViewGLSurfaceEGL::SetEnableSwapTimestamps() {
             static_cast<int>(supported_egl_timestamps_.size());
         presentation_flags_ = gfx::PresentationFeedback::kVSync |
                               gfx::PresentationFeedback::kHWCompletion;
+        break;
+      case EGL_RENDERING_COMPLETE_TIME_ANDROID:
+        writes_done_index_ = static_cast<int>(supported_egl_timestamps_.size());
         break;
     }
 
@@ -1879,6 +1883,7 @@ bool NativeViewGLSurfaceEGL::IsEGLTimestampSupported() const {
 bool NativeViewGLSurfaceEGL::GetFrameTimestampInfoIfAvailable(
     base::TimeTicks* presentation_time,
     base::TimeDelta* composite_interval,
+    base::TimeTicks* writes_done_time,
     uint32_t* presentation_flags,
     int frame_id) {
   DCHECK(presentation_time);
@@ -1961,6 +1966,17 @@ bool NativeViewGLSurfaceEGL::GetFrameTimestampInfoIfAvailable(
                          base::TimeDelta::FromNanoseconds(presentation_time_ns);
     *presentation_flags = presentation_flags_;
   }
+
+  // Get the WritesDone time if available, otherwise set to a null TimeTicks.
+  EGLnsecsANDROID writes_done_time_ns = egl_timestamps[writes_done_index_];
+  if (writes_done_time_ns == EGL_TIMESTAMP_INVALID_ANDROID ||
+      writes_done_time_ns == EGL_TIMESTAMP_PENDING_ANDROID) {
+    *writes_done_time = base::TimeTicks();
+  } else {
+    *writes_done_time = base::TimeTicks() +
+                        base::TimeDelta::FromNanoseconds(writes_done_time_ns);
+  }
+
   return true;
 }
 

@@ -6,7 +6,7 @@
 <translation id="1031362278801463162">Vorschau wird geladen…</translation>
 <translation id="1047431265488717055">Linkte&amp;xt kopieren</translation>
 <translation id="1049795001945932310">&amp;Spracheinstellungen</translation>
-<translation id="1054153489933238809">&amp;Original in neuem Tab öffnen</translation>
+<translation id="1054153489933238809">Original &amp;Bild in neuem Tab öffnen</translation>
 <translation id="1056898198331236512">Warnung</translation>
 <translation id="1084824384139382525">Adr&amp;esse des Links kopieren</translation>
 <translation id="1128109161498068552">Websites nicht gestatten, mittels systemexklusiver Meldungen auf MIDI-Geräte zuzugreifen</translation>
@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Vollbildmodus aus</translation>
 <translation id="2177950615300672361">Privater Tab: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Natives Client-Modul: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Schaltfläche ausblenden</translation>
 <translation id="2218515861914035131">Als unformatierten Text einfügen</translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identifikatoren für geschützten Inhalt zulassen (eventuell Neustart des Computers erforderlich)</translation>
@@ -137,14 +136,13 @@
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
-<translation id="3266179261140759675">Fertigstellen des Datenversands und -empfangs von kürzlich geschlossenen Websites nicht erlauben</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
 <translation id="3285322247471302225">Neuer &amp;Tab</translation>
 <translation id="3288047731229977326">Erweiterungen im Entwicklermodus können auf Ihrem Computer Schaden anrichten. Wenn Sie kein Entwickler sind, sollten Sie diese Erweiterungen im Entwicklermodus deaktivieren, um sicher zu sein.</translation>
 <translation id="329838636886466101">Reparieren</translation>
 <translation id="33022249435934718">GDI-Handles</translation>
 <translation id="3303818374450886607">Kopien</translation>
-<translation id="3305661444342691068">PDF-Vorschau</translation>
+<translation id="3305661444342691068">Im eingebauten PDF-Betrachter öffnen</translation>
 <translation id="3308134619352333507">Schaltfläche ausblenden</translation>
 <translation id="3317459757438853210">Beidseitig</translation>
 <translation id="3341703758641437857">Zugriff auf Datei-URLs zulassen</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Kann Websitedaten lesen und ändern</translation>
 <translation id="3560034655160545939">&amp;Rechtschreibprüfung</translation>
 <translation id="3574917942258583917">Privaten Modus trotzdem beenden?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; möchte den Drucker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; für eine Gruppe freigeben, deren Inhaber Sie sind: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Falls Sie zustimmen, können alle Gruppenmitglieder diesen Drucker nutzen.</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Link in &amp;privatem Fenster öffnen</translation>
 <translation id="3627879631695760395"><ph name="APP" /> installieren...</translation>
 <translation id="3668823961463113931">Handler</translation>
 <translation id="3678156199662914018">Erweiterung: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Anfrage zur Bildschirmfreigabe durch <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Geschlossene Websites dürfen den Datenversand oder -empfang nicht abschließen</translation>
 <translation id="3711931198657368127">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="3727187387656390258">Pop-up prüfen</translation>
 <translation id="3744111561329211289">Hintergrundsynchronisation</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Die folgende Erweiterung wurde erstellt:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Für Gruppe akzeptieren</translation>
 <translation id="4096508467498758490">Erweiterungen im Entwicklermodus deaktivieren</translation>
 <translation id="4100839878934973028">Ein anderes Programm auf Ihrem Computer hat eine App hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="4109898769411476438">Browser vor dem Import schließen</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Details anzeigen</translation>
 <translation id="4907306957610201395">Berechtigungskategorie</translation>
 <translation id="4912643508233590958">Inaktive Weckbefehle</translation>
-<translation id="4918086044614829423">Annehmen</translation>
 <translation id="4927753642311223124">Nichts zu sehen, alles OK.</translation>
 <translation id="4930714375720679147">Aktivieren</translation>
 <translation id="4988526792673242964">Seiten</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Speichern</translation>
 <translation id="5334142896108694079">Skript-Cache</translation>
 <translation id="5355926466126177564">Die Erweiterung <ph name="EXTENSION_NAME" /> hat die Seite geändert, die bei der Suche über die Adressleiste angezeigt wird.</translation>
-<translation id="5360150013186312835">In Symbolleiste anzeigen</translation>
+<translation id="5360150013186312835">In der Symbolleiste anzeigen</translation>
 <translation id="5362741141255528695">Private Schlüsseldatei auswählen.</translation>
 <translation id="536638840841140142">Keine</translation>
 <translation id="5370819323174483825">&amp;Neu laden</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Websitedaten löschen</translation>
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="6059925163896151826">USB-Geräte</translation>
-<translation id="6082651258230788217">In Symbolleiste anzeigen</translation>
 <translation id="6086846494333236931">Von Ihrem Administrator installiert</translation>
 <translation id="6101226222197207147">Neue App hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ihre Internetverbindung wird beeinflusst</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Browser-Neustart simulieren</translation>
 <translation id="6445450263907939268">Wenn diese Änderungen nicht von Ihnen gewollt waren, können Sie Ihre vorherigen Einstellungen wiederherstellen.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Ablehnen</translation>
 <translation id="6498249116389603658">&amp;Alle Ihre Sprachen</translation>
 <translation id="6503077044568424649">Meistbesucht</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Kann Websitedaten lesen und ändern</translation>
 <translation id="708060913198414444">Audioadresse k&amp;opieren</translation>
 <translation id="7175353351958621980">Geladen von:</translation>
-<translation id="7186088072322679094">In Symbolleiste behalten</translation>
+<translation id="7186088072322679094">In der Symbolleiste behalten</translation>
 <translation id="7270858098575133036">Nachfragen, wenn eine Website versucht, mit systemexklusiven Meldungen auf MIDI-Geräte zuzugreifen</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Ist dies die “Neuer Tab”-Seite, die Sie erwartet hatten?</translation>
 <translation id="786073089922909430">Dienst: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Letzte Ziele</translation>
-<translation id="7898627924844766532">In der Symbolleiste behalten</translation>
 <translation id="7903925330883316394">Dienstprogramm: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Derzeit offline</translation>
 <translation id="7947962633355574091">Videoadresse k&amp;opieren</translation>
@@ -451,10 +444,9 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8725066075913043281">Erneut versuchen</translation>
 <translation id="8757090071857742562">Der Desktop kann nicht gestreamt werden. Überprüfen Sie, ob Sie die Aufforderung zur Freigabe Ihres Bildschirms bestätigt haben.</translation>
 <translation id="8774934320277480003">Oberer Rand</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; möchte den Drucker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; für Sie freigeben.</translation>
 <translation id="8798099450830957504">Standardeinstellung</translation>
 <translation id="8800004011501252845">Ziele werden angezeigt für</translation>
-<translation id="8808478386290700967">Web Store</translation>
+<translation id="8808478386290700967">Chrome Web Store</translation>
 <translation id="8823514049557262177">Linkte&amp;xt kopieren</translation>
 <translation id="8823704566850948458">Passwort vorschlagen…</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>

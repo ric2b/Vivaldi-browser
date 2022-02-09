@@ -20,7 +20,7 @@ ScopePerFileProvider::ScopePerFileProvider(Scope* scope, bool allow_target_vars)
 ScopePerFileProvider::~ScopePerFileProvider() = default;
 
 const Value* ScopePerFileProvider::GetProgrammaticValue(
-    const std::string_view& ident) {
+    std::string_view ident) {
   if (ident == variables::kCurrentToolchain)
     return GetCurrentToolchain();
   if (ident == variables::kDefaultToolchain)
@@ -76,8 +76,8 @@ const Value* ScopePerFileProvider::GetGnVersion() {
 const Value* ScopePerFileProvider::GetPythonPath() {
   if (!python_path_) {
     python_path_ = std::make_unique<Value>(
-        nullptr,
-        FilePathToUTF8(scope_->settings()->build_settings()->python_path()));
+        nullptr, MaybeQuotePath(FilePathToUTF8(
+                     scope_->settings()->build_settings()->python_path())));
   }
   return python_path_.get();
 }

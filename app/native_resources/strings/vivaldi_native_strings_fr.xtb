@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Envoyer le lien par mail</translation>
 <translation id="1454726940098520109">Ne plus afficher la boîte de confirmation</translation>
 <translation id="1462666970065907900">Voulez-vous vraiment fermer cette fenêtre ?</translation>
+<translation id="1480046233931937785">Crédits</translation>
 <translation id="1526344461589023948">Une erreur est survenue lors de l’enregistrement de la mise à jour téléchargée. Veuillez vérifier l’espace disque disponible sur votre ordinateur et essayer plus tard.</translation>
 <translation id="1657174850639146440">Monstre 9</translation>
 <translation id="1676595396635191120">Nouvelle fenêtre privée</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Ouvrir dans un nouvel onglet</translation>
 <translation id="3027988479108856431">Malheureusement, les données de Yandex ne sont pas accessibles lorsque ce navigateur est lancé. Pour importer ces données dans Vivaldi, enregistrez votre travail en cours et fermez toutes les fenêtres Yandex. Puis cliquez sur « Continuer ».</translation>
 <translation id="3084011186245865060">Paysage 6</translation>
+<translation id="3093931836425623631">Vivaldi est rendu possible grâce au projet Open-Source Chromium et d’autres logiciels Open-Source.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Nouveau signet</translation>
 <translation id="3255747772218936245">Installer la mise à jour</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Paysage 7</translation>
 <translation id="7111492742514999492">Paysage 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi est rendu possible grâce au projet Open Source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> et <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Échec de lancement de l’installeur de la mise à jour. Veuillez vérifier que l’ordinateur dispose d’assez de mémoire et d’espace disque et réessayer plus tard.</translation>
 <translation id="7658239707568436148">Annuler</translation>
 <translation id="7715497554424665066">&amp;Ignorer la mise à jour</translation>
@@ -143,7 +144,7 @@
 <translation id="8261506727792406068">Supprimer</translation>
 <translation id="8331671104904436324">Ouvrir dans un nouvel onglet en arrière-plan</translation>
 <translation id="8373293945112511707">Paysage 1</translation>
-<translation id="8388552048012645975">Téléchargement dela mise à jour…</translation>
+<translation id="8388552048012645975">Téléchargement de la mise à jour…</translation>
 <translation id="8427094907586191051">Paysage 17</translation>
 <translation id="8439034818057146672">Une nouvelle version de Vivaldi est prête à être installée.</translation>
 <translation id="8446668873108041390">L’exécution de JavaScript via AppleScript est désactivée. Dans Paramètres &gt; Confidentialité &gt; Événements Apple, il y a un paramètre pour autoriser JavaScript à partir des événements Apple.</translation>

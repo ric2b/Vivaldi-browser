@@ -380,7 +380,7 @@ TEST_F(RuntimeDeps, CreateBundle) {
 
   // The rest of the ordering is undefined.
 
-  // The framework bundle's internal dependencies should not be incldued.
+  // The framework bundle's internal dependencies should not be included.
   EXPECT_TRUE(
       base::ContainsValue(result, MakePair("Bundle.framework/", &bundle)))
       << GetVectorDescription(result);

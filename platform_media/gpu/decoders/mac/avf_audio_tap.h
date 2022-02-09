@@ -33,28 +33,18 @@ namespace media {
 class AVFAudioTap {
  public:
   using FormatKnownCB =
-      base::Callback<void(const AudioStreamBasicDescription& format)>;
+      base::OnceCallback<void(const AudioStreamBasicDescription& format)>;
   using SamplesReadyCB =
-      base::Callback<void(const scoped_refptr<DataBuffer>& buffer)>;
-
-  AVFAudioTap(AVAssetTrack* audio_track,
-              const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-              const FormatKnownCB& format_known_cb,
-              const SamplesReadyCB& samples_ready_cb);
-  ~AVFAudioTap();
+      base::RepeatingCallback<void(scoped_refptr<DataBuffer> buffer)>;
 
   // Returns an AVAudioMix with an audio processing tap attached to it.  Set
   // the AVAudioMix on an AVPlayerItem to receive decoded audio samples through
   // |samples_ready_cb_|.  Returns nil on error to initialize the AVAudioMix.
-  base::scoped_nsobject<AVAudioMix> GetAudioMix();
-
- private:
-  AVAssetTrack* audio_track_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  FormatKnownCB format_known_cb_;
-  SamplesReadyCB samples_ready_cb_;
-
-  DISALLOW_COPY_AND_ASSIGN(AVFAudioTap);
+  static base::scoped_nsobject<AVAudioMix> GetAudioMix(
+      AVAssetTrack* audio_track,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      FormatKnownCB format_known_cb,
+      SamplesReadyCB samples_ready_cb);
 };
 
 }  // namespace media

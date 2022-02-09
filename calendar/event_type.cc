@@ -18,7 +18,7 @@ namespace calendar {
 
 EventRow::EventRow() {
   sequence = 0;
-  description = base::ASCIIToUTF16("");
+  description = u"";
   all_day = false;
   trash = false;
   is_recurring = false;
@@ -141,7 +141,7 @@ DeleteEventResult::DeleteEventResult() {}
 UpdateEventTypeResult::UpdateEventTypeResult() {}
 
 EventType::EventType()
-    : name(base::ASCIIToUTF16("")), color(""), iconindex(0), updateFields(0) {}
+    : name(u""), color(""), iconindex(0), updateFields(0) {}
 
 EventType::EventType(const EventType& event_type)
     : event_type_id(event_type.event_type_id),

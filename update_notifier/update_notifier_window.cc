@@ -19,6 +19,7 @@
 #include "base/win/current_module.h"
 
 #include "installer/win/vivaldi_install_l10n.h"
+#include "update_notifier/thirdparty/winsparkle/src/config.h"
 #include "update_notifier/update_notifier_manager.h"
 #include "update_notifier/update_notifier_resources.h"
 #include "vivaldi/update_notifier/update_notifier_strings.h"
@@ -147,9 +148,9 @@ void UpdateNotifierWindow::ShowNotification(const std::wstring& version) {
       notify_icon.szInfo, base::size(notify_icon.szInfo),
       GetLocalizedStringF(IDS_UPDATE_NOTIFICATION_TEXT_BASE, version));
   notify_icon.uTimeout = 30000;
-  int message_id = UpdateNotifierManager::IsSilentDownload()
-                       ? IDS_UPDATE_DOWNLOAD_NOTIFICATION_TITLE_BASE
-                       : IDS_UPDATE_NOTIFICATION_TITLE_BASE;
+  int message_id = WithDownloadUI(g_mode)
+                       ? IDS_UPDATE_NOTIFICATION_TITLE_BASE
+                       : IDS_UPDATE_DOWNLOAD_NOTIFICATION_TITLE_BASE;
   SetNotificationString(notify_icon.szInfoTitle,
                         base::size(notify_icon.szInfoTitle),
                         GetLocalizedString(message_id));

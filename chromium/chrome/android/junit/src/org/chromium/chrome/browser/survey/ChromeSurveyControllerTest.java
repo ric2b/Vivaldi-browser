@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -23,6 +24,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.metrics.test.ShadowRecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.survey.ChromeSurveyController.FilteringResult;
@@ -61,6 +63,11 @@ public class ChromeSurveyControllerTest {
         mTestController.setTabModelSelector(mSelector);
         mSharedPreferences = SharedPreferencesManager.getInstance();
         Assert.assertNull("Tab should be null", mTestController.getLastTabInfobarShown());
+    }
+
+    @After
+    public void after() {
+        FirstRunStatus.setFirstRunTriggered(false);
     }
 
     @Test
@@ -183,6 +190,15 @@ public class ChromeSurveyControllerTest {
     }
 
     @Test
+    public void testEligibilityFirstRun() {
+        FirstRunStatus.setFirstRunTriggered(true);
+        mRiggedController = new RiggedSurveyController(0, 1, 10);
+        Assert.assertFalse("Random selection should be false",
+                mRiggedController.isRandomlySelectedForSurvey());
+        verifyFilteringResultRecorded(FilteringResult.FIRST_TIME_USER, 1);
+    }
+
+    @Test
     public void testEligibilityRolledYesterday() {
         mRiggedController = new RiggedSurveyController(0, 5, 10);
         mSharedPreferences.writeInt(ChromePreferenceKeys.SURVEY_DATE_LAST_ROLLED, 4);
@@ -249,7 +265,7 @@ public class ChromeSurveyControllerTest {
         private int mMaxNumber;
 
         RiggedSurveyController(int randomNumberToReturn, int dayOfYear, int maxNumber) {
-            super(TEST_SURVEY_TRIGGER_ID);
+            super(TEST_SURVEY_TRIGGER_ID, null);
             mRandomNumberToReturn = randomNumberToReturn;
             mDayOfYear = dayOfYear;
             mMaxNumber = maxNumber;
@@ -271,11 +287,11 @@ public class ChromeSurveyControllerTest {
         }
     }
 
-    class TestChromeSurveyController extends ChromeSurveyController {
+    static class TestChromeSurveyController extends ChromeSurveyController {
         private Tab mTab;
 
         public TestChromeSurveyController(String triggerId) {
-            super(triggerId);
+            super(triggerId, null);
         }
 
         @Override

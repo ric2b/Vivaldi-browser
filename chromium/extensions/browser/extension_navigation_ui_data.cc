@@ -11,6 +11,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 
 namespace extensions {

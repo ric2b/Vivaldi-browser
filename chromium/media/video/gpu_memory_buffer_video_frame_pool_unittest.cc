@@ -15,6 +15,7 @@
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
 #include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/gfx/buffer_format_util.h"
 
 using ::testing::_;
 using ::testing::AtLeast;
@@ -612,13 +613,13 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, PreservesOrder) {
   std::vector<scoped_refptr<VideoFrame>> frame_outputs;
 
   scoped_refptr<VideoFrame> software_frame_1 = CreateTestYUVVideoFrame(10);
-  scoped_refptr<VideoFrame> frame_1 = nullptr;
+  scoped_refptr<VideoFrame> frame_1;
   gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
       software_frame_1,
       base::BindOnce(MaybeCreateHardwareFrameCallback, &frame_1));
 
   scoped_refptr<VideoFrame> software_frame_2 = CreateTestYUVVideoFrame(10);
-  scoped_refptr<VideoFrame> frame_2 = nullptr;
+  scoped_refptr<VideoFrame> frame_2;
   base::TimeTicks time_2;
   gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
       software_frame_2,
@@ -626,7 +627,7 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, PreservesOrder) {
                      &time_2));
 
   scoped_refptr<VideoFrame> software_frame_3 = VideoFrame::CreateEOSFrame();
-  scoped_refptr<VideoFrame> frame_3 = nullptr;
+  scoped_refptr<VideoFrame> frame_3;
   base::TimeTicks time_3;
   gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
       software_frame_3,

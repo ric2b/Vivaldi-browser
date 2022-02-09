@@ -69,7 +69,6 @@
 <translation id="215753907730220065">退出全屏模式</translation>
 <translation id="2177950615300672361">隐身标签页：<ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client 模块：<ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">隐藏按钮</translation>
 <translation id="2218515861914035131">粘贴为纯文本</translation>
 <translation id="2249605167705922988">例如：1-5、8、11-13</translation>
 <translation id="225240747099314620">允许受保护内容的标识符（可能需要重启）</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">预渲染：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">麦克风</translation>
 <translation id="3241680850019875542">选择要打包的扩展程序的根目录。要更新某个扩展程序，还需选择要再次使用的私有密钥文件。</translation>
-<translation id="3266179261140759675">禁止已关闭的网站收发数据</translation>
 <translation id="3280237271814976245">另存为(&amp;A)...</translation>
 <translation id="3285322247471302225">新建标签(&amp;T)</translation>
 <translation id="3288047731229977326">以开发者模式运行的扩展程序可能会损害您的计算机。如果您不是开发者，那么，为安全起见，应停用以开发者模式运行的扩展程序。</translation>
@@ -160,7 +158,6 @@
 <translation id="354068948465830244">可读取和更改网站数据</translation>
 <translation id="3560034655160545939">拼写检查(&amp;S)</translation>
 <translation id="3574917942258583917">确认退出无痕模式？</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;希望与您拥有的以下群组共享打印机&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;：&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;。如果您接受，该群组的所有成员都可以将内容发送到该打印机进行打印。</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3627588569887975815">在隐身窗口中打开链接(&amp;G)</translation>
 <translation id="3627879631695760395">安装“<ph name="APP" />”…</translation>
@@ -194,7 +191,6 @@
 <translation id="4087089424473531098">已创建扩展程序：
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">代表群组接受</translation>
 <translation id="4096508467498758490">请停用以开发者模式运行的扩展程序</translation>
 <translation id="4100839878934973028">您计算机上的其他程序添加了一个应用，该应用可能会改变 Vivaldi 的工作方式。</translation>
 <translation id="4109898769411476438">导入之前关闭浏览器</translation>
@@ -230,7 +226,6 @@
 <translation id="488785315393301722">显示细节</translation>
 <translation id="4907306957610201395">权限类别</translation>
 <translation id="4912643508233590958">闲置状态唤醒</translation>
-<translation id="4918086044614829423">接受</translation>
 <translation id="4927753642311223124">一切皆空，继续前行。</translation>
 <translation id="4930714375720679147">开启</translation>
 <translation id="4988526792673242964">页码</translation>
@@ -260,7 +255,7 @@
 <translation id="5317780077021120954">保存</translation>
 <translation id="5334142896108694079">脚本缓存</translation>
 <translation id="5355926466126177564">“<ph name="EXTENSION_NAME" />”扩展程序更改了您通过多功能框进行搜索时系统显示的页面。</translation>
-<translation id="5360150013186312835">在工具栏中显示</translation>
+<translation id="5360150013186312835">显示在工具栏上</translation>
 <translation id="5362741141255528695">选择私有密钥文件。</translation>
 <translation id="536638840841140142">无</translation>
 <translation id="5370819323174483825">重新加载(&amp;R)</translation>
@@ -306,7 +301,6 @@
 <translation id="6011449291337289699">清除网站数据</translation>
 <translation id="6042308850641462728">更多</translation>
 <translation id="6059925163896151826">USB 设备</translation>
-<translation id="6082651258230788217">显示于工具栏</translation>
 <translation id="6086846494333236931">需由管理员安装</translation>
 <translation id="6101226222197207147">已添加新应用（<ph name="EXTENSION_NAME" />）</translation>
 <translation id="6122081475643980456">您的互联网连接受到控制</translation>
@@ -333,7 +327,6 @@
 <translation id="6406303162637086258">模拟浏览器重启</translation>
 <translation id="6445450263907939268">如果您不想保留这些更改，可以还原之前的设置。</translation>
 <translation id="6447842834002726250">Cookie</translation>
-<translation id="6452181791372256707">拒绝</translation>
 <translation id="6498249116389603658">所选全部语言(&amp;A)</translation>
 <translation id="6503077044568424649">常去网站</translation>
 <translation id="6508261954199872201">应用：<ph name="APP_NAME" /></translation>
@@ -403,7 +396,6 @@
 <translation id="7857949311770343000">这是您想要的新标签页吗？</translation>
 <translation id="786073089922909430">服务：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">近期使用过的目标打印机</translation>
-<translation id="7898627924844766532">保留在工具栏</translation>
 <translation id="7903925330883316394">实用程序：<ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">当前离线</translation>
 <translation id="7947962633355574091">复制视频地址(&amp;O)</translation>
@@ -452,7 +444,6 @@
 <translation id="8725066075913043281">重试</translation>
 <translation id="8757090071857742562">无法投射桌面，请查看您是否已确认开始共享屏幕的提示。</translation>
 <translation id="8774934320277480003">上边距</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;希望与您共享打印机&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;。</translation>
 <translation id="8798099450830957504">默认</translation>
 <translation id="8800004011501252845">显示目标打印机</translation>
 <translation id="8808478386290700967">Vivaldi 网上应用店</translation>

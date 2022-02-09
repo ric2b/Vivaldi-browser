@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Надіслати посилання по пошті</translation>
 <translation id="1454726940098520109">Не показувати це підтвердження</translation>
 <translation id="1462666970065907900">Ви дійсно бажаєте закрити це вікно?</translation>
+<translation id="1480046233931937785">Подяка</translation>
 <translation id="1526344461589023948">Під час збереження завантажених файлів оновлення сталася помилка. Будь ласка, перевірте наявність вільного місця на диску та спробуйте ще раз.</translation>
 <translation id="1657174850639146440">Монстр 9</translation>
 <translation id="1676595396635191120">Нове приватне вікно</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Відкрити у новій вкладці</translation>
 <translation id="3027988479108856431">На жаль, налаштування Yandex браузера недоступні при працюючому браузері. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані і закрийте всі вікна Yandex браузера. Потім натисніть "Продовжити".</translation>
 <translation id="3084011186245865060">Краєвид 6</translation>
+<translation id="3093931836425623631">Vivaldi створено на базі відкритого проєкту Chromium та іншого ПЗ з відкритим вихідним кодом.</translation>
 <translation id="3127383884976966729">Тварина 7</translation>
 <translation id="3156398087075132709">Нова закладка</translation>
 <translation id="3255747772218936245">Встановити оновлення</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Краєвид 7</translation>
 <translation id="7111492742514999492">Краєвид 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi створено за використання проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> з відкритим кодом та іншого <ph name="BEGIN_LINK_OSS" />програмного забезпечення з відкритим кодом<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Сталася помилка при запуску інсталятора. Перевірте наявність вільного місця та пам'яті та спробуйте ще раз.</translation>
 <translation id="7658239707568436148">Скасувати</translation>
 <translation id="7715497554424665066">Ігнорувати оновлення</translation>

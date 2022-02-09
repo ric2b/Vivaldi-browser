@@ -68,7 +68,7 @@ PluginPrefs::PolicyStatus PluginPrefs::PolicyStatusForPlugin(
   if (IsPDFViewerPlugin(name) && always_open_pdf_externally_)
     return POLICY_DISABLED;
 
-  if (name == base::ASCIIToUTF16("Widevine Content Decryption Module") &&
+  if (name == u"Widevine Content Decryption Module" &&
       !enable_widevine_)
     return POLICY_DISABLED;
 
@@ -121,7 +121,7 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
     ListPrefUpdate update(prefs_, prefs::kPluginsPluginsList);
     base::ListValue* saved_plugins_list = update.Get();
     if (saved_plugins_list && !saved_plugins_list->empty()) {
-      for (auto& plugin_value : *saved_plugins_list) {
+      for (auto& plugin_value : saved_plugins_list->GetList()) {
         base::DictionaryValue* plugin;
         if (!plugin_value.GetAsDictionary(&plugin)) {
           LOG(WARNING) << "Invalid entry in " << prefs::kPluginsPluginsList;
@@ -189,7 +189,7 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
                                      base::Unretained(this)));
 
   registrar_.Add(vivaldiprefs::kPluginsWidevineEnabled,
-                 base::Bind(&PluginPrefs::UpdateWidevinePolicy,
+                 base::BindRepeating(&PluginPrefs::UpdateWidevinePolicy,
                  base::Unretained(this)));
 
 }
@@ -215,6 +215,6 @@ void PluginPrefs::UpdateWidevinePolicy(const std::string& pref_name) {
   content::PluginService::GetInstance()->PurgePluginListCache(profile_, false);
   if (profile_->HasOffTheRecordProfile(Profile::OTRProfileID::PrimaryID())) {
     content::PluginService::GetInstance()->PurgePluginListCache(
-        profile_->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID()), false);
+        profile_->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID(), false), false);
     }
 }

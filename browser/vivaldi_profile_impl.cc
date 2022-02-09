@@ -5,6 +5,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_version_info.h"
 #include "base/command_line.h"
+#include "base/strings/string_split.h"
 #include "base/version.h"
 #include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"

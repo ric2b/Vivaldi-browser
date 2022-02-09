@@ -13,14 +13,15 @@
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
-#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
+#include "chrome/browser/subresource_filter/chrome_content_subresource_filter_throttle_manager_factory.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
@@ -100,13 +101,17 @@ void AdverseAdFilterTestHarness::SetUp() {
       test_ruleset_publisher.SetRuleset(test_ruleset_pair.unindexed));
 
   // Set up the tab helpers.
-  InfoBarService::CreateForWebContents(web_contents());
+  infobars::ContentInfoBarManager::CreateForWebContents(web_contents());
   content_settings::PageSpecificContentSettings::CreateForWebContents(
       web_contents(),
       std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
           web_contents()));
-  ChromeSubresourceFilterClient::CreateThrottleManagerWithClientForWebContents(
-      web_contents());
+
+  VivaldiSubresourceFilterAdblockingThrottleManager::
+    CreateSubresourceFilterThrottleManagerForWebContents(
+  web_contents());
+
+  CreateSubresourceFilterThrottleManagerForWebContents(web_contents());
 
   base::RunLoop().RunUntilIdle();
 }

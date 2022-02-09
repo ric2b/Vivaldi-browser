@@ -18,6 +18,7 @@ import androidx.core.view.ViewCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.StrictModeContext;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -30,6 +31,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.SuggestionListViewBinder.
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewBinder;
+import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.carousel.BaseCarouselSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionView;
@@ -37,6 +39,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestion
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderViewBinder;
+import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.ExploreIconProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.MostVisitedTilesProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionViewBinder;
@@ -44,6 +47,7 @@ import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.query_tiles.QueryTile;
@@ -67,10 +71,12 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
  * Coordinator that handles the interactions with the autocomplete system.
  */
 public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextChangeListener {
-    private final ViewGroup mParent;
-    private OmniboxQueryTileCoordinator mQueryTileCoordinator;
-    private AutocompleteMediator mMediator;
-    private OmniboxSuggestionsDropdown mDropdown;
+    private final @NonNull ViewGroup mParent;
+    private final @NonNull ObservableSupplier<Profile> mProfileSupplier;
+    private final @NonNull Callback<Profile> mProfileChangeCallback;
+    private final @NonNull OmniboxQueryTileCoordinator mQueryTileCoordinator;
+    private final @NonNull AutocompleteMediator mMediator;
+    private @Nullable OmniboxSuggestionsDropdown mDropdown;
 
     // Vivaldi
     private ViewGroup mSearchEngineSuggestionView;
@@ -83,7 +89,12 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier,
             @NonNull Supplier<Tab> activityTabSupplier,
             @Nullable Supplier<ShareDelegate> shareDelegateSupplier,
-            @NonNull LocationBarDataProvider locationBarDataProvider) {
+            @NonNull LocationBarDataProvider locationBarDataProvider,
+            @NonNull ObservableSupplier<Profile> profileObservableSupplier,
+            @NonNull Callback<Tab> bringToForegroundCallback,
+            @NonNull Supplier<TabWindowManager> tabWindowManagerSupplier,
+            @NonNull BookmarkState bookmarkState,
+            @NonNull ExploreIconProvider exploreIconProvider) {
         mParent = parent;
         Context context = parent.getContext();
 
@@ -96,9 +107,10 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
 
         mQueryTileCoordinator = new OmniboxQueryTileCoordinator(context, this::onTileSelected);
         mMediator = new AutocompleteMediator(context, delegate, urlBarEditingTextProvider,
-                new AutocompleteController(), listModel, new Handler(), lifecycleDispatcher,
-                modalDialogManagerSupplier, activityTabSupplier, shareDelegateSupplier,
-                locationBarDataProvider);
+                listModel, new Handler(), lifecycleDispatcher, modalDialogManagerSupplier,
+                activityTabSupplier, shareDelegateSupplier, locationBarDataProvider,
+                bringToForegroundCallback, tabWindowManagerSupplier, bookmarkState,
+                exploreIconProvider);
         mMediator.initDefaultProcessors(mQueryTileCoordinator::setTiles);
 
         listModel.set(SuggestionListProperties.OBSERVER, mMediator);
@@ -109,6 +121,10 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         LazyConstructionPropertyMcp.create(listModel, SuggestionListProperties.VISIBLE,
                 viewProvider, SuggestionListViewBinder::bind);
 
+        mProfileSupplier = profileObservableSupplier;
+        mProfileChangeCallback = this::setAutocompleteProfile;
+        mProfileSupplier.addObserver(mProfileChangeCallback);
+
         // https://crbug.com/966227 Set initial layout direction ahead of inflating the suggestions.
         updateSuggestionListLayoutDirection();
     }
@@ -117,10 +133,9 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
      * Clean up resources used by this class.
      */
     public void destroy() {
+        mProfileSupplier.removeObserver(mProfileChangeCallback);
         mQueryTileCoordinator.destroy();
-        mQueryTileCoordinator = null;
         mMediator.destroy();
-        mMediator = null;
     }
 
     private ViewProvider<SuggestionListViewHolder> createViewProvider(
@@ -255,6 +270,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
      * Updates the profile used for generating autocomplete suggestions.
      * @param profile The profile to be used.
      */
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public void setAutocompleteProfile(Profile profile) {
         mMediator.setAutocompleteProfile(profile);
         mQueryTileCoordinator.setProfile(profile);
@@ -325,13 +341,12 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     }
 
     /**
-     * Sets to show cached zero suggest results. This will start both caching zero suggest results
-     * in shared preferences and also attempt to show them when appropriate without needing native
-     * initialization.
-     * @param showCachedZeroSuggestResults Whether cached zero suggest should be shown.
+     * Show cached zero suggest results.
+     * Enables Autocomplete subsystem to offer most recently presented suggestions in the event
+     * where Native counterpart is not yet initialized.
      */
-    public void setShowCachedZeroSuggestResults(boolean showCachedZeroSuggestResults) {
-        mMediator.setShowCachedZeroSuggestResults(showCachedZeroSuggestResults);
+    public void startCachedZeroSuggest() {
+        mMediator.startCachedZeroSuggest();
     }
 
     /**
@@ -408,12 +423,6 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public OmniboxSuggestionsDropdown getSuggestionsDropdownForTest() {
         return mDropdown;
-    }
-
-    /** @param controller The instance of AutocompleteController to be used. */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    public void setAutocompleteControllerForTest(AutocompleteController controller) {
-        mMediator.setAutocompleteControllerForTest(controller);
     }
 
     /** @return The current receiving OnSuggestionsReceived events. */

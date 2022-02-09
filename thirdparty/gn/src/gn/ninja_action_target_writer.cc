@@ -29,14 +29,20 @@ NinjaActionTargetWriter::~NinjaActionTargetWriter() = default;
 void NinjaActionTargetWriter::Run() {
   std::string custom_rule_name = WriteRuleDefinition();
 
-  // Collect our deps to pass as "extra hard dependencies" for input deps. This
-  // will force all of the action's dependencies to be completed before the
-  // action is run. Usually, if an action has a dependency, it will be
+  // Collect our deps to pass as additional "hard dependencies" for input deps.
+  // This will force all of the action's dependencies to be completed before
+  // the action is run. Usually, if an action has a dependency, it will be
   // operating on the result of that previous step, so we need to be sure to
   // serialize these.
-  std::vector<const Target*> extra_hard_deps;
-  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED))
-    extra_hard_deps.push_back(pair.ptr);
+  std::vector<const Target*> additional_hard_deps;
+  std::vector<OutputFile> data_outs;
+  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED)) {
+    if (pair.ptr->IsDataOnly()) {
+      data_outs.push_back(pair.ptr->dependency_output_file());
+    } else {
+      additional_hard_deps.push_back(pair.ptr);
+    }
+  }
 
   // For ACTIONs, the input deps appear only once in the generated ninja
   // file, so WriteInputDepsStampAndGetDep() won't create a stamp file
@@ -44,7 +50,7 @@ void NinjaActionTargetWriter::Run() {
   size_t num_stamp_uses =
       target_->output_type() == Target::ACTION ? 1u : target_->sources().size();
   std::vector<OutputFile> input_deps =
-      WriteInputDepsStampAndGetDep(extra_hard_deps, num_stamp_uses);
+      WriteInputDepsStampAndGetDep(additional_hard_deps, num_stamp_uses);
   out_ << std::endl;
 
   // Collects all output files for writing below.
@@ -88,7 +94,6 @@ void NinjaActionTargetWriter::Run() {
   // done before we run the action.
   // TODO(thakis): If the action has just a single output, make things depend
   // on that output directly without writing a stamp file.
-  std::vector<OutputFile> data_outs;
   for (const auto& dep : target_->data_deps())
     data_outs.push_back(dep.ptr->dependency_output_file());
   WriteStampForTarget(output_files, data_outs);
@@ -134,7 +139,10 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
   }
 
   out_ << "  command = ";
-  path_output_.WriteFile(out_, settings_->build_settings()->python_path());
+  PathOutput output(path_output_.current_dir(),
+                    settings_->build_settings()->root_path_utf8(),
+                    ESCAPE_NINJA_COMMAND);
+  output.WriteFile(out_, settings_->build_settings()->python_path());
   out_ << " ";
   path_output_.WriteFile(out_, target_->action_values().script());
   for (const auto& arg : args.list()) {

@@ -123,7 +123,7 @@ struct VivaldiMetaNames {
 
   // values stored in the node
   const std::string true_value = "true";
-  const std::u16string tripple_dash = base::UTF8ToUTF16("---");
+  const std::u16string tripple_dash = u"---";
   const std::string separator = "separator";
 };
 

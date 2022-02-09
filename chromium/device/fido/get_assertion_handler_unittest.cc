@@ -7,7 +7,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -48,7 +48,7 @@ constexpr uint8_t kBogusCredentialId[] = {0x01, 0x02, 0x03, 0x04};
 
 using TestGetAssertionRequestCallback = test::StatusAndValuesCallbackReceiver<
     GetAssertionStatus,
-    base::Optional<std::vector<AuthenticatorGetAssertionResponse>>,
+    absl::optional<std::vector<AuthenticatorGetAssertionResponse>>,
     const FidoAuthenticator*>;
 
 }  // namespace
@@ -202,7 +202,7 @@ TEST_F(FidoGetAssertionHandlerTest, TransportAvailabilityInfo) {
       CreateGetAssertionHandlerWithRequest(CtapGetAssertionRequest(
           test_data::kRelyingPartyId, test_data::kClientDataJson));
 
-  EXPECT_EQ(FidoRequestHandlerBase::RequestType::kGetAssertion,
+  EXPECT_EQ(FidoRequestType::kGetAssertion,
             request_handler->transport_availability_info().request_type);
 }
 

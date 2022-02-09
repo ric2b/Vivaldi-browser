@@ -16,6 +16,7 @@
 #include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/browser/upgrade_detector/build_state_observer.h"
 #include "chrome/browser/upgrade_detector/installed_version_poller.h"
+#include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/tools/vivaldi_tools.h"
 
 #include "app/vivaldi_constants.h"
@@ -85,7 +86,7 @@ class AutoUpdateObserver : public BuildStateObserver {
 
  private:
   void OnUpdate(const BuildState* build_state) override {
-    base::Optional<base::Version> version = build_state->installed_version();
+    absl::optional<base::Version> version = build_state->installed_version();
     extensions::AutoUpdateAPI::SendWillInstallUpdateOnQuit(
         version.value_or(base::Version()));
   }
@@ -212,6 +213,43 @@ AutoUpdateGetAutoInstallUpdatesFunction::Run() {
 ExtensionFunction::ResponseAction
 AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   return RespondNow(Error("Not implemented"));
+}
+
+ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
+  auto on_pending_update_result =
+      [](scoped_refptr<AutoUpdateGetUpdateStatusFunction> f,
+         absl::optional<base::Version> version) {
+        absl::optional<AutoUpdateStatus> status;
+        std::string version_string;
+        if (!version) {
+          status = AutoUpdateStatus::kNoUpdate;
+        } else if (!version->IsValid()) {
+          status = absl::nullopt;
+        } else {
+          status = AutoUpdateStatus::kWillInstallUpdateOnQuit;
+          version_string = version->GetString();
+        }
+        f->SendResult(status, std::move(version_string), std::string());
+      };
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+       base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&::vivaldi::GetPendingUpdateVersion, base::FilePath()),
+      base::BindOnce(on_pending_update_result,
+                     scoped_refptr<AutoUpdateGetUpdateStatusFunction>(this)));
+
+  return RespondLater();
+}
+
+bool AutoUpdateHasAutoUpdatesFunction::HasAutoUpdates() {
+  // Silent auto updates are not supported on windows system installs unless a
+  // very experimental --vsu flag is passed to the browser.
+  return ::vivaldi::GetBrowserInstallType() !=
+             ::vivaldi::InstallType::kForAllUsers ||
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kVivaldiSilentUpdate);
 }
 
 }  // namespace extensions

@@ -41,7 +41,7 @@ class InheritedLibraries {
   // Appends all items from the "other" list to the current one. The is_public
   // parameter indicates how the current target depends on the items in
   // "other". If is_public is true, the existing public flags of the appended
-  // items will be preserved (propogating the public-ness up the dependency
+  // items will be preserved (propagating the public-ness up the dependency
   // chain). If is_public is false, all deps will be added as private since
   // the current target isn't forwarding them.
   void AppendInherited(const InheritedLibraries& other, bool is_public);

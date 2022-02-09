@@ -19,6 +19,8 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_client.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
 
 // static
@@ -94,6 +96,17 @@ void PictureInPictureWindowControllerImpl::Show() {
   GetWebContentsImpl()->SetHasPictureInPictureVideo(true);
 }
 
+void PictureInPictureWindowControllerImpl::FocusInitiator() {
+  GetWebContentsImpl()->Activate();
+
+  if (vivaldi_delegate_) {
+    // In Vivaldi, WebContentsImpl's delegate is the guest view, which
+    // calls the embedder for activation, which is our Web UI. This won't
+    // work so we need to explicitly activate the tab here.
+    vivaldi_delegate_->ActivateTab(web_contents());
+  }
+}
+
 void PictureInPictureWindowControllerImpl::Close(bool should_pause_video) {
   if (!window_ || !window_->IsVisible())
     return;
@@ -104,12 +117,13 @@ void PictureInPictureWindowControllerImpl::Close(bool should_pause_video) {
 
 void PictureInPictureWindowControllerImpl::CloseAndFocusInitiator() {
   Close(false /* should_pause_video */);
-  GetWebContentsImpl()->Activate();
+  FocusInitiator();
 }
 
-void PictureInPictureWindowControllerImpl::OnWindowDestroyed() {
+void PictureInPictureWindowControllerImpl::OnWindowDestroyed(
+    bool should_pause_video) {
   window_ = nullptr;
-  CloseInternal(true /* should_pause_video */);
+  CloseInternal(should_pause_video);
 }
 
 void PictureInPictureWindowControllerImpl::EmbedSurface(
@@ -425,6 +439,11 @@ void PictureInPictureWindowControllerImpl::UpdatePlayPauseButtonVisibility() {
   window_->SetPlayPauseButtonVisibility((media_session_action_pause_handled_ &&
                                          media_session_action_play_handled_) ||
                                         always_show_play_pause_button_);
+}
+
+void PictureInPictureWindowControllerImpl::SetVivaldiDelegate(
+    base::WeakPtr<vivaldi_content::TabActivationDelegate> delegate) {
+  vivaldi_delegate_ = std::move(delegate);
 }
 
 WebContentsImpl* PictureInPictureWindowControllerImpl::GetWebContentsImpl() {

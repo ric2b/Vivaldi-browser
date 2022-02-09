@@ -15,11 +15,12 @@ class MockMessageDispatcherBridge : public MessageDispatcherBridge {
   MockMessageDispatcherBridge();
   ~MockMessageDispatcherBridge() override;
 
-  MOCK_METHOD(void,
+  MOCK_METHOD(bool,
               EnqueueMessage,
               (MessageWrapper * message,
                content::WebContents* web_contents,
-               MessageScopeType scopeType),
+               MessageScopeType scope_type,
+               MessagePriority priority),
               (override));
   MOCK_METHOD(void,
               DismissMessage,

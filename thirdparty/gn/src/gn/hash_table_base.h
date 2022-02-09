@@ -73,7 +73,7 @@
 //
 // Lookup, insertion and deletion are performed in ways that
 // are *very* different from standard containers, and the reason
-// is, unsuprisingly, performance.
+// is, unsurprisingly, performance.
 //
 // Use NodeLookup() to look for an existing item in the hash table.
 // This takes the item's hash value, and a templated callable to
@@ -137,7 +137,7 @@
 //      }
 //
 //      // Try to add |key| to the set. Return true if the insertion
-//      // was succesful, or false if the item was already in the set.
+//      // was successful, or false if the item was already in the set.
 //      bool add(const Foo& key) {
 //        size_t hash = MakeHash(key);
 //        Node* node = NodeLookup(
@@ -433,7 +433,7 @@ class HashTableBase {
   }
 
   // Call this method after updating the content of the |node| pointer
-  // returned by an unsucessful NodeLookup(). Return true to indicate that
+  // returned by an unsuccessful NodeLookup(). Return true to indicate that
   // the table size changed, and that existing iterators were invalidated.
   bool UpdateAfterInsert() {
     count_ += 1;
@@ -445,7 +445,7 @@ class HashTableBase {
   }
 
   // Call this method after updating the content of the |node| value
-  // returned a by succesful NodeLookup, to the tombstone value, if any.
+  // returned a by successful NodeLookup, to the tombstone value, if any.
   // Return true to indicate a table size change, ie. that existing
   // iterators where invalidated.
   bool UpdateAfterRemoval() {

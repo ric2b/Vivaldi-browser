@@ -244,7 +244,7 @@ class RequestFilterManager : public KeyedService {
       content::RenderFrameHost* frame,
       int render_process_id,
       content::ContentBrowserClient::URLLoaderFactoryType type,
-      base::Optional<int64_t> navigation_id,
+      absl::optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -258,7 +258,7 @@ class RequestFilterManager : public KeyedService {
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const GURL& site_for_cookies,
-      const base::Optional<std::string>& user_agent,
+      const absl::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -274,7 +274,7 @@ class RequestFilterManager : public KeyedService {
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const GURL& site_for_cookies,
-      const base::Optional<std::string>& user_agent,
+      const absl::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>

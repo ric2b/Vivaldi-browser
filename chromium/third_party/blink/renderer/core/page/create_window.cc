@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
+#include "third_party/blink/renderer/core/html/conversion_measurement_parsing.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -65,8 +66,14 @@ static bool IsWindowFeaturesSeparator(UChar c) {
          c == ',' || c == '\f';
 }
 
-WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string) {
+WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
+                                              LocalDOMWindow* dom_window) {
   WebWindowFeatures window_features;
+
+  ImpressionFeatures impression_features;
+  bool conversion_measurement_enabled =
+      dom_window &&
+      RuntimeEnabledFeatures::ConversionMeasurementEnabled(dom_window);
 
   // This code follows the HTML spec, specifically
   // https://html.spec.whatwg.org/C/#concept-window-open-features-tokenize
@@ -151,7 +158,13 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string) {
     }
 
     if (!ui_features_were_disabled && key_string != "noopener" &&
-        key_string != "noreferrer") {
+        key_string != "noreferrer" &&
+        (!conversion_measurement_enabled ||
+         (key_string != "attributionsourceeventid" &&
+          key_string != "attributiondestination" &&
+          key_string != "attributionreportto" &&
+          key_string != "attributionexpiry" &&
+          key_string != "attributionsourcepriority"))) {
       ui_features_were_disabled = true;
       window_features.menu_bar_visible = false;
       window_features.status_bar_visible = false;
@@ -189,11 +202,28 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string) {
       window_features.background = true;
     } else if (key_string == "persistent") {
       window_features.persistent = true;
+    } else if (conversion_measurement_enabled) {
+      if (key_string == "attributionsourceeventid") {
+        impression_features.impression_data = value_string.ToString();
+      } else if (key_string == "attributiondestination") {
+        impression_features.conversion_destination = value_string.ToString();
+      } else if (key_string == "attributionreportto") {
+        impression_features.reporting_origin = value_string.ToString();
+      } else if (key_string == "attributionexpiry") {
+        impression_features.expiry = value_string.ToString();
+      } else if (key_string == "attributionsourcepriority") {
+        impression_features.priority = value_string.ToString();
+      }
     }
   }
 
   if (window_features.noreferrer)
     window_features.noopener = true;
+
+  if (conversion_measurement_enabled) {
+    window_features.impression =
+        GetImpressionFromWindowFeatures(dom_window, impression_features);
+  }
 
   return window_features;
 }
@@ -289,8 +319,7 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
       AllocateSessionStorageNamespaceId();
 
   Page* old_page = opener_frame.GetPage();
-  if (!features.noopener ||
-      base::FeatureList::IsEnabled(features::kCloneSessionStorageForNoOpener)) {
+  if (!features.noopener) {
     CoreInitializer::GetInstance().CloneSessionStorage(old_page,
                                                        new_namespace_id);
   }

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/lazy_instance.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
@@ -89,7 +90,11 @@ bool PrintViewManager::PrintForSystemDialogNow(
   DCHECK(!on_print_dialog_shown_callback_);
   on_print_dialog_shown_callback_ = std::move(dialog_shown_callback);
   is_switching_to_system_dialog_ = true;
+
+  auto weak_this = weak_factory_.GetWeakPtr();
   DisconnectFromCurrentPrintJob();
+  if (!weak_this)
+    return false;
 
   // Don't print / print preview crashed tabs.
   if (IsCrashed())
@@ -241,10 +246,8 @@ bool PrintViewManager::PrintPreview(
 }
 
 void PrintViewManager::DidShowPrintDialog() {
-  if (print_manager_host_receivers_.GetCurrentTargetFrame() !=
-      print_preview_rfh_) {
+  if (GetCurrentTargetFrame() != print_preview_rfh_)
     return;
-  }
 
   if (on_print_dialog_shown_callback_)
     std::move(on_print_dialog_shown_callback_).Run();
@@ -254,8 +257,7 @@ void PrintViewManager::SetupScriptedPrintPreview(
     SetupScriptedPrintPreviewCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto& map = g_scripted_print_preview_closure_map.Get();
-  content::RenderFrameHost* rfh =
-      print_manager_host_receivers_.GetCurrentTargetFrame();
+  content::RenderFrameHost* rfh = GetCurrentTargetFrame();
   content::RenderProcessHost* rph = rfh->GetProcess();
 
   if (base::Contains(map, rph)) {
@@ -303,8 +305,7 @@ void PrintViewManager::ShowScriptedPrintPreview(bool source_is_modifiable) {
     return;
 
   DCHECK(print_preview_rfh_);
-  if (print_manager_host_receivers_.GetCurrentTargetFrame() !=
-      print_preview_rfh_)
+  if (GetCurrentTargetFrame() != print_preview_rfh_)
     return;
 
   PrintPreviewDialogController* dialog_controller =
@@ -328,9 +329,7 @@ void PrintViewManager::ShowScriptedPrintPreview(bool source_is_modifiable) {
 
 void PrintViewManager::RequestPrintPreview(
     mojom::RequestPrintPreviewParamsPtr params) {
-  content::RenderFrameHost* render_frame_host =
-      print_manager_host_receivers_.GetCurrentTargetFrame();
-
+  content::RenderFrameHost* render_frame_host = GetCurrentTargetFrame();
   if (RejectPrintPreviewRequestIfRestricted(render_frame_host))
     return;
 

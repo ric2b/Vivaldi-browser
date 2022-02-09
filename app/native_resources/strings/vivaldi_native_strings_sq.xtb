@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Dërgoj lidhjen me imejl</translation>
 <translation id="1454726940098520109">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1462666970065907900">Vërtet do e mbyllni dritaren?</translation>
+<translation id="1480046233931937785">Mirënjohje</translation>
 <translation id="1526344461589023948">Problem me regjistrimin e përditësimit të shkarkuar. Lutemi të kontrolloni hapësirën e nevojshme në kompjuter dhe provojeni prapë.</translation>
 <translation id="1657174850639146440">Monstra 9</translation>
 <translation id="1676595396635191120">Dritare private të re</translation>
@@ -31,7 +32,7 @@
 <translation id="2486841023299517366">Kafsha 4</translation>
 <translation id="2612127540243995147">Gatim për instalim. Vivaldi do të mbyllet dhe hapet automatikisht.</translation>
 <translation id="2613387515621326337">Tregoj faqen e përditësimit</translation>
-<translation id="2647368062414805334">Fatkeqësisht, nuk mund të importohen parametrat e Edge kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Edge. Pastaj klikoni Vazhdoj.</translation>
+<translation id="2647368062414805334">Fatkeqësisht, parametrat e Edge nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Edge. Pastaj klikoni Vazhdoj.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Kafsha 3</translation>
 <translation id="2873951654529031587">Koshi</translation>
@@ -39,8 +40,9 @@
 <translation id="2923448633003185837">Ngjit dhe shfletoj</translation>
 <translation id="2977472760057091832">Hap lidhjen në dritare private</translation>
 <translation id="2989805286512600854">Hap në skedë të re</translation>
-<translation id="3027988479108856431">Fatkeqësisht, nuk mund të importohen parametrat e Yandex kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
+<translation id="3027988479108856431">Fatkeqësisht, parametrat e Yandex nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3084011186245865060">Peizazhi 6</translation>
+<translation id="3093931836425623631">Vivaldi u bë i mundur falë projektit Chromium dhe programeve kompjuterike që përdoren lirisht.</translation>
 <translation id="3127383884976966729">Kafsha 7</translation>
 <translation id="3156398087075132709">Faqe interesante të re</translation>
 <translation id="3255747772218936245">Instaloj përditësimin</translation>
@@ -63,7 +65,7 @@
 <translation id="3732157130969736834">Shtoj lidhjen te faqet interesante</translation>
 <translation id="3732388226447288666">Kafsha 2</translation>
 <translation id="3732439195215136813">Kafsha 5</translation>
-<translation id="3795800845758778870">Fatkeqësisht, nuk mund të importohen parametrat e Brave kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Brave. Pastaj klikoni Vazhdoj.</translation>
+<translation id="3795800845758778870">Fatkeqësisht, parametrat e Brave nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Brave. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3822431842304177896">Vijë ndarëse të re</translation>
 <translation id="3832132597516774400">Peizazhi 5</translation>
 <translation id="3914946330804881301">Të importuara nga Opera</translation>
@@ -106,7 +108,7 @@
 <translation id="5770433027661640693">Peizazhi 10</translation>
 <translation id="5857090052475505287">Dosje të re</translation>
 <translation id="588258955323874662">Zmadhoj ekranin</translation>
-<translation id="5916080360077521750">Fatkeqësisht, nuk mund të importohen parametrat e Chrome kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Chrome. Pastaj klikoni Vazhdoj.</translation>
+<translation id="5916080360077521750">Fatkeqësisht, parametrat e Chrome nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Chrome. Pastaj klikoni Vazhdoj.</translation>
 <translation id="6040143037577758943">Mbyll</translation>
 <translation id="6229528619562190452">Klikoni këtu që ta përditësoni Vivaldin.</translation>
 <translation id="6234173136417926046">Përdor imazhin në sfondin e faqes fillestare</translation>
@@ -121,13 +123,12 @@
 <translation id="6635049669875534328">Të rejat e programit:</translation>
 <translation id="6693585104974197539">Përzgjidhni dosjen e profilit të Edge për ta importuar</translation>
 <translation id="6726279523566323394">Përzgjidhni dosjen e profilit të Brave për ta importuar</translation>
-<translation id="6804831687363620480">Fatkeqësisht, nuk mund të importohen parametrat e Opera 15+ kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
+<translation id="6804831687363620480">Fatkeqësisht, parametrat e Opera 15+ nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
 <translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopjoj</translation>
 <translation id="7086554968911045110">Peizazhi 7</translation>
 <translation id="7111492742514999492">Peizazhi 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi mundësohet nga projekti <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dhe të tjera <ph name="BEGIN_LINK_OSS" />programe me kod kompjuterik të hapur<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">E pamundur të hapej instaluesi. Lutemi të kontrolloni memorien apo hapësirën e nevojshme në kompjuter dhe provojeni prapë.</translation>
 <translation id="7658239707568436148">Anuloj</translation>
 <translation id="7715497554424665066">&amp;Shmang përditësimin</translation>

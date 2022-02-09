@@ -14,7 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
@@ -55,7 +55,8 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
             @NonNull SearchEngineLogoUtils searchEngineLogoUtils) {
         super.initialize(autocompleteCoordinator, urlCoordinator, statusCoordinator,
                 locationBarDataProvider, searchEngineLogoUtils);
-        mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
+        mPendingSearchPromoDecision =
+                AppHooks.get().getLocaleManager().needToCheckForSearchEnginePromo();
         getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
                 mPendingSearchPromoDecision);
         findViewById(R.id.url_action_container).setVisibility(View.VISIBLE);
@@ -65,7 +66,8 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     public void onFinishNativeInitialization() {
         super.onFinishNativeInitialization();
 
-        mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
+        mPendingSearchPromoDecision =
+                AppHooks.get().getLocaleManager().needToCheckForSearchEnginePromo();
         getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
                 mPendingSearchPromoDecision);
     }
@@ -78,7 +80,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
         SearchWidgetProvider.updateCachedVoiceSearchAvailability(
                 voiceRecognitionHandler.isVoiceSearchEnabled());
 
-        assert !LocaleManager.getInstance().needToCheckForSearchEnginePromo();
+        assert !AppHooks.get().getLocaleManager().needToCheckForSearchEnginePromo();
         mPendingSearchPromoDecision = false;
         getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
                 mPendingSearchPromoDecision);
@@ -164,10 +166,9 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
             mUrlBar.post(() -> {
                 mUrlBar.requestFocus();
                 mUrlCoordinator.setKeyboardVisibility(true, false);
+                getAutocompleteCoordinator().startCachedZeroSuggest();
             });
             mUrlBarFocusRequested = false;
         }
-        // Use cached suggestions only if native is not yet ready.
-        getAutocompleteCoordinator().setShowCachedZeroSuggestResults(!mNativeInitialized);
     }
 }

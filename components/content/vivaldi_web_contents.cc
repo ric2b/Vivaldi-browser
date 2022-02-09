@@ -52,12 +52,11 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {
     OuterContentsFrameTreeNode()->RemoveObserver(this);
   }
   if (outer_web_contents_) {
-    int current_process_id =
-      outer_web_contents_->GetRenderViewHost()->GetProcess()->GetID();
-    auto* child_rfh = outer_web_contents_->FindFrameByFrameTreeNodeId(
-      outer_contents_frame_tree_node_id_, current_process_id);
-    if (child_rfh) {
-      child_rfh->frame_tree_node()->RemoveObserver(this);
+
+    auto* outernode = OuterContentsFrameTreeNode();
+
+    if (outernode) {
+      outernode->RemoveObserver(this);
 
       // TODO(igor@vivaldi.com): This method is called after the code in
       // ~WebContentsImpl() run and, since the declaration of the frame_tree_
@@ -65,9 +64,9 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {
       // destructor for FrameTree. So current_web_contents_->GetFrameTree()
       // returns a pointer to FrameTree after its destructor is run. Figure out
       // if this is safe to call here.
-      current_web_contents_->GetFrameTree()->RemoveFrame(
-          child_rfh->frame_tree_node());
+      current_web_contents_->GetFrameTree()->RemoveFrame(outernode);
     }
+
 
     // This is an unsupported case, but if the inner webcontents of the outer
     // contents has been destroyed, discarded, we won't get notified. Check if

@@ -19,7 +19,8 @@
         },
         "name": "context_lost_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -61,7 +62,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -103,7 +105,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -145,7 +148,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -191,7 +195,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -242,7 +247,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -293,7 +299,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -371,7 +378,8 @@
         },
         "name": "screenshot_sync_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -413,7 +421,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -456,7 +465,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -479,7 +489,7 @@
           ],
           "idempotent": false,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 6
+          "shards": 12
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
       }
@@ -537,7 +547,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -584,7 +595,8 @@
         },
         "name": "context_lost_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -618,7 +630,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -653,7 +666,8 @@
         },
         "name": "gl_renderer_screenshot_sync_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -687,7 +701,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -721,7 +736,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -759,7 +775,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -802,7 +819,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -845,7 +863,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -880,7 +899,8 @@
         },
         "name": "screenshot_sync_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -914,7 +934,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -949,7 +970,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1018,7 +1040,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -1065,7 +1088,8 @@
         },
         "name": "context_lost_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1099,7 +1123,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1134,7 +1159,8 @@
         },
         "name": "gl_renderer_screenshot_sync_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1168,7 +1194,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1202,7 +1229,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1240,7 +1268,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1283,7 +1312,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1326,7 +1356,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1361,7 +1392,8 @@
         },
         "name": "screenshot_sync_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1395,7 +1427,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1430,7 +1463,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1466,8 +1500,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1492,11 +1528,14 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -1516,8 +1555,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1538,8 +1579,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1565,7 +1608,8 @@
         },
         "name": "context_lost_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1573,8 +1617,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1598,7 +1644,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1606,8 +1653,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1631,7 +1680,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1639,8 +1689,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1664,7 +1716,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1672,8 +1725,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1701,7 +1756,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1709,8 +1765,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1743,7 +1801,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1751,8 +1810,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1785,7 +1846,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1793,8 +1855,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1819,7 +1883,8 @@
         },
         "name": "screenshot_sync_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1827,8 +1892,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1852,7 +1919,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1860,8 +1928,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1886,7 +1956,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1894,8 +1965,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -1921,8 +1994,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1936,7 +2011,7 @@
           "--enable-gpu",
           "--test-launcher-bot-mode",
           "--test-launcher-jobs=1",
-          "--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*"
+          "--gtest_filter=TabCaptureApiPixelTest.EndToEnd*"
         ],
         "merge": {
           "args": [],
@@ -1948,8 +2023,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1973,11 +2050,14 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -1997,8 +2077,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2019,8 +2101,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2046,7 +2130,8 @@
         },
         "name": "context_lost_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2054,8 +2139,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2079,7 +2166,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2087,8 +2175,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2112,7 +2202,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2120,8 +2211,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2145,7 +2238,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2153,8 +2247,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2182,7 +2278,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2190,8 +2287,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2224,7 +2323,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2232,8 +2332,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2266,7 +2368,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2274,8 +2377,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2299,8 +2404,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2324,7 +2431,8 @@
         },
         "name": "screenshot_sync_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2332,8 +2440,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2357,7 +2467,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2365,8 +2476,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2391,7 +2504,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2399,8 +2513,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -2426,6 +2542,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2454,13 +2572,16 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -2480,6 +2601,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2504,6 +2627,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2533,7 +2658,8 @@
         },
         "name": "context_lost_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2541,6 +2667,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2568,7 +2696,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2576,6 +2705,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2603,7 +2734,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2611,6 +2743,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2638,7 +2772,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2646,6 +2781,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2677,7 +2814,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2685,6 +2823,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2721,7 +2861,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2729,6 +2870,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2765,7 +2908,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2773,6 +2917,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2801,7 +2947,8 @@
         },
         "name": "screenshot_sync_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2809,6 +2956,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2836,7 +2985,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2844,6 +2994,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2872,7 +3024,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2880,6 +3033,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2909,6 +3064,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2926,7 +3083,7 @@
           "--enable-gpu",
           "--test-launcher-bot-mode",
           "--test-launcher-jobs=1",
-          "--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*"
+          "--gtest_filter=TabCaptureApiPixelTest.EndToEnd*"
         ],
         "merge": {
           "args": [],
@@ -2938,6 +3095,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2965,13 +3124,16 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -2991,6 +3153,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3015,6 +3179,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3044,7 +3210,8 @@
         },
         "name": "context_lost_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3052,6 +3219,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3079,7 +3248,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3087,6 +3257,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3114,7 +3286,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3122,6 +3295,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3149,7 +3324,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3157,6 +3333,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3188,7 +3366,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3196,6 +3375,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3232,7 +3413,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3240,6 +3422,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3276,7 +3460,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3284,6 +3469,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3311,6 +3498,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3338,7 +3527,8 @@
         },
         "name": "screenshot_sync_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3346,6 +3536,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3373,7 +3565,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3381,6 +3574,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3409,7 +3604,8 @@
         },
         "name": "webgl_conformance_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3417,6 +3613,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3462,7 +3660,7 @@
           "--enable-gpu",
           "--test-launcher-bot-mode",
           "--test-launcher-jobs=1",
-          "--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*"
+          "--gtest_filter=TabCaptureApiPixelTest.EndToEnd*"
         ],
         "merge": {
           "args": [],
@@ -3505,7 +3703,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -3575,7 +3774,8 @@
         },
         "name": "context_lost_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3609,7 +3809,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3643,7 +3844,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3677,7 +3879,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3715,7 +3918,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3758,7 +3962,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3801,7 +4006,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3836,7 +4042,8 @@
         },
         "name": "screenshot_sync_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3870,7 +4077,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3905,7 +4113,8 @@
         },
         "name": "webgl_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3957,7 +4166,7 @@
           "--enable-gpu",
           "--test-launcher-bot-mode",
           "--test-launcher-jobs=1",
-          "--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*"
+          "--gtest_filter=TabCaptureApiPixelTest.EndToEnd*"
         ],
         "merge": {
           "args": [],
@@ -4000,7 +4209,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -4070,7 +4280,8 @@
         },
         "name": "context_lost_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4104,7 +4315,8 @@
         },
         "name": "depth_capture_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4138,7 +4350,8 @@
         },
         "name": "gpu_process_launch_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4172,7 +4385,8 @@
         },
         "name": "hardware_accelerated_feature_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4210,7 +4424,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4253,7 +4468,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4296,7 +4512,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4357,7 +4574,8 @@
         },
         "name": "screenshot_sync_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4391,7 +4609,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4426,7 +4645,8 @@
         },
         "name": "webgl_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {

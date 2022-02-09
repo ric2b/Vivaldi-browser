@@ -1,4 +1,476 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
+<translation id="1017280919048282932">&amp;Lüğətə əlavə etmək</translation>
+<translation id="1029317248976101138">Miqyas</translation>
+<translation id="1031362278801463162">Miniatürlər yüklənir</translation>
+<translation id="1047431265488717055">Keçid mət&amp;nini kopyalayın</translation>
+<translation id="1049795001945932310">&amp;Dil ayarları</translation>
+<translation id="1054153489933238809">Şəkl&amp;in əslini yeni vərəqdə açın</translation>
+<translation id="1056898198331236512">Xəbərdarlıq</translation>
+<translation id="1084824384139382525">Keçid ü&amp;nvanını kopyalayın</translation>
+<translation id="1128109161498068552">Hər hansı bir saytın MIDI cihazlarına daxil olmaq üçün sistemin xüsusi mesajlarını istifadə etməsinə icazə verməyin</translation>
+<translation id="1163931534039071049">&amp;Freym koda baxmaq</translation>
+<translation id="1165039591588034296">Xəta</translation>
+<translation id="1175364870820465910">&amp;Çap...</translation>
+<translation id="1181037720776840403">Silmək</translation>
+<translation id="1187722533808055681">Aktiv rejimə keçid</translation>
+<translation id="119944043368869598">Hamısını silin</translation>
+<translation id="1221825588892235038">Yalnız seçilənlər</translation>
+<translation id="1244303850296295656">Əlavə qoşma xətası</translation>
+<translation id="125220115284141797">Standart</translation>
+<translation id="1297175357211070620">Hədəf</translation>
+<translation id="1303101771013849280">Əlfəcinlərin HTML faylı</translation>
+<translation id="1380436189840894976">İstənilən halda məxfi rejimidən çıxılsın?</translation>
+<translation id="1430915738399379752">Çap</translation>
+<translation id="1433811987160647649">Girişə icazə soruşmaq</translation>
+<translation id="1451375123200651445">Veb-səhifə, bir fayl</translation>
+<translation id="1465176863081977902">Audio ünvanını k&amp;opyalamaq</translation>
+<translation id="1476607407192946488">&amp;Dil ayarları</translation>
+<translation id="150411034776756821"><ph name="SITE" /> silin</translation>
+<translation id="1546280085599573572">Bu qoşma, Ev düyməsinə vurduqda göstəriləcək səhifəni dəyişir.</translation>
+<translation id="15662109988763471">Seçilmiş printer mövcud deyil və ya düzgün quraşdırılmayıb. Printerinizi yoxlayın və ya başqasını seçin.</translation>
+<translation id="1588438908519853928">Adi</translation>
+<translation id="1588870296199743671">Keçidi bununla açın...</translation>
+<translation id="159359590073980872">Şəkil keşi</translation>
+<translation id="1601560923496285236">Tətbiq etmək</translation>
+<translation id="1603914832182249871">(Məxfi)</translation>
+<translation id="1620510694547887537">Kamera</translation>
+<translation id="1627276047960621195">Fayl təsvirediciləri</translation>
+<translation id="1682548588986054654">Yeni məxfi pəncərə</translation>
+<translation id="1698122934742150150">Yalnız cari məxfi sesiya üçün</translation>
+<translation id="1706625117072057435">Miqyas səviyyələri</translation>
+<translation id="1708338024780164500">(Qeyri-aktiv)</translation>
+<translation id="1723824996674794290">&amp;Yeni pəncərə</translation>
+<translation id="1725149567830788547">&amp;İdarəetmələri göndərmək</translation>
+<translation id="1729533290416704613">Bu, həmçinin axtarış sahəsində axtarış edilərkən hansı səhifənin göstəriləcəyini idarə edir.</translation>
+<translation id="174123615272205933">Xüsusi</translation>
+<translation id="1744108098763830590">Arxa plan səhifəsi</translation>
+<translation id="176587472219019965">&amp;Yeni pəncərə</translation>
+<translation id="1769104665586091481">Keçidi yeni &amp;pəncərədə açın</translation>
+<translation id="1779468444204342338">Minimum</translation>
+<translation id="1815083418640426271">Adi mətn kimi daxil edin</translation>
+<translation id="1828901632669367785">Sistem dialoqunu istifadə edərək çap edin...</translation>
+<translation id="1850508293116537636">Saat ə&amp;qrəbi istiqamətinə döndərin</translation>
+<translation id="1886996562706621347">Saytlara protokollar üçün standart işlədiciləri quraşdırmağı soruşmağa icazə vermək (tövsiyyə olunur)</translation>
+<translation id="1901303067676059328">H&amp;amısını seçin</translation>
+<translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Neçə nüsxənin çapa veriləcəyini rəqəmlərlə göstərin (1-dən <ph name="MAX_COPIES" /> qədər).</translation>
+<translation id="1963227389609234879">Hamısını silin</translation>
+<translation id="1994173015038366702">Sayt ünvanı</translation>
+<translation id="2019718679933488176">&amp;Səsi yeni pəncərədə açın</translation>
+<translation id="2050339315714019657">Portret</translation>
+<translation id="2076269580855484719">Bu qoşmanı gizlədin</translation>
+<translation id="2087822576218954668">Çapa vermək: <ph name="PRINT_NAME" /></translation>
+<translation id="2114326799768592691">&amp;Freymi yenidən yükləmək</translation>
+<translation id="2142328300403846845">Keçidi belə açın</translation>
+<translation id="2148892889047469596">Vərəqin yayımı</translation>
+<translation id="2150139952286079145">Axtarış hədəfləri</translation>
+<translation id="215753907730220065">Tam ekrndan çıxış</translation>
+<translation id="2177950615300672361">Məxfi rejim vərəqi: <ph name="TAB_NAME" /></translation>
+<translation id="219008588003277019">Native Client modulu: <ph name="NEXE_NAME" /></translation>
+<translation id="2218515861914035131">Adi mətn kimi daxil edin</translation>
+<translation id="2249605167705922988">məs., 1-5, 8, 11-13</translation>
+<translation id="225240747099314620">Qorunan tərkiblər üçün identifikatora icazə verin (kompyuteri yenidən başlatmaq lazım gələ bilər)</translation>
+<translation id="2277255602909579701">Bütün kukilər və sayt məlumatları</translation>
+<translation id="2280486287150724112">Sağ tərəf</translation>
+<translation id="2282146716419988068">GPU prosessoru</translation>
+<translation id="2301382460326681002">Əlavə qoşmanın kök qovluğu səhvdir.</translation>
+<translation id="2318143611928805047">Kağızın ölçüsü</translation>
+<translation id="2322193970951063277">Səhifə Başlıqları və Sonluqları</translation>
+<translation id="2326931316514688470">&amp;Tətbiqi yenidən başlatmaq</translation>
+<translation id="2327492829706409234">Tətbiqi aktiv etmək</translation>
+<translation id="2348176352564285430">Tətbiq: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378982052244864789">Qoşmalar qovluğunu seçin.</translation>
+<translation id="2379281330731083556">Sistem dialoqunu istifadə edərək çapa verin...<ph name="SHORTCUT_KEY" /></translation>
+<translation id="2381756643783702095">Göndərmədən öncə soruşmaq (tövsiyyə olunur)</translation>
+<translation id="241082044617551207">Naməlum qoşma</translation>
+<translation id="2423578206845792524">Şəkili belə &amp;saxlayın...</translation>
+<translation id="2439110203301358333">Başqa bir proqram Vivaldi'nin işinə təsir edə biləcək əlavə qoşma quraşdırdı.</translation>
+<translation id="2445081178310039857">Əlavə qoşmanın kök qovluğu tələb olunur.</translation>
+<translation id="2470702053775288986">Dəstəklənməyən qoşma söndürülüb</translation>
+<translation id="2476578072172137802">Saytlar üçün ayarlar</translation>
+<translation id="2482878487686419369">Bildirişlər</translation>
+<translation id="2498539833203011245">Yığmaq</translation>
+<translation id="2509495747794740764">Miqyas dəyəri 10 ilə 200 arası olmalıdır.</translation>
+<translation id="253557089021624350">Keepalive qoşulması sayı</translation>
+<translation id="2546283357679194313">Kukilər və sayt məlumatları</translation>
+<translation id="2550212893339833758">Mübadilə yaddaşı</translation>
+<translation id="2553440850688409052">Bu qoşmanı gizlətmək</translation>
+<translation id="26224892172169984">Saytlara, protokolları işləməyə ivazə verməyin</translation>
+<translation id="2662876636500006917">Chrome mağazası</translation>
+<translation id="2678063897982469759">Yenidən açmaq</translation>
+<translation id="2721037002783622288">&amp;Şəkili <ph name="SEARCH_ENGINE" />-da axtarmaq</translation>
+<translation id="2783321960289401138">Yarlıq yaradın...</translation>
+<translation id="2785873697295365461">Fayl təsvirediciləri</translation>
+<translation id="2809586584051668049">və <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2812989263793994277">Şəkillər göstərilməsin</translation>
+<translation id="2850541429955027218">Mövzu əlavə edin</translation>
+<translation id="2861941300086904918">Native Client təhlükəsizlik meneceri</translation>
+<translation id="2881076733170862447">Qoşmaya vurduğunuz zaman</translation>
+<translation id="2889064240420137087">Keçidi bununla açın...</translation>
+<translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> qoşması printer ilə bağlantı qura bilmir. Printerin qoşulduğunu yoxlayın və yenidən cəhd edin.</translation>
+<translation id="2904456025988372123">Faylların avtomatik yüklənməsinə cəhd edilərkən xəbərdarlıq etmək</translation>
+<translation id="2913331724188855103">Saytlara kuki məlumatlarını saxlamağa və oxumağa icazə vermək (tövsiyyə olunur)</translation>
+<translation id="2931157624143513983">Çap olunabilən sahəyə sığışdırmaq</translation>
+<translation id="2932085390869194046">Şifrə təklif etmək...</translation>
+<translation id="2932883381142163287">Xəta haqqında məlumat vermək</translation>
+<translation id="2941112035454246133">Alçaq</translation>
+<translation id="2972581237482394796">&amp;Təkrarlamaq</translation>
+<translation id="3003623123441819449">CSS keşi</translation>
+<translation id="3008272652534848354">İcazələri sıfırlamaq</translation>
+<translation id="3012631534724231212">(freym)</translation>
+<translation id="3013291976881901233">MİDİ cihazları</translation>
+<translation id="3021678814754966447">&amp;Freym koda baxmaq</translation>
+<translation id="3036546437875325427">Flash-i aktiv etmək</translation>
+<translation id="3046910703532196514">Tam veb-səhifə</translation>
+<translation id="3067198360141518313">Bu qoşmanı başladın</translation>
+<translation id="3080207940057008665">Başqa bir proqram Vivaldi'nin işinə təsir edə biləcək bəzi mövzular əlavə etdi.</translation>
+<translation id="3084548735795614657">Quraşdırmaq üçün buraya atın</translation>
+<translation id="3122464029669770682">MP</translation>
+<translation id="3124111068741548686">USER emalçısı</translation>
+<translation id="3127156390846601284">Bütün göstərilən saytların cihazınızda saxlanılan verilənləri silinəcəkdir. Davam etmək istəyirsiniz?</translation>
+<translation id="3129173833825111527">Sol tərəf</translation>
+<translation id="3144647712221361880">Keçidi belə açın</translation>
+<translation id="3154429428035006212">Bira aydan çox şəbəkədə deyil</translation>
+<translation id="3222066309010235055">Öncədən işlənmə: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">Mikrofon</translation>
+<translation id="3241680850019875542">Paketlənən qoşmaların kök qovluğunu seçin. Həmçinin Qoşmanı yeniləmək üçün istifadə ediləcək məxfi açar faylını seçin.</translation>
+<translation id="3280237271814976245">&amp;Belə saxlayın...</translation>
+<translation id="3285322247471302225">Yeni &amp;vərəq</translation>
+<translation id="3288047731229977326">Tərtibatçı rejimində başladılan əlavə qoşmalar komputerinizə zərər vura bilər. Əgər tərtibatçı deyilsinizsə təhlükəsizliyi təmin etmək üçün bu qoşmalar üçün tərtibatçı rejimini söndürün.</translation>
+<translation id="329838636886466101">Bərpa etmək</translation>
+<translation id="33022249435934718">GDİ təsvirediciləri</translation>
+<translation id="3303818374450886607">Kopyalar</translation>
+<translation id="3305661444342691068">PDF-ə baxmaq</translation>
+<translation id="3308134619352333507">Düyməni gizlədin</translation>
+<translation id="3317459757438853210">İkitərəfli çap</translation>
+<translation id="3341703758641437857">Fayl URL-larına icazə vermək</translation>
+<translation id="3347086966102161372">Şəkil ünvanını k&amp;opyalamaq</translation>
+<translation id="3360297538363969800">Çap etmək alınmadı. Printerinizi yoxlayın və yenidən cəhd edin.</translation>
+<translation id="3378572629723696641">Ola bilsin ki, bu qoşma zədələnib.</translation>
+<translation id="3387614642886316601">Təkmilləşdirilmiş orfoqrafiya yoxlaması</translation>
+<translation id="3432227430032737297">Bütün görünənləri silin</translation>
+<translation id="345693547134384690">Şəkili yeni vərəqdə açın</translation>
+<translation id="3494769164076977169">Faylların avtomatik yüklənməsinə cəhd edilərkən xəbərdarlıq etmək (tövsiyyə olunur)</translation>
+<translation id="3505030558724226696">Cihaza girişi ləğv etmək</translation>
+<translation id="3511307672085573050">K&amp;eçid ünvanını kopyalayın</translation>
+<translation id="354068948465830244">Bu saytın məlumatlarını oxuya və dəyişə bilər</translation>
+<translation id="3560034655160545939">&amp;Orfoqrafiya yoxlaması</translation>
+<translation id="3574917942258583917">İstənilən halda məxfi rejimdən çıxılsın?</translation>
+<translation id="3587482841069643663">Hamısı</translation>
+<translation id="3627588569887975815">Keçidi &amp;məxfi vərəqdə açın</translation>
+<translation id="3627879631695760395"><ph name="APP" /> tətbiqini quraşdırın...</translation>
+<translation id="3668823961463113931">Emalçılar</translation>
+<translation id="3678156199662914018">Əlavə qoşma: <ph name="EXTENSION_NAME" /></translation>
+<translation id="3683524264665795342"><ph name="APP_NAME" />Ekran paylaşımı sorğusu</translation>
+<translation id="3708684582558000260">Bağlanmış saytlara verilənləri göndərmək və ya qəbul etmək icazəsi verməyin</translation>
+<translation id="3711931198657368127">Yer&amp;ləşdirin və açın <ph name="URL" /></translation>
+<translation id="3727187387656390258">Popup pəncərəsini yoxlamaq</translation>
+<translation id="3744111561329211289">Arxa fonda eyniləşdirmə</translation>
+<translation id="3760460896538743390">&amp;Fon səhifəsini yoxlamaq</translation>
+<translation id="3797900183766075808">&amp;Bu “<ph name="SEARCH_TERMS" />”i <ph name="SEARCH_ENGINE" />də axtarmaq</translation>
+<translation id="3800806661949714323">Hamısı göstərilsin (tövsiyyə olunur)</translation>
+<translation id="3810973564298564668">İdarə etmək</translation>
+<translation id="3838085852053358637">Qoşma yüklənə bilmədi</translation>
+<translation id="383891835335927981">Miqyası dəyişdirilən saytlar yoxdur</translation>
+<translation id="385051799172605136">Geriyə</translation>
+<translation id="3899879303189199559">Bi ildən çox şəbəkədə deyil</translation>
+<translation id="3905761538810670789">Tətbiqi bərpa etmək</translation>
+<translation id="3908501907586732282">Əlavə qoşmanı aktiv etmək</translation>
+<translation id="3909791450649380159">Kəs&amp;mək</translation>
+<translation id="3927932062596804919">Girişə icazə verməmək</translation>
+<translation id="3936390757709632190">&amp;Səsi yeni pəncərədə açmaq</translation>
+<translation id="3943582379552582368">&amp;Geriyə</translation>
+<translation id="3948116654032448504">&amp;Şəkili <ph name="SEARCH_ENGINE" />-da axtarmaq</translation>
+<translation id="3955193568934677022">Saytlara qorunan məzmunu oynatmağa icazə vermək (tövsiyyə olunur)</translation>
+<translation id="3979395879372752341">Yeni qoşma əlavə edildi (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Lüğətə əlavə edin</translation>
+<translation id="407520071244661467">Miqyas</translation>
+<translation id="4079140982534148664">Təkmilləşdirilmiş orfoqrafiya yoxlamasından istifadə edin</translation>
+<translation id="4087089424473531098">Əlavə qoşma yaradıldı:
+
+<ph name="EXTENSION_FILE" /></translation>
+<translation id="4096508467498758490">Tərtibatçı rejimini və qoşmaları söndürün</translation>
+<translation id="4100839878934973028">Başqa bir proqram Vivaldi'nin işinə təsir edə biləcək tətbiq əlavə etdi.</translation>
+<translation id="4109898769411476438">İdxal etməzdən öncə veb-bələdçini bağlayın</translation>
+<translation id="4115080753528843955">Bəzi xidmətlər, qorunan kontentlərə giriş əldə etmək üçün unikal identifikatorlardan istifadə edir</translation>
+<translation id="4130207949184424187">Bu qoşma, axtarı sahəsində istifadə olunacaq axtarış vasitəsini dəyişir.</translation>
+<translation id="4131410914670010031">Ağ-qara çap</translation>
+<translation id="4176463684765177261">Söndürülüb</translation>
+<translation id="4200983522494130825">Yeni &amp;vərəq</translation>
+<translation id="4225397296022057997">Bütün saytlarda</translation>
+<translation id="4256316378292851214">Video'nu belə &amp;saxlayın...</translation>
+<translation id="4278390842282768270">İcazə verildi</translation>
+<translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />KB (aktiv <ph name="NUM_KILOBYTES_LIVE" />KB)</translation>
+<translation id="4345587454538109430">Tənzimləyin...</translation>
+<translation id="4348766275249686434">Səhvləri toplamaq</translation>
+<translation id="4363771538994847871">Yayım üçün cihaz yoxdur. Kömək lazımdır?</translation>
+<translation id="4384652540891215547">Qoşmanı aktivləşdirmək</translation>
+<translation id="4394049700291259645">Söndürün</translation>
+<translation id="4409697491990005945">Kənar boşluqlar</translation>
+<translation id="4423376891418188461">Ayarları bərpa edin</translation>
+<translation id="4434045419905280838">Popup-lar və ünvan yönləndirmələri</translation>
+<translation id="4478664379124702289">&amp;Keçidi belə saxlayın...</translation>
+<translation id="4579581181964204535"><ph name="HOST_NAME" /> sayt yayımı mümkün deyil.</translation>
+<translation id="4593021220803146968">&amp;İrəli, <ph name="URL" /> keçmək</translation>
+<translation id="4595560905247879544">Tətbiqlər və qoşmalar yalnız menecer (<ph name="CUSTODIAN_NAME" />) dəyişə bilər .</translation>
+<translation id="4613271546271159013">Bu qoşma, yeni bir vərəq açdığınız zaman göstərilən səhifəni dəyişdirdi.</translation>
+<translation id="4643612240819915418">&amp;Videonu yeni pəncərədə açmaq</translation>
+<translation id="4677772697204437347">GPU yaddaşı</translation>
+<translation id="4681930562518940301">Şəkl&amp;in əslini yeni vərəqdə açın</translation>
+<translation id="4711638718396952945">Ayarları bərpa etmək</translation>
+<translation id="4726710629007580002">Bu qoşmanı quraşdırmağa cəhd edərkən bu xəbərdarlıqlar göstərildi:</translation>
+<translation id="479536056609751218">Veb-səhifə, yalnız HTML</translation>
+<translation id="4839303808932127586">Video'nu belə &amp;saxlayın...</translation>
+<translation id="488785315393301722">Təfərrüatları göstərmək</translation>
+<translation id="4907306957610201395">İcazə kateqoriyası</translation>
+<translation id="4912643508233590958">Boşdayanmada oyanmaq</translation>
+<translation id="4927753642311223124">Burada heç nə yoxdur, keçin.</translation>
+<translation id="4930714375720679147">İşə salmaq</translation>
+<translation id="4988526792673242964">Səhifələr</translation>
+<translation id="49896407730300355">Saat əqrəbinin ə&amp;ksinə döndərin</translation>
+<translation id="4989966318180235467">&amp;Fon səhifəsini yoxlamaq</translation>
+<translation id="4994474651455208930">Saytlara standart protokol işlədicilərini quraşdırmağı soruşmağa icazə verin</translation>
+<translation id="5000922062037820727">Əngəlləndi (tövsiyyə olunur)</translation>
+<translation id="5027562294707732951">Qoşma əlavə edin</translation>
+<translation id="5036662165765606524">Sayta faylları avtomatik yüklıməyə icazə verməyin</translation>
+<translation id="5039804452771397117">İcazə vermək</translation>
+<translation id="5057110919553308744">Qoşmaya kliklədiyiniz zaman</translation>
+<translation id="5059526285558225588">Paylaşacağınız sahəni seçin</translation>
+<translation id="5063480226653192405">İstifadəsi</translation>
+<translation id="5116628073786783676">Audio'nu belə &amp;saxlayın...</translation>
+<translation id="5143374789336132547">"<ph name="EXTENSION_NAME" />" qoşması, Ev düyməsinə vurduqda açılacaq səhifəni dəyişdi.</translation>
+<translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" /> üçün əlavə ayarlar</translation>
+<translation id="5171343362375269016">Mübadilə yaddaşı</translation>
+<translation id="5233019165164992427">NaCl xəta sazlama portu</translation>
+<translation id="5233231016133573565">Prosesin İD-si</translation>
+<translation id="5233736638227740678">&amp;Yerləşdirmək</translation>
+<translation id="5256861893479663409">Bütün saytlarda</translation>
+<translation id="5265562206369321422">Bir aydan çox şəbəkədə deyil</translation>
+<translation id="5269977353971873915">Çap etmək alınmadı</translation>
+<translation id="5284445933715251131">Yüklənməni davam etdirmək</translation>
+<translation id="52912272896845572">Məxfi açar düzgün deyil.</translation>
+<translation id="5301954838959518834">OK, hazırdır</translation>
+<translation id="5317780077021120954">Saxlayın</translation>
+<translation id="5334142896108694079">Script keşi</translation>
+<translation id="5355926466126177564">"<ph name="EXTENSION_NAME" />" qoşması, axtarış üçün istifadə olunacaq axtarış vasitəsini dəyişdi.</translation>
+<translation id="5360150013186312835">Alətlər panelində göstərmək</translation>
+<translation id="5362741141255528695">Məxfi açar faylını seçin.</translation>
+<translation id="536638840841140142">Xeyr</translation>
+<translation id="5370819323174483825">&amp;Yeniləmək</translation>
+<translation id="5398572795982417028">Səhifənin ölçüsü icazə verilən <ph name="MAXIMUM_PAGE" /> limitini aşır</translation>
+<translation id="5425042808445046667">Yüklənməni davam etdirmək</translation>
+<translation id="5427459444770871191">Saat ə&amp;qrəbi istiqamətinə döndərin</translation>
+<translation id="5431318178759467895">Rəng</translation>
+<translation id="5483785310822538350">Fayla və cihaza girişi ləğv etmək</translation>
+<translation id="5485102783864353244">Tətbiq əlavə edin</translation>
+<translation id="5486561344817861625">Veb-bələdçini yenidən başladılan kimi göstərmək</translation>
+<translation id="5487521232677179737">Verilənləri silmək</translation>
+<translation id="5509693895992845810">&amp;Belə saxlayın...</translation>
+<translation id="5521078259930077036">Bu, gözlədiyiniz ana səhifədir?</translation>
+<translation id="5542132724887566711">Profil</translation>
+<translation id="5556459405103347317">Yeniləmək</translation>
+<translation id="5575473780076478375">Məxfi rejim əlavə qoşması: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5614553682702429503">Şifrə saxlanılsın?</translation>
+<translation id="5623842676595125836">Jurnal</translation>
+<translation id="5627086634964711283">Bu, həmçinin Ev düyməsinə vurduqda hansı səhifənin göstəriləcəyini idarə edir.</translation>
+<translation id="563535393368633106">Girişə icazə soruşmaq (tövsiyyə olunur)</translation>
+<translation id="5649053991847567735">Avtomatik yükləmələr</translation>
+<translation id="5677928146339483299">Əngəlləndi</translation>
+<translation id="5689516760719285838">Hadisə yeri</translation>
+<translation id="5707185214361380026">Əlavə qoşmanı buradan yükləmək mümkün olmadı:</translation>
+<translation id="5715711091495208045">Əavə qoşma vasitəçisi: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5746169159649715125">PDF kimi saxlayın</translation>
+<translation id="5747809636523347288">Yer&amp;ləşdirin və açın <ph name="URL" /></translation>
+<translation id="5759728514498647443"><ph name="APP_NAME" /> ilə çapa göndərdiyiniz sənəd <ph name="APP_NAME" /> tərəfindən oxuna bilər.</translation>
+<translation id="5764483294734785780">Audio'nu belə &amp;saxlayın...</translation>
+<translation id="577624874850706961">Kukiləri fayllarını axtarmaq</translation>
+<translation id="5780973441651030252">Prosesin üstünlüyü</translation>
+<translation id="5804241973901381774">İcazələr</translation>
+<translation id="5828633471261496623">Çap edilir...</translation>
+<translation id="583281660410589416">Naməlum</translation>
+<translation id="5860491529813859533">İşə salmaq</translation>
+<translation id="5867841422488265304">Veb ünvanını və ya axtarış sorğusunu daxil edin</translation>
+<translation id="5910363049092958439">Şəkili belə &amp;saxlayın...</translation>
+<translation id="5956585768868398362">Bu, gözlədiyiniz axtarış səhifəsidir?</translation>
+<translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maksimum <ph name="NUM_KILOBYTES_LIVE" />)</translation>
+<translation id="5965661248935608907">Bu, Ev düyməsinə vurduqda və ya axtarış sahəsində axtarış etdikdə hansı səhifənin göstəriləcəyini idarə edir.</translation>
+<translation id="5978277834170881274">&amp;Orfoqrafiyanın baza yoxlaması</translation>
+<translation id="5979421442488174909">&amp; <ph name="LANGUAGE" /> dilinə tərcümə etmək</translation>
+<translation id="6011449291337289699">Sayt verilənlərini silin</translation>
+<translation id="6042308850641462728">Daha ətraflı</translation>
+<translation id="6059925163896151826">USB cihazları</translation>
+<translation id="6086846494333236931">İnzibatçınız tərəfindən quraşdırılıb</translation>
+<translation id="6101226222197207147">Yeni tətbiq əlavə edildi (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="6122081475643980456">İnternet bağlantınız nəzarət altındadır</translation>
+<translation id="6147020289383635445">Çapa əvvəlcədən baxış mümkün olmadı.</translation>
+<translation id="6156863943908443225">Script keşi</translation>
+<translation id="6169666352732958425">İş masasının yayımı mümkün deyil.</translation>
+<translation id="6196854373336333322"><ph name="EXTENSION_NAME" /> qoşması proksi ayarlarını dəyişdi. İndi o ötürülən məlumatları dəyişdirə və internet bağlantısını kəsə bilər. Əgər dəyişikliyin nə üçün baş verdiyini bilmirsinizsə o zaman qoçmanı söndürməniz məsləhətdir.</translation>
+<translation id="6206311232642889873">Şəkili kop&amp;yalın</translation>
+<translation id="6239558157302047471">&amp;Freymi yenidən yükləmək</translation>
+<translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="6248988683584659830">Axtarış ayarları</translation>
+<translation id="6251870443722440887">GDİ təsvirediciləri</translation>
+<translation id="6264365405983206840">H&amp;amısını seçin</translation>
+<translation id="6268252012308737255"><ph name="APP" /> tətbiqində açın</translation>
+<translation id="6273677812470008672">Keyfiyyət</translation>
+<translation id="6295158916970320988">Bütün saytlar</translation>
+<translation id="6295855836753816081">Saxlanılır...</translation>
+<translation id="6308937455967653460">&amp;Keçid kimi saxlayın...</translation>
+<translation id="6315493146179903667">Hamısını ön plana çıxarın</translation>
+<translation id="6326855256003666642">Keepalive qoşulması sayı</translation>
+<translation id="6374469231428023295">Yenidən cəhd edin</translation>
+<translation id="6385543213911723544">Saytlar kuki fayllarını saxlaya və oxuya bilər</translation>
+<translation id="6398765197997659313">Tam ekrandan çıxış</translation>
+<translation id="6406303162637086258">Veb-bələdçini yenidən başladılan kimi göstərmək</translation>
+<translation id="6445450263907939268">Əgər bu dəyişikliyi istəməsəniz, ilkin ayarlarına qaytara bilərsiniz.</translation>
+<translation id="6447842834002726250">Kukilər</translation>
+<translation id="6498249116389603658">&amp;Bütün dillər</translation>
+<translation id="6503077044568424649">Daha çox baxılan</translation>
+<translation id="6508261954199872201">Tətbiq: <ph name="APP_NAME" /></translation>
+<translation id="6518014396551869914">Şəkili kop&amp;yalayın</translation>
+<translation id="6550675742724504774">Seçimlər</translation>
+<translation id="6612358246767739896">Qorunan tərkib</translation>
+<translation id="6639554308659482635">SQLite yaddaşı</translation>
+<translation id="6686817083349815241">Şifrənizi saxlayın</translation>
+<translation id="6691936601825168937">&amp;İrəli</translation>
+<translation id="6798954102094737107">Qoşma: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6812841287760418429">Dəyişiklikləri saxlamaq</translation>
+<translation id="6817174620439930047">Sistem ismarıcından itifadə edərək MİDİ cihazlarına giriş əldə etməyə çalışan saytlar haqqında məni xəbərdar etmək (tövsiyyə olunur)</translation>
+<translation id="682123305478866682">İş masasını yayımı</translation>
+<translation id="6824564591481349393">&amp;E-poçt ünvanını kopyalayın</translation>
+<translation id="6840155290835956714">Göndərmədən öncə soruşmaq</translation>
+<translation id="6886871292305414135">Keçidi yeni &amp;vərəqdə açın</translation>
+<translation id="6892812721183419409">Keçidi, <ph name="USER" /> kimi açın</translation>
+<translation id="6900284862687837908">Arxa fon tətbiqi: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6904344821472985372">Fayla girişi ləğv etmək</translation>
+<translation id="6916590542764765824">Əlavə qoşmaları idarə etmək</translation>
+<translation id="6945221475159498467">Seçim</translation>
+<translation id="6955446738988643816">Popup pəncərəsini yoxlamaq</translation>
+<translation id="6970856801391541997">Göstərilmiş səhifələrin çapı</translation>
+<translation id="6991665348624301627">Təyinat yerini seçin</translation>
+<translation id="7005848115657603926">Yalnış səhifə diapazonu, <ph name="EXAMPLE_PAGE_RANGE" /> istifadə edin</translation>
+<translation id="7006634003215061422">Aşağı sahə</translation>
+<translation id="7053983685419859001">Əngəlləmək</translation>
+<translation id="7070484045139057854">Bu, saytın məlumatlarını oxuya və dəyişə bilər</translation>
+<translation id="708060913198414444">Audio ünvanını k&amp;opyalamaq</translation>
+<translation id="7175353351958621980">Buradan yükləndi:</translation>
+<translation id="7186088072322679094">Alətlər panelində saxlayın</translation>
+<translation id="7270858098575133036">Sistem ismarıcından itifadə edərək MİDİ cihazlarına giriş əldə etməyə çalışan saytlar haqqında məni xəbərdar etmək</translation>
+<translation id="7287143125007575591">İcazə verilmədi.</translation>
+<translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="7309257895202129721">&amp;İdarəetmələri göstərmək</translation>
+<translation id="7385854874724088939">Çap zamanı xəta baş verdi. Printerinizi yoxlayın və yenidən cəhd edin.</translation>
+<translation id="7412226954991670867">GPU Yaddaşı</translation>
+<translation id="7421925624202799674">&amp;Səhifənin koduna baxmaq</translation>
+<translation id="7423098979219808738">Öncə soruşmaq</translation>
+<translation id="7427348830195639090">Arxa fon səhifəsi: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7453008956351770337">Bu printeri seçməklə, Siz aşağıdakı qoşmanın printerinizə girişinə ivazə verirsiniz:</translation>
+<translation id="749028671485790643">İstifadəçi <ph name="VALUE" /></translation>
+<translation id="7521387064766892559">JavaScript faylı</translation>
+<translation id="7564847347806291057">Əməliyyatın sonu</translation>
+<translation id="7576690715254076113">Qarışdırın</translation>
+<translation id="7629827748548208700">Vərəq: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">İmtina</translation>
+<translation id="7661259717474717992">Saytlara kuku məlumatlarını saxlamağa və oxumağa icazə verin</translation>
+<translation id="7663719505383602579">Qəbuledici: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7684212569183643648">İnzibatçınız tərəfindən quraşdırılıb</translation>
+<translation id="7685049629764448582">JavaScript yaddaşı</translation>
+<translation id="7701869757853594372">USER emalçısı</translation>
+<translation id="7704305437604973648">Tapşırıq</translation>
+<translation id="7710568461918838723">&amp;Yayımlamaq...</translation>
+<translation id="7750228210027921155">Şəkildə Şəkil</translation>
+<translation id="7751260505918304024">Hamısını göstərmək</translation>
+<translation id="7760004034676677601">Bu, gözlədiyiniz başlanğıc səhifədir?</translation>
+<translation id="7771452384635174008">Dil qatı</translation>
+<translation id="7782102568078991263">Google'dən artıq təkliflər yoxdur</translation>
+<translation id="7786889348652477777">&amp;Tətbiqi yenidən başlatmaq</translation>
+<translation id="7791543448312431591">Əlavə etmək</translation>
+<translation id="7800518121066352902">Saat əqrəbinin əksinə döndərin</translation>
+<translation id="7814458197256864873">&amp;Kopyalamaq</translation>
+<translation id="7818135753970109980">Yeni mövzu əlavə edildi (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="782057141565633384">Video ünvanını k&amp;opyalamaq</translation>
+<translation id="7849264908733290972">Şəkili yeni vərəqdə açmaq</translation>
+<translation id="7857949311770343000">Bu, gözlədiyiniz yeni vərəq səhifəsidir?</translation>
+<translation id="786073089922909430">Xidmət: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7885253890047913815">Az əvvəlki təyinat yeri</translation>
+<translation id="7903925330883316394">Faydalı alətlər: <ph name="UTILITY_TYPE" /></translation>
+<translation id="7938594894617528435">Hal-hazırda oflayndır</translation>
+<translation id="7947962633355574091">Video ünvanını k&amp;opyalamaq</translation>
+<translation id="7966241909927244760">Şəkil ünvanınını k&amp;opyalamaq</translation>
+<translation id="7973394300052703468">Yeni məxfi &amp;pəncərə</translation>
+<translation id="7978412674231730200">Məxfi açar</translation>
+<translation id="7982789257301363584">Şəbəkə</translation>
+<translation id="7997826902155442747">Prosesin üstünlüyü</translation>
+<translation id="7999229196265990314">Aşağıdakı fayllar yaradıldı:
+
+Əlavə qoşmalar: <ph name="EXTENSION_FILE" />
+Açar faylı: <ph name="KEY_FILE" />
+
+Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq üçün lazım olacaq.</translation>
+<translation id="8004582292198964060">Veb-bələdçi</translation>
+<translation id="8018313076035239964">Veb saytların hansı məlumatları istiadə edə biləcəyini və sizə hansı məzmunu göstərə biləcəklərini idarə edin</translation>
+<translation id="8032244173881942855">Vərəqin yayımı mümkün deyil.</translation>
+<translation id="8071432093239591881">Şəkil kimi çap edin</translation>
+<translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
+<translation id="8137559199583651773">Əlavə qoşmaları idarə edin</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {Endirilir} other {Endirilir}}</translation>
+<translation id="8230134520748321204"><ph name="ORIGIN" /> üçün şifəni saxlanılsın?</translation>
+<translation id="8261378640211443080"><ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> bölməsində bu qoşma haqqında məlumat yoxdur və ola bilsin ki, bu sizin xəbərəiniz olmadan quraşdırılıb.</translation>
+<translation id="8270242299912238708">PDF sənədləri</translation>
+<translation id="8339059274628563283"><ph name="SITE" /> verilənləri yerli saxlayır</translation>
+<translation id="8351419472474436977">Qoşma proksi ayarlarını dəyişdirdi. Bu sizə göndərilən məlumatları izləyə və ya dəyişə, həmçinin internet bağlantısını kəsə bilər. Əgər bu dəyişikliyin niyə baş verdiyini bilmirsinizsə bu qoşmanı söndürməniz məsləhətdir.</translation>
+<translation id="8382913212082956454">&amp;E-mail ünvanını kopyalayın</translation>
+<translation id="8413385045638830869">Öncə soruşmaq (tövsiyyə olunur)</translation>
+<translation id="8434480141477525001">NaCl xəta sazlama portu</translation>
+<translation id="8449008133205184768">Yerləşdirin və üsluba uyğun açın</translation>
+<translation id="8496717697661868878">Bu qoşmanı başlatmaq</translation>
+<translation id="8512476990829870887">Əməliyyatın sonu</translation>
+<translation id="8523493869875972733">Bağlamaq</translation>
+<translation id="8546306075665861288">Şəkil keşi</translation>
+<translation id="8569682776816196752">Təyinat yeri tapılmadı</translation>
+<translation id="857943718398505171">İcazə verildi (tövsiyyə olunur)</translation>
+<translation id="8584280235376696778">&amp;Videonu yeni pəncərədə açmaq</translation>
+<translation id="8605428685123651449">SQLite yaddaşı</translation>
+<translation id="8615618338313291042">Məxfi rejim tətbiqi: <ph name="APP_NAME" /></translation>
+<translation id="862750493060684461">CSS keşi</translation>
+<translation id="8661290697478713397">Keçidi &amp;məxfi vərəqdə açın</translation>
+<translation id="8664389313780386848">&amp;Səhifənin koduna baxmaq</translation>
+<translation id="8708000541097332489">Çıxışda silinsin</translation>
+<translation id="8714838604780058252">Arxa fon qrafikası</translation>
+<translation id="8725066075913043281">Yenidən cəhd edin</translation>
+<translation id="8757090071857742562">İş masasındakıların yayımı mümkün deyil.  Ekranın paylaşılmasına icazə verdiyinizə əmin olun.</translation>
+<translation id="8774934320277480003">Yuxarı sahə</translation>
+<translation id="8798099450830957504">Standart</translation>
+<translation id="8800004011501252845">təyinat yerini bunun üçün göstərir</translation>
+<translation id="8808478386290700967">İnternet mağaza</translation>
+<translation id="8823514049557262177">Keçid mə&amp;tnini kopyalayln</translation>
+<translation id="8823704566850948458">Şifrə təklif etmək...</translation>
+<translation id="8859174528519900719">Alt freym: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8899851313684471736">Keçidi yeni &amp;pəncərədə açın</translation>
+<translation id="8915370057835397490">Təkliflər yüklənir</translation>
+<translation id="8916476537757519021">Məxfi rejim alt freymi: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="895944840846194039">JavaScript yaddaşı</translation>
+<translation id="8962083179518285172">Təsvirini gizlətmək</translation>
+<translation id="8973557916016709913">Miqyası sıfırlamaq</translation>
+<translation id="897939795688207351"><ph name="ORIGIN" /> açıq</translation>
+<translation id="8996526648899750015">Hesab əlavə edin...</translation>
+<translation id="9003647077635673607">Bütün saytlarda icazə vermək</translation>
+<translation id="9027459031423301635">Keçidi &amp;Yeni vərəqdə açın</translation>
+<translation id="9056810968620647706">Heç nə tapılmadı.</translation>
+<translation id="9137916601698928395">Keçidi <ph name="USER" /> kimi açın</translation>
+<translation id="91568222606626347">Yarlıq yaradın...</translation>
+<translation id="916607977885256133">Şəkildə Şəkil</translation>
+<translation id="9170848237812810038">&amp;Ləğv etmək</translation>
+<translation id="9215293857209265904"><ph name="EXTENSION_NAME" /> əlavə edildi</translation>
+<translation id="9218430445555521422">Standart veb-bələdçi kimi təyin etmək</translation>
+<translation id="9219103736887031265">Şəkillər</translation>
+<translation id="93766956588638423">Qoşmanı bərpa etmək</translation>
+<translation id="98515147261107953">Albom</translation>
+<translation id="994289308992179865">&amp;Təkrar</translation>
+<translation id="998747458861718449">Təftiş etmək</translation>
 </translationbundle>

@@ -9,8 +9,9 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/optional.h"
 #include "base/strings/string_piece_forward.h"
+#include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -26,7 +27,7 @@ struct EnumPrefProperties {
   ~EnumPrefProperties();
   EnumPrefProperties(EnumPrefProperties&&);
 
-  base::Optional<int> FindValue(base::StringPiece name) const;
+  absl::optional<int> FindValue(base::StringPiece name) const;
   const std::string* FindName(int value) const;
 
   std::vector<std::pair<std::string, int>> name_value_pairs;
@@ -35,9 +36,14 @@ struct EnumPrefProperties {
 
 bool IsMergeableListPreference(base::StringPiece name);
 
-// Preference properties to use in our JS bindings
-#if !defined(OS_ANDROID)
+#ifdef OS_ANDROID
 
+// Declare an empty struct to minimize the amount of Android-specific ifdefs.
+struct PrefPropertiesMap {};
+
+#else
+
+// Preference properties to use in our JS bindings
 class PrefProperties {
  public:
   PrefProperties();
@@ -58,14 +64,14 @@ class PrefProperties {
   DISALLOW_COPY_AND_ASSIGN(PrefProperties);
 };
 
-using PrefsProperties = std::unordered_map<std::string, PrefProperties>;
+using PrefPropertiesMap = std::unordered_map<std::string, PrefProperties>;
 
 // Workaround to pass to our extension API registered preference properties
 // for a new profile. Chromium does not provide a way to access just created
 // profile from RegisterProfilePrefs.
-PrefsProperties ExtractLastRegisteredPrefsPropertes();
+PrefPropertiesMap ExtractLastRegisteredPrefsProperties();
 
-#endif  // !defined(OS_ANDROID)
+#endif  // ifdef OS_ANDROID
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 

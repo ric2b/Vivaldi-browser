@@ -177,8 +177,8 @@ void DirectoryWatcher::ReportChanges() {
 
   if (!updated_contents.empty())
     callback_task_runner_->PostTask(
-        FROM_HERE, base::Bind(callback_, std::move(updated_contents),
-                              std::move(invalid_paths)));
+        FROM_HERE, base::BindOnce(callback_, std::move(updated_contents),
+                                  std::move(invalid_paths)));
 
   task_runner_->PostDelayedTask(
       FROM_HERE,

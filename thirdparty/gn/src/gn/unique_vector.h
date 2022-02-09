@@ -8,7 +8,6 @@
 #include <stddef.h>
 
 #include <algorithm>
-#include <unordered_set>
 #include <vector>
 
 #include "hash_table_base.h"

@@ -34,11 +34,11 @@
 #include <memory>
 
 #include "base/feature_list.h"
-#include "base/optional.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/http/structured_headers.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
@@ -70,9 +70,8 @@
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
-#include "third_party/blink/renderer/core/html/imports/html_imports_controller.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
-#include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
+#include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/loader/appcache/application_cache_host.h"
 #include "third_party/blink/renderer/core/loader/back_forward_cache_loader_helper_for_frame.h"
@@ -190,7 +189,7 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
               const ClientHintsPreferences& client_hints_preferences,
               float device_pixel_ratio,
               const String& user_agent,
-              const base::Optional<UserAgentMetadata>& user_agent_metadata,
+              const absl::optional<UserAgentMetadata>& user_agent_metadata,
               bool is_svg_image_chrome_client,
               bool is_prerendering)
       : url(url),
@@ -213,7 +212,7 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
   const ClientHintsPreferences client_hints_preferences;
   const float device_pixel_ratio;
   const String user_agent;
-  const base::Optional<UserAgentMetadata> user_agent_metadata;
+  const absl::optional<UserAgentMetadata> user_agent_metadata;
   const bool is_svg_image_chrome_client;
   const bool is_prerendering;
 
@@ -402,8 +401,7 @@ void FrameFetchContext::PrepareRequest(
 }
 
 void FrameFetchContext::AddResourceTiming(const ResourceTimingInfo& info) {
-  // Normally, |document_| is cleared on Document shutdown. However, Documents
-  // for HTML imports will also not have a LocalFrame set: in that case, also
+  // Normally, |document_| is cleared on Document shutdown. In that case,
   // early return, as there is nothing to report the resource timing to.
   if (GetResourceFetcherProperties().IsDetached())
     return;
@@ -458,10 +456,11 @@ void FrameFetchContext::AddClientHintsIfNecessary(
       SecurityOrigin::Create(request.Url())->ToUrlOrigin();
   bool is_1p_origin = IsFirstPartyOrigin(request.Url());
 
-  base::Optional<UserAgentMetadata> ua = GetUserAgentMetadata();
+  absl::optional<UserAgentMetadata> ua = GetUserAgentMetadata();
 
-  base::Optional<ClientHintImageInfo> image_info;
-  base::Optional<WTF::AtomicString> lang;
+  absl::optional<ClientHintImageInfo> image_info;
+  absl::optional<WTF::AtomicString> lang;
+  absl::optional<WTF::AtomicString> prefers_color_scheme;
 
   if (document_) {  // Only get frame info if the frame is not detached
     image_info = ClientHintImageInfo();
@@ -474,6 +473,8 @@ void FrameFetchContext::AddClientHintsIfNecessary(
                ->DomWindow()
                ->navigator()
                ->SerializeLanguagesForClientHintHeader();
+
+    prefers_color_scheme = document_->InDarkMode() ? "dark" : "light";
 
     // TODO(crbug.com/1151050): |SerializeLanguagesForClientHintHeader| getter
     // affects later calls if there is a DevTools override. The following blink
@@ -491,9 +492,9 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   prefs.CombineWith(hints_preferences);
   prefs.CombineWith(GetClientHintsPreferences());
 
-  BaseFetchContext::AddClientHintsIfNecessary(prefs, resource_origin,
-                                              is_1p_origin, ua, policy,
-                                              image_info, lang, request);
+  BaseFetchContext::AddClientHintsIfNecessary(
+      prefs, resource_origin, is_1p_origin, ua, policy, image_info, lang,
+      prefers_color_scheme, request);
 }
 
 void FrameFetchContext::PopulateResourceRequest(
@@ -507,14 +508,6 @@ void FrameFetchContext::PopulateResourceRequest(
 
   ModifyRequestForCSP(request);
   AddClientHintsIfNecessary(hints_preferences, resource_width, request);
-
-  const ContentSecurityPolicy* csp =
-      GetContentSecurityPolicyForWorld(options.world_for_csp.get());
-  if (csp && csp->ShouldSendCSPHeader(type))
-    // TODO(crbug.com/993769): Test if this header returns duplicated values
-    // (i.e. "CSP: active, active") on asynchronous "stale-while-revalidate"
-    // revalidation requests and if this is unexpected behavior.
-    request.AddHttpHeaderField("CSP", "active");
 }
 
 bool FrameFetchContext::IsPrerendering() const {
@@ -633,10 +626,10 @@ FrameFetchContext::CreateWebSocketHandshakeThrottle() {
 
 bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
     mojom::blink::RequestContextType request_context,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info,
     const KURL& url,
     ReportingDisposition reporting_disposition,
-    const base::Optional<String>& devtools_id) const {
+    const absl::optional<String>& devtools_id) const {
   if (GetResourceFetcherProperties().IsDetached()) {
     // TODO(yhirano): Implement the detached case.
     return false;
@@ -730,7 +723,7 @@ String FrameFetchContext::GetUserAgent() const {
   return GetFrame()->Loader().UserAgent();
 }
 
-base::Optional<UserAgentMetadata> FrameFetchContext::GetUserAgentMetadata()
+absl::optional<UserAgentMetadata> FrameFetchContext::GetUserAgentMetadata()
     const {
   if (GetResourceFetcherProperties().IsDetached())
     return frozen_state_->user_agent_metadata;
@@ -782,7 +775,7 @@ void FrameFetchContext::Trace(Visitor* visitor) const {
 
 bool FrameFetchContext::CalculateIfAdSubresource(
     const ResourceRequestHead& resource_request,
-    const base::Optional<KURL>& alias_url,
+    const absl::optional<KURL>& alias_url,
     ResourceType type,
     const FetchInitiatorInfo& initiator_info) {
   // Mark the resource as an Ad if the BaseFetchContext thinks it's an ad.
@@ -802,8 +795,9 @@ bool FrameFetchContext::CalculateIfAdSubresource(
 
 bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
     const KURL& url,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
-    ReportingDisposition reporting_disposition) const {
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info,
+    ReportingDisposition reporting_disposition,
+    const String& devtools_request_id) const {
   if (GetResourceFetcherProperties().IsDetached())
     return false;
 
@@ -819,14 +813,21 @@ bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
   }
 
   const char kWellKnownConversionRegsitrationPath[] =
-      "/.well-known/register-conversion";
+      "/.well-known/attribution-reporting/trigger-attribution";
   if (url.GetPath() != kWellKnownConversionRegsitrationPath)
     return false;
 
   if (!document_->domWindow()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kConversionMeasurement)) {
+          mojom::blink::PermissionsPolicyFeature::kAttributionReporting)) {
+    AuditsIssue::ReportAttributionIssue(
+        document_->domWindow(),
+        AttributionReportingIssueType::kPermissionPolicyDisabled,
+        GetFrame()->GetDevToolsFrameToken(), nullptr, devtools_request_id);
+
+    // TODO(crbug.com/1178400): Remove console message once the issue reported
+    //     above is actually shown in DevTools.
     String message =
-        "The 'conversion-measurement' feature policy must be enabled to "
+        "The 'attribution-reporting' feature policy must be enabled to "
         "register a conversion.";
     document_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kOther,
@@ -840,6 +841,11 @@ bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
   if (!main_frame.GetSecurityContext()
            ->GetSecurityOrigin()
            ->IsPotentiallyTrustworthy()) {
+    AuditsIssue::ReportAttributionIssue(
+        document_->domWindow(),
+        AttributionReportingIssueType::kAttributionUntrustworthyOrigin,
+        main_frame.GetDevToolsFrameToken(), nullptr, devtools_request_id,
+        main_frame.GetSecurityContext()->GetSecurityOrigin()->ToString());
     return false;
   }
 
@@ -847,12 +853,22 @@ bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
                                          ->GetSecurityContext()
                                          ->GetSecurityOrigin()
                                          ->IsPotentiallyTrustworthy()) {
+    AuditsIssue::ReportAttributionIssue(
+        document_->domWindow(),
+        AttributionReportingIssueType::kAttributionUntrustworthyOrigin,
+        GetFrame()->GetDevToolsFrameToken(), nullptr, devtools_request_id,
+        GetFrame()->GetSecurityContext()->GetSecurityOrigin()->ToString());
     return false;
   }
 
   scoped_refptr<const SecurityOrigin> redirect_origin =
       SecurityOrigin::Create(url);
   if (!redirect_origin->IsPotentiallyTrustworthy()) {
+    AuditsIssue::ReportAttributionIssue(
+        document_->domWindow(),
+        AttributionReportingIssueType::kAttributionUntrustworthyOrigin,
+        absl::nullopt, nullptr, devtools_request_id,
+        redirect_origin->ToString());
     return false;
   }
 
@@ -864,16 +880,40 @@ bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
   mojom::blink::ConversionPtr conversion = mojom::blink::Conversion::New();
   conversion->reporting_origin = SecurityOrigin::Create(url);
   conversion->conversion_data = 0UL;
+  conversion->event_source_trigger_data = 0UL;
 
-  const char kConversionDataParam[] = "conversion-data";
+  const char kTriggerDataParam[] = "trigger-data";
   URLSearchParams* search_params = URLSearchParams::Create(url.Query());
-  if (search_params->has(kConversionDataParam)) {
+  if (search_params->has(kTriggerDataParam)) {
     bool is_valid_integer = false;
-    uint64_t data = search_params->get(kConversionDataParam)
-                        .ToUInt64Strict(&is_valid_integer);
+    uint64_t data =
+        search_params->get(kTriggerDataParam).ToUInt64Strict(&is_valid_integer);
 
     // Default invalid params to 0.
     conversion->conversion_data = is_valid_integer ? data : 0UL;
+
+    if (!is_valid_integer) {
+      AuditsIssue::ReportAttributionIssue(
+          document_->domWindow(),
+          AttributionReportingIssueType::kInvalidAttributionData, absl::nullopt,
+          nullptr, devtools_request_id, search_params->get(kTriggerDataParam));
+    }
+  } else {
+    AuditsIssue::ReportAttributionIssue(
+        document_->domWindow(),
+        AttributionReportingIssueType::kInvalidAttributionData, absl::nullopt,
+        nullptr, devtools_request_id);
+  }
+  // Defaulting to 0 means that it is not possible to selectively convert only
+  // event sources or navigation sources.
+  const char kEventSourceTriggerDataParam[] = "event-source-trigger-data";
+  if (search_params->has(kEventSourceTriggerDataParam)) {
+    bool is_valid_integer = false;
+    uint64_t data = search_params->get(kEventSourceTriggerDataParam)
+                        .ToUInt64Strict(&is_valid_integer);
+
+    // Default invalid params to 0.
+    conversion->event_source_trigger_data = is_valid_integer ? data : 0UL;
   }
 
   mojo::AssociatedRemote<mojom::blink::ConversionHost> conversion_host;
@@ -916,13 +956,13 @@ FrameFetchContext::GetContentSecurityNotifier() const {
   return document_loader_->GetContentSecurityNotifier();
 }
 
-base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
+absl::optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     ResourceType type,
     const ResourceRequest& resource_request,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
   if (!GetResourceFetcherProperties().IsDetached() &&
       document_->IsFreezingInProgress() && !resource_request.GetKeepalive()) {
     AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(

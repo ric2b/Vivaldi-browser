@@ -17,7 +17,6 @@
 #include "base/threading/thread_checker.h"
 #include "gpu/gpu_export.h"
 
-
 namespace media {
 
 class AVFMediaReader;
@@ -53,12 +52,12 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   void DataReady(IPCDecodingBuffer buffer);
 
   scoped_refptr<DataRequestHandler> data_request_handler_;
-  dispatch_queue_t reader_queue_;
+  dispatch_queue_t reader_queue_ = nullptr;
   std::unique_ptr<AVFMediaReader> reader_;
 
   base::ThreadChecker thread_checker_;
 
-  base::WeakPtrFactory<AVFMediaReaderRunner> weak_ptr_factory_;
+  base::WeakPtrFactory<AVFMediaReaderRunner> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AVFMediaReaderRunner);
 };

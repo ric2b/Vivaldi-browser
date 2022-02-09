@@ -153,8 +153,7 @@ bool URLOverridesHandler::Parse(Extension* extension, std::u16string* error) {
   }
 
   // An extension may override at most one page.
-  if (!vivaldi::IsVivaldiRunning() &&
-    overrides->size() > 1) {
+  if (!vivaldi::IsVivaldiRunning() && overrides->DictSize() > 1) {
     *error = base::ASCIIToUTF16(errors::kMultipleOverrides);
     return false;
   }

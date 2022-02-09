@@ -12,7 +12,7 @@
 namespace extensions {
 
 namespace {
-base::Optional<page_actions::Service::ScriptOverride>
+absl::optional<page_actions::Service::ScriptOverride>
 FromVivaldiPageActionsScriptOverride(
     vivaldi::page_actions::ScriptOverride script_override) {
   switch (script_override) {
@@ -24,7 +24,7 @@ FromVivaldiPageActionsScriptOverride(
       return page_actions::Service::kDisabledOverride;
     default:
       NOTREACHED();
-      return base::nullopt;
+      return absl::nullopt;
   }
 }
 }  // namespace

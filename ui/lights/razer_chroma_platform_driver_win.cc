@@ -247,8 +247,9 @@ void RazerChromaPlatformDriverWin::SetColors(RazerChromaColors& colors) {
   }
   task_tracker_->PostTask(
       task_runner_.get(), FROM_HERE,
-      base::Bind(&RazerChromaPlatformDriverWin::RunEffectsOnThread,
-                 base::Unretained(this), std::move(effect_ids), colors.size()));
+      base::BindOnce(&RazerChromaPlatformDriverWin::RunEffectsOnThread,
+                          base::Unretained(this), std::move(effect_ids),
+                          colors.size()));
 }
 
 void RazerChromaPlatformDriverWin::AddToGroup(RZEFFECTID group_effect_id,

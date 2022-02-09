@@ -11,6 +11,8 @@
 #include "chrome/browser/custom_handlers/register_protocol_handler_permission_request.h"
 #include "chrome/browser/download/download_permission_request.h"
 #include "chrome/browser/permissions/attestation_permission_request.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -18,14 +20,21 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/location_bar/permission_chip.h"
+#include "chrome/browser/ui/views/location_bar/permission_request_chip.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_bubble_view.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_impl.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
+#include "components/content_settings/core/common/pref_names.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request_impl.h"
+#include "components/permissions/permission_ui_selector.h"
+#include "components/permissions/request_type.h"
+#include "components/permissions/test/mock_permission_request.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -72,9 +81,9 @@ class PermissionPromptBubbleViewBrowserTest
     }
     base::RunLoop().RunUntilIdle();
 
-    PermissionChip* permission_chip = GetPermissionChipView();
-    if (permission_chip->GetVisible()) {
-      views::test::ButtonTestApi(permission_chip->button())
+    PermissionChip* chip = GetPermissionRequestChipView();
+    if (chip) {
+      views::test::ButtonTestApi(chip->button())
           .NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
                                       gfx::Point(), ui::EventTimeForNow(),
                                       ui::EF_LEFT_MOUSE_BUTTON, 0));
@@ -83,8 +92,7 @@ class PermissionPromptBubbleViewBrowserTest
   }
 
   bool VerifyUi() override {
-    const bool should_close_on_deactivate =
-        GetPermissionChipView()->GetVisible();
+    const bool should_close_on_deactivate = GetPermissionRequestChipView();
     views::Widget* prompt_widget = test_api_->GetPromptWindow();
     views::BubbleDialogDelegate* bubble_dialog =
         prompt_widget->widget_delegate()->AsBubbleDialogDelegate();
@@ -99,15 +107,14 @@ class PermissionPromptBubbleViewBrowserTest
     return browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame();
   }
 
-  PermissionChip* GetPermissionChipView() {
+  PermissionChip* GetPermissionRequestChipView() {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForBrowser(browser());
-    return browser_view->toolbar()->location_bar()->permission_chip();
+    return browser_view->toolbar()->location_bar()->chip();
   }
 
   permissions::PermissionRequest* MakeRegisterProtocolHandlerRequest() {
     std::string protocol = "mailto";
-    bool user_gesture = true;
     ProtocolHandler handler =
         ProtocolHandler::CreateProtocolHandler(protocol, GetTestUrl());
     ProtocolHandlerRegistry* registry =
@@ -115,8 +122,7 @@ class PermissionPromptBubbleViewBrowserTest
             browser()->profile());
     // Deleted in RegisterProtocolHandlerPermissionRequest::RequestFinished().
     return new RegisterProtocolHandlerPermissionRequest(
-        registry, handler, GetTestUrl(), user_gesture,
-        base::ScopedClosureRunner());
+        registry, handler, GetTestUrl(), base::ScopedClosureRunner());
   }
 
   void AddRequestForContentSetting(const std::string& name) {
@@ -197,13 +203,14 @@ IN_PROC_BROWSER_TEST_P(PermissionPromptBubbleViewBrowserTest,
 // AnnounceText doesn't go through the path that uses Event::kAlert. Therefore
 // we can't test it.
 #if !defined(OS_MAC)
-  PermissionChip* permission_chip = GetPermissionChipView();
+  PermissionChip* chip = GetPermissionRequestChipView();
   // If chip UI is used, two notifications will be announced: one that
   // permission was requested and second when bubble is opened.
-  if (permission_chip->GetVisible())
+  if (chip && !chip->should_start_open_for_testing()) {
     EXPECT_EQ(2, counter.GetCount(ax::mojom::Event::kAlert));
-  else
+  } else {
     EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kAlert));
+  }
 #else
   EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kAlert));
 #endif
@@ -339,6 +346,128 @@ IN_PROC_BROWSER_TEST_P(PermissionPromptBubbleViewBrowserTest,
   ShowAndVerifyUi();
 }
 
+class QuietUIPromoBrowserTest : public PermissionPromptBubbleViewBrowserTest {
+ public:
+  QuietUIPromoBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        features::kQuietNotificationPrompts,
+        {{QuietNotificationPermissionUiConfig::kEnableAdaptiveActivation,
+          "true"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(QuietUIPromoBrowserTest, InvokeUi_QuietUIPromo) {
+  auto* profile = browser()->profile();
+  // Promo is not enabled by default.
+  EXPECT_FALSE(QuietNotificationPermissionUiState::ShouldShowPromo(profile));
+
+  for (const char* origin_spec :
+       {"https://a.com", "https://b.com", "https://c.com"}) {
+    GURL requesting_origin(origin_spec);
+    ui_test_utils::NavigateToURL(browser(), requesting_origin);
+    permissions::MockPermissionRequest notification_request(
+        u"request", permissions::RequestType::kNotifications,
+        requesting_origin);
+    test_api_->manager()->AddRequest(GetActiveMainFrame(),
+                                     &notification_request);
+    base::RunLoop().RunUntilIdle();
+    EXPECT_FALSE(test_api_->manager()->ShouldCurrentRequestUseQuietUI());
+    EXPECT_FALSE(QuietNotificationPermissionUiState::ShouldShowPromo(profile));
+    test_api_->manager()->Deny();
+    base::RunLoop().RunUntilIdle();
+  }
+
+  LocationBarView* location_bar_view =
+      BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
+  ContentSettingImageView& quiet_ui_icon = **std::find_if(
+      location_bar_view->GetContentSettingViewsForTest().begin(),
+      location_bar_view->GetContentSettingViewsForTest().end(),
+      [](ContentSettingImageView* view) {
+        return view->GetTypeForTesting() ==
+               ContentSettingImageModel::ImageType::NOTIFICATIONS_QUIET_PROMPT;
+      });
+
+  EXPECT_FALSE(quiet_ui_icon.GetVisible());
+  // `ContentSettingImageView::AnimationEnded()` was not triggered and IPH is
+  // not shown.
+  EXPECT_FALSE(quiet_ui_icon.get_critical_promo_id_for_testing().has_value());
+
+  GURL notification("http://www.notification1.com/");
+  ui_test_utils::NavigateToURL(browser(), notification);
+  permissions::MockPermissionRequest notification_request(
+      u"request", permissions::RequestType::kNotifications, notification);
+  test_api_->manager()->AddRequest(GetActiveMainFrame(), &notification_request);
+  base::RunLoop().RunUntilIdle();
+
+  // After 3 denied Notifications requests, Adaptive activation enabled quiet
+  // permission prompt.
+  EXPECT_TRUE(test_api_->manager()->ShouldCurrentRequestUseQuietUI());
+  // At the first quiet permission prompt we show IPH.
+  ASSERT_TRUE(QuietNotificationPermissionUiState::ShouldShowPromo(profile));
+
+  EXPECT_TRUE(quiet_ui_icon.GetVisible());
+  EXPECT_TRUE(quiet_ui_icon.is_animating_label());
+  // Animation is reset to trigger `ContentSettingImageView::AnimationEnded()`.
+  // `AnimationEnded` contains logic for displaying IPH and marking it as shown.
+  quiet_ui_icon.reset_animation_for_testing();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(quiet_ui_icon.is_animating_label());
+
+  // The IPH is showing.
+  ASSERT_TRUE(quiet_ui_icon.get_critical_promo_id_for_testing().has_value());
+  FeaturePromoControllerViews* iph_controller =
+      BrowserView::GetBrowserViewForBrowser(browser())
+          ->feature_promo_controller();
+  // The critical promo that is currently showing is the one created by a quiet
+  // permission prompt.
+  EXPECT_TRUE(iph_controller->CriticalPromoIsShowing(
+      quiet_ui_icon.get_critical_promo_id_for_testing().value()));
+
+  iph_controller->CloseBubbleForCriticalPromo(
+      quiet_ui_icon.get_critical_promo_id_for_testing().value());
+
+  test_api_->manager()->Deny();
+  base::RunLoop().RunUntilIdle();
+
+  // After quiet permission prompt was resolved, the critical promo is reset.
+  EXPECT_FALSE(quiet_ui_icon.get_critical_promo_id_for_testing().has_value());
+
+  EXPECT_FALSE(quiet_ui_icon.GetVisible());
+
+  // The second Notifications permission request to verify that the IPH is not
+  // shown.
+  GURL notification2("http://www.notification2.com/");
+  ui_test_utils::NavigateToURL(browser(), notification2);
+  permissions::MockPermissionRequest notification_request2(
+      u"request", permissions::RequestType::kNotifications, notification2);
+  test_api_->manager()->AddRequest(GetActiveMainFrame(),
+                                   &notification_request2);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(test_api_->manager()->ShouldCurrentRequestUseQuietUI());
+  // At the second quiet permission prompt the IPH should be disabled.
+  EXPECT_FALSE(QuietNotificationPermissionUiState::ShouldShowPromo(profile));
+
+  EXPECT_TRUE(quiet_ui_icon.GetVisible());
+  EXPECT_TRUE(quiet_ui_icon.is_animating_label());
+  quiet_ui_icon.reset_animation_for_testing();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(quiet_ui_icon.is_animating_label());
+
+  // The IPH id is not empty because `ContentSettingImageView::AnimationEnded()`
+  // was triggered.
+  EXPECT_TRUE(quiet_ui_icon.get_critical_promo_id_for_testing().has_value());
+  // The critical promo is not shown.
+  EXPECT_FALSE(iph_controller->CriticalPromoIsShowing(
+      quiet_ui_icon.get_critical_promo_id_for_testing().value()));
+
+  test_api_->manager()->Deny();
+  base::RunLoop().RunUntilIdle();
+}
+
 // ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER is ChromeOS only.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_P(PermissionPromptBubbleViewBrowserTest,
@@ -372,3 +501,5 @@ IN_PROC_BROWSER_TEST_P(OneTimePermissionPromptBubbleViewBrowserTest,
 INSTANTIATE_TEST_SUITE_P(All,
                          OneTimePermissionPromptBubbleViewBrowserTest,
                          ::testing::Values(false, true));
+
+INSTANTIATE_TEST_SUITE_P(All, QuietUIPromoBrowserTest, ::testing::Values(true));

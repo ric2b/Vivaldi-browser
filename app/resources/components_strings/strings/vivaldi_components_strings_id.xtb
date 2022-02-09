@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Lanjutkan</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Menjalankan Diagnostik Jaringan<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifikasi</translation>
+<translation id="2491414235131909199">Halaman ini telah diblokir oleh ekstensi</translation>
 <translation id="2501278716633472235">Kembali</translation>
 <translation id="2539524384386349900">Deteksi</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> mengirimkan tanggapan yang tidak valid.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Jangan masukkan informasi sensitif apapun di situs ini (misalnya, sandi atau kartu kredit), karena penyerang dapat mencurinya.</translation>
 <translation id="5869405914158311789">Situs ini tidak dapat dijangkau</translation>
 <translation id="5932224571077948991">Situs menampilkan iklan yang mengganggu atau menyesatkan</translation>
-<translation id="5990559369517809815">Permintaan ke server telah diblokir oleh ekstensi.</translation>
 <translation id="6051221802930200923">Anda tidak dapat membuka <ph name="SITE" /> sekarang karena situs menggunakan penyematan sertifikat. Kesalahan jaringan dan serangan biasanya bersifat sementara, sehingga halaman ini mungkin akan berfungsi nanti.</translation>
 <translation id="6146055958333702838">Periksa semua kabel dan mulai ulang semua router, modem, atau semua perangkat
     jaringan lain yang mungkin anda gunakan.</translation>

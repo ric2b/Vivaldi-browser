@@ -2,9 +2,15 @@
 
 #include "extensions/api/vivaldi_account/vivaldi_account_api.h"
 
+#include "base/base64.h"
+#include "base/task/thread_pool.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
+#include "components/os_crypt/os_crypt.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/schema/vivaldi_account.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "prefs/vivaldi_pref_names.h"
 
 namespace extensions {
 
@@ -201,4 +207,94 @@ ExtensionFunction::ResponseAction VivaldiAccountGetStateFunction::Run() {
           GetState(Profile::FromBrowserContext(browser_context())))));
 }
 
+ExtensionFunction::ResponseAction
+VivaldiAccountSetPendingRegistrationFunction::Run() {
+  std::unique_ptr<vivaldi::vivaldi_account::SetPendingRegistration::Params>
+      params(vivaldi::vivaldi_account::SetPendingRegistration::Params::Create(
+          *args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  PrefService* prefs =
+      Profile::FromBrowserContext(browser_context())->GetPrefs();
+
+  if (!params->registration) {
+    prefs->ClearPref(vivaldiprefs::kVivaldiAccountPendingRegistration);
+    return RespondNow(NoArguments());
+  }
+  std::string password = params->registration->password;
+  auto encrypted_password = std::make_unique<std::string>();
+  // encrypted_password_ptr is expected to be valid as long as
+  // encrypted_password is valid, which should be at least until OnEncryptDone
+  // is called. So, it should be safe to use during OSCrypt:EncryptString
+  std::string* encrypted_password_ptr = encrypted_password.get();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&OSCrypt::EncryptString, password, encrypted_password_ptr),
+      base::BindOnce(
+          &VivaldiAccountSetPendingRegistrationFunction::OnEncryptDone, this,
+          std::move(params->registration), std::move(encrypted_password)));
+  return RespondLater();
+}
+
+void VivaldiAccountSetPendingRegistrationFunction::OnEncryptDone(
+    std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+        pending_registration,
+    std::unique_ptr<std::string> encrypted_password,
+    bool result) {
+  if (!result) {
+    Respond(Error("Failed to encrypt pending registration password"));
+    return;
+  }
+
+  base::Base64Encode(*encrypted_password, &pending_registration->password);
+  PrefService* prefs =
+      Profile::FromBrowserContext(browser_context())->GetPrefs();
+  prefs->Set(vivaldiprefs::kVivaldiAccountPendingRegistration,
+             *pending_registration->ToValue());
+
+  Respond(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+VivaldiAccountGetPendingRegistrationFunction::Run() {
+  PrefService* prefs =
+      Profile::FromBrowserContext(browser_context())->GetPrefs();
+
+  auto pending_registration =
+      vivaldi::vivaldi_account::PendingRegistration::FromValue(
+          *prefs->Get(vivaldiprefs::kVivaldiAccountPendingRegistration));
+
+  if (!pending_registration) {
+    return RespondNow(ArgumentList(nullptr));
+  }
+  std::string encrypted_password;
+  if (!base::Base64Decode(pending_registration->password,
+                          &encrypted_password) ||
+      encrypted_password.empty()) {
+    return RespondNow(Error("Failed to decode pending registration password"));
+  }
+  std::string* password_ptr = &pending_registration->password;
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&OSCrypt::DecryptString, encrypted_password, password_ptr),
+      base::BindOnce(
+          &VivaldiAccountGetPendingRegistrationFunction::OnDecryptDone, this,
+          std::move(pending_registration)));
+  return RespondLater();
+}
+
+void VivaldiAccountGetPendingRegistrationFunction::OnDecryptDone(
+    std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+        pending_registration,
+    bool result) {
+  if (!result) {
+    Respond(Error("Failed to decrypt pending registration password"));
+    return;
+  }
+
+  Respond(ArgumentList(
+      vivaldi::vivaldi_account::GetPendingRegistration::Results::Create(
+          *pending_registration)));
+}
 }  // namespace extensions

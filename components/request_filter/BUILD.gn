@@ -31,7 +31,6 @@ source_set("request_filter") {
   if (enable_extensions) {
     deps += [
       "//extensions/browser",
-      "//extensions/browser/api/web_request",
     ]
   }
   allow_circular_includes_from = [

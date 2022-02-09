@@ -33,7 +33,7 @@ class HistoryPrivateEventRouter : public history::HistoryServiceObserver {
 
   void DispatchEvent(Profile* profile,
                      const std::string& event_name,
-                     std::unique_ptr<base::ListValue> event_args);
+                     std::vector<base::Value> event_args);
   Profile* profile_;
   ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
       history_service_observer_;

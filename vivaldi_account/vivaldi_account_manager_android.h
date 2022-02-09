@@ -22,9 +22,24 @@ class VivaldiAccountManagerAndroid
              const base::android::JavaParamRef<jobject>& obj,
              const base::android::JavaParamRef<jstring>& username,
              const base::android::JavaParamRef<jstring>& password,
-             const base::android::JavaParamRef<jstring>& session_name,
              jboolean save_password);
   void Logout(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void SetSessionName(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      const base::android::JavaParamRef<jstring>& session_name);
+
+  base::android::ScopedJavaLocalRef<jobject> GetPendingRegistration(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  jboolean SetPendingRegistration(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& username,
+      const base::android::JavaParamRef<jstring>& password,
+      const base::android::JavaParamRef<jstring>& recovery_email);
+  void ResetPendingRegistration(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // VivaldiAccountManager::Observer implementation
   void OnVivaldiAccountUpdated() override;

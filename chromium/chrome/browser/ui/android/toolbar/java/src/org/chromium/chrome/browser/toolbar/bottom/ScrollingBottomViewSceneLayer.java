@@ -21,6 +21,7 @@ import java.util.List;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
@@ -50,6 +51,9 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
 
     /** The {@link ViewResourceFrameLayout} that this scene layer represents. */
     private ViewResourceFrameLayout mBottomView;
+
+    /** Vivaldi */
+    private BrowserControlsSizer mControlsSizer;
 
     /**
      * Build a composited bottom view layer.
@@ -124,7 +128,10 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
         if (!mIsVisible) {
             if (mCurrentYOffsetPx < mBottomView.getHeight())
                 mCurrentYOffsetPx += mBottomView.getHeight();
-        }
+            // After the scene gets visible again we need to reset the yoffset but only when
+            // controls are completely shown. Fix for VAB-4178.
+        } else if (mControlsSizer.getBrowserControlHiddenRatio() == 0)
+            mCurrentYOffsetPx = 0;
 
         ScrollingBottomViewSceneLayerJni.get().updateScrollingBottomViewLayer(mNativePtr,
                 ScrollingBottomViewSceneLayer.this, resourceManager, mResourceId,
@@ -176,14 +183,19 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     @Override
     public void getVirtualViews(List<VirtualView> views) {}
 
+    /* Vivaldi: Set the |BrowserControlsSizer| */
+    public void setBrowserControlsSizer(BrowserControlsSizer browserControlsSizer) {
+        mControlsSizer = browserControlsSizer;
+    }
+
     @NativeMethods
     interface Natives {
         long init(ScrollingBottomViewSceneLayer caller);
         void setContentTree(long nativeScrollingBottomViewSceneLayer,
-                            ScrollingBottomViewSceneLayer caller, SceneLayer contentTree);
+                ScrollingBottomViewSceneLayer caller, SceneLayer contentTree);
         void updateScrollingBottomViewLayer(long nativeScrollingBottomViewSceneLayer,
-                                            ScrollingBottomViewSceneLayer caller, ResourceManager resourceManager,
-                                            int viewResourceId, int shadowHeightPx, float xOffset, float yOffset,
-                                            boolean showShadow);
+                ScrollingBottomViewSceneLayer caller, ResourceManager resourceManager,
+                int viewResourceId, int shadowHeightPx, float xOffset, float yOffset,
+                boolean showShadow);
     }
 }

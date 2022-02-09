@@ -29,7 +29,6 @@ DesktopDragDropClientWin::DesktopDragDropClientWin(
     HWND window,
     DesktopWindowTreeHostWin* desktop_host)
     : drag_drop_in_progress_(false),
-      drag_operation_(0),
       desktop_host_(desktop_host) {
   drop_target_ = new DesktopDropTargetWin(root_window);
   drop_target_->Init(window);
@@ -40,15 +39,14 @@ DesktopDragDropClientWin::~DesktopDragDropClientWin() {
     DragCancel();
 }
 
-int DesktopDragDropClientWin::StartDragAndDrop(
+ui::mojom::DragOperation DesktopDragDropClientWin::StartDragAndDrop(
     std::unique_ptr<ui::OSExchangeData> data,
     aura::Window* root_window,
     aura::Window* source_window,
     const gfx::Point& screen_location,
-    int operation,
+    int allowed_operations,
     ui::mojom::DragEventSource source) {
   drag_drop_in_progress_ = true;
-  drag_operation_ = operation;
   if (source == ui::mojom::DragEventSource::kTouch) {
     gfx::Point screen_point = display::win::ScreenWin::DIPToScreenPoint(
         {screen_location.x(), screen_location.y()});
@@ -70,7 +68,9 @@ int DesktopDragDropClientWin::StartDragAndDrop(
     drag_source_ = Microsoft::WRL::Make<vivaldi::CustomDragSourceWin>(
         vivaldi::IsTabDragInProgress());
   } else {
+    // clang-format off
   drag_source_ = ui::DragSourceWin::Create();
+    // clang-format on
   }
   Microsoft::WRL::ComPtr<ui::DragSourceWin> drag_source_copy = drag_source_;
   drag_source_copy->set_data(data.get());
@@ -81,13 +81,14 @@ int DesktopDragDropClientWin::StartDragAndDrop(
 
   // Disable hang watching until the end of the function since the user can take
   // unbounded time to complete the drag. (http://crbug.com/806174)
-  base::HangWatchScopeDisabled disabler;
+  base::IgnoreHangsInScope disabler;
   base::TimeTicks start_time = base::TimeTicks::Now();
 
   HRESULT result = ::DoDragDrop(
       ui::OSExchangeDataProviderWin::GetIDataObject(*data.get()),
       drag_source_.Get(),
-      ui::DragDropTypes::DragOperationToDropEffect(operation), &effect);
+      ui::DragDropTypes::DragOperationToDropEffect(allowed_operations),
+      &effect);
   if (alive && source == ui::mojom::DragEventSource::kTouch) {
     // In a normal drag drop, ::DoDragDrop calls QueryContinueDrag every time
     // it gets a mouse or keyboard event. The windows doc
@@ -118,16 +119,14 @@ int DesktopDragDropClientWin::StartDragAndDrop(
   if (result != DRAGDROP_S_DROP)
     effect = DROPEFFECT_NONE;
 
-  if (::vivaldi::IsVivaldiRunning() && result == DRAGDROP_S_CANCEL) {
-    drag_operation_ |= VivaldiEventHooks::DRAG_CANCEL;
-  }
+  vivaldi::g_cancelled_drag = (result == DRAGDROP_S_CANCEL);
 
-  return ui::DragDropTypes::DropEffectToDragOperation(effect);
+  return ui::PreferredDragOperation(
+      ui::DragDropTypes::DropEffectToDragOperation(effect));
 }
 
 void DesktopDragDropClientWin::DragCancel() {
   drag_source_->CancelDrag();
-  drag_operation_ = 0;
 }
 
 bool DesktopDragDropClientWin::IsDragDropInProgress() {

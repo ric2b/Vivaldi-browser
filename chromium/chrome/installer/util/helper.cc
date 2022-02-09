@@ -87,15 +87,8 @@ base::FilePath GetCurrentInstallPathFromRegistry(bool system_install) {
 namespace installer {
 
 base::FilePath GetChromeInstallPath(bool system_install) {
-
-  // Use the install path provided by
-  // the command line switch: --vivaldi-install-dir=<filepath>
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
-    return command_line.GetSwitchValuePath(
-        vivaldi::constants::kVivaldiInstallDir).Append(kInstallBinaryDir);
-  }
+  if (kVivaldi)
+    return vivaldi::GetInstallBinaryDir();
 
   base::FilePath install_path =
       GetCurrentInstallPathFromRegistry(system_install);
@@ -106,14 +99,8 @@ base::FilePath GetChromeInstallPath(bool system_install) {
 
 base::FilePath GetChromeInstallPathWithPrefs(bool system_install,
                                              const InitialPreferences& prefs) {
-  // Use the install path provided by
-  // the command line switch: --vivaldi-install-dir=<filepath>
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
-    return command_line.GetSwitchValuePath(
-        vivaldi::constants::kVivaldiInstallDir).Append(kInstallBinaryDir);
-  }
+  if (kVivaldi)
+    return vivaldi::GetInstallBinaryDir();
 
   base::FilePath install_path =
       GetCurrentInstallPathFromRegistry(system_install);

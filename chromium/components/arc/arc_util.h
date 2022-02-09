@@ -21,6 +21,7 @@ class Window;
 
 namespace base {
 class CommandLine;
+struct SystemMemoryInfoKB;
 }  // namespace base
 
 namespace user_manager {
@@ -56,6 +57,9 @@ enum class ArcVmUreadaheadMode {
   // ARCVM ureadahead is turned off for disabled mode.
   DISABLED,
 };
+
+using SystemMemoryInfoCallback =
+    base::RepeatingCallback<bool(base::SystemMemoryInfoKB*)>;
 
 // Upstart Job Description
 struct JobDesc {
@@ -94,13 +98,16 @@ bool IsArcVmEnabled();
 // device.
 bool IsArcVmRtVcpuEnabled(uint32_t cpus);
 
+// Returns true if ARC VM advised to use Huge Pages for guest memory.
+bool IsArcVmUseHugePages();
+
 // Returns true if all development configuration directives in the
 // vm_tools/init/arcvm_dev.conf file are ignored during ARCVM start.
 bool IsArcVmDevConfIgnored();
 
 // Returns mode of operation for ureadahead during the ARCVM boot flow.
-// Valid modes are readahead (default), generate, or disabled.
-ArcVmUreadaheadMode GetArcVmUreadaheadMode();
+// Valid modes are readahead, generate, or disabled.
+ArcVmUreadaheadMode GetArcVmUreadaheadMode(SystemMemoryInfoCallback callback);
 
 // Returns true if ARC should always start within the primary user session
 // (opted in user or not), and other supported mode such as guest and Kiosk

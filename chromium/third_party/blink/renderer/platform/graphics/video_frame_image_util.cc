@@ -4,13 +4,16 @@
 
 #include "third_party/blink/renderer/platform/graphics/video_frame_image_util.h"
 
+#include "base/logging.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
-#include "components/viz/common/resources/single_release_callback.h"
+#include "components/viz/common/resources/release_callback.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
 #include "media/base/video_util.h"
+#include "media/base/wait_and_replace_sync_token_client.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
@@ -42,7 +45,9 @@ bool CanUseZeroCopyImages(const media::VideoFrame& frame) {
   // frames, which would violate ImageBitmap requirements.
   // TODO(sandersd): Handle YUV pixel formats.
   // TODO(sandersd): Handle high bit depth formats.
-#if defined(OS_ANDROID)
+  // TODO(crbug.com/1203713): Figure out why macOS zero copy ends up with y-flip
+  // images in zero copy mode.
+#if defined(OS_ANDROID) || defined(OS_MAC)
   return false;
 #else
   return frame.NumTextures() == 1 &&
@@ -155,10 +160,17 @@ scoped_refptr<StaticBitmapImage> CreateImageFromVideoFrame(
         kN32_SkColorType, kUnpremul_SkAlphaType, std::move(sk_color_space));
 
     // Hold a ref by storing it in the release callback.
-    auto release_callback = viz::SingleReleaseCallback::Create(
-        WTF::Bind([](scoped_refptr<media::VideoFrame> frame,
-                     const gpu::SyncToken& sync_token, bool is_lost) {},
-                  frame));
+    auto release_callback = WTF::Bind(
+        [](scoped_refptr<media::VideoFrame> frame,
+           base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider,
+           const gpu::SyncToken& sync_token, bool is_lost) {
+          if (is_lost || !context_provider)
+            return;
+          auto* ri = context_provider->ContextProvider()->RasterInterface();
+          media::WaitAndReplaceSyncTokenClient client(ri);
+          frame->UpdateReleaseSyncToken(&client);
+        },
+        frame, SharedGpuContext::ContextProviderWrapper());
 
     return AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
         frame->mailbox_holder(0).mailbox, frame->mailbox_holder(0).sync_token,
@@ -213,8 +225,6 @@ scoped_refptr<StaticBitmapImage> CreateImageFromVideoFrame(
     resource_provider = local_resource_provider.get();
   }
 
-  // TODO(crbug.com/1186864): Accelerated CanvasResourceProviders don't always
-  // handle orientation correctly, so disable orientation tagging.
   if (resource_provider->IsAccelerated())
     prefer_tagged_orientation = false;
 
@@ -275,8 +285,8 @@ bool DrawVideoFrameIntoResourceProvider(
   }
 
   video_renderer->Paint(
-      frame.get(), resource_provider->Canvas(), gfx::RectF(dest_rect),
-      media_flags,
+      frame.get(), resource_provider->Canvas(/*needs_will_draw*/ true),
+      gfx::RectF(dest_rect), media_flags,
       ignore_video_transformation
           ? media::kNoTransformation
           : frame->metadata().transformation.value_or(media::kNoTransformation),

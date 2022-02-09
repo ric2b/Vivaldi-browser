@@ -138,42 +138,61 @@ Err JSONToInputs(const Label& default_toolchain,
     return Err(Location(), "Input is not a dictionary.");
 
   Err err;
-  std::vector<std::string> strings;
-  strings = GetStringVector(*dict, "files", &err);
-  if (err.has_error())
-    return err;
-  for (auto& s : strings) {
-    if (!IsPathSourceAbsolute(s) && !IsPathAbsolute(s)) {
-      return Err(Location(),
-                 "\"" + s + "\" is not a source-absolute or absolute path.");
+
+  const char kFilesKey[] = "files";
+  {
+    std::vector<std::string> files = GetStringVector(*dict, kFilesKey, &err);
+    if (err.has_error())
+      return err;
+    for (auto& s : files) {
+      if (!IsPathSourceAbsolute(s) && !IsPathAbsolute(s)) {
+        return Err(Location(),
+                   "\"" + s + "\" is not a source-absolute or absolute path.");
+      }
+      inputs->source_vec.emplace_back(std::move(s));
     }
-    inputs->source_vec.emplace_back(std::move(s));
   }
 
-  strings = GetStringVector(*dict, "additional_compile_targets", &err);
-  if (err.has_error())
-    return err;
-
   inputs->compile_included_all = false;
-  for (auto& s : strings) {
-    if (s == "all") {
-      inputs->compile_included_all = true;
-    } else {
-      inputs->compile_vec.push_back(
+  const char kAdditonalCompileTargetsKey[] = "additional_compile_targets";
+  if (dict->HasKey(kAdditonalCompileTargetsKey)) {
+    std::vector<std::string> additional_compile_targets =
+        GetStringVector(*dict, kAdditonalCompileTargetsKey, &err);
+    if (err.has_error())
+      return err;
+
+    for (auto& s : additional_compile_targets) {
+      if (s == "all") {
+        inputs->compile_included_all = true;
+      } else {
+        inputs->compile_vec.push_back(
+            AbsoluteOrSourceAbsoluteStringToLabel(default_toolchain, s, &err));
+        if (err.has_error())
+          return err;
+      }
+    }
+  }
+
+  const char kTestTargetsKey[] = "test_targets";
+  {
+    std::vector<std::string> test_targets =
+        GetStringVector(*dict, kTestTargetsKey, &err);
+    if (err.has_error())
+      return err;
+    for (auto& s : test_targets) {
+      inputs->test_vec.push_back(
           AbsoluteOrSourceAbsoluteStringToLabel(default_toolchain, s, &err));
       if (err.has_error())
         return err;
     }
   }
 
-  strings = GetStringVector(*dict, "test_targets", &err);
-  if (err.has_error())
-    return err;
-  for (auto& s : strings) {
-    inputs->test_vec.push_back(
-        AbsoluteOrSourceAbsoluteStringToLabel(default_toolchain, s, &err));
-    if (err.has_error())
-      return err;
+  for (const auto& kv : dict->DictItems()) {
+    if (kv.first == kFilesKey || kv.first == kAdditonalCompileTargetsKey ||
+        kv.first == kTestTargetsKey) {
+      continue;
+    }
+    return Err(Location(), "Unknown analyze input key \"" + kv.first + "\".");
   }
 
   for (auto& s : inputs->source_vec)
@@ -402,6 +421,13 @@ bool Analyzer::ItemRefersToFile(const Item* item,
   for (const auto& cur_file : item->build_dependency_files()) {
     if (cur_file == *file)
       return true;
+  }
+
+  if (const Config* config = item->AsConfig()) {
+    for (const auto& config_pair: config->configs()) {
+      if (ItemRefersToFile(config_pair.ptr, file))
+        return true;
+    }
   }
 
   if (!item->AsTarget())

@@ -12,6 +12,8 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
@@ -90,7 +92,6 @@
 #include "ui/touch_selection/touch_selection_controller.h"
 
 #include "app/vivaldi_apptools.h"
-#include "ui/content/vivaldi_event_hooks.h"
 
 namespace content {
 
@@ -104,6 +105,8 @@ WebContentsView* CreateWebContentsView(
 }
 
 namespace {
+
+using ::ui::mojom::DragOperation;
 
 WebContentsViewAura::RenderWidgetHostViewCreateFunction
     g_create_render_widget_host_view = nullptr;
@@ -160,7 +163,7 @@ class WebDragSourceAura : public content::WebContentsObserver {
 // necessary.
 void PrepareDragForFileContents(const DropData& drop_data,
                                 ui::OSExchangeDataProvider* provider) {
-  base::Optional<base::FilePath> filename =
+  absl::optional<base::FilePath> filename =
       drop_data.GetSafeFilenameForImageFileContents();
   if (filename)
     provider->SetFileContents(*filename, drop_data.file_contents);
@@ -376,15 +379,6 @@ blink::DragOperationsMask ConvertToDragOperationsMask(int drag_op) {
   return static_cast<blink::DragOperationsMask>(web_drag_op);
 }
 
-ui::mojom::DragOperation ConvertToDragOperation(int drag_ops) {
-  int op_mask = ConvertToDragOperationsMask(drag_ops);
-  DCHECK(op_mask == blink::kDragOperationNone ||
-         op_mask == blink::kDragOperationCopy ||
-         op_mask == blink::kDragOperationLink ||
-         op_mask == blink::kDragOperationMove);
-  return static_cast<ui::mojom::DragOperation>(op_mask);
-}
-
 GlobalRoutingID GetRenderViewHostID(RenderViewHost* rvh) {
   return GlobalRoutingID(rvh->GetProcess()->GetID(), rvh->GetRoutingID());
 }
@@ -421,7 +415,7 @@ WebContentsViewAura::OnPerformDropContext::OnPerformDropContext(
     const ui::DropTargetEvent& event,
     std::unique_ptr<ui::OSExchangeData> data,
     base::ScopedClosureRunner end_drag_runner,
-    base::Optional<gfx::PointF> transformed_pt,
+    absl::optional<gfx::PointF> transformed_pt,
     gfx::PointF screen_pt)
     : target_rwh(target_rwh->GetWeakPtr()),
       event(event),
@@ -710,7 +704,7 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
                                          WebContentsViewDelegate* delegate)
     : web_contents_(web_contents),
       delegate_(delegate),
-      current_drag_op_(ui::mojom::DragOperation::kNone),
+      current_drag_op_(DragOperation::kNone),
       drag_dest_delegate_(nullptr),
       current_rvh_for_drag_(ChildProcessHost::kInvalidUniqueID,
                             MSG_ROUTING_NONE),
@@ -740,7 +734,7 @@ WebContentsViewAura::~WebContentsViewAura() {
 
 void WebContentsViewAura::EndDrag(
     base::WeakPtr<RenderWidgetHostImpl> source_rwh_weak_ptr,
-    ui::mojom::DragOperation op) {
+    DragOperation op) {
   drag_start_process_id_ = ChildProcessHost::kInvalidUniqueID;
   drag_start_view_id_ = GlobalRoutingID(ChildProcessHost::kInvalidUniqueID,
                                         MSG_ROUTING_NONE);
@@ -925,8 +919,8 @@ void WebContentsViewAura::CreateAuraWindow(aura::Window* context) {
   // The use cases for WindowObserver do not apply to Browser Plugins:
   // 1) guests do not support NPAPI plugins.
   // 2) guests' window bounds are supposed to come from its embedder.
-  if (!BrowserPluginGuest::IsGuest(web_contents_))
-    window_observer_.reset(new WindowObserver(this));
+  if (!web_contents_->IsGuest())
+    window_observer_ = std::make_unique<WindowObserver>(this);
 }
 
 void WebContentsViewAura::UpdateWebContentsVisibility() {
@@ -934,13 +928,13 @@ void WebContentsViewAura::UpdateWebContentsVisibility() {
 }
 
 Visibility WebContentsViewAura::GetVisibility() const {
-  if (window_->occlusion_state() == aura::Window::OcclusionState::VISIBLE)
+  if (window_->GetOcclusionState() == aura::Window::OcclusionState::VISIBLE)
     return Visibility::VISIBLE;
 
-  if (window_->occlusion_state() == aura::Window::OcclusionState::OCCLUDED)
+  if (window_->GetOcclusionState() == aura::Window::OcclusionState::OCCLUDED)
     return Visibility::OCCLUDED;
 
-  DCHECK_EQ(window_->occlusion_state(), aura::Window::OcclusionState::HIDDEN);
+  DCHECK_EQ(window_->GetOcclusionState(), aura::Window::OcclusionState::HIDDEN);
   return Visibility::HIDDEN;
 }
 
@@ -1084,7 +1078,7 @@ void WebContentsViewAura::StartDragging(
 
   // We need to enable recursive tasks on the message loop so we can get
   // updates while in the system DoDragDrop loop.
-  int result_op = 0;
+  DragOperation result_op;
   {
     gfx::NativeView content_native_view = GetContentNativeView();
     base::CurrentThread::ScopedNestableTaskAllower allow;
@@ -1106,38 +1100,19 @@ void WebContentsViewAura::StartDragging(
     return;
   }
 
-#if defined(OS_WIN)
-  // NOTE(pettern@vivaldi.com): To be able to create a custom window
-  // when dropping tabs outside a window. On Windows we add this extra event
-  // here and not in WebContentsImpl::DragSourceEndedAt to access
-  // Windows-specific drag cancel status.
-  if (::vivaldi::IsVivaldiRunning()) {
-    bool cancelled = !!(result_op & VivaldiEventHooks::DRAG_CANCEL);
-    result_op &= ~VivaldiEventHooks::DRAG_CANCEL;
-    gfx::Point screen_loc =
-        display::Screen::GetScreen()->GetCursorScreenPoint();
-    bool consumed = VivaldiEventHooks::HandleDragEnd(
-        web_contents_, ConvertToDragOperation(result_op), cancelled,
-        screen_loc.x(), screen_loc.y());
-    if (consumed) {
-      result_op = ui::DragDropTypes::DRAG_NONE;
-    }
-  }
-#endif  // defined(OS_WIN)
-
   // If drag is still in progress that means we haven't received drop targeting
   // callback yet. So we have to make sure to delay calling EndDrag until drop
   // is done.
   if (!drag_in_progress_) {
-    EndDrag(std::move(source_rwh_weak_ptr), ConvertToDragOperation(result_op));
+    EndDrag(std::move(source_rwh_weak_ptr), result_op);
   } else {
     end_drag_runner_.ReplaceClosure(base::BindOnce(
         &WebContentsViewAura::EndDrag, weak_ptr_factory_.GetWeakPtr(),
-        std::move(source_rwh_weak_ptr), ConvertToDragOperation(result_op)));
+        std::move(source_rwh_weak_ptr), result_op));
   }
 }
 
-void WebContentsViewAura::UpdateDragCursor(ui::mojom::DragOperation operation) {
+void WebContentsViewAura::UpdateDragCursor(DragOperation operation) {
   current_drag_op_ = operation;
 }
 
@@ -1279,7 +1254,7 @@ void WebContentsViewAura::DragEnteredCallback(
     ui::DropTargetEvent event,
     std::unique_ptr<DropData> drop_data,
     base::WeakPtr<RenderWidgetHostViewBase> target,
-    base::Optional<gfx::PointF> transformed_pt) {
+    absl::optional<gfx::PointF> transformed_pt) {
   drag_in_progress_ = true;
   if (!target)
     return;
@@ -1344,7 +1319,7 @@ void WebContentsViewAura::DragUpdatedCallback(
     ui::DropTargetEvent event,
     std::unique_ptr<DropData> drop_data,
     base::WeakPtr<RenderWidgetHostViewBase> target,
-    base::Optional<gfx::PointF> transformed_pt) {
+    absl::optional<gfx::PointF> transformed_pt) {
   // If drag is not in progress it means drag has already finished and we get
   // this callback after that already. This happens for example when drag leaves
   // out window and we get the exit signal while still waiting for this
@@ -1453,7 +1428,7 @@ void WebContentsViewAura::PerformDropCallback(
     ui::DropTargetEvent event,
     std::unique_ptr<ui::OSExchangeData> data,
     base::WeakPtr<RenderWidgetHostViewBase> target,
-    base::Optional<gfx::PointF> transformed_pt) {
+    absl::optional<gfx::PointF> transformed_pt) {
   drag_in_progress_ = false;
   base::ScopedClosureRunner end_drag_runner(std::move(end_drag_runner_));
 
@@ -1555,11 +1530,11 @@ void WebContentsViewAura::FinishOnPerformDropCallback(
   current_drop_data_.reset();
 }
 
-ui::mojom::DragOperation WebContentsViewAura::OnPerformDrop(
+DragOperation WebContentsViewAura::OnPerformDrop(
     const ui::DropTargetEvent& event,
     std::unique_ptr<ui::OSExchangeData> data) {
   if (web_contents_->ShouldIgnoreInputEvents())
-    return ui::mojom::DragOperation::kNone;
+    return DragOperation::kNone;
 
   VivaldiGetDragTarget(web_contents_,
           event.location_f(),
@@ -1567,6 +1542,13 @@ ui::mojom::DragOperation WebContentsViewAura::OnPerformDrop(
                          weak_ptr_factory_.GetWeakPtr(), event,
                          std::move(data)));
   return current_drag_op_;
+}
+
+aura::client::DragDropDelegate::DropCallback
+WebContentsViewAura::GetDropCallback(const ui::DropTargetEvent& event) {
+  // TODO(crbug.com/1197522): Return drop callback.
+  NOTIMPLEMENTED();
+  return base::NullCallback();
 }
 
 void WebContentsViewAura::CompleteDrop(RenderWidgetHostImpl* target_rwh,

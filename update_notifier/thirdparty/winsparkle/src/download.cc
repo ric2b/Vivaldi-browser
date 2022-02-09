@@ -35,7 +35,7 @@
 #include <wininet.h>
 #include <string>
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 /*--------------------------------------------------------------------------*
                                 helpers
@@ -68,9 +68,21 @@ bool GetHttpNumericHeader(HINTERNET handle, DWORD whatToGet, DWORD& output) {
 
 }  // anonymous namespace
 
-FileDownloader::FileDownloader(const GURL& url, int flags, Error& error) {
+FileDownloader::FileDownloader() = default;
+
+void FileDownloader::SetHeader(base::StringPiece name,
+                               base::StringPiece value) {
+  DCHECK(!inet_handle_) << "must not be called after Connect()";
+  http_headers_.append(name.data(), name.length());
+  http_headers_ += ": ";
+  http_headers_.append(value.data(), value.length());
+  http_headers_ += "\r\n";
+}
+
+void FileDownloader::Connect(const GURL& url, Error& error) {
   if (error)
     return;
+  DCHECK(!inet_handle_);
 
   if (!url.is_valid()) {
     error.set(Error::kNetwork, "Invalid URL - " + url.possibly_invalid_spec());
@@ -105,10 +117,12 @@ FileDownloader::FileDownloader(const GURL& url, int flags, Error& error) {
   }
 
   DWORD dwFlags = INTERNET_FLAG_NO_UI;
-  if (flags & Download_NoCached)
+  if (disable_caching_) {
     dwFlags |= INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD;
-  if (scheme == INTERNET_SCHEME_HTTPS)
+  }
+  if (scheme == INTERNET_SCHEME_HTTPS) {
     dwFlags |= INTERNET_FLAG_SECURE;
+  }
 
   request_handle_ =
       HttpOpenRequestA(connection_handle_, "GET", url.PathForRequest().c_str(),
@@ -117,6 +131,15 @@ FileDownloader::FileDownloader(const GURL& url, int flags, Error& error) {
   if (!request_handle_) {
     error.set(Error::kNetwork, LastWin32Error("HttpOpenRequestA"));
     return;
+  }
+
+  if (!http_headers_.empty()) {
+    if (!HttpAddRequestHeadersA(
+            request_handle_, http_headers_.data(), http_headers_.size(),
+            HTTP_ADDREQ_FLAG_REPLACE | HTTP_ADDREQ_FLAG_ADD)) {
+      error.set(Error::kNetwork, LastWin32Error("HttpAddRequestHeadersA"));
+      return;
+    }
   }
 
 again:
@@ -280,4 +303,4 @@ std::string FileDownloader::FetchAll(Error& error) {
   return data;
 }
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier

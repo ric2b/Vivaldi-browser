@@ -69,7 +69,6 @@
 <translation id="215753907730220065">خروج از حالت تمام صفحه</translation>
 <translation id="2177950615300672361">برگه ناشناس: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">‏ماژول Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">دکمه‌ی مخفی‌سازی</translation>
 <translation id="2218515861914035131">جای‌گذاری به‌عنوان نوشتار ساده</translation>
 <translation id="2249605167705922988">برای مثال 5-1، 8، 13-11</translation>
 <translation id="225240747099314620">اجازه به شناسه‌ها برای محتوای محافظت شده (ممکن است نیاز به راه‌اندازی مجدد رایانه باشد)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">میکروفن</translation>
 <translation id="3241680850019875542">دایرکتوری ریشه برنامهٔ افزودنی را برای فشرده کردن انتخاب کنید. همچنین برای به‌روزرسانی برنامهٔ افزودنی، فایل کلید خصوصی را برای استفاده مجدد انتخاب کنید.</translation>
-<translation id="3266179261140759675">ارسال و دریافت اطلاعات توسط سایت‌های بسته شده را مسدود می‌کند</translation>
 <translation id="3280237271814976245">ذخیره &amp;به‌عنوان...</translation>
 <translation id="3285322247471302225">&amp;زبانه‌ی جدید</translation>
 <translation id="3288047731229977326">افزونه‌هایی که در حالت برنامه‌نوبس اجرا می‌شوند می‌توانند به رایانه شما آسیب برسانند. اگر برنامه‌نویس نیستید، باید این برنامه‌های افزودنی را که در حالت برنامه‌نویس اجرا می‌شوند غیرفعال کنید تا ایمن بمانید.</translation>
@@ -145,7 +143,7 @@
 <translation id="33022249435934718">‏کنترل‌کننده‌های GDI</translation>
 <translation id="3303818374450886607">کپی‌ها</translation>
 <translation id="3305661444342691068">گشودن PDF در پیش‌نمایش</translation>
-<translation id="3308134619352333507">دکمه پنهان‌سازی</translation>
+<translation id="3308134619352333507">دکمه‌ی مخفی‌سازی</translation>
 <translation id="3317459757438853210">دو طرفه</translation>
 <translation id="3341703758641437857">اجازه‌ی دسترسی به آدرس فایل‌ها</translation>
 <translation id="3347086966102161372">کپی آدرس تصویر</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">می‌تواند داده‌های سایت را خوانده و تغییر دهد</translation>
 <translation id="3560034655160545939">&amp;غلط‌گیر املایی</translation>
 <translation id="3574917942258583917">در هر صورت از حالت ناشناس خارج می‌شوید؟</translation>
-<translation id="357886715122934472">‏&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; می‌خواهد چاپگر &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; را با گروهی که شما مالک آن هستید، به اشتراک بگذارد: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. اگر بپذیرید، تمام اعضای گروه می‌توانند با چاپگر چاپ کنند.</translation>
 <translation id="3587482841069643663">همه</translation>
 <translation id="3627588569887975815">گشودن پیوند در پنجره‌ی حالت &amp;ناشناس</translation>
 <translation id="3627879631695760395">نصب <ph name="APP" />…</translation>
 <translation id="3668823961463113931">کنترل‌کننده‌ها</translation>
 <translation id="3678156199662914018">برنامهٔ افزودنی: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">درخواست اشتراک‌گذاری صفحه <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">به سایت‌های بسته‌شده، اجازه‌ی تکمیل ارسال و دریافت اطلاعات داده نشود</translation>
 <translation id="3711931198657368127">جای‌گذاری و رفتن به <ph name="URL" /></translation>
 <translation id="3727187387656390258">بررسی بالاپرها</translation>
 <translation id="3744111561329211289">همگام‌سازی پس‌زمینه</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">برنامهٔ افزودنی ایجاد شده:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">پذیرش برای گروه</translation>
 <translation id="4096508467498758490">غیرفعال کردن افزونه‌های حالت برنامه‌نویس</translation>
 <translation id="4100839878934973028">یکی از نرم‌افزارهای رایانه‌ی شما، برنامه‌ای را اضافه نموده که ممکن است بر کارکرد ویوالدی تأثیر بگذارد.</translation>
 <translation id="4109898769411476438">‏پیش از وارد کردن اطلاعات مرورگر را ببندید</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">نمایش جزئیات</translation>
 <translation id="4907306957610201395">دسته‌بندی مجوز</translation>
 <translation id="4912643508233590958">خروج از حالت بیکار</translation>
-<translation id="4918086044614829423">می‌پذیرم</translation>
 <translation id="4927753642311223124">در اینجا چیزی برای مشاهده وجود ندارد، به حرکت ادامه دهید.</translation>
 <translation id="4930714375720679147">فعال‌سازی</translation>
 <translation id="4988526792673242964">صفحات</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">پاک کردن داده‌های سایت</translation>
 <translation id="6042308850641462728">بیشتر</translation>
 <translation id="6059925163896151826">‏دستگاه‌های USB</translation>
-<translation id="6082651258230788217">نمایش در نوار ابزار</translation>
 <translation id="6086846494333236931">نصب‌ شده توسط مدیر شما</translation>
 <translation id="6101226222197207147">برنامه جدید اضافه شده (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">اتصال اینترنت شما کنترل می‌شود</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">شبیه‌سازی راه‌اندازی مجدد مرورگر</translation>
 <translation id="6445450263907939268">اگر این تغییرات مدنظر شما نبود، می‌توانید تنظیمات قبلی‌تان را بازیابی کنید.</translation>
 <translation id="6447842834002726250">کوکی‌ها</translation>
-<translation id="6452181791372256707">عدم پذیرش</translation>
 <translation id="6498249116389603658">&amp;همه زبان‌های شما</translation>
 <translation id="6503077044568424649">بیشترین موارد بازدید شده</translation>
 <translation id="6508261954199872201">برنامه: <ph name="APP_NAME" /></translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">این صفحه برگه جدیدی است که منتظرش بودید؟</translation>
 <translation id="786073089922909430">سرویس: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">مقصدهای اخیر</translation>
-<translation id="7898627924844766532">نگهداری در نوار ابزار</translation>
 <translation id="7903925330883316394">ابزار: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">در حال حاضر آفلاین</translation>
 <translation id="7947962633355574091">کپی آدرس ویدیو</translation>
@@ -452,7 +445,6 @@
 <translation id="8725066075913043281">تلاش مجدد</translation>
 <translation id="8757090071857742562">ارسال محتوای میزکار امکان‌پذیر نیست.  ببینید آیا فرمان شروع اشتراک‌گذاری صفحه‌تان را تأیید کرده‌اید.</translation>
 <translation id="8774934320277480003">حاشیه بالا</translation>
-<translation id="8783093612333542422">‏&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; می‌خواهد چاپگر &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; را با شما به اشتراک بگذارد.</translation>
 <translation id="8798099450830957504">پیش‌فرض</translation>
 <translation id="8800004011501252845">نمایش مقصدها برای</translation>
 <translation id="8808478386290700967">فروشگاه وب</translation>

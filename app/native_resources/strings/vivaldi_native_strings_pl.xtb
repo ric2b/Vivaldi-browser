@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Wyślij link pocztą e-mail</translation>
 <translation id="1454726940098520109">Nie pytaj ponownie</translation>
 <translation id="1462666970065907900">Czy na pewno chcesz zamknąć to okno?</translation>
+<translation id="1480046233931937785">Prawa autorskie</translation>
 <translation id="1526344461589023948">Wystąpił błąd podczas próby zapisania pobranej aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość miejsca na dysku i spróbuj ponownie później.</translation>
 <translation id="1657174850639146440">Potwór 9</translation>
 <translation id="1676595396635191120">Nowe okno prywatne</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Otwórz w nowej karcie</translation>
 <translation id="3027988479108856431">Niestety, twoje ustawienia Yandex nie są dostępne podczas korzystania z przeglądarki. Aby zaimportować te ustawienia, zapisz swoją pracę i zamknij wszystkie okna przeglądarki Yandex. Następnie naciśnij Dalej, aby kontynuować.</translation>
 <translation id="3084011186245865060">Krajobraz 6</translation>
+<translation id="3093931836425623631">Vivaldi powstało dzięki projektowi open source Chromium i innym oprogramowaniu open source.</translation>
 <translation id="3127383884976966729">Zwierzę 7</translation>
 <translation id="3156398087075132709">Nowa zakładka</translation>
 <translation id="3255747772218936245">Zainstaluj aktualizację</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Krajobraz 7</translation>
 <translation id="7111492742514999492">Krajobraz 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Przeglądarka Vivaldi powstała dzięki otwartemu projektowi <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> oraz innego <ph name="BEGIN_LINK_OSS" />oprogramowania open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Nie udało się uruchomić instalatora aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość pamięci lub miejsca na dysku i spróbuj ponownie później.</translation>
 <translation id="7658239707568436148">Anuluj</translation>
 <translation id="7715497554424665066">Ignoruj aktualizację</translation>

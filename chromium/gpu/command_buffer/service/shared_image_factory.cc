@@ -6,7 +6,6 @@
 
 #include <inttypes.h>
 
-#include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
@@ -49,6 +48,7 @@
 
 #if defined(OS_WIN)
 #include "gpu/command_buffer/service/shared_image_backing_factory_d3d.h"
+#include "ui/gfx/buffer_format_util.h"
 #endif  // OS_WIN
 
 #if defined(OS_FUCHSIA)
@@ -276,6 +276,7 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
                                            int client_id,
                                            gfx::GpuMemoryBufferHandle handle,
                                            gfx::BufferFormat format,
+                                           gfx::BufferPlane plane,
                                            SurfaceHandle surface_handle,
                                            const gfx::Size& size,
                                            const gfx::ColorSpace& color_space,
@@ -291,8 +292,8 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
   if (!factory)
     return false;
   auto backing = factory->CreateSharedImage(
-      mailbox, client_id, std::move(handle), format, surface_handle, size,
-      color_space, surface_origin, alpha_type, usage);
+      mailbox, client_id, std::move(handle), format, plane, surface_handle,
+      size, color_space, surface_origin, alpha_type, usage);
   if (backing)
     backing->OnWriteSucceeded();
   return RegisterBacking(std::move(backing), allow_legacy_mailbox);
@@ -424,6 +425,30 @@ bool SharedImageFactory::OnMemoryDump(
 
   return true;
 }
+
+#if defined(OS_WIN)
+bool SharedImageFactory::CreateSharedImageVideoPlanes(
+    base::span<const Mailbox> mailboxes,
+    gfx::GpuMemoryBufferHandle handle,
+    gfx::BufferFormat format,
+    const gfx::Size& size,
+    uint32_t usage) {
+  if (!interop_backing_factory_)
+    return false;
+
+  auto backings = interop_backing_factory_->CreateSharedImageVideoPlanes(
+      mailboxes, std::move(handle), format, size, usage);
+
+  if (backings.size() != gfx::NumberOfPlanesForLinearBufferFormat(format))
+    return false;
+
+  for (auto& backing : backings) {
+    if (!RegisterBacking(std::move(backing), /*allow_legacy_mailbox=*/false))
+      return false;
+  }
+  return true;
+}
+#endif
 
 #if defined(OS_ANDROID)
 bool SharedImageFactory::CreateSharedImageWithAHB(const Mailbox& out_mailbox,

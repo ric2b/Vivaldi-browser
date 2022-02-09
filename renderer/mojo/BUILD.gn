@@ -1,0 +1,10 @@
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojo") {
+  sources = [ "vivaldi_tabs_private.mojom" ]
+  input_root_override = "//vivaldi/"
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+  ]
+}

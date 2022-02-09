@@ -23,7 +23,7 @@
 
 FlagsUIHandler::FlagsUIHandler()
     : access_(flags_ui::kGeneralAccessFlagsOnly),
-      experimental_features_requested_(false),
+      experimental_features_callback_id_(""),
       deprecated_features_only_(false) {}
 
 FlagsUIHandler::~FlagsUIHandler() {}
@@ -57,18 +57,26 @@ void FlagsUIHandler::Init(flags_ui::FlagsStorage* flags_storage,
   flags_storage_.reset(flags_storage);
   access_ = access;
 
-  if (experimental_features_requested_)
-    HandleRequestExperimentalFeatures(nullptr);
+  if (!experimental_features_callback_id_.empty())
+    SendExperimentalFeatures();
 }
 
 void FlagsUIHandler::HandleRequestExperimentalFeatures(
     const base::ListValue* args) {
-  experimental_features_requested_ = true;
+  AllowJavascript();
+  const base::Value& callback_id = args->GetList()[0];
+
+  experimental_features_callback_id_ = callback_id.GetString();
   // Bail out if the handler hasn't been initialized yet. The request will be
   // handled after the initialization.
-  if (!flags_storage_)
+  if (!flags_storage_) {
     return;
+  }
 
+  SendExperimentalFeatures();
+}
+
+void FlagsUIHandler::SendExperimentalFeatures() {
   base::DictionaryValue results;
 
   std::unique_ptr<base::ListValue> supported_features(new base::ListValue);
@@ -103,8 +111,9 @@ void FlagsUIHandler::HandleRequestExperimentalFeatures(
   results.SetBoolean(flags_ui::kShowBetaChannelPromotion, false);
   results.SetBoolean(flags_ui::kShowDevChannelPromotion, false);
 #endif
-  web_ui()->CallJavascriptFunctionUnsafe(flags_ui::kReturnExperimentalFeatures,
-                                         results);
+  ResolveJavascriptCallback(base::Value(experimental_features_callback_id_),
+                            results);
+  experimental_features_callback_id_.clear();
 }
 
 void FlagsUIHandler::HandleEnableExperimentalFeatureMessage(
@@ -156,7 +165,7 @@ void FlagsUIHandler::HandleRestartBrowser(const base::ListValue* args) {
   // Adhere to policy-enforced command-line switch handling when applying
   // modified flags.
   auto flags = flags_storage_->GetFlags();
-  chromeos::UserSessionManager::ApplyUserPolicyToFlags(
+  ash::UserSessionManager::ApplyUserPolicyToFlags(
       Profile::FromWebUI(web_ui())->GetPrefs(), &flags);
 
   AccountId account_id =

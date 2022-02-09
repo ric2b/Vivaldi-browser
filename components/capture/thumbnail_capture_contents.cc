@@ -322,9 +322,10 @@ void ThumbnailCaptureContents::CaptureViaIpc() {
   params.full_page = false;
   params.once_per_contents = true;
   params.target_size = target_size_;
-  CapturePage::Capture(offscreen_tab_web_contents_.get(), params,
-                       base::Bind(&ThumbnailCaptureContents::OnIpcCaptureDone,
-                                  weak_ptr_factory_.GetWeakPtr()));
+  CapturePage::Capture(
+      offscreen_tab_web_contents_.get(), params,
+      base::BindOnce(&ThumbnailCaptureContents::OnIpcCaptureDone,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ThumbnailCaptureContents::OnCopyImageReady(const SkBitmap& bitmap) {

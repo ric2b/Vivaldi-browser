@@ -89,9 +89,9 @@ class TestIPCDemuxer : public IPCDemuxer {
     IPCDemuxer::Initialize(host, std::move(status_cb));
   }
 
-  base::Optional<container_names::MediaContainerName> GetContainerForMetrics()
+  absl::optional<container_names::MediaContainerName> GetContainerForMetrics()
       const override {
-    return base::nullopt;
+    return absl::nullopt;
   }
 
  private:
@@ -112,7 +112,7 @@ Demuxer* PlatformPipelineTestBase::CreatePlatformDemuxer(
     MediaLog* media_log) {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
-  IPCFactory::Preinitialize(base::Bind(&CreateIPCMediaPipelineHost),
+  IPCFactory::Preinitialize(base::BindRepeating(&CreateIPCMediaPipelineHost),
                             task_environment_.GetMainThreadTaskRunner(),
                             task_environment_.GetMainThreadTaskRunner());
   std::string adjusted_mime_type = IPCDemuxer::CanPlayType(content_type, url);

@@ -320,7 +320,8 @@ MenuManager::MenuManager(content::BrowserContext* context, StateStore* store)
   Profile* profile = Profile::FromBrowserContext(context);
   observed_profiles_.AddObservation(profile);
   if (profile->HasPrimaryOTRProfile())
-    observed_profiles_.AddObservation(profile->GetPrimaryOTRProfile());
+    observed_profiles_.AddObservation(
+        profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
   if (store_)
     store_->RegisterKey(kContextMenusKey);
 }
@@ -733,7 +734,7 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
         webview_guest ? events::WEB_VIEW_INTERNAL_CONTEXT_MENUS
                       : events::CONTEXT_MENUS,
         webview_guest ? kOnWebviewContextMenus : kOnContextMenus,
-        std::make_unique<base::ListValue>(args), context);
+        base::Value(args).TakeList(), context);
     event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
     event_router->DispatchEventToExtension(item->extension_id(),
                                            std::move(event));
@@ -745,7 +746,7 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
                       : events::CONTEXT_MENUS_ON_CLICKED,
         webview_guest ? api::chrome_web_view_internal::OnClicked::kEventName
                       : api::context_menus::OnClicked::kEventName,
-        std::make_unique<base::ListValue>(std::move(args)), context);
+        std::move(args), context);
     event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
     if (webview_guest)
       event->filter_info.instance_id = webview_guest->view_instance_id();

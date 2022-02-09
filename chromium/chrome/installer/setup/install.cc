@@ -589,22 +589,6 @@ void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
   // failures possible.
   command_line.AppendSwitch(switches::kVerboseLogging);
 
-  // For Vivaldi we need to append the supplied install dir.
-  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  if (cmd_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
-    base::FilePath vivaldi_install_dir =
-        cmd_line.GetSwitchValuePath(vivaldi::constants::kVivaldiInstallDir);
-    command_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
-                                  vivaldi_install_dir);
-  }
-#if !defined(OFFICIAL_BUILD)
-  if (vivaldi::debug_subprocesses_exe) {
-    command_line.SetProgram(*vivaldi::debug_subprocesses_exe);
-    command_line.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
-                                  setup_path);
-  }
-#endif
-
   base::LaunchOptions launch_options;
   launch_options.start_hidden = true;
   // Make sure not to launch from a version directory. Otherwise, it wouldn't be

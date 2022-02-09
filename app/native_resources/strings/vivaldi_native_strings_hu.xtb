@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Hivatkozás küldése levélben</translation>
 <translation id="1454726940098520109">Ne mutassa újra</translation>
 <translation id="1462666970065907900">Biztos be akarod zárni az ablakot?</translation>
+<translation id="1480046233931937785">Készítők</translation>
 <translation id="1526344461589023948">Hiba lépett fel aletöltött frissítés mentésekor. Ellenőrizd, hogy a gépen van elegendő szabad lemezterület, és később próbáld újra.</translation>
 <translation id="1657174850639146440">Szörny 9</translation>
 <translation id="1676595396635191120">Új privát ablak</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Megnyitás új lapon</translation>
 <translation id="3027988479108856431">Sajnos a Yandex beállításaid nem érhetők el, míg a böngésző fut. Hogy beimportáld azon beállításokat a Vivaldiba, mentsd el a munkáidat és zárj be minden Yandex ablakot, majd kattints a Folytatás gombra.</translation>
 <translation id="3084011186245865060">Tájkép 6</translation>
+<translation id="3093931836425623631">A Vivaldi működését a Chromium nyílt forráskódú projekt és egyéb nyílt forráskódú szoftverek teszik lehetővé.</translation>
 <translation id="3127383884976966729">Állat 7</translation>
 <translation id="3156398087075132709">Új könyvjelző</translation>
 <translation id="3255747772218936245">Frissítés telepítése</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Tájkép 7</translation>
 <translation id="7111492742514999492">Tájkép 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">A Vivaldi megvalósítását a <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> nyílt forráskódú projekt és egyéb <ph name="BEGIN_LINK_OSS" />nyílt forráskódú szoftverek<ph name="END_LINK_OSS" /> teszik lehetővé.</translation>
 <translation id="7581266044164103589">A frissítés telepítőjét nem sikerült elindítani. Ellenőrizd, hogy a számítógépben van elegendő memória és lemezterület, és később próbáld újra.</translation>
 <translation id="7658239707568436148">Mégse</translation>
 <translation id="7715497554424665066">Fr&amp;issítés kihagyása</translation>

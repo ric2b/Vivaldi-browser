@@ -119,8 +119,8 @@ void RuleServiceImpl::OnStateLoaded(
   active_exceptions_lists_ = load_result->active_exceptions_lists;
   blocked_urls_reporter_.emplace(
       std::move(load_result->blocked_counters),
-      base::Bind(&RuleServiceStorage::ScheduleSave,
-                 base::Unretained(&state_store_.value())));
+      base::BindRepeating(&RuleServiceStorage::ScheduleSave,
+                          base::Unretained(&state_store_.value())));
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
     for (const auto& rule_source :
@@ -163,8 +163,8 @@ void RuleServiceImpl::OnStateLoaded(
   known_sources_handler_.emplace(
       this, load_result->storage_version, load_result->known_sources,
       std::move(load_result->deleted_presets),
-      base::Bind(&RuleServiceStorage::ScheduleSave,
-                 base::Unretained(&state_store_.value())));
+      base::BindRepeating(&RuleServiceStorage::ScheduleSave,
+                          base::Unretained(&state_store_.value())));
 
   is_loaded_ = true;
   for (Observer& observer : observers_)
@@ -199,12 +199,12 @@ std::map<uint32_t, RuleSource> RuleServiceImpl::GetRuleSources(
   return output;
 }
 
-base::Optional<RuleSource> RuleServiceImpl::GetRuleSource(RuleGroup group,
+absl::optional<RuleSource> RuleServiceImpl::GetRuleSource(RuleGroup group,
                                                           uint32_t source_id) {
   const auto& rule_sources = GetSourceMap(group);
   const auto& source_context = rule_sources.find(source_id);
   if (source_context == rule_sources.end())
-    return base::nullopt;
+    return absl::nullopt;
   return source_context->second->rule_source();
 }
 

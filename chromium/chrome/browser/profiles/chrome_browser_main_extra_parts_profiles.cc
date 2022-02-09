@@ -40,6 +40,7 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
+#include "chrome/browser/login_detection/login_detection_keyed_service_factory.h"
 #include "chrome/browser/media/history/media_history_keyed_service_factory.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/media_engagement_service_factory.h"
@@ -74,6 +75,7 @@
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
+#include "chrome/browser/sessions/session_data_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
@@ -120,7 +122,9 @@
 #include "chrome/browser/android/reading_list/reading_list_notification_service_factory.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/thin_webview/chrome_thin_webview_initializer.h"
+#include "chrome/browser/commerce/commerce_feature_list.h"
 #include "chrome/browser/commerce/merchant_viewer/merchant_signal_db_content.pb.h"
+#include "chrome/browser/commerce/merchant_viewer/merchant_viewer_data_manager_factory.h"
 #include "chrome/browser/commerce/subscriptions/commerce_subscription_db_content.pb.h"
 #include "chrome/browser/media/android/cdm/media_drm_origin_id_manager_factory.h"
 #else
@@ -194,11 +198,14 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/login/security_token_session_controller_factory.h"
+#include "chrome/browser/ash/system_extensions/system_extensions_provider_factory.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/lacros/cert_db_initializer_factory.h"
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/lacros/lacros_chrome_service_impl.h"
 #endif
 
 #if defined(OS_MAC)
@@ -274,6 +281,10 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if !defined(OS_ANDROID)
   CartServiceFactory::GetInstance();
 #endif
+#if defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(commerce::kCommerceMerchantViewer))
+    MerchantViewerDataManagerFactory::GetInstance();
+#endif
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   CertDbInitializerFactory::GetInstance();
 #endif
@@ -327,6 +338,7 @@ void ChromeBrowserMainExtraPartsProfiles::
           permissions::features::kOneTimeGeolocationPermission)) {
     LastTabStandingTrackerFactory::GetInstance();
   }
+  login_detection::LoginDetectionKeyedServiceFactory::GetInstance();
 #if !defined(OS_ANDROID)
   LoginUIServiceFactory::GetInstance();
   ManagedConfigurationAPIFactory::GetInstance();
@@ -427,13 +439,19 @@ void ChromeBrowserMainExtraPartsProfiles::
   send_tab_to_self::SendTabToSelfClientServiceFactory::GetInstance();
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   SessionServiceFactory::GetInstance();
+  SessionDataServiceFactory::GetInstance();
 #endif
   SharingServiceFactory::GetInstance();
   ShortcutsBackendFactory::GetInstance();
   SigninProfileAttributesUpdaterFactory::GetInstance();
   if (site_engagement::SiteEngagementService::IsEnabled())
     site_engagement::SiteEngagementServiceFactory::GetInstance();
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  const crosapi::mojom::BrowserInitParams* init_params =
+      chromeos::LacrosChromeServiceImpl::Get()->init_params();
+  if (!init_params->use_new_account_manager)
+    SigninManagerFactory::GetInstance();
+#elif BUILDFLAG(ENABLE_DICE_SUPPORT)
   SigninManagerFactory::GetInstance();
 #endif
 #if BUILDFLAG(ENABLE_SPELLCHECK)
@@ -445,6 +463,10 @@ void ChromeBrowserMainExtraPartsProfiles::
   suggestions::SuggestionsServiceFactory::GetInstance();
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserServiceFactory::GetInstance();
+#endif
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (base::FeatureList::IsEnabled(features::kSystemExtensions))
+    SystemExtensionsProviderFactory::GetInstance();
 #endif
   TabRestoreServiceFactory::GetInstance();
   TemplateURLFetcherFactory::GetInstance();

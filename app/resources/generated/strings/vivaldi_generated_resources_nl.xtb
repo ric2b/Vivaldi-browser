@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Volledig scherm sluiten</translation>
 <translation id="2177950615300672361">Privétab: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client-module: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Knop verbergen</translation>
 <translation id="2218515861914035131">Plakken als platte &amp;tekst</translation>
 <translation id="2249605167705922988">bijv. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identificatoren toestaan voor beveiligde inhoud (PC-herstart mogelijk vereist)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">PreRender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfoon</translation>
 <translation id="3241680850019875542">Selecteer de hoofddirectory van de extensie die je wilt inpakken. Als je een extensie wilt bijwerken, selecteer je ook het privésleutelbestand om dit opnieuw te gebruiken.</translation>
-<translation id="3266179261140759675">Voorkomen dat gesloten sites gegevens sturen en ontvangen</translation>
 <translation id="3280237271814976245">&amp;Opslaan als...</translation>
 <translation id="3285322247471302225">Nieuwe &amp;tab</translation>
 <translation id="3288047731229977326">Extensies die in ontwikkelaarsmodus worden uitgevoerd, kunnen je computer beschadigen. Als je geen ontwikkelaar bent, dien je om veiligheidsredenen zulke extensies uit te schakelen.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Kan websitegegevens lezen en wijzigen</translation>
 <translation id="3560034655160545939">&amp;Spellingcontrole</translation>
 <translation id="3574917942258583917">Privémodus toch afsluiten?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil een printer delen &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met een van je groepen: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Als je akkoord gaat, kunnen alle groepsleden de printer gebruiken voor afdrukken.</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Koppeling openen in privévenster</translation>
 <translation id="3627879631695760395"><ph name="APP" /> installeren...</translation>
 <translation id="3668823961463113931">Handlers</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Verzoek voor scherm delen van <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Gesloten websites mogen het verzenden of ontvangen van gegevens niet voltooien</translation>
 <translation id="3711931198657368127">Pl&amp;akken en naar <ph name="URL" /> gaan</translation>
 <translation id="3727187387656390258">Pop-up inspecteren</translation>
 <translation id="3744111561329211289">Synchronisatie op de achtergrond</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">De volgende extensie is gemaakt:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Accepteren voor groep</translation>
 <translation id="4096508467498758490">Extensies in ontwikkelaarsmodus uitschakelen</translation>
 <translation id="4100839878934973028">Een ander programma op je computer heeft een app toegevoegd die de manier waarop Vivaldi werkt kan wijzigen.</translation>
 <translation id="4109898769411476438">Browser sluiten voor het importeren</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Details weergeven</translation>
 <translation id="4907306957610201395">Permissies</translation>
 <translation id="4912643508233590958">Activeringen vanuit inactief</translation>
-<translation id="4918086044614829423">Accepteren</translation>
 <translation id="4927753642311223124">Hier is niets te zien.</translation>
 <translation id="4930714375720679147">Inschakelen</translation>
 <translation id="4988526792673242964">Pagina's</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Websitegegevens wissen</translation>
 <translation id="6042308850641462728">Meer</translation>
 <translation id="6059925163896151826">USB-apparaten</translation>
-<translation id="6082651258230788217">In werkbalk weergeven</translation>
 <translation id="6086846494333236931">Geïnstalleerd door je administrator</translation>
 <translation id="6101226222197207147">Nieuwe app toegevoegd (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Je internetverbinding wordt beheerd</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Browserherstart simuleren</translation>
 <translation id="6445450263907939268">Als je deze wijzigingen niet wilt aanbrengen, kun je je vorige instellingen herstellen.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Afwijzen</translation>
 <translation id="6498249116389603658">&amp;Al je talen</translation>
 <translation id="6503077044568424649">Meest bezocht</translation>
 <translation id="6508261954199872201">Applicatie: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Kan websitegegevens lezen en wijzigen</translation>
 <translation id="708060913198414444">Audioadres k&amp;opiëren</translation>
 <translation id="7175353351958621980">Geladen vanaf:</translation>
-<translation id="7186088072322679094">Op werkbalk houden</translation>
+<translation id="7186088072322679094">In werkbalk houden</translation>
 <translation id="7270858098575133036">Goedkeuring vragen als een website berichten exclusief voor het systeem wil gebruiken om toegang te krijgen tot MIDI-apparaten</translation>
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Is dit de pagina voor 'nieuwe tab' die je verwachtte?</translation>
 <translation id="786073089922909430">Service: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Recente bestemmingen</translation>
-<translation id="7898627924844766532">Op werkbalk houden</translation>
 <translation id="7903925330883316394">Hulpprogramma: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Op dit moment offline</translation>
 <translation id="7947962633355574091">Videoadres k&amp;opiëren</translation>
@@ -451,7 +444,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8725066075913043281">Opnieuw proberen</translation>
 <translation id="8757090071857742562">Kan bureaublad niet casten. Controleer of je het bericht voor het delen van je scherm hebt bevestigd.</translation>
 <translation id="8774934320277480003">Marge bovenkant</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil een printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met je delen.</translation>
 <translation id="8798099450830957504">Standaard</translation>
 <translation id="8800004011501252845">Bestemmingen weergeven voor</translation>
 <translation id="8808478386290700967">Web Store</translation>

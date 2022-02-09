@@ -267,3 +267,39 @@ void OSCrypt::ResetStateForTesting() {
   GetEncryptionKeyFactory().clear();
   GetMockEncryptionKeyFactory().clear();
 }
+
+// static
+bool OSCrypt::DecryptImportedString16(
+      const std::string& ciphertext,
+      std::u16string* plaintext,
+      const std::string& import_encrytpion_key) {
+  std::string utf8;
+  if (!base::StartsWith(ciphertext, kEncryptionVersionPrefix,
+                        base::CompareCase::SENSITIVE)) {
+    if (DecryptStringWithDPAPI(ciphertext, &utf8)) {
+      *plaintext = base::UTF8ToUTF16(utf8);
+      return true;
+    }
+  }
+
+  crypto::Aead aead(crypto::Aead::AES_256_GCM);
+  aead.Init(&import_encrytpion_key);
+
+  if (ciphertext.length() < kNonceLength + sizeof(kEncryptionVersionPrefix)) {
+    LOG(ERROR) << "Encrypted string too short.";
+    return false;
+  }
+
+  // Obtain the nonce.
+  std::string nonce =
+      ciphertext.substr(sizeof(kEncryptionVersionPrefix) - 1, kNonceLength);
+  // Strip off the versioning prefix before decrypting.
+  std::string raw_ciphertext =
+      ciphertext.substr(kNonceLength + (sizeof(kEncryptionVersionPrefix) - 1));
+
+  if (aead.Open(raw_ciphertext, nonce, std::string(), &utf8)) {
+    *plaintext = base::UTF8ToUTF16(utf8);
+    return true;
+  }
+  return false;
+}

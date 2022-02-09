@@ -23,7 +23,6 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -33,7 +32,6 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.search_engines.TemplateUrlService;
-import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
@@ -124,7 +122,7 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     private boolean mIsDefaultSearchEngineGoogle;
     private boolean mIsAssistantVoiceSearchEnabled;
     private boolean mIsColorfulMicEnabled;
-    private boolean mShouldShowColorfulMic;
+    private boolean mShouldShowColorfulButtons;
     private boolean mIsMultiAccountCheckEnabled;
     private String mMinAgsaVersion;
 
@@ -179,7 +177,7 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
 
         mIsDefaultSearchEngineGoogle = mTemplateUrlService.isDefaultSearchEngineGoogle();
 
-        mShouldShowColorfulMic = isColorfulMicEnabled();
+        mShouldShowColorfulButtons = isColorfulMicEnabled();
     }
 
     /** @return Whether the user has had a chance to enable the feature. */
@@ -213,14 +211,14 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
      *         exist or reuse the existing Drawable's ConstantState if it does already exist.
      **/
     public Drawable getCurrentMicDrawable() {
-        return AppCompatResources.getDrawable(
-                mContext, mShouldShowColorfulMic ? R.drawable.ic_colorful_mic : R.drawable.btn_mic);
+        return AppCompatResources.getDrawable(mContext,
+                mShouldShowColorfulButtons ? R.drawable.ic_colorful_mic : R.drawable.btn_mic);
     }
 
     /** @return The correct ColorStateList for the current theme. */
-    public @Nullable ColorStateList getMicButtonColorStateList(
+    public @Nullable ColorStateList getButtonColorStateList(
             @ColorInt int primaryColor, Context context) {
-        if (mShouldShowColorfulMic) return null;
+        if (mShouldShowColorfulButtons) return null;
 
         final boolean useLightColors =
                 ColorUtils.shouldUseLightForegroundOnBackground(primaryColor);
@@ -291,7 +289,7 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
             if (returnImmediately) return false;
             outList.add(EligibilityFailureReason.CHROME_NOT_GOOGLE_SIGNED);
         }
-        if (!mExternalAuthUtils.isGoogleSigned(IntentHandler.PACKAGE_GSA)) {
+        if (!mExternalAuthUtils.isGoogleSigned(GSAState.PACKAGE_NAME)) {
             if (returnImmediately) return false;
             outList.add(EligibilityFailureReason.AGSA_NOT_GOOGLE_SIGNED);
         }
@@ -324,7 +322,7 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     /** @return The Intent for Assistant voice search. */
     public Intent getAssistantVoiceSearchIntent() {
         Intent intent = new Intent(Intent.ACTION_SEARCH);
-        intent.setPackage(IntentHandler.PACKAGE_GSA);
+        intent.setPackage(GSAState.PACKAGE_NAME);
         return intent;
     }
 
@@ -403,11 +401,11 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
         new AsyncTask<Boolean>() {
             @Override
             protected Boolean doInBackground() {
-                return mShouldShowColorfulMic != shouldShowColorfulMic;
+                return mShouldShowColorfulButtons != shouldShowColorfulMic;
             }
             @Override
             protected void onPostExecute(Boolean notify) {
-                mShouldShowColorfulMic = shouldShowColorfulMic;
+                mShouldShowColorfulButtons = shouldShowColorfulMic;
                 if (notify) notifyObserver();
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -416,14 +414,10 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     /** Wrapped multi-account check to handle the exception. */
     @VisibleForTesting
     boolean doesViolateMultiAccountCheck() {
-        if (!mAccountManagerFacade.isCachePopulated()) return true;
-
-        try {
-            return mAccountManagerFacade.getGoogleAccounts().size() > 1;
-        } catch (AccountManagerDelegateException e) {
-            // In case of an exception -- we can't be sure so default to true.
-            return true;
-        }
+        // In case of the accounts cannot be fetched -- we can't be sure so default to true.
+        return !mExternalAuthUtils.canUseGooglePlayServices()
+                || !mAccountManagerFacade.isCachePopulated()
+                || mAccountManagerFacade.tryGetGoogleAccounts().size() > 1;
     }
 
     // TemplateUrlService.TemplateUrlServiceObserver implementation
@@ -434,7 +428,7 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
         if (mIsDefaultSearchEngineGoogle == searchEngineGoogle) return;
 
         mIsDefaultSearchEngineGoogle = searchEngineGoogle;
-        mShouldShowColorfulMic = isColorfulMicEnabled();
+        mShouldShowColorfulButtons = isColorfulMicEnabled();
         notifyObserver();
     }
 
@@ -457,7 +451,7 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     /** Enable the colorful mic for testing purposes. */
     void setColorfulMicEnabledForTesting(boolean enabled) {
         mIsColorfulMicEnabled = enabled;
-        mShouldShowColorfulMic = enabled;
+        mShouldShowColorfulButtons = enabled;
     }
 
     void setMultiAccountCheckEnabledForTesting(boolean enabled) {

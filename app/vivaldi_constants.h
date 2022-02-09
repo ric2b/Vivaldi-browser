@@ -6,6 +6,7 @@
 #define APP_VIVALDI_CONSTANTS_H_
 
 #define VIVALDI_APP_ID "mpognobbkildjkofajifpdfhcoklimli"
+#define VIVALDI_APP_ID_U u"mpognobbkildjkofajifpdfhcoklimli"
 #define VIVALDI_APP_HEX_ID "A414F2F4543AC9C68DDF663D0A459E6053E3373C"
 
 #define VIVALDI_DATA_URL_SCHEME "chrome"

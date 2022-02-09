@@ -193,7 +193,7 @@ class MetricsServiceTest : public testing::Test {
   // the histogram was not found.
   int GetHistogramSampleCount(const ChromeUserMetricsExtension& uma_log,
                               base::StringPiece histogram_name) {
-    const auto histogram_name_hash = HashMetricName(histogram_name);
+    const auto histogram_name_hash = base::HashMetricName(histogram_name);
     int samples = 0;
     for (int i = 0; i < uma_log.histogram_event_size(); ++i) {
       const auto& histogram = uma_log.histogram_event(i);
@@ -469,7 +469,7 @@ TEST_F(MetricsServiceTest, FirstLogCreatedBeforeUnsentLogsSent) {
   // is never deserialized to proto, so we're just passing some dummy content.
   ASSERT_EQ(0u, test_log_store->initial_log_count());
   ASSERT_EQ(0u, test_log_store->ongoing_log_count());
-  test_log_store->StoreLog("blah_blah", MetricsLog::ONGOING_LOG, base::nullopt);
+  test_log_store->StoreLog("blah_blah", MetricsLog::ONGOING_LOG, absl::nullopt);
   // Note: |initial_log_count()| refers to initial stability logs, so the above
   // log is counted an ongoing log (per its type).
   ASSERT_EQ(0u, test_log_store->initial_log_count());

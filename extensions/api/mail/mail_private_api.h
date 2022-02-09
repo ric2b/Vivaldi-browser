@@ -301,6 +301,27 @@ class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateMatchMessageFunction);
 };
 
+class MailPrivateRebuildDatabaseFunction : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.rebuildDatabase",
+                             MAIL_SEARCH_REBUILD_DATABASE)
+ public:
+  MailPrivateRebuildDatabaseFunction() = default;
+
+ protected:
+  ~MailPrivateRebuildDatabaseFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the RebuildDatabse function to provide results.
+  void RebuildStartedCallback(std::shared_ptr<bool> results);
+
+ private:
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateRebuildDatabaseFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_

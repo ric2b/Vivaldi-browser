@@ -115,9 +115,8 @@ VivaldiAccountManagerRequestHandler::~VivaldiAccountManagerRequestHandler() {}
 void VivaldiAccountManagerRequestHandler::HandleRequest() {
   request_start_time_ = base::Time::Now();
 
-  auto url_loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(profile_)
-          ->GetURLLoaderFactoryForBrowserProcess();
+  auto url_loader_factory = profile_->GetDefaultStoragePartition()
+                                ->GetURLLoaderFactoryForBrowserProcess();
 
   url_loader_ = CreateURLLoader(request_url_, body_, headers_);
 

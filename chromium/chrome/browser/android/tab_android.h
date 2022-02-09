@@ -13,7 +13,6 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
@@ -46,15 +45,6 @@ class AutofillProvider;
 
 class TabAndroid : public base::SupportsUserData {
  public:
-  // A Java counterpart will be generated for this enum.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser
-  enum TabLoadStatus {
-    PAGE_LOAD_FAILED = 0,
-    DEFAULT_PAGE_LOAD = 1,
-    PARTIAL_PRERENDERED_PAGE_LOAD = 2,
-    FULL_PRERENDERED_PAGE_LOAD = 3,
-  };
-
   class Observer : public base::CheckedObserver {
    public:
     // Called when WebContents is initialized.
@@ -164,22 +154,6 @@ class TabAndroid : public base::SupportsUserData {
       const base::android::JavaParamRef<jobject>& jweb_contents,
       jint width,
       jint height);
-  TabLoadStatus LoadUrl(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jstring>& url,
-      const base::android::JavaParamRef<jobject>& j_initiator_origin,
-      const base::android::JavaParamRef<jstring>& j_extra_headers,
-      const base::android::JavaParamRef<jobject>& j_post_data,
-      jint page_transition,
-      const base::android::JavaParamRef<jstring>& j_referrer_url,
-      jint referrer_policy,
-      jboolean is_renderer_initiated,
-      jboolean should_replace_current_entry,
-      jboolean has_user_gesture,
-      jboolean should_clear_history_list,
-      jlong omnibox_input_received_timestamp,
-      jlong intent_received_timestamp,
-      jint ua_override_option);
   void SetActiveNavigationEntryTitleForUrl(
       JNIEnv* env,
       const base::android::JavaParamRef<jstring>& jurl,
@@ -230,9 +204,6 @@ class TabAndroid : public base::SupportsUserData {
 
   base::ObserverList<Observer> observers_;
 
-  // Vivaldi
-  std::unique_ptr<autofill::AutofillProvider> autofill_provider_;
-
   DISALLOW_COPY_AND_ASSIGN(TabAndroid);
 
  public:
@@ -243,10 +214,8 @@ class TabAndroid : public base::SupportsUserData {
       jboolean did_start_load,
       jboolean did_finish_load);
 
-  // Vivaldi: Init the autofill provider.
-  void OnAutofillProviderChanged(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& autofill_provider);
+  // Vivaldi: Init the autofill driver.
+  void InitializeAutofillDriver(JNIEnv* env);
 };
 
 #endif  // CHROME_BROWSER_ANDROID_TAB_ANDROID_H_

@@ -293,7 +293,7 @@ bool InputFileManager::LoadFile(const LocationRange& origin,
   bool success =
       DoLoadFile(origin, build_settings, name, load_file_callback_, file, &tokens, &root, err);
   // Can't return early. We have to ensure that the completion event is
-  // signaled in all cases bacause another thread could be blocked on this one.
+  // signaled in all cases because another thread could be blocked on this one.
 
   // Save this pointer for running the callbacks below, which happens after the
   // scoped ptr ownership is taken away inside the lock.

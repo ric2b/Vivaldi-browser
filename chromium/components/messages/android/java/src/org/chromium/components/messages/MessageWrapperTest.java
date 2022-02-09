@@ -47,7 +47,7 @@ public class MessageWrapperTest {
     @Test
     @SmallTest
     public void testMessageProperties() {
-        MessageWrapper message = MessageWrapper.create(1);
+        MessageWrapper message = MessageWrapper.create(1, MessageIdentifier.TEST_MESSAGE);
         PropertyModel messageProperties = message.getMessageProperties();
 
         message.setTitle("Title");
@@ -57,6 +57,10 @@ public class MessageWrapperTest {
         message.setDescription("Description");
         Assert.assertEquals("Description doesn't match provided value", "Description",
                 messageProperties.get(MessageBannerProperties.DESCRIPTION));
+
+        message.setDescriptionMaxLines(2);
+        Assert.assertEquals("Description max lines doesn't match provided value", 2,
+                messageProperties.get(MessageBannerProperties.DESCRIPTION_MAX_LINES));
 
         message.setPrimaryButtonText("Primary button");
         Assert.assertEquals("Button text doesn't match provided value", "Primary button",
@@ -82,7 +86,7 @@ public class MessageWrapperTest {
     @SmallTest
     public void testCallbacks() {
         final long nativePtr = 1;
-        MessageWrapper message = MessageWrapper.create(nativePtr);
+        MessageWrapper message = MessageWrapper.create(nativePtr, MessageIdentifier.TEST_MESSAGE);
         PropertyModel messageProperties = message.getMessageProperties();
         messageProperties.get(MessageBannerProperties.ON_PRIMARY_ACTION).run();
         Mockito.verify(mNativeMock).handleActionClick(nativePtr);
@@ -100,7 +104,7 @@ public class MessageWrapperTest {
     @SmallTest
     public void testDestroyedMessageWrapperCallbacks() {
         final long nativePtr = 1;
-        MessageWrapper message = MessageWrapper.create(nativePtr);
+        MessageWrapper message = MessageWrapper.create(nativePtr, MessageIdentifier.TEST_MESSAGE);
         PropertyModel messageProperties = message.getMessageProperties();
 
         message.clearNativePtr();

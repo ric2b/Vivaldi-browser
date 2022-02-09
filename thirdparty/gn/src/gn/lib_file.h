@@ -19,7 +19,7 @@ class LibFile {
  public:
   LibFile() = default;
 
-  explicit LibFile(const std::string_view& lib_name);
+  explicit LibFile(std::string_view lib_name);
   explicit LibFile(const SourceFile& source_file);
 
   bool is_source_file() const { return name_.empty(); }

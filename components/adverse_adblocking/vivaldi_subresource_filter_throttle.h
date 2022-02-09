@@ -8,7 +8,6 @@
 
 #include "base/memory/weak_ptr.h"
 
-#include "components/subresource_filter/content/browser/subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_client.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
@@ -17,15 +16,13 @@
 
 namespace content {
 class BrowserContext;
+class WebContents;
 }
 
-using subresource_filter::SubresourceFilterClient;
 using subresource_filter::SubresourceFilterSafeBrowsingClient;
 using subresource_filter::Configuration;
 using subresource_filter::ActivationList;
 using subresource_filter::ActivationDecision;
-
-class VivaldiSubresourceFilterClient;
 
 enum class ActivationPosition {
   kOnly = 0,
@@ -42,9 +39,9 @@ class VivaldiSubresourceFilterAdblockingThrottle
       public base::SupportsWeakPtr<VivaldiSubresourceFilterAdblockingThrottle> {
  public:
   VivaldiSubresourceFilterAdblockingThrottle(
-      content::NavigationHandle* handle,
-      VivaldiSubresourceFilterClient* client);
+      content::NavigationHandle* handle);
   ~VivaldiSubresourceFilterAdblockingThrottle() override;
+
 
   // content::NavigationThrottle:
   content::NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
@@ -103,10 +100,6 @@ class VivaldiSubresourceFilterAdblockingThrottle
   // Whether this throttle is deferring the navigation. Only set to true in
   // WillProcessResponse if there are ongoing safe browsing checks.
   bool deferring_ = false;
-
-  // Must outlive this class, and is owned by
-  //ContentSubresourceFilterThrottleManager.
-  VivaldiSubresourceFilterClient* filter_client_;
 
   content::BrowserContext* browser_context_;
 

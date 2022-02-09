@@ -37,7 +37,7 @@ class Token;
 // various state points into them.
 class InputFileManager : public base::RefCountedThreadSafe<InputFileManager> {
  public:
-  // Callback issued when a file is laoded. On auccess, the parse node will
+  // Callback issued when a file is loaded. On auccess, the parse node will
   // refer to the root block of the file. On failure, this will be NULL.
   using FileLoadCallback = std::function<void(const ParseNode*)>;
 

@@ -68,26 +68,12 @@ const char kTypeDictionaryName[] = "dictionary";
 
 }  // namespace
 
-#if defined(OS_ANDROID)
-
-namespace {
-// Declare empty structs to minimize the amount of ifdefs
-struct PrefProperties {
-  void SetEnumProperties(EnumPrefProperties enum_properties) {}
-};
-
-struct PrefsProperties {
-  void emplace(std::string path, PrefProperties properties) {}
-};
-
-}  // namespace
-
-#else
+#ifndef OS_ANDROID
 
 namespace {
 
-PrefsProperties& GetRegisteredPrefPropertiesStorage() {
-  static base::NoDestructor<PrefsProperties> storage;
+PrefPropertiesMap& GetRegisteredPrefPropertiesStorage() {
+  static base::NoDestructor<PrefPropertiesMap> storage;
   return *storage;
 }
 
@@ -106,26 +92,26 @@ void PrefProperties::SetEnumProperties(EnumPrefProperties enum_properties) {
       std::make_unique<EnumPrefProperties>(std::move(enum_properties));
 }
 
-PrefsProperties ExtractLastRegisteredPrefsPropertes() {
+PrefPropertiesMap ExtractLastRegisteredPrefsProperties() {
   // Should be called exactly once per profile after a call to
   // RegisterProfilePrefs.
   DCHECK(!GetRegisteredPrefPropertiesStorage().empty());
   return std::move(GetRegisteredPrefPropertiesStorage());
 }
 
-#endif  // !defined(OS_ANDROID)
+#endif  // ifndef OS_ANDROID
 
 EnumPrefProperties::EnumPrefProperties() = default;
 EnumPrefProperties::EnumPrefProperties(EnumPrefProperties&&) = default;
 EnumPrefProperties::~EnumPrefProperties() = default;
 
-base::Optional<int> EnumPrefProperties::FindValue(
+absl::optional<int> EnumPrefProperties::FindValue(
     base::StringPiece name) const {
   for (const auto& i : name_value_pairs) {
     if (i.first == name)
       return i.second;
   }
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 const std::string* EnumPrefProperties::FindName(int value) const {
@@ -223,7 +209,7 @@ base::Value GetComputedDefault(const std::string& path) {
 void RegisterPrefsFromDefinition(base::Value definition,
                                  std::string current_path,
                                  user_prefs::PrefRegistrySyncable* registry,
-                                 PrefsProperties* prefs_properties) {
+                                 PrefPropertiesMap* pref_properties_map) {
   const base::Value* type_value = definition.FindKey(kTypeKeyName);
   if (!type_value) {
     for (auto child : definition.DictItems()) {
@@ -235,7 +221,7 @@ void RegisterPrefsFromDefinition(base::Value definition,
       }
       RegisterPrefsFromDefinition(std::move(child.second),
                                   std::move(child_path), registry,
-                                  prefs_properties);
+                                  pref_properties_map);
     }
     return;
   }
@@ -277,7 +263,7 @@ void RegisterPrefsFromDefinition(base::Value definition,
     LOG(FATAL) << "Invalid type value at '" << current_path << "'";
   }
 
-  base::Optional<bool> syncable = definition.FindBoolKey(kSyncableKeyName);
+  absl::optional<bool> syncable = definition.FindBoolKey(kSyncableKeyName);
   if (!syncable) {
     LOG(FATAL) << "Expected a boolean at '" << current_path << "."
                << kSyncableKeyName << "'";
@@ -313,7 +299,9 @@ void RegisterPrefsFromDefinition(base::Value definition,
     }
   }
 
+#if !defined(OS_ANDROID)
   PrefProperties properties;
+#endif
   switch (pref_kind) {
     case PrefKind::kEnum: {
       const base::Value* enum_values = definition.FindDictKey(kEnumValuesKey);
@@ -343,7 +331,7 @@ void RegisterPrefsFromDefinition(base::Value definition,
         enum_properties.name_value_pairs.emplace_back(name, value);
       }
 
-      base::Optional<int> enum_default;
+      absl::optional<int> enum_default;
       if (default_value.is_string()) {
         enum_default = enum_properties.FindValue(default_value.GetString());
       } else {
@@ -358,7 +346,9 @@ void RegisterPrefsFromDefinition(base::Value definition,
             << current_path << "'";
       }
       registry->RegisterIntegerPref(current_path, *enum_default, flags);
+#if !defined(OS_ANDROID)
       properties.SetEnumProperties(std::move(enum_properties));
+#endif
       break;
     }
     case PrefKind::kString:
@@ -394,7 +384,9 @@ void RegisterPrefsFromDefinition(base::Value definition,
       NOTREACHED();
   }
 
-  prefs_properties->emplace(std::move(current_path), std::move(properties));
+#if !defined(OS_ANDROID)
+  pref_properties_map->emplace(std::move(current_path), std::move(properties));
+#endif
 }
 
 #if !defined(OS_ANDROID)
@@ -402,7 +394,7 @@ void RegisterPrefsFromDefinition(base::Value definition,
 void AddChromiumProperties(base::Value* value,
                            base::StringPiece current_path,
                            bool local_pref,
-                           PrefsProperties* prefs_properties) {
+                           PrefPropertiesMap* pref_properties_map) {
   base::Value* chromium_prefs = value->FindDictKey(current_path);
   if (!chromium_prefs) {
     LOG(FATAL) << "Expected a dictionary at '" << current_path << "'";
@@ -421,7 +413,7 @@ void AddChromiumProperties(base::Value* value,
 
     PrefProperties properties;
     properties.SetLocal(local_pref);
-    prefs_properties->emplace(std::move(*pref_path), std::move(properties));
+    pref_properties_map->emplace(std::move(*pref_path), std::move(properties));
   }
 }
 
@@ -519,7 +511,7 @@ base::Value ReadPrefsJson() {
   base::ReadFileToString(prefs_definition_file, &prefs_definitions_content);
 #endif  // OS_ANDROID
 
-  base::Optional<base::Value> prefs_definitions =
+  absl::optional<base::Value> prefs_definitions =
       base::JSONReader::Read(prefs_definitions_content);
   if (!prefs_definitions || !prefs_definitions->is_dict()) {
     LOG(FATAL) << "Expected a dictionary at the root of the pref definitions";
@@ -533,6 +525,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // This pref is obsolete.
   registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
 
+  registry->RegisterDictionaryPref(
+      vivaldiprefs::kVivaldiAccountPendingRegistration);
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
 
@@ -547,19 +541,19 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
     LOG(FATAL) << "Expected a dictionary at '" << kVivaldiKeyName << "'";
   }
 
-  PrefsProperties prefs_properties;
+  PrefPropertiesMap pref_properties_map;
 
   RegisterPrefsFromDefinition(std::move(*vivaldi_pref_definition),
-                              kVivaldiKeyName, registry, &prefs_properties);
+                              kVivaldiKeyName, registry, &pref_properties_map);
 
 #if !defined(OS_ANDROID)
   AddChromiumProperties(&prefs_definitions, kChromiumKeyName, false,
-                        &prefs_properties);
+                        &pref_properties_map);
   AddChromiumProperties(&prefs_definitions, kChromiumLocalKeyName, true,
-                        &prefs_properties);
+                        &pref_properties_map);
 
   DCHECK(GetRegisteredPrefPropertiesStorage().empty());
-  GetRegisteredPrefPropertiesStorage() = std::move(prefs_properties);
+  GetRegisteredPrefPropertiesStorage() = std::move(pref_properties_map);
 
   RegisterOldPrefs(registry);
 #endif  // !defined(OS_ANDROID)

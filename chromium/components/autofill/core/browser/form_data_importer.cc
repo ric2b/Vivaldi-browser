@@ -262,7 +262,7 @@ void FormDataImporter::ImportFormData(const FormStructure& submitted_form,
                                       bool profile_autofill_enabled,
                                       bool credit_card_autofill_enabled) {
   std::unique_ptr<CreditCard> imported_credit_card;
-  base::Optional<std::string> detected_upi_id;
+  absl::optional<std::string> detected_upi_id;
 
   bool is_credit_card_upstream_enabled =
       credit_card_save_manager_->IsCreditCardUploadEnabled();
@@ -424,7 +424,7 @@ bool FormDataImporter::ImportFormData(
     bool credit_card_autofill_enabled,
     bool should_return_local_card,
     std::unique_ptr<CreditCard>* imported_credit_card,
-    base::Optional<std::string>* imported_upi_id) {
+    absl::optional<std::string>* imported_upi_id) {
   // We try the same |form| for both credit card and address import/update.
   // - ImportCreditCard may update an existing card, or fill
   //   |imported_credit_card| with an extracted card. See .h for details of
@@ -557,6 +557,15 @@ bool FormDataImporter::ImportAddressProfileForSection(
 
   // Go through each |form| field and attempt to constitute a valid profile.
   for (const auto& field : form) {
+    // TODO(crbug/1213301): Remove this. This hack replaces the UNKNOWN_TYPE
+    // (due to autocomplete) of fields of a specific signature with their server
+    // or heuristic type. The changed value is reset below.
+    bool is_autocomplete_workaround =
+        base::FeatureList::IsEnabled(
+            features::kAutofillIgnoreAutocompleteForImport) &&
+        field->GetFieldSignature() == FieldSignature(2281611779) &&
+        field->Type().IsUnknown();
+
     // Reject fields that are not within the specified |section|.
     // If section is empty, use all fields.
     if (field->section != section && !section.empty())
@@ -573,10 +582,17 @@ bool FormDataImporter::ImportAddressProfileForSection(
         !field->is_focusable &&
         !base::FeatureList::IsEnabled(
             features::kAutofillProfileImportFromUnfocusableFields);
-    if (!field->IsFieldFillable() || skip_unfocussable_field || value.empty())
+    if ((!is_autocomplete_workaround && !field->IsFieldFillable()) ||
+        skip_unfocussable_field || value.empty()) {
       continue;
+    }
 
     AutofillType field_type = field->Type();
+    if (is_autocomplete_workaround) {
+      field_type = AutofillType(field->server_type() != NO_SERVER_DATA
+                                    ? field->server_type()
+                                    : field->heuristic_type());
+    }
 
     // Credit card fields are handled by ImportCreditCard().
     if (field_type.group() == FieldTypeGroup::kCreditCard)
@@ -645,7 +661,7 @@ bool FormDataImporter::ImportAddressProfileForSection(
       const translate::LanguageState* language_state =
           client_->GetLanguageState();
       if (language_state)
-        page_language = language_state->original_language();
+        page_language = language_state->source_language();
       // Retry to set the country of there is known page language.
       if (!page_language.empty()) {
         candidate_profile.SetInfoWithVerificationStatus(
@@ -731,7 +747,8 @@ bool FormDataImporter::ImportAddressProfileForSection(
   // incognito mode but the import is not triggered if the browser is in the
   // incognito mode.
   DCHECK(!personal_data_manager_->IsOffTheRecord());
-  address_profile_save_manager_->SaveProfile(candidate_profile);
+  address_profile_save_manager_->ImportProfileFromForm(
+      candidate_profile, app_locale_, form.source_url());
 
   return true;
 }
@@ -902,7 +919,9 @@ CreditCard FormDataImporter::ExtractCreditCardFromForm(
     // month. Attempt to save with the option value. First find the index of the
     // option text in the select options and try the corresponding value.
     if (!saved && server_field_type == CREDIT_CARD_EXP_MONTH) {
-      for (size_t i = 0; i < field->option_contents.size(); ++i) {
+      size_t items_count =
+          std::min(field->option_contents.size(), field->option_values.size());
+      for (size_t i = 0; i < items_count; ++i) {
         if (value == field->option_contents[i]) {
           candidate_credit_card.SetInfo(field_type, field->option_values[i],
                                         app_locale_);
@@ -915,13 +934,13 @@ CreditCard FormDataImporter::ExtractCreditCardFromForm(
   return candidate_credit_card;
 }
 
-base::Optional<std::string> FormDataImporter::ImportUpiId(
+absl::optional<std::string> FormDataImporter::ImportUpiId(
     const FormStructure& form) {
   for (const auto& field : form) {
     if (IsUPIVirtualPaymentAddress(field->value))
       return base::UTF16ToUTF8(field->value);
   }
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 }  // namespace autofill

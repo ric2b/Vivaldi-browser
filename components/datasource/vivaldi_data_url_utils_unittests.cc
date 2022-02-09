@@ -24,7 +24,7 @@ class VivaldiDataUrlUtilsTest : public testing::Test {};
 
 TEST_F(VivaldiDataUrlUtilsTest, ParsePath) {
   std::string data;
-  base::Optional<PathType> type;
+  absl::optional<PathType> type;
 
   // Check for parsing of all known types.
   for (PathType i : kTypeList) {
@@ -64,7 +64,7 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath) {
 
 TEST_F(VivaldiDataUrlUtilsTest, ParsePath_BadFormat) {
   std::string data;
-  base::Optional<PathType> type;
+  absl::optional<PathType> type;
 
   // In the invalid format checks use the name of one of top directories to
   // ensure that the url is rejected due to bad format, not an unknwon
@@ -73,29 +73,29 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath_BadFormat) {
 
   // The path cannot be empty.
   type = ParsePath("");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   // The path must be absolute.
   type = ParsePath("thumbnail");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParsePath("thumbnail/id.png");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   // An unknown top directory must be rejected.
   type = ParsePath("/unknown/data");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParsePath("/thumbnail2/data");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParsePath("/thumbnail2");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 }
 
 TEST_F(VivaldiDataUrlUtilsTest, ParsePath_OldFormats) {
   std::string data;
-  base::Optional<PathType> type;
+  absl::optional<PathType> type;
 
   // thumbnail and local-image specific checks to ensure that we still support
   // the older forms.
@@ -136,29 +136,29 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath_OldFormats) {
 
 TEST_F(VivaldiDataUrlUtilsTest, UrlParse) {
   std::string data;
-  base::Optional<PathType> type;
+  absl::optional<PathType> type;
 
   // This does not test parsing of the path as the PathTest covers that.
 
   // Check that invalid urls including relative forms are reported.
   type = ParseUrl("");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParseUrl("thumbnail");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParseUrl("/thumbnail/data.png");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParseUrl("//vivaldi-data/thumbnail/data.png");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   // An unknown or wrong schema should be reported.
   type = ParseUrl("foo://vivaldi-data/thumbnail/data.png");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   type = ParseUrl("https://vivaldi-data/thumbnail/data.png");
-  EXPECT_EQ(type, base::nullopt);
+  EXPECT_EQ(type, absl::nullopt);
 
   // Check that an older thumb host is an alias for vivaldi-data.
   for (PathType i : kTypeList) {
@@ -207,7 +207,7 @@ TEST_F(VivaldiDataUrlUtilsTest, MimeType) {
 
 TEST_F(VivaldiDataUrlUtilsTest, MakeUrl) {
   std::string data;
-  base::Optional<PathType> type;
+  absl::optional<PathType> type;
 
   for (PathType i : kTypeList) {
     std::string url = MakeUrl(i, "data");

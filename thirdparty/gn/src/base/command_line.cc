@@ -107,7 +107,7 @@ void AppendSwitchesAndArguments(CommandLine* command_line,
 }
 
 #if defined(OS_WIN)
-// Quote a string as necessary for CommandLineToArgvW compatiblity *on Windows*.
+// Quote a string as necessary for CommandLineToArgvW compatibility *on Windows*.
 std::u16string QuoteForCommandLineToArgvW(const std::u16string& arg,
                                           bool quote_placeholders) {
   // We follow the quoting rules of CommandLineToArgvW.
@@ -283,7 +283,7 @@ void CommandLine::SetProgram(const FilePath& program) {
 #endif
 }
 
-bool CommandLine::HasSwitch(const std::string_view& switch_string) const {
+bool CommandLine::HasSwitch(std::string_view switch_string) const {
   DCHECK_EQ(ToLowerASCII(switch_string), switch_string);
   return ContainsKey(switches_, switch_string);
 }
@@ -293,7 +293,7 @@ bool CommandLine::HasSwitch(const char switch_constant[]) const {
 }
 
 std::string CommandLine::GetSwitchValueASCII(
-    const std::string_view& switch_string) const {
+    std::string_view switch_string) const {
   StringType value = GetSwitchValueNative(switch_string);
   if (!IsStringASCII(value)) {
     DLOG(WARNING) << "Value of switch (" << switch_string << ") must be ASCII.";
@@ -306,13 +306,12 @@ std::string CommandLine::GetSwitchValueASCII(
 #endif
 }
 
-FilePath CommandLine::GetSwitchValuePath(
-    const std::string_view& switch_string) const {
+FilePath CommandLine::GetSwitchValuePath(std::string_view switch_string) const {
   return FilePath(GetSwitchValueNative(switch_string));
 }
 
 CommandLine::StringType CommandLine::GetSwitchValueNative(
-    const std::string_view& switch_string) const {
+    std::string_view switch_string) const {
   DCHECK_EQ(ToLowerASCII(switch_string), switch_string);
   auto result = switches_.find(switch_string);
   return result == switches_.end() ? StringType() : result->second;

@@ -281,7 +281,7 @@ BookmarksPrivateUpdatePartnersFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   vivaldi_default_bookmarks::UpdatePartners(
       profile,
-      base::Bind(
+      base::BindOnce(
           &BookmarksPrivateUpdatePartnersFunction::OnUpdatePartnersResult,
           this));
   return did_respond() ? AlreadyResponded() : RespondLater();

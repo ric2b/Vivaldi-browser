@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/metrics/metrics_hashes.h"
-#include "base/optional.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/trace_event_analyzer.h"
 #include "base/time/time.h"
@@ -17,8 +16,8 @@
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_tab_helper.h"
+#include "chrome/browser/history_clusters/history_clusters_service_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_tab_helper.h"
-#include "chrome/browser/history_clusters/memories_service_factory.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -32,7 +31,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/test/history_service_test_util.h"
-#include "components/history_clusters/core/memories_service.h"
+#include "components/history_clusters/core/history_clusters_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/ntp_tiles/custom_links_store.h"
 #include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
@@ -50,6 +49,7 @@
 #include "services/metrics/public/cpp/ukm_source.h"
 #include "services/network/public/cpp/network_quality_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
 using content::NavigationSimulator;
@@ -115,12 +115,7 @@ class UkmPageLoadMetricsObserverTest
     EXPECT_CALL(mock_network_quality_provider_, GetDownstreamThroughputKbps())
         .Times(AnyNumber())
         .WillRepeatedly(Return(int32_t()));
-    TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile(),
-        base::BindRepeating(&TemplateURLServiceFactory::BuildInstanceFor));
 
-    BookmarkModelFactory::GetInstance()->SetTestingFactory(
-        profile(), BookmarkModelFactory::GetDefaultFactory());
     bookmarks::BookmarkModel* bookmark_model =
         BookmarkModelFactory::GetForBrowserContext(profile());
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model);
@@ -130,6 +125,16 @@ class UkmPageLoadMetricsObserverTest
         ->SetForceEligibleTabForTesting(true);
 
     HistoryClustersTabHelper::CreateForWebContents(web_contents());
+  }
+
+  TestingProfile::TestingFactories GetTestingFactories() const override {
+    return {
+        {BookmarkModelFactory::GetInstance(),
+         BookmarkModelFactory::GetDefaultFactory()},
+        {HistoryServiceFactory::GetInstance(),
+         HistoryServiceFactory::GetDefaultFactory()},
+        {TemplateURLServiceFactory::GetInstance(),
+         base::BindRepeating(&TemplateURLServiceFactory::BuildInstanceFor)}};
   }
 
   MockNetworkQualityProvider& mock_network_quality_provider() {
@@ -708,7 +713,7 @@ TEST_F(UkmPageLoadMetricsObserverTest,
     tester()->SimulateTimingUpdate(timing);
 
     timing.paint_timing->largest_contentful_paint->largest_text_paint =
-        base::Optional<base::TimeDelta>();
+        absl::optional<base::TimeDelta>();
     timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 0;
     PopulateRequiredTimingFields(&timing);
 
@@ -1489,7 +1494,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
   NavigateAndCommit(GURL(kTestUrl1));
   base::TimeTicks time_origin = base::TimeTicks::Now();
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(
-      1.0, 1.0, 0, 0, 0, 0, {},
+      1.0, 1.0, 0, 0, 0, 0, 0, 0, {},
       {time_origin - base::TimeDelta::FromMilliseconds(3000)});
   render_data.new_layout_shifts.emplace_back(
       page_load_metrics::mojom::LayoutShift::New(
@@ -1503,8 +1508,8 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
   // Simulate hiding the tab (the report should include shifts after hide).
   web_contents()->WasHidden();
 
-  page_load_metrics::mojom::FrameRenderDataUpdate render_data_2(1.5, 0.0, 0, 0,
-                                                                0, 0, {}, {});
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data_2(
+      1.5, 0.0, 0, 0, 0, 0, 0, 0, {}, {});
   render_data_2.new_layout_shifts.emplace_back(
       page_load_metrics::mojom::LayoutShift::New(
           time_origin - base::TimeDelta::FromMilliseconds(2500), 1.5));
@@ -1553,16 +1558,10 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
         PageLoad::
             kLayoutInstability_AverageCumulativeShiftScore_SessionWindow_Gap5000msName,
         250);
-    ukm_recorder.ExpectEntryMetric(
-        ukm_entry,
-        PageLoad::
-            kLayoutInstability_MaxCumulativeShiftScore_SessionWindowByInputs_Gap1000ms_Max5000msName,
-        150);
     ukm_recorder.ExpectEntryMetric(kv.second.get(),
                                    PageLoad::kNavigation_PageEndReason3Name,
                                    page_load_metrics::END_CLOSE);
   }
-
   EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
                   "PageLoad.LayoutInstability.CumulativeShiftScore"),
               testing::ElementsAre(base::Bucket(25, 1)));
@@ -1570,10 +1569,6 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
                   "PageLoad.LayoutInstability.MaxCumulativeShiftScore."
                   "SessionWindow.Gap1000ms.Max5000ms"),
               testing::ElementsAre(base::Bucket(25, 1)));
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  "PageLoad.LayoutInstability.MaxCumulativeShiftScore."
-                  "SessionWindowByInputs.Gap1000ms.Max5000ms"),
-              testing::ElementsAre(base::Bucket(15, 1)));
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, SiteInstanceRenderProcessAssignment) {
@@ -1659,7 +1654,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstabilitySubframeAggregation) {
 
   // Simulate layout instability in the main frame.
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
-                                                              0, {}, {});
+                                                              0, 0, 0, {}, {});
   tester()->SimulateRenderDataUpdate(render_data);
 
   RenderFrameHost* subframe =
@@ -1829,7 +1824,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, HomePageReported) {
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, DefaultSearchReported) {
-  static const char kShortName[] = "test";
+  static const char16_t kShortName[] = u"test";
   static const char kSearchURL[] =
       "https://www.searchurl.com/search?q={searchTerms}";
   static const char kSearchURLWithQuery[] =
@@ -1842,7 +1837,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, DefaultSearchReported) {
   ASSERT_TRUE(model->loaded());
 
   TemplateURLData data;
-  data.SetShortName(base::ASCIIToUTF16(kShortName));
+  data.SetShortName(kShortName);
   data.SetKeyword(data.short_name());
   data.SetURL(kSearchURL);
 
@@ -1995,7 +1990,6 @@ TEST_F(UkmPageLoadMetricsObserverTest, IsExistingBookmark) {
 TEST_F(UkmPageLoadMetricsObserverTest, IsNewBookmark) {
   GURL url(kTestUrl1);
 
-  ASSERT_TRUE(profile()->CreateHistoryService());
   history::HistoryService* history_service =
       HistoryServiceFactory::GetForProfile(profile(),
                                            ServiceAccessType::IMPLICIT_ACCESS);
@@ -2031,7 +2025,6 @@ TEST_F(UkmPageLoadMetricsObserverTest, IsNewBookmark) {
 TEST_F(UkmPageLoadMetricsObserverTest, IsNTPCustomLink) {
   GURL url(kTestUrl1);
 
-  ASSERT_TRUE(profile()->CreateHistoryService());
   history::HistoryService* history_service =
       HistoryServiceFactory::GetForProfile(profile(),
                                            ServiceAccessType::IMPLICIT_ACCESS);
@@ -2061,12 +2054,11 @@ TEST_F(UkmPageLoadMetricsObserverTest, IsNTPCustomLink) {
 #endif  // !defined(OS_ANDROID)
 
 TEST_F(UkmPageLoadMetricsObserverTest, DurationSinceLastVisitSeconds) {
-  // TODO(tommycli): Should we move this test to either MemoriesService or
-  // HistoryClustersTabHelper? On the one hand, the logic resides there.
-  // On the other hand this serves as a good integration test with UKM.
+  // TODO(tommycli): Should we move this test to either HistoryClustersService
+  // or HistoryClustersTabHelper? On the one hand, the logic resides there. On
+  // the other hand this serves as a good integration test with UKM.
   GURL url(kTestUrl1);
 
-  ASSERT_TRUE(profile()->CreateHistoryService());
   history::HistoryService* history_service =
       HistoryServiceFactory::GetForProfile(profile(),
                                            ServiceAccessType::IMPLICIT_ACCESS);
@@ -2200,7 +2192,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, CLSNeverForegroundedNoReport) {
   NavigateAndCommit(GURL(kTestUrl1));
 
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
-                                                              0, {}, {});
+                                                              0, 0, 0, {}, {});
   tester()->SimulateRenderDataUpdate(render_data);
 
   // Simulate closing the tab.
@@ -2234,8 +2226,8 @@ class CLSUkmPageLoadMetricsObserverTest
 void CLSUkmPageLoadMetricsObserverTest::SimulateShiftDelta(
     float delta,
     content::RenderFrameHost* frame) {
-  page_load_metrics::mojom::FrameRenderDataUpdate render_data(delta, delta, 0,
-                                                              0, 0, 0, {}, {});
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(
+      delta, delta, 0, 0, 0, 0, 0, 0, {}, {});
   tester()->SimulateRenderDataUpdate(render_data, frame);
 }
 

@@ -638,43 +638,6 @@ TEST(FilesystemUtils, ContentsEqual) {
   EXPECT_FALSE(ContentsEqual(file_path, "bar"));
 }
 
-TEST(FilesystemUtils, WriteFileIfChanged) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-
-  std::string data = "foo";
-
-  // Write if file doesn't exist. Create also directory.
-  base::FilePath file_path =
-      temp_dir.GetPath().AppendASCII("bar").AppendASCII("foo.txt");
-  EXPECT_TRUE(WriteFileIfChanged(file_path, data, nullptr));
-
-  base::File::Info file_info;
-  ASSERT_TRUE(base::GetFileInfo(file_path, &file_info));
-  Ticks last_modified = file_info.last_modified;
-
-  {
-    using namespace std::chrono_literals;
-#if defined(OS_MACOSX)
-    // Modification times are in seconds in HFS on Mac.
-    std::this_thread::sleep_for(1s);
-#else
-    std::this_thread::sleep_for(1ms);
-#endif
-  }
-
-  // Don't write if contents is the same.
-  EXPECT_TRUE(WriteFileIfChanged(file_path, data, nullptr));
-  ASSERT_TRUE(base::GetFileInfo(file_path, &file_info));
-  EXPECT_EQ(last_modified, file_info.last_modified);
-
-  // Write if contents changed.
-  EXPECT_TRUE(WriteFileIfChanged(file_path, "bar", nullptr));
-  std::string file_data;
-  ASSERT_TRUE(base::ReadFileToString(file_path, &file_data));
-  EXPECT_EQ("bar", file_data);
-}
-
 TEST(FilesystemUtils, GetToolchainDirs) {
   BuildSettings build_settings;
   build_settings.SetBuildDir(SourceDir("//out/Debug/"));

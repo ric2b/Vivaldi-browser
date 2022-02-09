@@ -6,6 +6,8 @@
 
 #include "base/callback.h"
 
+enum class AutoUpdateStatus;
+
 @interface SparkleUpdaterDelegate : NSObject<SUUpdaterDelegate> {}
 
 - (void)updater:(SUUpdater *)updater didFindValidUpdate:(SUAppcastItem *)item;
@@ -17,5 +19,8 @@
 - (void)updater:(SUUpdater *)updater didAbortWithError:(NSError *)error;
 
 - (void)installUpdateAndRestart;
+- (AutoUpdateStatus)getUpdateStatus;
+- (std::string)getUpdateVersion;
+- (std::string)getUpdateReleaseNotesUrl;
 
 @end // @interface SparkleUpdaterDelegate

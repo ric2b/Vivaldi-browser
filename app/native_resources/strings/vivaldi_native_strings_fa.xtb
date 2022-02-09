@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">ارسال پیوند از طریق ایمیل</translation>
 <translation id="1454726940098520109">عدم نمایش پیغام تأیید خروج</translation>
 <translation id="1462666970065907900">آیا واقعا می‌خواهید این پنجره را ببندید؟</translation>
+<translation id="1480046233931937785">دست‌اندرکاران</translation>
 <translation id="1526344461589023948">ذخیره‌سازی به‌روزرسانی دانلود شده با خطا مواجه شد. لطفاً بررسی کنید که آیا رایانه فضای دیسک کافی دارد و بعد دوباره امتحان کنید.</translation>
 <translation id="1657174850639146440">هیولا ۹</translation>
 <translation id="1676595396635191120">پنجره خصوصی جدید</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">در زبانه جدیدی باز کن</translation>
 <translation id="3027988479108856431">متأسفانه، تنظیمات Yandex در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Yandex را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="3084011186245865060">چشم‌انداز ۶</translation>
+<translation id="3093931836425623631">ویوالدی توسط پروژه منبع باز کرومیوم و سایر نرم‌افزارهای منبع باز تهیه شده است.</translation>
 <translation id="3127383884976966729">حیوان ۷</translation>
 <translation id="3156398087075132709">نشانک جدید</translation>
 <translation id="3255747772218936245">نصب به‌روزرسانی</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">چشم‌انداز ۷</translation>
 <translation id="7111492742514999492">چشم‌انداز ۹</translation>
 <translation id="7337881442233988129">کرومیوم</translation>
-<translation id="7496505986576158197">ویوالدی توسط پروژه‌ی منبع‌باز <ph name="BEGIN_LINK_CHROMIUM" />کرومیوم<ph name="END_LINK_CHROMIUM" /> و سایر <ph name="BEGIN_LINK_OSS" />نرم‌افزارهای منبع‌باز<ph name="END_LINK_OSS" /> ساخته شده است.</translation>
 <translation id="7581266044164103589">نصاب به‌روزرسانی راه اندازی نشد. لطفاً بررسی کنید که رایانه از حافظه یا فضای دیسک کافی برخوردار است و بعد دوباره امتحان کنید.</translation>
 <translation id="7658239707568436148">لغو</translation>
 <translation id="7715497554424665066">&amp;نادیده گرفتن به‌روزرسانی</translation>

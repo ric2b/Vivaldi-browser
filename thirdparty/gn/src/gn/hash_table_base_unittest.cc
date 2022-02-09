@@ -96,7 +96,7 @@ class TestHashTable : public HashTableBase<TestHashNode> {
   // IMPORTANT NOTE: Because the table contains bare owning pointers, we
   // have to use explicit copy and move constructor/operators for things
   // to work as expected. This is yet another reason why HashTableBase<>
-  // should only be used with care (preferrably with non-owning pointers).
+  // should only be used with care (preferably with non-owning pointers).
   //
   TestHashTable(const TestHashTable& other) : BaseType(other) {
     // Only node (i.e. pointers) are copied by the base type.

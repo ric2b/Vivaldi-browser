@@ -235,10 +235,10 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     make_redirect_rule = true;
   }
 
-  base::Optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
-  base::Optional<std::vector<std::string>> exception_domains;
-  base::Optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
-  base::Optional<std::vector<std::string>> option_domains;
+  absl::optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
+  absl::optional<std::vector<std::string>> exception_domains;
+  absl::optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
+  absl::optional<std::vector<std::string>> option_domains;
   if (exceptions) {
     exception_types = GetTypes(exceptions);
     exception_domains = GetDomains(exceptions);
@@ -326,7 +326,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
             }
           }
           if (!potential_domain.empty()) {
-            rule.included_domains.push_back(potential_domain.as_string());
+            rule.included_domains.push_back(std::string(potential_domain));
           }
         }
       } else if (option_domains) {
@@ -422,12 +422,12 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
   }
 }
 
-base::Optional<std::bitset<RequestFilterRule::kTypeCount>>
+absl::optional<std::bitset<RequestFilterRule::kTypeCount>>
 DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   std::bitset<RequestFilterRule::kTypeCount> types;
   const base::Value* types_value = rule_properties->FindListKey(kTypesKey);
   if (!types_value)
-    return base::nullopt;
+    return absl::nullopt;
 
   for (const auto& type_name : types_value->GetList()) {
     if (!type_name.is_string())
@@ -443,12 +443,12 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   return types;
 }
 
-base::Optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
+absl::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
     const base::Value* rule_properties) {
   std::vector<std::string> domains;
   const base::Value* domains_value = rule_properties->FindListKey(kDomainsKey);
   if (!domains_value)
-    return base::nullopt;
+    return absl::nullopt;
 
   for (const auto& domain : domains_value->GetList()) {
     if (!domain.is_string())

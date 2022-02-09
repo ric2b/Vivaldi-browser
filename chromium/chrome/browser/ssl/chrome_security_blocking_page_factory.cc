@@ -18,6 +18,7 @@
 #include "chrome/browser/ssl/insecure_form/insecure_form_controller_client.h"
 #include "chrome/browser/ssl/ssl_error_controller_client.h"
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
+#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/common/channel_info.h"
 #include "components/security_interstitials/content/content_metrics_helper.h"
 #include "components/security_interstitials/content/settings_page_helper.h"
@@ -55,6 +56,8 @@
 #include "net/base/net_errors.h"
 #include "net/dns/public/secure_dns_mode.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -188,7 +191,7 @@ ChromeSecurityBlockingPageFactory::CreateSSLPage(
   page = std::make_unique<SSLBlockingPage>(
       web_contents, cert_error, ssl_info, request_url, options_mask,
       time_triggered, support_url, std::move(ssl_cert_reporter), overridable,
-      /*can_show_enhanced_protection_message=*/true,
+      /*can_show_enhanced_protection_message=*/!vivaldi::IsVivaldiRunning(),
       std::move(controller_client));
 
   DoChromeSpecificSetup(page.get());

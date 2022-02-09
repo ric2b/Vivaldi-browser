@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Desactivar pantalla completa</translation>
 <translation id="2177950615300672361">Pestaña de incógnito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Módulo de cliente nativo: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Ocultar botón</translation>
 <translation id="2218515861914035131">Pegar como texto sin formato</translation>
 <translation id="2249605167705922988">p. ej. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir identificadores para contenido protegido (puede requerir el reinicio del sistema)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Preprocesador: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Micrófono</translation>
 <translation id="3241680850019875542">Selecciona el directorio raíz de la extensión a empaquetar. Para actualizar una extensión, selecciona también el archivo de clave privada que se reusará.</translation>
-<translation id="3266179261140759675">Bloquear los sitios cerrados para que no envíen ni reciban datos</translation>
 <translation id="3280237271814976245">Guardar &amp;como...</translation>
 <translation id="3285322247471302225">Pes&amp;taña nueva</translation>
 <translation id="3288047731229977326">Las extensiones que se ejecutan en el modo desarrollador pueden dañar tu equipo. Si no eres desarrollador, debes desactivar esas extensiones para mantenerte protegido.</translation>
@@ -160,7 +158,6 @@
 <translation id="354068948465830244">Puede leer y cambiar datos de sitios</translation>
 <translation id="3560034655160545939">Revi&amp;sión ortográfica</translation>
 <translation id="3574917942258583917">¿Quieres salir del modo de incógnito de todos modos?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir una impresora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un grupo que te pertenece: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si aceptas, todos los miembros del grupo podrán imprimir en ella.</translation>
 <translation id="3587482841069643663">Todas</translation>
 <translation id="3627588569887975815">Abrir enlace en una ventana de incó&amp;gnito</translation>
 <translation id="3627879631695760395">Instalar <ph name="APP" />...</translation>
@@ -194,7 +191,6 @@
 <translation id="4087089424473531098">Se creó la extensión:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Aceptar para el grupo</translation>
 <translation id="4096508467498758490">Desactivar extensiones en el modo desarrollador</translation>
 <translation id="4100839878934973028">Otro programa de tu equipo añadió una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
@@ -230,7 +226,6 @@
 <translation id="488785315393301722">Mostrar detalles</translation>
 <translation id="4907306957610201395">Categoría de permiso</translation>
 <translation id="4912643508233590958">Activación inactiva</translation>
-<translation id="4918086044614829423">Aceptar</translation>
 <translation id="4927753642311223124">Aquí no hay nada que ver, circulen.</translation>
 <translation id="4930714375720679147">Activar</translation>
 <translation id="4988526792673242964">Páginas</translation>
@@ -260,7 +255,7 @@
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5334142896108694079">Caché de secuencia de comandos</translation>
 <translation id="5355926466126177564">La extensión <ph name="EXTENSION_NAME" /> ha cambiado la página que se muestra al buscar desde Omnibox.</translation>
-<translation id="5360150013186312835">Mostrar en la barra de herramientas</translation>
+<translation id="5360150013186312835">Mostrar en barra de herramientas</translation>
 <translation id="5362741141255528695">Selecciona un archivo de clave privada.</translation>
 <translation id="536638840841140142">Ninguno</translation>
 <translation id="5370819323174483825">&amp;Recargar página</translation>
@@ -306,7 +301,6 @@
 <translation id="6011449291337289699">Borrar datos de sitios</translation>
 <translation id="6042308850641462728">Más</translation>
 <translation id="6059925163896151826">Dispositivos USB</translation>
-<translation id="6082651258230788217">Mostrar en la barra de herramientas</translation>
 <translation id="6086846494333236931">Instalada por tu administrador</translation>
 <translation id="6101226222197207147">Aplicación nueva añadida (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Tu conexión a internet está siendo controlada</translation>
@@ -333,7 +327,6 @@
 <translation id="6406303162637086258">Simular reinicio del navegador</translation>
 <translation id="6445450263907939268">Si no querías realizar estos cambios, puedes restaurar los ajustes anteriores.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Rechazar</translation>
 <translation id="6498249116389603658">&amp;Todos tus idiomas</translation>
 <translation id="6503077044568424649">Más visitado</translation>
 <translation id="6508261954199872201">Aplicación: <ph name="APP_NAME" /></translation>
@@ -364,7 +357,7 @@
 <translation id="7070484045139057854">Puede leer y cambiar datos de sitios</translation>
 <translation id="708060913198414444">C&amp;opiar dirección del audio</translation>
 <translation id="7175353351958621980">Cargada desde:</translation>
-<translation id="7186088072322679094">Mantener en la barra de herramientas</translation>
+<translation id="7186088072322679094">Mantener en barra de herramientas</translation>
 <translation id="7270858098575133036">Preguntar cuando un sitio intente usar mensajes exclusivos del sistema para acceder a dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
@@ -403,7 +396,6 @@
 <translation id="7857949311770343000">¿Es esta la página de pestaña nueva que esperabas?</translation>
 <translation id="786073089922909430">Servicio: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Destinos recientes</translation>
-<translation id="7898627924844766532">Mantener en la barra de herramientas</translation>
 <translation id="7903925330883316394">Utilidad: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Sin conexión actualmente</translation>
 <translation id="7947962633355574091">C&amp;opiar dirección del video</translation>
@@ -452,7 +444,6 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="8725066075913043281">Reintentar</translation>
 <translation id="8757090071857742562">No se pudo transmitir el escritorio. Verifica si confirmaste el permiso para empezar a compartir tu pantalla.</translation>
 <translation id="8774934320277480003">Margen superior</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir una impresora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; contigo.</translation>
 <translation id="8798099450830957504">Por defecto</translation>
 <translation id="8800004011501252845">Mostrando destinos para</translation>
 <translation id="8808478386290700967">Web Store</translation>

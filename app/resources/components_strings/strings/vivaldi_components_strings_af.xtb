@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Gaan voort</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwerkdiagnose loop tans<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Kennisgewings</translation>
+<translation id="2491414235131909199">Hierdie bladsy is deur 'n uitbreiding geblokkeer</translation>
 <translation id="2501278716633472235">Gaan terug</translation>
 <translation id="2539524384386349900">Bespeur</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> het ’n ongeldige reaksie verstuur.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">U moet liefs geen sensitiewe inligting (bv. wagwoorde of kredietkaarte) op hierdie werf invoer nie omdat dit deur aanvallers gesteel kan word.</translation>
 <translation id="5869405914158311789">Hierdie werf kan nie bereik word nie</translation>
 <translation id="5932224571077948991">Werf vertoon indringerige of misleidende advertensies</translation>
-<translation id="5990559369517809815">Versoeke aan die bediener is deur ’n uitbreiding geblokkeer.</translation>
 <translation id="6051221802930200923">U kan nie nou <ph name="SITE" /> besoek nie omdat die webwerf sertifikaatopsluiting gebruik. Netwerkfoute en -aanvalle is gewoonlik tydelik, dus sal hierdie blad waarskynlik later werk.</translation>
 <translation id="6146055958333702838">Gaan enige kabels na en herlaai enige roeteerders, modems of ander
     netwerkverbindings wat u gebruik, na.</translation>

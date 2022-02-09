@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/observer_list.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace adblock_filter {
@@ -34,12 +35,12 @@ class KnownRuleSourcesHandler {
   virtual const std::set<std::string>& GetDeletedPresets(
       RuleGroup group) const = 0;
 
-  virtual base::Optional<uint32_t> AddSourceFromUrl(RuleGroup group,
+  virtual absl::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
                                                     const GURL& url) = 0;
-  virtual base::Optional<uint32_t> AddSourceFromFile(
+  virtual absl::optional<uint32_t> AddSourceFromFile(
       RuleGroup group,
       const base::FilePath& file) = 0;
-  virtual base::Optional<KnownRuleSource> GetSource(RuleGroup group,
+  virtual absl::optional<KnownRuleSource> GetSource(RuleGroup group,
                                                     uint32_t source_id) = 0;
   virtual bool RemoveSource(RuleGroup group, uint32_t source_id) = 0;
 

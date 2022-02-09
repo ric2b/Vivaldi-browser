@@ -65,12 +65,15 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
       if (guid_valid && type && *type == "menu") {
         const std::string* action = menu.FindStringPath("action");
         const std::string* role = menu.FindStringPath("role");
+        const absl::optional<bool> showShortcut =
+          menu.FindBoolPath("showshortcut");
         if (action && role) {
           std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(*guid,
               Menu_Node::GetNewId());
           node->SetType(Menu_Node::MENU);
           node->SetRole(*role);
           node->SetAction(*action);
+          node->SetShowShortcut(showShortcut);
           // We add the menu even when there is no children added, but not
           // if parsing failed.
           bool parsing_ok = true;
@@ -199,6 +202,7 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
         node->SetTitle(base::UTF8ToUTF16(*title));
         node->SetHasCustomTitle(true);  // Even if title length is 0.
       }
+      node->SetShowShortcut(parent->showShortcut());
       if (*type == "command") {
         node->SetType(Menu_Node::COMMAND);
         if (parameter) {
@@ -310,6 +314,9 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
     case Menu_Node::MENU:
       dict.SetKey("type", base::Value("menu"));
       dict.SetKey("role", base::Value(node->role()));
+      if (node->showShortcut().has_value()) {
+        dict.SetKey("showshortcut", base::Value(*node->showShortcut()));
+      }
       is_folder = true;
       break;
     case Menu_Node::FOLDER:

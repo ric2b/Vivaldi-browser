@@ -2,6 +2,7 @@ import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
 import("//build/config/compiler/pgo/pgo.gni")
+import("//vivaldi/gn/config/signer_features.gni")
 
 if (is_win || is_mac) {
   import("//vivaldi/installer/widevine.gni")
@@ -73,8 +74,6 @@ if (is_win) {
       "//vivaldi/installer/win:vivaldi_release",
       "//vivaldi/tools/vivaldi_proxy",
     ]
-    sign_executables =
-        defined(invoker.sign_executables) && invoker.sign_executables
     outputs -= [ "$root_out_dir/chrome.7z" ]
     if (!is_component_build) {
       outputs -= [ "$root_out_dir/chrome.packed.7z" ]

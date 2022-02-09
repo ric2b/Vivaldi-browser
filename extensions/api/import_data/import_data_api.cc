@@ -143,8 +143,7 @@ const std::string ImportItemToString(importer::ImportItem item) {
 ImportDataAPI::ImportDataAPI(content::BrowserContext* context)
     : browser_context_(context),
       importer_host_(nullptr),
-      import_succeeded_count_(0) {
-}
+      import_succeeded_count_(0) {}
 
 ImportDataAPI::~ImportDataAPI() {}
 
@@ -220,7 +219,7 @@ void ImportDataAPI::ImportEnded() {
       browser_context_);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI> >::
+static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI>>::
     DestructorAtExit g_factory_import = LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -304,7 +303,6 @@ void ImportDataGetProfilesFunction::Finished() {
           source_profile.user_profile_names.at(i).profileDisplayName);
       profItem->profile_name =
           source_profile.user_profile_names.at(i).profileName;
-
     }
 
     profile->user_profiles = std::move(profileItems);
@@ -322,7 +320,7 @@ ExtensionFunction::ResponseAction ImportDataGetProfilesFunction::Run() {
   singl->setProfileRequested(true);
   api_importer_list_->DetectSourceProfiles(
       g_browser_process->GetApplicationLocale(), true,
-      base::Bind(&ImportDataGetProfilesFunction::Finished, this));
+      base::BindOnce(&ImportDataGetProfilesFunction::Finished, this));
   return RespondLater();
   // }
 }
@@ -405,14 +403,12 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
               importer_type_ == importer::TYPE_VIVALDI) &&
              ids[6] == "false") {
     if (importer_type_ == importer::TYPE_OPERA) {
-      dialog_title =
-          l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_PROFILE_TITLE);
+      dialog_title = l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_PROFILE_TITLE);
     } else if (importer_type_ == importer::TYPE_EDGE_CHROMIUM) {
       dialog_title =
           l10n_util::GetStringUTF16(IDS_IMPORT_EDGE_CHROMIUM_PROFILE_TITLE);
     } else if (importer_type_ == importer::TYPE_BRAVE) {
-      dialog_title =
-          l10n_util::GetStringUTF16(IDS_IMPORT_BRAVE_PROFILE_TITLE);
+      dialog_title = l10n_util::GetStringUTF16(IDS_IMPORT_BRAVE_PROFILE_TITLE);
     } else if (importer_type_ == importer::TYPE_VIVALDI) {
       dialog_title =
           l10n_util::GetStringUTF16(IDS_IMPORT_VIVALDI_PROFILE_TITLE);

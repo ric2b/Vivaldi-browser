@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Saada link meiliga</translation>
 <translation id="1454726940098520109">Seda kinnitust rohkem ei näidata</translation>
 <translation id="1462666970065907900">Kas oled kindel, et tahad selle akna sulgeda?</translation>
+<translation id="1480046233931937785">Tänuavaldused</translation>
 <translation id="1526344461589023948">Allalaaditud uuenduse salvestamisel tekkis tõrge. Palun vaata, et arvutis oleks piisavalt vaba kettaruumi, ja proovi siis uuesti.</translation>
 <translation id="1657174850639146440">Koll 9</translation>
 <translation id="1676595396635191120">Uus privaatne aken</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Ava uuel kaardil</translation>
 <translation id="3027988479108856431">Yandexi töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Yandexi aknad. Seejärel klõpsa „Jätka”.</translation>
 <translation id="3084011186245865060">Maastik 6</translation>
+<translation id="3093931836425623631">Vivaldi on loodud avatud lähtekoodiga Chromiumi projekti ja hulga muu avatud lähtekoodiga tarkvara põhjal.</translation>
 <translation id="3127383884976966729">Loom 7</translation>
 <translation id="3156398087075132709">Uus järjehoidja</translation>
 <translation id="3255747772218936245">Paigalda uuendus</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Maastik 7</translation>
 <translation id="7111492742514999492">Maastik 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi on loodud avatud lähtekoodiga <ph name="BEGIN_LINK_CHROMIUM" />Chromiumi projekti<ph name="END_LINK_CHROMIUM" /> ja hulga <ph name="BEGIN_LINK_OSS" />muu avatud lähtekoodiga tarkvara<ph name="END_LINK_OSS" /> põhjal.</translation>
 <translation id="7581266044164103589">Uuenduse paigaldusprogrammi käivitamine ebaõnnestus. Palun vaata, et arvutil oleks piisavalt vaba mälumahtu ja kettaruumi, ja proovi siis uuesti.</translation>
 <translation id="7658239707568436148">Loobu</translation>
 <translation id="7715497554424665066">&amp;Eira uuendust</translation>

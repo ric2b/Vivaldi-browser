@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread_observer.h"
@@ -49,7 +50,13 @@ class PhishingClassifierDelegate : public content::RenderFrameObserver,
   ~PhishingClassifierDelegate() override;
 
   // mojom::PhishingDetector
-  void SetPhishingModel(const std::string& model) override;
+  void SetPhishingModel(const std::string& model,
+                        base::File tflite_visual_model) override;
+
+  // mojom::PhishingDetector
+  void SetPhishingFlatBufferModel(
+      base::ReadOnlySharedMemoryRegion flatbuffer_region,
+      base::File tflite_visual_model) override;
 
   // Called by the RenderFrame once there is a phishing scorer available.
   // The scorer is passed on to the classifier.

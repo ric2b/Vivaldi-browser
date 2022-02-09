@@ -5,6 +5,8 @@
 #ifndef TOOLS_GN_CREATE_BUNDLE_TARGET_GENERATOR_H_
 #define TOOLS_GN_CREATE_BUNDLE_TARGET_GENERATOR_H_
 
+#include <string_view>
+
 #include "base/macros.h"
 #include "gn/target_generator.h"
 
@@ -24,7 +26,7 @@ class CreateBundleTargetGenerator : public TargetGenerator {
 
  private:
   bool FillBundleDir(const SourceDir& bundle_root_dir,
-                     const std::string_view& name,
+                     std::string_view name,
                      SourceDir* bundle_dir);
 
   bool FillXcodeExtraAttributes();

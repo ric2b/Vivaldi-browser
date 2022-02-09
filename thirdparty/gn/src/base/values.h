@@ -198,7 +198,7 @@ class Value {
   // This overload is necessary to avoid ambiguity for const char* arguments.
   Value* SetKey(const char* key, Value value);
 
-  // This attemps to remove the value associated with |key|. In case of failure,
+  // This attempts to remove the value associated with |key|. In case of failure,
   // e.g. the key does not exist, |false| is returned and the underlying
   // dictionary is not changed. In case of success, |key| is deleted from the
   // dictionary and the method returns |true|.

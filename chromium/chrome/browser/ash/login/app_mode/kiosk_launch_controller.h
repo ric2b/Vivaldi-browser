@@ -183,6 +183,9 @@ class KioskLaunchController
   // Whether the network is required for the installation.
   bool network_required_ = false;
 
+  // Whether the controller has already been cleaned-up.
+  bool cleaned_up_ = false;
+
   // Used to login into kiosk user profile.
   std::unique_ptr<KioskProfileLoader> kiosk_profile_loader_;
 
@@ -205,5 +208,11 @@ class KioskLaunchController
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
+// source migration is finished.
+namespace ash {
+using ::chromeos::KioskLaunchController;
+}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_APP_MODE_KIOSK_LAUNCH_CONTROLLER_H_

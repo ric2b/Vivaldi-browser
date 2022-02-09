@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <string>
+#include <string_view>
 
 // A StringAtom models a pointer to a globally unique constant string.
 //

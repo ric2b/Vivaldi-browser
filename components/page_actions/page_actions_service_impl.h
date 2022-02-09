@@ -89,7 +89,7 @@ class ServiceImpl : public Service, public content_injection::Provider {
       directory_watcher_;
   std::map<std::string, content_injection::StaticInjectionItem>
       static_injections_;
-  base::Optional<int> javascript_world_id_;
+  absl::optional<int> javascript_world_id_;
 
   base::ObserverList<Observer> observers_;
 

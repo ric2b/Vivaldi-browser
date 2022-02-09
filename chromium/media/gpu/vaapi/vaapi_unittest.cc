@@ -14,27 +14,28 @@
 #include <va/va_str.h>
 
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
+#include "base/cpu.h"
 #include "base/files/file.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
-#include "base/optional.h"
 #include "base/process/launch.h"
-#include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_suite.h"
 #include "build/chromeos_buildflags.h"
-#include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/media_switches.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "media/media_buildflags.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media {
 namespace {
 
-base::Optional<VAProfile> ConvertToVAProfile(VideoCodecProfile profile) {
+absl::optional<VAProfile> ConvertToVAProfile(VideoCodecProfile profile) {
   // A map between VideoCodecProfile and VAProfile.
   const std::map<VideoCodecProfile, VAProfile> kProfileMap = {
     // VAProfileH264Baseline is deprecated in <va/va.h> from libva 2.0.0.
@@ -51,12 +52,12 @@ base::Optional<VAProfile> ConvertToVAProfile(VideoCodecProfile profile) {
 #endif
   };
   auto it = kProfileMap.find(profile);
-  return it != kProfileMap.end() ? base::make_optional<VAProfile>(it->second)
-                                 : base::nullopt;
+  return it != kProfileMap.end() ? absl::make_optional<VAProfile>(it->second)
+                                 : absl::nullopt;
 }
 
 // Converts the given string to VAProfile
-base::Optional<VAProfile> StringToVAProfile(const std::string& va_profile) {
+absl::optional<VAProfile> StringToVAProfile(const std::string& va_profile) {
   const std::map<std::string, VAProfile> kStringToVAProfile = {
     {"VAProfileNone", VAProfileNone},
     {"VAProfileH264ConstrainedBaseline", VAProfileH264ConstrainedBaseline},
@@ -81,12 +82,12 @@ base::Optional<VAProfile> StringToVAProfile(const std::string& va_profile) {
 
   auto it = kStringToVAProfile.find(va_profile);
   return it != kStringToVAProfile.end()
-             ? base::make_optional<VAProfile>(it->second)
-             : base::nullopt;
+             ? absl::make_optional<VAProfile>(it->second)
+             : absl::nullopt;
 }
 
 // Converts the given string to VAEntrypoint
-base::Optional<VAEntrypoint> StringToVAEntrypoint(
+absl::optional<VAEntrypoint> StringToVAEntrypoint(
     const std::string& va_entrypoint) {
   const std::map<std::string, VAEntrypoint> kStringToVAEntrypoint = {
     {"VAEntrypointVLD", VAEntrypointVLD},
@@ -101,8 +102,8 @@ base::Optional<VAEntrypoint> StringToVAEntrypoint(
 
   auto it = kStringToVAEntrypoint.find(va_entrypoint);
   return it != kStringToVAEntrypoint.end()
-             ? base::make_optional<VAEntrypoint>(it->second)
-             : base::nullopt;
+             ? absl::make_optional<VAEntrypoint>(it->second)
+             : absl::nullopt;
 }
 
 std::unique_ptr<base::test::ScopedFeatureList> CreateScopedFeatureList() {
@@ -196,8 +197,7 @@ TEST_F(VaapiTest, VerifyNoVAProfileH264Baseline) {
 TEST_F(VaapiTest, GetSupportedDecodeProfiles) {
   const auto va_info = RetrieveVAInfoOutput();
 
-  for (const auto& profile : VaapiWrapper::GetSupportedDecodeProfiles(
-           gpu::GpuDriverBugWorkarounds())) {
+  for (const auto& profile : VaapiWrapper::GetSupportedDecodeProfiles()) {
     const auto va_profile = ConvertToVAProfile(profile.profile);
     ASSERT_TRUE(va_profile.has_value());
 

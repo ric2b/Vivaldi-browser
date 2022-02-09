@@ -620,7 +620,7 @@ Examples
 
 int RunDesc(const std::vector<std::string>& args) {
   if (args.size() != 2 && args.size() != 3) {
-    Err(Location(), "You're holding it wrong.",
+    Err(Location(), "Unknown command format. See \"gn help desc\"",
         "Usage: \"gn desc <out_dir> <target_name> [<what to display>]\"")
         .PrintToStdout();
     return 1;

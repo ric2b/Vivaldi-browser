@@ -43,9 +43,11 @@ class Menu_Model : public KeyedService {
                  size_t index);
   bool SetTitle(Menu_Node* node, const std::u16string& title);
   bool SetParameter(Menu_Node* node, const std::string& parameter);
+  bool SetShowShortcut(Menu_Node* node, bool show_shortcut);
   bool SetContainerMode(Menu_Node* node, const std::string& mode);
   bool SetContainerEdge(Menu_Node* node, const std::string& edge);
   bool Remove(Menu_Node* node);
+  bool RemoveAction(Menu_Node* root, const std::string& action);
   bool Reset(const Menu_Node* node);
   bool Reset(const std::string& menu);
 

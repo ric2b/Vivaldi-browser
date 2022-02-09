@@ -12,7 +12,6 @@
 #include "base/json/string_escape.h"
 #include "gn/builder.h"
 #include "gn/deps_iterator.h"
-#include "gn/filesystem_utils.h"
 #include "gn/ninja_target_command_util.h"
 #include "gn/rust_project_writer_helpers.h"
 #include "gn/rust_tool.h"
@@ -70,12 +69,7 @@ bool RustProjectWriter::RunAndWriteFiles(const BuildSettings* build_settings,
   std::ostream out(&out_buffer);
 
   RenderJSON(build_settings, all_targets, out);
-
-  if (out_buffer.ContentsEqual(output_path)) {
-    return true;
-  }
-
-  return out_buffer.WriteToFile(output_path, err);
+  return out_buffer.WriteToFileIfChanged(output_path, err);
 }
 
 // Map of Targets to their index in the crates list (for linking dependencies to
@@ -167,36 +161,22 @@ std::vector<std::string> FindAllArgValuesAfterPrefix(
 const std::string_view sysroot_crates[] = {"std",
                                            "core",
                                            "alloc",
-                                           "collections",
-                                           "libc",
                                            "panic_unwind",
                                            "proc_macro",
-                                           "rustc_unicode",
-                                           "std_unicode",
                                            "test",
-                                           "alloc_jemalloc",
-                                           "alloc_system",
-                                           "compiler_builtins",
-                                           "getopts",
                                            "panic_abort",
-                                           "unwind",
-                                           "build_helper",
-                                           "rustc_asan",
-                                           "rustc_lsan",
-                                           "rustc_msan",
-                                           "rustc_tsan",
-                                           "syntax"};
+                                           "unwind"};
 
 // Multiple sysroot crates have dependenices on each other.  This provides a
-// mechanism for specifiying that in an extendible manner.
+// mechanism for specifying that in an extendible manner.
 const std::unordered_map<std::string_view, std::vector<std::string_view>>
     sysroot_deps_map = {{"alloc", {"core"}},
                         {"std", {"alloc", "core", "panic_abort", "unwind"}}};
 
 // Add each of the crates a sysroot has, including their dependencies.
 void AddSysrootCrate(const BuildSettings* build_settings,
-                     const std::string_view crate,
-                     const std::string_view current_sysroot,
+                     std::string_view crate,
+                     std::string_view current_sysroot,
                      SysrootCrateIndexMap& sysroot_crate_lookup,
                      CrateList& crate_list) {
   if (sysroot_crate_lookup.find(crate) != sysroot_crate_lookup.end()) {
@@ -241,7 +221,7 @@ void AddSysrootCrate(const BuildSettings* build_settings,
 
 // Add the given sysroot to the project, if it hasn't already been added.
 void AddSysroot(const BuildSettings* build_settings,
-                const std::string_view sysroot,
+                std::string_view sysroot,
                 SysrootIndexMap& sysroot_lookup,
                 CrateList& crate_list) {
   // If this sysroot is already in the lookup, we don't add it again.
@@ -258,7 +238,7 @@ void AddSysroot(const BuildSettings* build_settings,
 
 void AddSysrootDependencyToCrate(Crate* crate,
                                  const SysrootCrateIndexMap& sysroot,
-                                 const std::string_view crate_name) {
+                                 std::string_view crate_name) {
   if (const auto crate_idx = sysroot.find(crate_name);
       crate_idx != sysroot.end()) {
     crate->AddDependency(crate_idx->second, std::string(crate_name));
@@ -281,7 +261,7 @@ void AddTarget(const BuildSettings* build_settings,
   // Check what sysroot this target needs.  Add it to the crate list if it
   // hasn't already been added.
   auto rust_tool =
-      target->toolchain()->GetToolForSourceTypeAsRust(SourceFile::SOURCE_RS);
+      target->toolchain()->GetToolForTargetFinalOutputAsRust(target);
   auto current_sysroot = rust_tool->GetSysroot();
   if (current_sysroot != "" && sysroot_lookup.count(current_sysroot) == 0) {
     AddSysroot(build_settings, current_sysroot, sysroot_lookup, crate_list);
@@ -332,6 +312,12 @@ void AddTarget(const BuildSettings* build_settings,
     AddSysrootDependencyToCrate(&crate, sysroot, "core");
     AddSysrootDependencyToCrate(&crate, sysroot, "alloc");
     AddSysrootDependencyToCrate(&crate, sysroot, "std");
+
+    // Proc macros have the proc_macro crate as a direct dependency
+    if (std::string_view(rust_tool->name()) ==
+        std::string_view(RustTool::kRsToolMacro)) {
+      AddSysrootDependencyToCrate(&crate, sysroot, "proc_macro");
+    }
   }
 
   // Add the rest of the crate dependencies.

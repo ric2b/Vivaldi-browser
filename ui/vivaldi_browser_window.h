@@ -120,12 +120,22 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
 
   autofill::AutofillBubbleBase* ShowSaveAddressProfileBubble(
       content::WebContents* web_contents,
-      autofill::SaveAddressProfileBubbleController* controller,
+      autofill::SaveUpdateAddressProfileBubbleController* controller,
+      bool is_user_gesture) override;
+
+  autofill::AutofillBubbleBase* ShowUpdateAddressProfileBubble(
+      content::WebContents* web_contents,
+      autofill::SaveUpdateAddressProfileBubbleController* controller,
       bool is_user_gesture) override;
 
   autofill::AutofillBubbleBase* ShowEditAddressProfileDialog(
       content::WebContents* web_contents,
       autofill::EditAddressProfileDialogController* controller) override;
+
+  autofill::AutofillBubbleBase* ShowVirtualCardManualFallbackBubble(
+      content::WebContents* web_contents,
+      autofill::VirtualCardManualFallbackBubbleController* controller,
+      bool is_user_gesture) override;
 
   void OnPasswordSaved() override {}
 
@@ -310,12 +320,16 @@ class VivaldiBrowserWindow final
       bool show_stay_in_chrome,
       bool show_remember_selection,
       PageActionIconType icon_type,
-      const base::Optional<url::Origin>& initiating_origin,
+      const absl::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override {}
 #endif
   send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfBubble(
       content::WebContents* contents,
       send_tab_to_self::SendTabToSelfBubbleController* controller,
+      bool is_user_gesture) override;
+  sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
+      content::WebContents* contents,
+      sharing_hub::SharingHubBubbleController* controller,
       bool is_user_gesture) override;
   ExtensionsContainer* GetExtensionsContainer() override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}

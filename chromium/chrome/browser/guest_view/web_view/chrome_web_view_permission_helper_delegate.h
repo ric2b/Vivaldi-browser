@@ -70,13 +70,6 @@ class ChromeWebViewPermissionHelperDelegate
       bool allow,
       const std::string& user_input);
 
-  void OnNotificationPermissionResponse(
-      int bridge_id,
-      bool user_gesture,
-      const base::Callback<void(ContentSetting)>& callback,
-      bool allow,
-      const std::string& user_input);
-
   void OnFileSystemPermissionResponse(base::OnceCallback<void(bool)> callback,
                                       bool allow,
                                       const std::string& user_input);

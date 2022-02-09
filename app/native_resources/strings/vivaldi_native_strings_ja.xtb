@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">リンクをメールで送る</translation>
 <translation id="1454726940098520109">今後確認しない</translation>
 <translation id="1462666970065907900">このウィンドウを本当に閉じますか？</translation>
+<translation id="1480046233931937785">クレジット</translation>
 <translation id="1526344461589023948">ダウンロードした更新ファイルを保存できませんでした。お使いのコンピューターに十分な空き容量があることをご確認の上、もう一度お試しください。</translation>
 <translation id="1657174850639146440">怪獣９</translation>
 <translation id="1676595396635191120">新規プライベートウィンドウ</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">新しいタブで開く</translation>
 <translation id="3027988479108856431">残念ですが、Yandexの起動中は設定を利用できません。Vivaldiにこれらの設定をインポートするには、作業中の処理を保存して全てのYandexのウィンドウを閉じ、継続をクリックしてください。</translation>
 <translation id="3084011186245865060">風景６</translation>
+<translation id="3093931836425623631">Vivaldiは、Chromiumオープンソースプロジェクトとその他のオープンソースソフトウェアによって構築されています。</translation>
 <translation id="3127383884976966729">動物７</translation>
 <translation id="3156398087075132709">新しいブックマーク</translation>
 <translation id="3255747772218936245">更新をインストール</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">風景７</translation>
 <translation id="7111492742514999492">風景９</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldiは<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />オープンソースプロジェクトとその他<ph name="BEGIN_LINK_OSS" />オープンソースソフトウェア<ph name="END_LINK_OSS" />によって成り立っています。</translation>
 <translation id="7581266044164103589">更新インストーラーの起動に失敗しました。お使いのコンピューターに十分なメモリとストレージの空き容量があることをご確認の上、後ほどもう一度お試しください。</translation>
 <translation id="7658239707568436148">キャンセル</translation>
 <translation id="7715497554424665066">更新を無視 (&amp;I)</translation>

@@ -120,6 +120,26 @@ class MenuContentRemoveFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MenuContentRemoveFunction);
 };
 
+class MenuContentRemoveActionFunction : public ExtensionFunction,
+                                        public ::menus::MenuModelObserver {
+ public:
+  DECLARE_EXTENSION_FUNCTION("menuContent.removeAction",
+                             MENUCONTENT_REMOVE_ACTION)
+  MenuContentRemoveActionFunction() = default;
+
+  // ::menus::MenuModelObserver
+  void MenuModelLoaded(menus::Menu_Model* model) override;
+
+ private:
+  ~MenuContentRemoveActionFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+  bool HandleRemoval();
+
+  DISALLOW_COPY_AND_ASSIGN(MenuContentRemoveActionFunction);
+};
+
 class MenuContentUpdateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("menuContent.update", MENUCONTENT_UPDATE)

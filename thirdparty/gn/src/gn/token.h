@@ -58,10 +58,12 @@ class Token {
   };
 
   Token();
-  Token(const Location& location, Type t, const std::string_view& v);
+  Token(const Location& location, Type t, std::string_view v);
+
+  static Token ClassifyAndMake(const Location& location, std::string_view v);
 
   Type type() const { return type_; }
-  const std::string_view& value() const { return value_; }
+  std::string_view value() const { return value_; }
   const Location& location() const { return location_; }
   void set_location(Location location) { location_ = location; }
   LocationRange range() const {

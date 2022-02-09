@@ -114,11 +114,11 @@ cr.define('settings_about_page', function() {
       fireStatusChanged(UpdateStatus.DISABLED_BY_ADMIN);
       assertEquals(null, icon.src);
       assertEquals('cr20:domain', icon.icon);
-      assertEquals(0, statusMessageEl.textContent.trim().length);
+      assertNotEquals(previousMessageText, statusMessageEl.textContent);
 
       fireStatusChanged(UpdateStatus.FAILED);
       assertEquals(null, icon.src);
-      assertEquals('cr:error', icon.icon);
+      assertEquals('cr:error-outline', icon.icon);
       assertEquals(0, statusMessageEl.textContent.trim().length);
 
       fireStatusChanged(UpdateStatus.DISABLED);
@@ -220,7 +220,8 @@ cr.define('settings_about_page', function() {
       assertAllHidden();
 
       fireStatusChanged(UpdateStatus.DISABLED_BY_ADMIN);
-      assertAllHidden();
+      assertFalse(checkForUpdates.hidden);
+      assertTrue(relaunch.hidden);
     });
 
     /**
@@ -553,6 +554,15 @@ cr.define('settings_about_page', function() {
       assertEquals(
           deepLinkElement, getDeepActiveElement(),
           'Diagnostics should be focused for settingId=1707.');
+    });
+
+    // Regression test for crbug.com/1220294
+    test('Update button shown initially', async () => {
+      aboutBrowserProxy.blockRefreshUpdateStatus();
+      await initNewPage();
+
+      const {checkForUpdates} = page.$;
+      assertFalse(checkForUpdates.hidden);
     });
   });
 

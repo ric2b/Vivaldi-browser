@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "media/base/cdm_config.h"
 #include "media/base/key_system_names.h"
 #include "media/base/key_systems.h"
@@ -19,15 +20,12 @@
 #include "media/base/media_permission.h"
 #include "media/base/mime_util.h"
 #include "media/media_buildflags.h"
-#include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_media_key_system_configuration.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/modules/media/webmediaplayer_util.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "url/gurl.h"
-#include "url/origin.h"
 
 namespace media {
 
@@ -246,6 +244,10 @@ class KeySystemConfigSelector::ConfigState {
     return are_hw_secure_codecs_required_;
   }
 
+  bool AreHwSecureCodesNotAllowed() const {
+    return are_hw_secure_codecs_not_allowed_;
+  }
+
   // Checks whether a rule is compatible with all previously added rules.
   bool IsRuleSupported(EmeConfigRule rule) const {
     switch (rule) {
@@ -264,14 +266,18 @@ class KeySystemConfigSelector::ConfigState {
       case EmeConfigRule::PERSISTENCE_REQUIRED:
         return !is_persistence_not_allowed_;
       case EmeConfigRule::IDENTIFIER_AND_PERSISTENCE_REQUIRED:
-        return (!is_identifier_not_allowed_ && IsPermissionPossible() &&
-                !is_persistence_not_allowed_);
+        return !is_identifier_not_allowed_ && IsPermissionPossible() &&
+               !is_persistence_not_allowed_;
       case EmeConfigRule::HW_SECURE_CODECS_NOT_ALLOWED:
         return !are_hw_secure_codecs_required_;
       case EmeConfigRule::HW_SECURE_CODECS_REQUIRED:
         return !are_hw_secure_codecs_not_allowed_;
       case EmeConfigRule::IDENTIFIER_AND_HW_SECURE_CODECS_REQUIRED:
         return !is_identifier_not_allowed_ && IsPermissionPossible() &&
+               !are_hw_secure_codecs_not_allowed_;
+      case EmeConfigRule::IDENTIFIER_PERSISTENCE_AND_HW_SECURE_CODECS_REQUIRED:
+        return !is_identifier_not_allowed_ && IsPermissionPossible() &&
+               !is_persistence_not_allowed_ &&
                !are_hw_secure_codecs_not_allowed_;
       case EmeConfigRule::SUPPORTED:
         return true;
@@ -314,6 +320,11 @@ class KeySystemConfigSelector::ConfigState {
         return;
       case EmeConfigRule::IDENTIFIER_AND_HW_SECURE_CODECS_REQUIRED:
         is_identifier_required_ = true;
+        are_hw_secure_codecs_required_ = true;
+        return;
+      case EmeConfigRule::IDENTIFIER_PERSISTENCE_AND_HW_SECURE_CODECS_REQUIRED:
+        is_identifier_required_ = true;
+        is_persistence_required_ = true;
         are_hw_secure_codecs_required_ = true;
         return;
       case EmeConfigRule::SUPPORTED:
@@ -505,8 +516,20 @@ bool KeySystemConfigSelector::GetSupportedCapabilities(
         continue;
       requested_robustness_ascii = capability.robustness.Ascii();
     }
+    // Both of these should not be true.
+    DCHECK(!(proposed_config_state.AreHwSecureCodecsRequired() &&
+             proposed_config_state.AreHwSecureCodesNotAllowed()));
+    bool hw_secure_requirement;
+    bool* hw_secure_requirement_ptr = &hw_secure_requirement;
+    if (proposed_config_state.AreHwSecureCodecsRequired())
+      hw_secure_requirement = true;
+    else if (proposed_config_state.AreHwSecureCodesNotAllowed())
+      hw_secure_requirement = false;
+    else
+      hw_secure_requirement_ptr = nullptr;
     EmeConfigRule robustness_rule = key_systems_->GetRobustnessConfigRule(
-        key_system, media_type, requested_robustness_ascii);
+        key_system, media_type, requested_robustness_ascii,
+        hw_secure_requirement_ptr);
 
     // 3.13. If the user agent and implementation definitely support playback of
     //       encrypted media data for the combination of container, media types,
@@ -634,14 +657,18 @@ KeySystemConfigSelector::GetSupportedConfiguration(
   // permission has already been denied. This would happen anyway later.
   EmeFeatureSupport distinctive_identifier_support =
       key_systems_->GetDistinctiveIdentifierSupport(key_system);
+#if !defined(OS_ANDROID)
   // NOTE: This is an additional action we are taking here that is not in the
   // spec currently.  Specifically, we are not allowing a distinctive identifier
-  // for cross-origin frames.
+  // for cross-origin frames. We do not do this on Android because there is no
+  // CDM selection available to Chrome that doesn't require a distinct
+  // identifier.
   if (web_frame_delegate_->IsCrossOriginToMainFrame()) {
     if (distinctive_identifier_support == EmeFeatureSupport::ALWAYS_ENABLED)
       return CONFIGURATION_NOT_SUPPORTED;
     distinctive_identifier_support = EmeFeatureSupport::NOT_SUPPORTED;
   }
+#endif  // !defined(OS_ANDROID)
   EmeConfigRule di_rule = GetDistinctiveIdentifierConfigRule(
       distinctive_identifier_support, distinctive_identifier);
   if (!config_state->IsRuleSupported(di_rule)) {

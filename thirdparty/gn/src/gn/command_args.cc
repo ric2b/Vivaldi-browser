@@ -40,7 +40,7 @@ const char kSwitchShort[] = "short";
 const char kSwitchOverridesOnly[] = "overrides-only";
 const char kSwitchJson[] = "json";
 
-bool DoesLineBeginWithComment(const std::string_view& line) {
+bool DoesLineBeginWithComment(std::string_view line) {
   // Skip whitespace.
   size_t i = 0;
   while (i < line.size() && base::IsAsciiWhitespace(line[i]))
@@ -67,7 +67,7 @@ size_t BackUpToLineBegin(const std::string& data, size_t offset) {
 
 // Assumes DoesLineBeginWithComment(), this strips the # character from the
 // beginning and normalizes preceding whitespace.
-std::string StripHashFromLine(const std::string_view& line, bool pad) {
+std::string StripHashFromLine(std::string_view line, bool pad) {
   // Replace the # sign and everything before it with 3 spaces, so that a
   // normal comment that has a space after the # will be indented 4 spaces
   // (which makes our formatting come out nicely). If the comment is indented
@@ -137,8 +137,7 @@ void PrintDefaultValueInfo(std::string_view name, const Value& value) {
 }
 
 // Override value is null if there is no override.
-void PrintArgHelp(const std::string_view& name,
-                  const Args::ValueWithOverride& val) {
+void PrintArgHelp(std::string_view name, const Args::ValueWithOverride& val) {
   OutputString(std::string(name), DECORATION_YELLOW);
   OutputString("\n");
 
@@ -163,7 +162,7 @@ void PrintArgHelp(const std::string_view& name,
 }
 
 void BuildArgJson(base::Value& dict,
-                  const std::string_view& name,
+                  std::string_view name,
                   const Args::ValueWithOverride& arg,
                   bool short_only) {
   assert(dict.is_dict());
@@ -171,7 +170,7 @@ void BuildArgJson(base::Value& dict,
   // Fetch argument name.
   dict.SetKey("name", base::Value(name));
 
-  // Fetch overridden value inforrmation (if present).
+  // Fetch overridden value information (if present).
   if (arg.has_override) {
     base::DictionaryValue override_dict;
     override_dict.SetKey("value",

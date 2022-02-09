@@ -338,6 +338,11 @@ bool Target::OnResolved(Err* err) {
   ScopedTrace trace(TraceItem::TRACE_ON_RESOLVED, label());
   trace.SetToolchain(settings()->toolchain_label());
 
+  // Check visibility for just this target's own configs, before dependents are
+  // added.
+  if (!CheckConfigVisibility(err))
+    return false;
+
   // Copy this target's own dependent and public configs to the list of configs
   // applying to it.
   configs_.Append(all_dependent_configs_.begin(), all_dependent_configs_.end());
@@ -430,12 +435,16 @@ bool Target::IsFinal() const {
          output_type_ == LOADABLE_MODULE || output_type_ == ACTION ||
          output_type_ == ACTION_FOREACH || output_type_ == COPY_FILES ||
          output_type_ == CREATE_BUNDLE || output_type_ == RUST_PROC_MACRO ||
-         (output_type_ == STATIC_LIBRARY &&
-          (complete_static_lib_ ||
-           // Rust static libraries may be used from C/C++ code and therefore
-           // require all dependencies to be linked in as we cannot link their
-           // (Rust) dependencies directly as we would for C/C++.
-           source_types_used_.RustSourceUsed()));
+         (output_type_ == STATIC_LIBRARY && complete_static_lib_);
+}
+
+bool Target::IsDataOnly() const {
+  // BUNDLE_DATA exists only to declare inputs to subsequent CREATE_BUNDLE
+  // targets. Changing only contents of the bundle data target should not cause
+  // a binary to be re-linked. It should affect only the CREATE_BUNDLE steps
+  // instead. As a result, normal targets should treat this as a data
+  // dependency.
+  return output_type_ == BUNDLE_DATA;
 }
 
 DepsIteratorRange Target::GetDeps(DepsIterationType type) const {
@@ -512,8 +521,7 @@ bool Target::GetOutputsAsSourceFiles(const LocationRange& loc_for_error,
       output_type() == Target::ACTION_FOREACH ||
       output_type() == Target::GENERATED_FILE) {
     action_values().GetOutputsAsSourceFiles(this, outputs);
-  } else if (output_type() == Target::CREATE_BUNDLE ||
-             output_type() == Target::GENERATED_FILE) {
+  } else if (output_type() == Target::CREATE_BUNDLE) {
     if (!bundle_data().GetOutputsAsSourceFiles(settings(), this, outputs, err))
       return false;
   } else if (IsBinary() && output_type() != Target::SOURCE_SET) {
@@ -538,7 +546,7 @@ bool Target::GetOutputsAsSourceFiles(const LocationRange& loc_for_error,
           output_file.AsSourceFile(settings()->build_settings()));
     }
   } else {
-    // Everything else (like a group or something) has a stamp output. The
+    // Everything else (like a group or bundle_data) has a stamp output. The
     // dependency output file should have computed what this is. This won't be
     // valid unless the build is complete.
     if (!build_complete) {
@@ -674,14 +682,14 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     //
     // In this case:
     //   EXE -> INTERMEDIATE_SHLIB --[public]--> FINAL_SHLIB
-    // The EXE will also link to to FINAL_SHLIB. The public dependeny means
+    // The EXE will also link to to FINAL_SHLIB. The public dependency means
     // that the EXE can use the headers in FINAL_SHLIB so the FINAL_SHLIB
     // will need to appear on EXE's link line.
     //
     // However, if the dependency is private:
     //   EXE -> INTERMEDIATE_SHLIB --[private]--> FINAL_SHLIB
     // the dependency will not be propagated because INTERMEDIATE_SHLIB is
-    // not granting permission to call functiosn from FINAL_SHLIB. If EXE
+    // not granting permission to call functions from FINAL_SHLIB. If EXE
     // wants to use functions (and link to) FINAL_SHLIB, it will need to do
     // so explicitly.
     //
@@ -691,7 +699,7 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     inherited_libraries_.AppendPublicSharedLibraries(dep->inherited_libraries(),
                                                      is_public);
   } else if (!dep->IsFinal()) {
-    // The current target isn't linked, so propogate linked deps and
+    // The current target isn't linked, so propagate linked deps and
     // libraries up the dependency tree.
     inherited_libraries_.AppendInherited(dep->inherited_libraries(), is_public);
     rust_values().transitive_libs().AppendInherited(
@@ -958,6 +966,15 @@ bool Target::CheckVisibility(Err* err) const {
   for (const auto& pair : GetDeps(DEPS_ALL)) {
     if (!Visibility::CheckItemVisibility(this, pair.ptr, err))
       return false;
+  }
+  return true;
+}
+
+bool Target::CheckConfigVisibility(Err* err) const {
+  for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
+    if (const Config* config = iter.GetCurrentConfig())
+      if (!Visibility::CheckItemVisibility(this, config, err))
+        return false;
   }
   return true;
 }

@@ -206,7 +206,7 @@ base::Version InstallUtil::GetChromeVersion(bool system_install) {
   // We want to use Vivaldi version both when running as the browser and in the
   // installer, but not in tests.
   if (vivaldi::IsVivaldiRunning() || vivaldi::g_inside_installer_application) {
-    return vivaldi::GetInstallVersion(vivaldi::GetInstallBinaryDir());
+    return vivaldi::GetInstallVersion();
   }
   base::Version version;
   RegKey key;
@@ -492,8 +492,10 @@ void InstallUtil::AppendModeAndChannelSwitches(
     command_line->AppendSwitch(install_details.install_switch());
   if (install_details.channel_origin() ==
       install_static::ChannelOrigin::kPolicy) {
+    // Use channel_override rather than simply channel so that extended stable
+    // is differentiated from regular.
     command_line->AppendSwitchNative(installer::switches::kChannel,
-                                     install_details.channel());
+                                     install_details.channel_override());
   }
 }
 
@@ -531,7 +533,7 @@ bool InstallUtil::ProgramCompare::GetInfo(const base::File& file,
 }
 
 // static
-base::Optional<base::Version> InstallUtil::GetDowngradeVersion() {
+absl::optional<base::Version> InstallUtil::GetDowngradeVersion() {
   RegKey key;
   std::wstring downgrade_version;
   if (key.Open(install_static::IsSystemInstall() ? HKEY_LOCAL_MACHINE
@@ -541,11 +543,11 @@ base::Optional<base::Version> InstallUtil::GetDowngradeVersion() {
       key.ReadValue(installer::kRegDowngradeVersion, &downgrade_version) !=
           ERROR_SUCCESS ||
       downgrade_version.empty()) {
-    return base::nullopt;
+    return absl::nullopt;
   }
   base::Version version(base::WideToASCII(downgrade_version));
   if (!version.IsValid())
-    return base::nullopt;
+    return absl::nullopt;
   return version;
 }
 

@@ -112,7 +112,6 @@ class VivaldiUIEvents : public VivaldiEventHooks {
 
   bool DoHandleDragEnd(content::WebContents* web_contents,
                        ui::mojom::DragOperation operation,
-                       bool cancelled,
                        int screen_x,
                        int screen_y) override;
 

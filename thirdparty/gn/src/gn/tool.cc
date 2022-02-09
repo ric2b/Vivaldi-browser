@@ -342,7 +342,7 @@ const char* Tool::GetToolTypeForSourceType(SourceFile::Type type) {
 
 // static
 const char* Tool::GetToolTypeForTargetFinalOutput(const Target* target) {
-  // The contents of this list might be suprising (i.e. stamp tool for copy
+  // The contents of this list might be surprising (i.e. stamp tool for copy
   // rules). See the header for why.
   // TODO(crbug.com/gn/39): Don't emit stamp files for single-output targets.
   if (target->source_types_used().RustSourceUsed()) {

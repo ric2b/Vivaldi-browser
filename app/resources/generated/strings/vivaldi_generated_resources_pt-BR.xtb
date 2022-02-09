@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Sair do modo tela-cheia</translation>
 <translation id="2177950615300672361">Guia Privada: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Módulo de Cliente Nativo: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Ocultar botão</translation>
 <translation id="2218515861914035131">Colar como texto sem formatação</translation>
 <translation id="2249605167705922988">1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir identificadores únicos (talvez seja necessário reiniciar o computador)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Pré-renderizador: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfone</translation>
 <translation id="3241680850019875542">Selecione o diretório raiz da extensão a ser empacotada. Para atualizar uma extensão, selecione também a chave privada a ser reutilizada.</translation>
-<translation id="3266179261140759675">Bloquear sites fechados de enviar e receber dados</translation>
 <translation id="3280237271814976245">Salvar &amp;como...</translation>
 <translation id="3285322247471302225">Nova &amp;Guia</translation>
 <translation id="3288047731229977326">Extensões executadas no modo de desenvolvedor podem prejudicar o computador. Se você não for desenvolvedor, para sua segurança, desative essas extensões que estão sendo executadas no modo de desenvolvedor.</translation>
@@ -145,7 +143,7 @@
 <translation id="33022249435934718">Identificadores de GDI</translation>
 <translation id="3303818374450886607">Cópias</translation>
 <translation id="3305661444342691068">Abrir PDF na Pré-Visualização</translation>
-<translation id="3308134619352333507">Ocultar botão</translation>
+<translation id="3308134619352333507">Ocultar Botão</translation>
 <translation id="3317459757438853210">Frente e verso</translation>
 <translation id="3341703758641437857">Permitir execução em arquivos locais</translation>
 <translation id="3347086966102161372">C&amp;opiar endereço da imagem</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Pode ler e alterar os dados do site</translation>
 <translation id="3560034655160545939">&amp;Verificação ortográfica</translation>
 <translation id="3574917942258583917">Sair do modo de navegação anônima mesmo assim?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; deseja compartilhar uma impressora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; com um grupo de sua propriedade: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Se você aceitar, todos os membros do grupo poderão imprimir pela impressora.</translation>
 <translation id="3587482841069643663">Todas</translation>
 <translation id="3627588569887975815">Abrir link em janela &amp;privada</translation>
 <translation id="3627879631695760395">Instalar <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Manipuladores de protocolos</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> deseja transmitir a tela</translation>
+<translation id="3708684582558000260">Não permitir que os sites fechados terminem de enviar ou receber dados</translation>
 <translation id="3711931198657368127">Co&amp;lar e acessar <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspecionar pop-up</translation>
 <translation id="3744111561329211289">Sincronização em segundo plano</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">A extensão foi compactada em:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Aceitar fazer parte do grupo</translation>
 <translation id="4096508467498758490">Desativar extensões no modo de desenvolvedor</translation>
 <translation id="4100839878934973028">Outro programa em seu computador adicionou um aplicativo que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="4109898769411476438">Fechar o Navegador Antes de Importar</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Exibir Detalhes</translation>
 <translation id="4907306957610201395">Categoria de Permissão</translation>
 <translation id="4912643508233590958">Ativações do Estado Ocioso</translation>
-<translation id="4918086044614829423">Aceitar</translation>
 <translation id="4927753642311223124">Não há nada para se ver aqui.</translation>
 <translation id="4930714375720679147">Ativar</translation>
 <translation id="4988526792673242964">Páginas</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Excluir dados dos sites</translation>
 <translation id="6042308850641462728">Mais</translation>
 <translation id="6059925163896151826">Dispositivos USB</translation>
-<translation id="6082651258230788217">Mostrar na barra de ferramentas</translation>
 <translation id="6086846494333236931">Instalada pelo administrador</translation>
 <translation id="6101226222197207147">Novo aplicativo adicionado (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Sua conexão com a Internet está sendo controlada</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simular reinicialização do navegador</translation>
 <translation id="6445450263907939268">Se você não deseja essas alterações, é possível restaurar as configurações anteriores.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Rejeitar</translation>
 <translation id="6498249116389603658">&amp;Todos os idiomas listados</translation>
 <translation id="6503077044568424649">Mais visitados</translation>
 <translation id="6508261954199872201">Aplicativo: <ph name="APP_NAME" /></translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Esta é a página "Nova guia" que você esperava?</translation>
 <translation id="786073089922909430">Serviço: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Destinos recentes</translation>
-<translation id="7898627924844766532">Manter na barra de ferramentas</translation>
 <translation id="7903925330883316394">Utilitário: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Atualmente off-line</translation>
 <translation id="7947962633355574091">C&amp;opiar endereço do vídeo</translation>
@@ -452,7 +445,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8725066075913043281">Tentar novamente</translation>
 <translation id="8757090071857742562">Não foi possível transmitir a área de trabalho. Verifique se você confirmou a solicitação para iniciar a compartilhar sua tela.</translation>
 <translation id="8774934320277480003">Margem superior</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quer compartilhar uma impressora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; com você.</translation>
 <translation id="8798099450830957504">Padrão</translation>
 <translation id="8800004011501252845">Mostrando destinos para</translation>
 <translation id="8808478386290700967">Web Store</translation>

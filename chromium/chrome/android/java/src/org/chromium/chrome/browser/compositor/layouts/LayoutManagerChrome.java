@@ -26,7 +26,6 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
-import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -47,7 +46,10 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * A {@link Layout} controller for the more complicated Chrome browser.  This is currently a
@@ -88,7 +90,6 @@ public class LayoutManagerChrome extends LayoutManagerImpl
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param layerTitleCacheSupplier Supplier of the {@link LayerTitleCache}.
      * @param overviewModeBehaviorSupplier Supplier of the {@link OverviewModeBehavior}.
-     * @param layoutStateProviderOneshotSupplier Supplier of the {@link LayoutStateProvider}.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      */
     public LayoutManagerChrome(LayoutManagerHost host, ViewGroup contentContainer,
@@ -96,10 +97,9 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<LayerTitleCache> layerTitleCacheSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            OneshotSupplierImpl<LayoutStateProvider> layoutStateProviderOneshotSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider) {
         super(host, contentContainer, tabContentManagerSupplier, layerTitleCacheSupplier,
-                layoutStateProviderOneshotSupplier, topUiThemeColorProvider);
+                topUiThemeColorProvider);
         Context context = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
 
@@ -129,13 +129,11 @@ public class LayoutManagerChrome extends LayoutManagerImpl
 
         if (createOverviewLayout) {
             if (startSurface != null) {
-                assert TabUiFeatureUtilities.isGridTabSwitcherEnabled();
+                assert TabUiFeatureUtilities.isGridTabSwitcherEnabled(context);
                 TabManagementDelegate tabManagementDelegate =
                         TabManagementModuleProvider.getDelegate();
                 assert tabManagementDelegate != null;
 
-                final ObservableSupplier<? extends BrowserControlsStateProvider>
-                        browserControlsSupplier = mHost.getBrowserControlsManagerSupplier();
                 mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(
                         context, this, renderHost, startSurface);
             }
@@ -172,7 +170,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
 
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
-            ControlContainer controlContainer, DynamicResourceLoader dynamicResourceLoader) {
+            ControlContainer controlContainer, DynamicResourceLoader dynamicResourceLoader,
+            TopUiThemeColorProvider topUiColorProvider) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
         BrowserControlsStateProvider browserControlsStateProvider =
@@ -181,9 +180,10 @@ public class LayoutManagerChrome extends LayoutManagerImpl
         // Build Layouts
         mOverviewListLayout =
                 new OverviewListLayout(context, this, renderHost, browserControlsStateProvider);
-        mToolbarSwipeLayout = new ToolbarSwipeLayout(context, this, renderHost);
+        mToolbarSwipeLayout = new ToolbarSwipeLayout(context, this, renderHost,
+                browserControlsStateProvider, this, topUiColorProvider);
 
-        super.init(selector, creator, controlContainer, dynamicResourceLoader);
+        super.init(selector, creator, controlContainer, dynamicResourceLoader, topUiColorProvider);
 
         // TODO: TitleCache should be a part of the ResourceManager.
         mTitleCache = mHost.getTitleCache();
@@ -296,7 +296,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     @Override
     protected boolean shouldDelayHideAnimation(Layout layoutBeingHidden) {
         return mEnableAnimations && layoutBeingHidden == mOverviewLayout && mCreatingNtp
-                && !TabUiFeatureUtilities.isGridTabSwitcherEnabled();
+                && !TabUiFeatureUtilities.isGridTabSwitcherEnabled(mHost.getContext());
     }
 
     @Override
@@ -390,6 +390,11 @@ public class LayoutManagerChrome extends LayoutManagerImpl
         } else if (mOverviewLayout != null) {
             startShowing(mOverviewLayout, animate);
         }
+        // Vivaldi
+        // Note(nagamani@vivaldi.com): Initialize with ScrollDirection.UNKNOWN to properly detect
+        // subsequent swipes.
+        if (BuildConfig.IS_VIVALDI && mToolbarSwipeHandler != null)
+            ((ToolbarSwipeHandler)mToolbarSwipeHandler).mScrollDirection = ScrollDirection.UNKNOWN;
     }
 
     /**
@@ -455,7 +460,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
      */
     protected class ToolbarSwipeHandler implements SwipeHandler {
         /** The scroll direction of the current gesture. */
-        private @ScrollDirection int mScrollDirection;
+        /*Vivaldi*/ protected  @ScrollDirection int mScrollDirection;
 
         /**
          * The range in degrees that a swipe can be from a particular direction to be considered
@@ -494,10 +499,13 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             mScrollDirection = computeScrollDirection(dx, dy);
             if (mScrollDirection == ScrollDirection.UNKNOWN) return;
 
-            if (mSupportSwipeDown && mOverviewLayout != null
-                    && mScrollDirection == ScrollDirection.DOWN) {
-                RecordUserAction.record("MobileToolbarSwipeOpenStackView");
-                showOverview(true);
+            // Vivaldi - Show Overview layout whether address bar is at top or bottom
+            if (mSupportSwipeDown && mOverviewLayout != null) {
+                if ((VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.DOWN)
+                        || (!VivaldiUtils.isTopToolbarOn()
+                        && mScrollDirection == ScrollDirection.UP)) {
+                    showOverview(true);
+                }
             } else if (mScrollDirection == ScrollDirection.LEFT
                     || mScrollDirection == ScrollDirection.RIGHT) {
                 startShowing(mToolbarSwipeLayout, true);
@@ -545,6 +553,11 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             } else if (swipeAngle < 270 + SWIPE_RANGE_DEG && swipeAngle > 270 - SWIPE_RANGE_DEG) {
                 direction = ScrollDirection.DOWN;
             }
+            // Vivaldi: Note(nagamani@vivaldi.com): Swipe UP is sometimes not computed
+            // properly with swipeAngle.
+            if (Math.abs(dy) > Math.abs(dx) && dy < 0.f) {
+                direction = ScrollDirection.UP;
+            }
 
             return direction;
         }
@@ -558,7 +571,9 @@ public class LayoutManagerChrome extends LayoutManagerImpl
                 return false;
             }
 
-            if (direction == ScrollDirection.DOWN) {
+            // Vivaldi - Enable ScrollDirection UP when address bar at the bottom
+            if (direction == ScrollDirection.DOWN
+                    || (!VivaldiUtils.isTopToolbarOn() && direction == ScrollDirection.UP)) {
                 boolean isAccessibility = ChromeAccessibilityUtil.get().isAccessibilityEnabled();
                 return mOverviewLayout != null && !isAccessibility;
             }

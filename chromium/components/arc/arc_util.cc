@@ -13,17 +13,18 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/optional.h"
 #include "base/process/launch.h"
+#include "base/process/process_metrics.h"
 #include "base/strings/string_number_conversions.h"
-#include "chromeos/dbus/concierge_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "base/strings/string_util.h"
+#include "chromeos/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/dbus/upstart/upstart_client.h"
 #include "components/arc/arc_features.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/user_manager/user_manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/display/types/display_constants.h"
@@ -51,6 +52,12 @@ constexpr const char kCrosSystemPath[] = "/usr/bin/crossystem";
 constexpr char kGenerate[] = "generate";
 constexpr char kDisabled[] = "disabled";
 
+// Do not run ureadahead in vm for devices with less than 8GB due to memory
+// pressure issues since system will likely drop caches in this case.
+// The value should match platform2/arc/vm/scripts/init/arcvm-ureadahead.conf
+// in Chrome OS.
+constexpr int kReadaheadTotalMinMemoryInKb = 7500000;
+
 void SetArcCpuRestrictionCallback(
     login_manager::ContainerCpuRestrictionState state,
     bool success) {
@@ -64,7 +71,7 @@ void SetArcCpuRestrictionCallback(
 }
 
 void OnSetArcVmCpuRestriction(
-    base::Optional<vm_tools::concierge::SetVmCpuRestrictionResponse> response) {
+    absl::optional<vm_tools::concierge::SetVmCpuRestrictionResponse> response) {
   if (!response) {
     LOG(ERROR) << "Failed to call SetVmCpuRestriction";
     return;
@@ -74,7 +81,7 @@ void OnSetArcVmCpuRestriction(
 }
 
 void SetArcVmCpuRestriction(CpuRestrictionState cpu_restriction_state) {
-  auto* client = chromeos::DBusThreadManager::Get()->GetConciergeClient();
+  auto* client = chromeos::ConciergeClient::Get();
   if (!client) {
     LOG(ERROR) << "ConciergeClient is not available";
     return;
@@ -188,13 +195,26 @@ bool IsArcVmRtVcpuEnabled(uint32_t cpus) {
   return false;
 }
 
+bool IsArcVmUseHugePages() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcVmUseHugePages);
+}
+
 bool IsArcVmDevConfIgnored() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kIgnoreArcVmDevConf);
 }
 
-ArcVmUreadaheadMode GetArcVmUreadaheadMode() {
-  ArcVmUreadaheadMode mode = ArcVmUreadaheadMode::READAHEAD;
+ArcVmUreadaheadMode GetArcVmUreadaheadMode(SystemMemoryInfoCallback callback) {
+  base::SystemMemoryInfoKB mem_info;
+  DCHECK(callback);
+  if (!callback.Run(&mem_info)) {
+    LOG(ERROR) << "Failed to get system memory info";
+    return ArcVmUreadaheadMode::DISABLED;
+  }
+  ArcVmUreadaheadMode mode = (mem_info.total > kReadaheadTotalMinMemoryInKb)
+                                 ? ArcVmUreadaheadMode::READAHEAD
+                                 : ArcVmUreadaheadMode::DISABLED;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kArcVmUreadaheadMode)) {
     const std::string value =
@@ -375,6 +395,8 @@ int32_t GetLcdDensityForDeviceScaleFactor(float device_scale_factor) {
   if (std::abs(device_scale_factor - 1.6f) < kEpsilon)
     return 213;  // TVDPI
   if (std::abs(device_scale_factor - display::kDsf_1_777) < kEpsilon)
+    return 240;  // HDPI
+  if (std::abs(device_scale_factor - display::kDsf_1_8) < kEpsilon)
     return 240;  // HDPI
   if (std::abs(device_scale_factor - display::kDsf_2_666) < kEpsilon)
     return 320;  // XHDPI

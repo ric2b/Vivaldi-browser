@@ -77,18 +77,18 @@ bool ContentSettingsAgentImpl::Delegate::IsSchemeAllowlisted(
   return false;
 }
 
-base::Optional<bool>
+absl::optional<bool>
 ContentSettingsAgentImpl::Delegate::AllowReadFromClipboard() {
-  return base::nullopt;
+  return absl::nullopt;
 }
 
-base::Optional<bool>
+absl::optional<bool>
 ContentSettingsAgentImpl::Delegate::AllowWriteToClipboard() {
-  return base::nullopt;
+  return absl::nullopt;
 }
 
-base::Optional<bool> ContentSettingsAgentImpl::Delegate::AllowMutationEvents() {
-  return base::nullopt;
+absl::optional<bool> ContentSettingsAgentImpl::Delegate::AllowMutationEvents() {
+  return absl::nullopt;
 }
 
 void ContentSettingsAgentImpl::Delegate::PassiveInsecureContentFound(
@@ -312,6 +312,7 @@ bool ContentSettingsAgentImpl::AllowStorageAccessSync(
   if (permissions != cached_storage_permissions_.end())
     return permissions->second;
 
+  SCOPED_UMA_HISTOGRAM_TIMER("ContentSettings.AllowStorageAccessSync");
   bool result = false;
   GetContentSettingsManager().AllowStorageAccess(
       routing_id(), ConvertToMojoStorageType(storage_type),

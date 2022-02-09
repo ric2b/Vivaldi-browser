@@ -59,7 +59,7 @@ class StatsReporterImpl : public StatsReporter {
       const std::string& vivaldi_version,
       const std::string& user_agent,
       ReportingData& local_state_reporting_data,
-      base::Optional<base::Value>& os_profile_reporting_data_json,
+      absl::optional<base::Value>& os_profile_reporting_data_json,
       std::string& request_url,
       std::string& body,
       base::TimeDelta& next_reporting_time_interval);
@@ -87,13 +87,13 @@ class StatsReporterImpl : public StatsReporter {
   void OnLegacyUserIdGot(const std::string& legacy_user_id);
   void StartReporting();
 
-  void OnOSStatFileRead(base::Optional<FileAndContent> file_and_content);
+  void OnOSStatFileRead(absl::optional<FileAndContent> file_and_content);
   void DoReporting(FileHolder os_profile_reporting_data_file,
                    std::string os_profile_reporting_data);
   void OnURLLoadComplete(
       FileHolder os_profile_reporting_data_file,
       ReportingData local_state_reporting_data,
-      base::Optional<base::Value> os_profile_reporting_data_json,
+      absl::optional<base::Value> os_profile_reporting_data_json,
       base::TimeDelta next_reporting_time_interval_,
       std::unique_ptr<std::string> response_body);
   void ScheduleNextReporting(base::TimeDelta next_try_delay, bool add_jitter);

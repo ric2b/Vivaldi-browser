@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Continua</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Eseguire la diagnostica di rete<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifiche</translation>
+<translation id="2491414235131909199">Questa pagina è stata bloccata da un'estensione</translation>
 <translation id="2501278716633472235">Torna indietro</translation>
 <translation id="2539524384386349900">Rileva</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ha inviato una risposta non valida.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Non dovresti inserire dati sensibili in questo sito (ad esempio password o carte di credito) perché potrebbero essere rubati da utenti malintenzionati.</translation>
 <translation id="5869405914158311789">Impossibile raggiungere il sito</translation>
 <translation id="5932224571077948991">Il sito mostra annunci invasivi o fuorvianti</translation>
-<translation id="5990559369517809815">Le richieste al server sono state bloccate da un'estensione.</translation>
 <translation id="6051221802930200923">Al momento non puoi visitare <ph name="SITE" /> perché il sito web utilizza il blocco dei certificati. Errori di rete e attacchi sono in genere temporanei, quindi questa pagina probabilmente funzionerà più tardi.</translation>
 <translation id="6146055958333702838">Controlla eventuali cavi e riavvia eventuali router, modem o altri
     dispositivi di rete in uso.</translation>

@@ -20,7 +20,7 @@
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/quads/compositor_frame.h"
-#include "components/viz/common/resources/single_release_callback.h"
+#include "components/viz/common/resources/release_callback.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/public/common/content_switches.h"
@@ -153,6 +153,25 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceInternal(
     viz::CopyOutputRequest::CopyOutputRequestCallback callback) {
   auto request =
       std::make_unique<viz::CopyOutputRequest>(format, std::move(callback));
+
+  // NOTE(igor@vivaldi.com): Workaround for the issue retported in
+  // https://groups.google.com/a/chromium.org/g/chromium-dev/c/SmNUPsoPz2k/m/B9GGSZKcAQAJ
+  struct VivaldiRequestSequenceSetter {
+    VivaldiRequestSequenceSetter(
+        std::unique_ptr<viz::CopyOutputRequest>& request)
+        : request(request) {}
+    ~VivaldiRequestSequenceSetter() {
+      if (request) {
+        // The request has not moved out to host_frame_sink_manager_, so this
+        // is an error. Trigger the callback call on the original sequence.
+        request->set_result_task_runner(base::SequencedTaskRunnerHandle::Get());
+      }
+    }
+
+    std::unique_ptr<viz::CopyOutputRequest>& request;
+  };
+
+  VivaldiRequestSequenceSetter set_error_sequence(request);
 
   // It is possible for us to not have a valid surface to copy from. Such as
   // if a navigation fails to complete. In such a case do not attempt to request
@@ -378,8 +397,7 @@ void DelegatedFrameHost::DidCopyStaleContent(
       result->GetTextureResult()->mailbox, GL_LINEAR, GL_TEXTURE_2D,
       result->GetTextureResult()->sync_token, result->size(),
       false /* is_overlay_candidate */);
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback =
-      result->TakeTextureOwnership();
+  viz::ReleaseCallback release_callback = result->TakeTextureOwnership();
 
   if (stale_content_layer_->parent() != client_->DelegatedFrameHostGetLayer())
     client_->DelegatedFrameHostGetLayer()->Add(stale_content_layer_.get());

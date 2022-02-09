@@ -12,7 +12,7 @@
 <translation id="1838104802459806957">மேலே சாய்க்கவும்</translation>
 <translation id="1851169887664797861">கூடுதல் கேமரா கட்டுப்பாடுகள் உள்ளன</translation>
 <translation id="1851616744363735765">இடைநிறுத்தப்பட்டுள்ளது</translation>
-<translation id="1862930711583847113"><ph name="FILE" /> கோப்பை இடமாற்ற முடியவில்லை</translation>
+<translation id="1862930711583847113"><ph name="FILE" /> ஃபைலை இடமாற்ற முடியவில்லை</translation>
 <translation id="1899697626337024495">படத் தெளிவுத்திறன்</translation>
 <translation id="2022953316617983419">QR குறியீடு</translation>
 <translation id="2036868001356139588">டைமர் காலஅளவு</translation>
@@ -39,12 +39,12 @@
 <translation id="3240426699337459095">இணைப்பு நகலெடுக்கப்பட்டது</translation>
 <translation id="3259149966178251584">கேமரா தெளிவுத்திறன்</translation>
 <translation id="3517926952904427380">படத்தை நீளவாக்கில் எடுக்க முடியவில்லை</translation>
-<translation id="3569311554794739032"><ph name="FILE" /> கோப்பை நிச்சயமாக அகற்ற விரும்புகிறீர்களா?</translation>
+<translation id="3569311554794739032"><ph name="FILE" /> ஃபைலை நிச்சயமாக அகற்ற விரும்புகிறீர்களா?</translation>
 <translation id="3733597664308256288">கூடுதல் கேமரா கட்டுப்பாடுகள் உள்ளன. அவற்றைப் பயன்படுத்த, Search + வலது அம்புக்குறி விசைகளை அழுத்தவும்.</translation>
 <translation id="3810838688059735925">வீடியோ</translation>
 <translation id="3838931309141338733">பார்கோடை ஸ்கேன் செய்</translation>
 <translation id="3892148308691398805">உரையை நகலெடு</translation>
-<translation id="4000398125663085899">இப்போது புதிய படங்களும் வீடியோக்களும் Files ஆப்ஸில் உள்ள இந்தக் கோப்புறையில் சேமிக்கப்படும்: எனது கோப்புகள் &gt; கேமரா</translation>
+<translation id="4000398125663085899">இப்போது புதிய படங்களும் வீடியோக்களும் Files ஆப்ஸில் உள்ள இந்தக் கோப்புறையில் சேமிக்கப்படும்: எனது ஃபைல்கள்  &gt; கேமரா</translation>
 <translation id="4118525110028899586">ரெக்கார்டிங்கை இடைநிறுத்து</translation>
 <translation id="4269820728363426813">இணைப்பு முகவரியை நகலெடு</translation>
 <translation id="4279490309300973883">பிரதிபலிக்கிறது</translation>
@@ -54,7 +54,7 @@
 <translation id="4497569853498380347">(<ph name="ASPECT_RATIO_WIDTH" />:<ph name="ASPECT_RATIO_HEIGHT" />) <ph name="MEGAPIXEL" /> மெகாபிக்சல்</translation>
 <translation id="4570032796877367747">முன்பக்கக் கேமரா</translation>
 <translation id="4628948037717959914">படம்</translation>
-<translation id="4649291346448517080">கோப்பைச் சேமிக்க முடியவில்லை</translation>
+<translation id="4649291346448517080">ஃபைலைச் சேமிக்க முடியவில்லை</translation>
 <translation id="4890010094662541459">3 x 3</translation>
 <translation id="5057360777601936059">உங்கள் கேமரா தற்போது கிடைக்கவில்லை.
         கேமரா சரியாக இணைக்கப்பட்டுள்ளதா எனப் பார்க்கவும்.</translation>
@@ -76,6 +76,7 @@
 <translation id="6420689864531458495">(<ph name="ASPECT_RATIO_WIDTH" />:<ph name="ASPECT_RATIO_HEIGHT" /> - <ph name="WIDTH" />x<ph name="HEIGHT" />) <ph name="MEGAPIXEL" /> மெகா பிக்சல்</translation>
 <translation id="6681668084120808868">புகைப்படம் எடு</translation>
 <translation id="6778482348691154169">படம் எடுக்க முடியவில்லை</translation>
+<translation id="695140971690006676">அனைத்தையும் மீட்டமை</translation>
 <translation id="6965382102122355670">சரி</translation>
 <translation id="698156982839284926">3 வினாடிகள்</translation>
 <translation id="712848772518857951"><ph name="COUNT" /> உள்ளடக்கங்களை நிச்சயமாக அகற்ற விரும்புகிறீர்களா?</translation>
@@ -89,7 +90,6 @@
 <translation id="7649070708921625228">உதவி</translation>
 <translation id="7658239707568436148">ரத்து செய்</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="7974782136796202581">நகர்த்துதல், சாய்த்தல், அளவை மாற்றுதல் போன்ற விருப்பங்களைக் காட்டு</translation>
 <translation id="7983668134180549431">உரை கண்டறியப்பட்டது.</translation>
 <translation id="8067883171444229417">வீடியோவை பிளே செய்</translation>
 <translation id="8120146556401698679">நகர்வு சாய்வு அளவை மாற்று</translation>

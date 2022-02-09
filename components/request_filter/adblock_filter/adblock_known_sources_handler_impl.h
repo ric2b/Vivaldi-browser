@@ -11,6 +11,7 @@
 #include "base/observer_list.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace adblock_filter {
@@ -34,12 +35,12 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   const std::set<std::string>& GetDeletedPresets(
       RuleGroup group) const override;
 
-  base::Optional<uint32_t> AddSourceFromUrl(RuleGroup group,
+  absl::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
                                             const GURL& url) override;
-  base::Optional<uint32_t> AddSourceFromFile(
+  absl::optional<uint32_t> AddSourceFromFile(
       RuleGroup group,
       const base::FilePath& file) override;
-  base::Optional<KnownRuleSource> GetSource(RuleGroup group,
+  absl::optional<KnownRuleSource> GetSource(RuleGroup group,
                                             uint32_t source_id) override;
   bool RemoveSource(RuleGroup group, uint32_t source_id) override;
 
@@ -53,7 +54,7 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   void RemoveObserver(Observer* observer) override;
 
  private:
-  base::Optional<uint32_t> AddSource(const KnownRuleSource& known_source,
+  absl::optional<uint32_t> AddSource(const KnownRuleSource& known_source,
                                      bool enable);
 
   KnownRuleSources& GetSourceMap(RuleGroup group);

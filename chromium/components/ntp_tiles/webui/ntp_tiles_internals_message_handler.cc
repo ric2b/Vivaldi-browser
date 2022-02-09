@@ -100,8 +100,9 @@ void NTPTilesInternalsMessageHandler::HandleRegisterForEvents(
     disabled.SetBoolean("popular", false);
     disabled.SetBoolean("customLinks", false);
     disabled.SetBoolean("allowlist", false);
-    client_->CallJavascriptFunction(
-        "chrome.ntp_tiles_internals.receiveSourceInfo", disabled);
+    client_->CallJavascriptFunction("cr.webUIListenerCallback",
+                                    base::Value("receive-source-info"),
+                                    disabled);
     SendTiles(NTPTilesVector(), FaviconResultMap());
     return;
   }
@@ -110,7 +111,7 @@ void NTPTilesInternalsMessageHandler::HandleRegisterForEvents(
   suggestions_status_.clear();
   popular_sites_json_.clear();
   most_visited_sites_ = client_->MakeMostVisitedSites();
-  most_visited_sites_->SetMostVisitedURLsObserver(this, site_count_);
+  most_visited_sites_->AddMostVisitedURLsObserver(this, site_count_);
   SendSourceInfo();
 }
 
@@ -169,7 +170,7 @@ void NTPTilesInternalsMessageHandler::HandleUpdate(
   // TODO(sfiera): refresh MostVisitedSites without re-creating it, as soon as
   // that will pick up changes to the Popular Sites overrides.
   most_visited_sites_ = client_->MakeMostVisitedSites();
-  most_visited_sites_->SetMostVisitedURLsObserver(this, site_count_);
+  most_visited_sites_->AddMostVisitedURLsObserver(this, site_count_);
   SendSourceInfo();
 }
 
@@ -243,8 +244,8 @@ void NTPTilesInternalsMessageHandler::SendSourceInfo() {
     value.SetBoolean("popular", false);
   }
 
-  client_->CallJavascriptFunction(
-      "chrome.ntp_tiles_internals.receiveSourceInfo", value);
+  client_->CallJavascriptFunction("cr.webUIListenerCallback",
+                                  base::Value("receive-source-info"), value);
 }
 
 void NTPTilesInternalsMessageHandler::SendTiles(
@@ -285,8 +286,8 @@ void NTPTilesInternalsMessageHandler::SendTiles(
 
   base::DictionaryValue result;
   result.Set("sites", std::move(sites_list));
-  client_->CallJavascriptFunction("chrome.ntp_tiles_internals.receiveSites",
-                                  result);
+  client_->CallJavascriptFunction("cr.webUIListenerCallback",
+                                  base::Value("receive-sites"), result);
 }
 
 void NTPTilesInternalsMessageHandler::OnURLsAvailable(

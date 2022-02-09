@@ -31,7 +31,6 @@
 #include "content/browser/web_package/web_bundle_handle_tracker.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/browser/webui/web_ui_impl.h"
-#include "content/common/frame_messages.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/browser_context.h"
@@ -77,10 +76,18 @@ void RecordWebPlatformSecurityMetrics(RenderFrameHostImpl* rfh,
                  kCrossOriginOpenerPolicySameOriginAllowPopups);
   }
 
-  if (rfh->cross_origin_embedder_policy().value ==
-      network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp) {
-    client->LogWebFeatureForCurrentPage(
-        rfh, blink::mojom::WebFeature::kCrossOriginEmbedderPolicyRequireCorp);
+  switch (rfh->cross_origin_embedder_policy().value) {
+    case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
+      break;
+    case network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless:
+      client->LogWebFeatureForCurrentPage(
+          rfh,
+          blink::mojom::WebFeature::kCrossOriginEmbedderPolicyCredentialless);
+      break;
+    case network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp:
+      client->LogWebFeatureForCurrentPage(
+          rfh, blink::mojom::WebFeature::kCrossOriginEmbedderPolicyRequireCorp);
+      break;
   }
 
   if (rfh->cross_origin_opener_policy().value ==
@@ -197,22 +204,22 @@ struct Navigator::NavigationMetricsData {
   // For renderer-initated navigations this just includes OOPIFs since local
   // beforeunloads will have been run in the renderer before dispatching the
   // navigation IPC.
-  base::Optional<base::TimeTicks> before_unload_start_;
-  base::Optional<base::TimeTicks> before_unload_end_;
+  absl::optional<base::TimeTicks> before_unload_start_;
+  absl::optional<base::TimeTicks> before_unload_end_;
 
   // Time at which the browser process received a navigation request and
   // dispatched beforeunloads to the renderer.
-  base::Optional<base::TimeTicks> before_unload_sent_;
+  absl::optional<base::TimeTicks> before_unload_sent_;
 
   // Timestamps renderer_before_unload_(start|end)_ give the time it took to run
   // beforeunloads for local frames in a renderer-initiated navigation, prior to
   // notifying the browser process about the navigation.
-  base::Optional<base::TimeTicks> renderer_before_unload_start_;
-  base::Optional<base::TimeTicks> renderer_before_unload_end_;
+  absl::optional<base::TimeTicks> renderer_before_unload_start_;
+  absl::optional<base::TimeTicks> renderer_before_unload_end_;
 
   // Time at which the browser process dispatched the CommitNavigation to the
   // renderer.
-  base::Optional<base::TimeTicks> commit_navigation_sent_;
+  absl::optional<base::TimeTicks> commit_navigation_sent_;
 };
 
 Navigator::Navigator(
@@ -412,8 +419,7 @@ void Navigator::DidNavigate(
   if (!is_same_document_navigation) {
     // Navigating to a new location means a new, fresh set of http headers
     // and/or <meta> elements - we need to reset Permissions Policy.
-    frame_tree_node->ResetForNavigation(
-        navigation_request->IsServedFromBackForwardCache());
+    frame_tree_node->ResetForNavigation();
   }
 
   // Update the site of the SiteInstance if it doesn't have one yet, unless
@@ -442,6 +448,29 @@ void Navigator::DidNavigate(
         render_frame_host->GetRenderViewHost());
     rvh->SetContentsMimeType(params.contents_mime_type);
   }
+
+  // Navigations that activate an existing bfcached or prerendered document do
+  // not create a new document.
+  //
+  // |was_within_same_document| (controlled by the renderer) also needs to be
+  // considered: in some cases, the browser and renderer can disagree. While
+  // this is usually a bad message kill, there are some situations where this
+  // can legitimately happen. When a new frame is created (e.g. with
+  // <iframe src="...">), the initial about:blank document doesn't have a
+  // corresponding entry in the browser process. As a result, the browser
+  // process incorrectly determines that the navigation is cross-document when
+  // in reality it's same-document.
+  //
+  // TODO(crbug/1099264): Remove |was_within_same_document| from this logic
+  // once all same-document navigations have a NavigationEntry. Once this
+  // happens there should be no cases where the browser and renderer
+  // legitimately disagree as described above.
+  bool did_create_new_document = !navigation_request->IsPageActivation() &&
+                                 !is_same_document_navigation &&
+                                 !was_within_same_document;
+
+  render_frame_host->DidNavigate(params, navigation_request.get(),
+                                 did_create_new_document);
 
   int old_entry_count = controller_.GetEntryCount();
   LoadCommittedDetails details;
@@ -474,25 +503,6 @@ void Navigator::DidNavigate(
         site_instance);
   }
 
-  // Back-forward cache navigations do not create a new document.
-  //
-  // |was_within_same_document| (controlled by the renderer) also needs to be
-  // considered: in some cases, the browser and renderer can disagree. While
-  // this is usually a bad message kill, there are some situations where this
-  // can legitimately happen. When a new frame is created (e.g. with
-  // <iframe src="...">), the initial about:blank document doesn't have a
-  // corresponding entry in the browser process. As a result, the browser
-  // process incorrectly determines that the navigation is cross-document when
-  // in reality it's same-document.
-  //
-  // TODO(crbug/1099264): Remove |was_within_same_document| from this logic
-  // once all same-document navigations have a NavigationEntry. Once this
-  // happens there should be no cases where the browser and renderer
-  // legitimately disagree as described above.
-  bool did_create_new_document =
-      !navigation_request->IsServedFromBackForwardCache() &&
-      !is_same_document_navigation && !was_within_same_document;
-
   // Store some information for recording WebPlatform security metrics. These
   // metrics depends on information present in the NavigationRequest. However
   // they must be recorded after the NavigationRequest has been destroyed and
@@ -501,9 +511,6 @@ void Navigator::DidNavigate(
   bool has_embedding_control = HasEmbeddingControl(navigation_request.get());
   bool is_error_page = navigation_request->IsErrorPage();
   const GURL original_request_url = navigation_request->GetOriginalRequestURL();
-
-  render_frame_host->DidNavigate(params, navigation_request.get(),
-                                 did_create_new_document);
 
   // Send notification about committed provisional loads. This notification is
   // different from the NAV_ENTRY_COMMITTED notification which doesn't include
@@ -612,7 +619,7 @@ void Navigator::RequestOpenURL(
     const GURL& url,
     const blink::LocalFrameToken* initiator_frame_token,
     int initiator_process_id,
-    const base::Optional<url::Origin>& initiator_origin,
+    const absl::optional<url::Origin>& initiator_origin,
     const scoped_refptr<network::ResourceRequestBody>& post_body,
     const std::string& extra_headers,
     const Referrer& referrer,
@@ -622,7 +629,7 @@ void Navigator::RequestOpenURL(
     blink::mojom::TriggeringEventInfo triggering_event_info,
     const std::string& href_translate,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-    const base::Optional<blink::Impression>& impression) {
+    const absl::optional<blink::Impression>& impression) {
   // Note: This can be called for subframes (even when OOPIFs are not possible)
   // if the disposition calls for a different window.
 
@@ -708,8 +715,9 @@ void Navigator::NavigateFromFrameProxy(
     scoped_refptr<network::ResourceRequestBody> post_body,
     const std::string& extra_headers,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
+    network::mojom::SourceLocationPtr source_location,
     bool has_user_gesture,
-    const base::Optional<blink::Impression>& impression) {
+    const absl::optional<blink::Impression>& impression) {
   // |method != "POST"| should imply absence of |post_body|.
   if (method != "POST" && post_body) {
     NOTREACHED();
@@ -748,7 +756,8 @@ void Navigator::NavigateFromFrameProxy(
       initiator_origin, is_renderer_initiated, source_site_instance,
       referrer_to_use, page_transition, should_replace_current_entry,
       download_policy, method, post_body, extra_headers,
-      std::move(blob_url_loader_factory), impression);
+      std::move(source_location), std::move(blob_url_loader_factory),
+      impression);
 }
 
 void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
@@ -849,6 +858,9 @@ void Navigator::OnBeginNavigation(
   const bool override_user_agent =
       delegate_ &&
       delegate_->ShouldOverrideUserAgentForRendererInitiatedNavigation();
+  if (navigation_entry)
+    navigation_entry->SetIsOverridingUserAgent(override_user_agent);
+
   frame_tree_node->CreatedNavigationRequest(
       NavigationRequest::CreateRendererInitiated(
           frame_tree_node, navigation_entry, std::move(common_params),
@@ -866,8 +878,8 @@ void Navigator::OnBeginNavigation(
       false /* is_browser_initiated_before_unload */);
 
   LogRendererInitiatedBeforeUnloadTime(
-      navigation_request->begin_params()->before_unload_start,
-      navigation_request->begin_params()->before_unload_end);
+      navigation_request->begin_params().before_unload_start,
+      navigation_request->begin_params().before_unload_end);
 
   // This frame has already run beforeunload before it sent this IPC.  See if
   // any of its cross-process subframes also need to run beforeunload.  If so,

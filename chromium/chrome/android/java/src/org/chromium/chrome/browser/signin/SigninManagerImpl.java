@@ -27,10 +27,10 @@ import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
 import org.chromium.chrome.browser.sync.AndroidSyncSettings;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.externalauth.ExternalAuthUtils;
-import org.chromium.components.signin.AccountTrackerService;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.AccountInfoService;
+import org.chromium.components.signin.identitymanager.AccountTrackerService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.IdentityMutator;
@@ -69,7 +69,6 @@ class SigninManagerImpl
     private final IdentityManager mIdentityManager;
     private final IdentityMutator mIdentityMutator;
     private final AndroidSyncSettings mAndroidSyncSettings;
-    private final ExternalAuthUtils mExternalAuthUtils;
     private final ObserverList<SignInStateObserver> mSignInStateObservers = new ObserverList<>();
     private final ObserverList<SignInAllowedObserver> mSignInAllowedObservers =
             new ObserverList<>();
@@ -111,24 +110,20 @@ class SigninManagerImpl
         assert identityManager != null;
         assert identityMutator != null;
         final SigninManagerImpl signinManager = new SigninManagerImpl(nativeSigninManagerAndroid,
-                accountTrackerService, identityManager, identityMutator, AndroidSyncSettings.get(),
-                ExternalAuthUtils.getInstance());
+                accountTrackerService, identityManager, identityMutator, AndroidSyncSettings.get());
 
         identityManager.addObserver(signinManager);
-        AccountInfoService.init(identityManager);
+        AccountInfoService.init(identityManager, accountTrackerService);
         accountTrackerService.addObserver(signinManager);
 
         identityMutator.reloadAllAccountsFromSystemWithPrimaryAccount(CoreAccountInfo.getIdFrom(
                 identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN)));
-
-        signinManager.maybeRollbackMobileIdentityConsistency();
         return signinManager;
     }
 
     private SigninManagerImpl(long nativeSigninManagerAndroid,
             AccountTrackerService accountTrackerService, IdentityManager identityManager,
-            IdentityMutator identityMutator, AndroidSyncSettings androidSyncSettings,
-            ExternalAuthUtils externalAuthUtils) {
+            IdentityMutator identityMutator, AndroidSyncSettings androidSyncSettings) {
         ThreadUtils.assertOnUiThread();
         assert androidSyncSettings != null;
         mNativeSigninManagerAndroid = nativeSigninManagerAndroid;
@@ -136,7 +131,6 @@ class SigninManagerImpl
         mIdentityManager = identityManager;
         mIdentityMutator = identityMutator;
         mAndroidSyncSettings = androidSyncSettings;
-        mExternalAuthUtils = externalAuthUtils;
 
         mSigninAllowedByPolicy =
                 SigninManagerImplJni.get().isSigninAllowedByPolicy(mNativeSigninManagerAndroid);
@@ -153,25 +147,6 @@ class SigninManagerImpl
         AccountInfoService.get().destroy();
         mIdentityManager.removeObserver(this);
         mNativeSigninManagerAndroid = 0;
-    }
-
-    /**
-     * Temporary code to handle rollback for {@link ChromeFeatureList#MOBILE_IDENTITY_CONSISTENCY}.
-     * TODO(https://crbug.com/1065029): Remove when the flag is removed.
-     */
-    private void maybeRollbackMobileIdentityConsistency() {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) return;
-        // Nothing to do if there's no primary account.
-        if (mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN) == null) return;
-        // Nothing to do if sync is on - this state existed before MobileIdentityConsistency.
-        if (mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SYNC) != null) return;
-
-        Log.w(TAG, "Rolling back MobileIdentityConsistency: signing out.");
-        signOut(SignoutReason.MOBILE_IDENTITY_CONSISTENCY_ROLLBACK);
-        // Since AccountReconcilor currently operates in pre-MICE mode, it doesn't react to
-        // primary account changes when there's no sync consent. Log-out web accounts manually.
-        SigninManagerImplJni.get().logOutAllAccountsForMobileIdentityConsistencyRollback(
-                mNativeSigninManagerAndroid);
     }
 
     /**
@@ -333,9 +308,6 @@ class SigninManagerImpl
     }
 
     /**
-     * @deprecated use {@link #signinAndEnableSync(int, CoreAccountInfo, SignInCallback)} instead.
-     * TODO(crbug.com/1002056): Remove this version after migrating all callers to CoreAccountInfo.
-     *
      * Starts the sign-in flow, and executes the callback when finished.
      *
      * The sign-in flow goes through the following steps:
@@ -351,7 +323,6 @@ class SigninManagerImpl
      * @param callback Optional callback for when the sign-in process is finished.
      */
     @Override
-    @Deprecated
     public void signinAndEnableSync(@SigninAccessPoint int accessPoint, Account account,
             @Nullable SignInCallback callback) {
         mAccountTrackerService.seedAccountsIfNeeded(() -> {
@@ -429,8 +400,7 @@ class SigninManagerImpl
                     AccountUtils.createAccountFromName(mSignInState.mCoreAccountInfo.getEmail()));
             boolean atLeastOneDataTypeSynced =
                     !ProfileSyncService.get().getChosenDataTypes().isEmpty();
-            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
-                    || atLeastOneDataTypeSynced) {
+            if (atLeastOneDataTypeSynced) {
                 // Turn on sync only when user has at least one data type to sync, this is
                 // consistent with {@link ManageSyncSettings#updataSyncStateFromSelectedModelTypes},
                 // in which we turn off sync we stop sync service when the user toggles off all the
@@ -646,7 +616,7 @@ class SigninManagerImpl
     }
 
     private boolean isGooglePlayServicesPresent() {
-        return !mExternalAuthUtils.isGooglePlayServicesMissing(
+        return !ExternalAuthUtils.getInstance().isGooglePlayServicesMissing(
                 ContextUtils.getApplicationContext());
     }
 
@@ -674,7 +644,7 @@ class SigninManagerImpl
             SigninManagerImplJni.get().wipeGoogleServiceWorkerCaches(
                     mNativeSigninManagerAndroid, wipeDataCallback);
         }
-        mAccountTrackerService.onAccountsChanged();
+        ThreadUtils.postOnUiThread(mAccountTrackerService::onAccountsChanged);
     }
 
     @VisibleForTesting
@@ -781,10 +751,6 @@ class SigninManagerImpl
                 Callback<Boolean> callback);
 
         String getManagementDomain(long nativeSigninManagerAndroid);
-
-        // Temporary code to handle rollback for MobileIdentityConsistency.
-        // TODO(https://crbug.com/1065029): Remove when the flag is removed.
-        void logOutAllAccountsForMobileIdentityConsistencyRollback(long nativeSigninManagerAndroid);
 
         void wipeProfileData(long nativeSigninManagerAndroid, Runnable callback);
 

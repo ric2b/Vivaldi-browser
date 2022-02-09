@@ -25,7 +25,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -86,7 +87,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -148,7 +150,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -212,7 +215,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -260,6 +264,69 @@
       },
       {
         "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android30.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "android_webview_unittests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true,
+          "has_native_resultdb_integration": true
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "machine_type": "n1-standard-4",
+              "os": "Ubuntu-16.04|Ubuntu-18.04",
+              "pool": "chromium.tests.avd"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android30",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_30_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "android_webview_unittests",
+        "test_id_prefix": "ninja://android_webview/test:android_webview_unittests/"
+      },
+      {
+        "args": [
           "angle_unittests",
           "-v",
           "--avd-config=../../tools/android/avd/proto/generic_android30.textpb"
@@ -269,7 +336,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -323,7 +391,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -385,7 +454,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -447,7 +517,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -509,7 +580,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -571,7 +643,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -635,7 +708,8 @@
         },
         "name": "webkit_unit_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -698,7 +772,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -760,7 +835,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -822,7 +898,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -885,7 +962,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -947,7 +1025,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1010,7 +1089,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1072,7 +1152,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1142,7 +1223,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1205,7 +1287,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1269,7 +1352,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1332,7 +1416,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1396,7 +1481,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1447,8 +1533,7 @@
         "args": [
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android30.textpb",
-          "--gtest_filter=-FontUniqueNameLookupTest.TestMatchPostScriptNameTtc"
+          "--avd-config=../../tools/android/avd/proto/generic_android30.textpb"
         ],
         "merge": {
           "args": [
@@ -1460,7 +1545,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1524,7 +1610,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1586,7 +1673,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1648,7 +1736,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1710,7 +1799,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1772,7 +1862,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1834,7 +1925,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1896,7 +1988,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1958,7 +2051,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2023,7 +2117,8 @@
         },
         "name": "gl_tests_validating",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2085,7 +2180,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2147,7 +2243,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2209,7 +2306,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2271,7 +2369,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2333,7 +2432,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2395,7 +2495,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2457,7 +2558,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2519,7 +2621,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2581,7 +2684,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2643,7 +2747,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2706,7 +2811,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2768,7 +2874,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2830,7 +2937,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2892,7 +3000,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2954,7 +3063,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3016,7 +3126,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3078,7 +3189,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3141,7 +3253,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3204,7 +3317,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3266,7 +3380,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3328,7 +3443,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3390,7 +3506,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3452,7 +3569,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3514,7 +3632,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3576,7 +3695,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3638,7 +3758,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3700,7 +3821,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3762,7 +3884,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3825,7 +3948,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3888,7 +4012,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -3951,7 +4076,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4014,7 +4140,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4076,7 +4203,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4139,7 +4267,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4202,7 +4331,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4264,7 +4394,8 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4324,7 +4455,8 @@
         },
         "name": "system_webview_wpt",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "results_handler": "layout tests",
         "swarming": {
@@ -4362,7 +4494,8 @@
         },
         "name": "weblayer_shell_wpt",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "results_handler": "layout tests",
         "swarming": {
@@ -4407,7 +4540,8 @@
         },
         "name": "chrome_public_wpt",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "results_handler": "layout tests",
         "swarming": {
@@ -4468,7 +4602,8 @@
         },
         "name": "weblayer_instrumentation_test_apk_ToT_Tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4535,13 +4670,14 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 89.0.4389.126"
+            "weblayer_skew_tests_with_client_from_89"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
-        "name": "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 89.0.4389.126",
+        "name": "weblayer_skew_tests_with_client_from_89",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4549,7 +4685,7 @@
             {
               "cipd_package": "chromium/testing/weblayer-x86",
               "location": "weblayer_instrumentation_test_M89",
-              "revision": "version:89.0.4389.126"
+              "revision": "version:89.0.4389.129"
             },
             {
               "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
@@ -4590,8 +4726,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 2
         },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
+        "test": "weblayer_skew_tests",
+        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_skew_tests/"
       },
       {
         "args": [
@@ -4614,13 +4750,14 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 90.0.4430.65"
+            "weblayer_skew_tests_with_client_from_90"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
-        "name": "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 90.0.4430.65",
+        "name": "weblayer_skew_tests_with_client_from_90",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4628,7 +4765,7 @@
             {
               "cipd_package": "chromium/testing/weblayer-x86",
               "location": "weblayer_instrumentation_test_M90",
-              "revision": "version:90.0.4430.65"
+              "revision": "version:90.0.4430.224"
             },
             {
               "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
@@ -4669,8 +4806,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 2
         },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
+        "test": "weblayer_skew_tests",
+        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_skew_tests/"
       },
       {
         "args": [
@@ -4678,12 +4815,12 @@
           "--test-runner-outdir",
           ".",
           "--client-outdir",
-          "../../weblayer_instrumentation_test_M88/out/Release",
+          "../../weblayer_instrumentation_test_M91/out/Release",
           "--implementation-outdir",
           ".",
           "--test-expectations",
           "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--client-version=88",
+          "--client-version=91",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices",
           "--avd-config=../../tools/android/avd/proto/generic_android29.textpb"
@@ -4693,21 +4830,22 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Client Tests For 88.0.4324.207"
+            "weblayer_skew_tests_with_client_from_91"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
-        "name": "weblayer_instrumentation_test_versions_apk_Client Tests For 88.0.4324.207",
+        "name": "weblayer_skew_tests_with_client_from_91",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M88",
-              "revision": "version:88.0.4324.207-pt2"
+              "location": "weblayer_instrumentation_test_M91",
+              "revision": "version:91.0.4472.72"
             },
             {
               "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
@@ -4748,8 +4886,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 2
         },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
+        "test": "weblayer_skew_tests",
+        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_skew_tests/"
       },
       {
         "args": [
@@ -4772,13 +4910,14 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 89.0.4389.126"
+            "weblayer_skew_tests_with_impl_from_89"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
-        "name": "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 89.0.4389.126",
+        "name": "weblayer_skew_tests_with_impl_from_89",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4786,7 +4925,7 @@
             {
               "cipd_package": "chromium/testing/weblayer-x86",
               "location": "weblayer_instrumentation_test_M89",
-              "revision": "version:89.0.4389.126"
+              "revision": "version:89.0.4389.129"
             },
             {
               "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
@@ -4827,8 +4966,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 2
         },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
+        "test": "weblayer_skew_tests",
+        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_skew_tests/"
       },
       {
         "args": [
@@ -4851,13 +4990,14 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 90.0.4430.65"
+            "weblayer_skew_tests_with_impl_from_90"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
-        "name": "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 90.0.4430.65",
+        "name": "weblayer_skew_tests_with_impl_from_90",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4865,7 +5005,7 @@
             {
               "cipd_package": "chromium/testing/weblayer-x86",
               "location": "weblayer_instrumentation_test_M90",
-              "revision": "version:90.0.4430.65"
+              "revision": "version:90.0.4430.224"
             },
             {
               "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
@@ -4906,8 +5046,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 2
         },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
+        "test": "weblayer_skew_tests",
+        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_skew_tests/"
       },
       {
         "args": [
@@ -4917,10 +5057,10 @@
           "--client-outdir",
           ".",
           "--implementation-outdir",
-          "../../weblayer_instrumentation_test_M88/out/Release",
+          "../../weblayer_instrumentation_test_M91/out/Release",
           "--test-expectations",
           "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--impl-version=88",
+          "--impl-version=91",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices",
           "--avd-config=../../tools/android/avd/proto/generic_android29.textpb"
@@ -4930,21 +5070,22 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Implementation Tests For 88.0.4324.207"
+            "weblayer_skew_tests_with_impl_from_91"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
-        "name": "weblayer_instrumentation_test_versions_apk_Implementation Tests For 88.0.4324.207",
+        "name": "weblayer_skew_tests_with_impl_from_91",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M88",
-              "revision": "version:88.0.4324.207-pt2"
+              "location": "weblayer_instrumentation_test_M91",
+              "revision": "version:91.0.4472.72"
             },
             {
               "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
@@ -4985,550 +5126,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 2
         },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
-      }
-    ]
-  },
-  "android-weblayer-marshmallow-x86-rel-tests": {
-    "gtest_tests": [
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb",
-          "--replace-system-package=org.chromium.weblayer.shell,apks/WebLayerShellSystemWebView.apk"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_apk_ToT_Tests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_apk_ToT_Tests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "weblayer_instrumentation_test_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_apk/"
-      },
-      {
-        "args": [
-          "--webview-apk-path=apks/SystemWebView.apk",
-          "--test-runner-outdir",
-          ".",
-          "--client-outdir",
-          "../../weblayer_instrumentation_test_M89/out/Release",
-          "--implementation-outdir",
-          ".",
-          "--test-expectations",
-          "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--client-version=89",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 89.0.4389.126"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 89.0.4389.126",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M89",
-              "revision": "version:89.0.4389.126"
-            },
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
-      },
-      {
-        "args": [
-          "--webview-apk-path=apks/SystemWebView.apk",
-          "--test-runner-outdir",
-          ".",
-          "--client-outdir",
-          "../../weblayer_instrumentation_test_M90/out/Release",
-          "--implementation-outdir",
-          ".",
-          "--test-expectations",
-          "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--client-version=90",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 90.0.4430.65"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_versions_apk_Client Library Skew Tests For 90.0.4430.65",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M90",
-              "revision": "version:90.0.4430.65"
-            },
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
-      },
-      {
-        "args": [
-          "--webview-apk-path=apks/SystemWebView.apk",
-          "--test-runner-outdir",
-          ".",
-          "--client-outdir",
-          "../../weblayer_instrumentation_test_M88/out/Release",
-          "--implementation-outdir",
-          ".",
-          "--test-expectations",
-          "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--client-version=88",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Client Tests For 88.0.4324.207"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_versions_apk_Client Tests For 88.0.4324.207",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M88",
-              "revision": "version:88.0.4324.207-pt2"
-            },
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
-      },
-      {
-        "args": [
-          "--webview-apk-path=apks/AOSP_SystemWebView.apk",
-          "--test-runner-outdir",
-          ".",
-          "--client-outdir",
-          ".",
-          "--implementation-outdir",
-          "../../weblayer_instrumentation_test_M89/out/Release",
-          "--test-expectations",
-          "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--impl-version=89",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 89.0.4389.126"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 89.0.4389.126",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M89",
-              "revision": "version:89.0.4389.126"
-            },
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
-      },
-      {
-        "args": [
-          "--webview-apk-path=apks/AOSP_SystemWebView.apk",
-          "--test-runner-outdir",
-          ".",
-          "--client-outdir",
-          ".",
-          "--implementation-outdir",
-          "../../weblayer_instrumentation_test_M90/out/Release",
-          "--test-expectations",
-          "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--impl-version=90",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 90.0.4430.65"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_versions_apk_Implementation Library Skew Tests For 90.0.4430.65",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M90",
-              "revision": "version:90.0.4430.65"
-            },
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
-      },
-      {
-        "args": [
-          "--webview-apk-path=apks/AOSP_SystemWebView.apk",
-          "--test-runner-outdir",
-          ".",
-          "--client-outdir",
-          ".",
-          "--implementation-outdir",
-          "../../weblayer_instrumentation_test_M88/out/Release",
-          "--test-expectations",
-          "../../weblayer/browser/android/javatests/skew/expectations.txt",
-          "--impl-version=88",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android23.textpb"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "weblayer_instrumentation_test_versions_apk_Implementation Tests For 88.0.4324.207"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "weblayer_instrumentation_test_versions_apk_Implementation Tests For 88.0.4324.207",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "chromium/testing/weblayer-x86",
-              "location": "weblayer_instrumentation_test_M88",
-              "revision": "version:88.0.4324.207-pt2"
-            },
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "device_os": null,
-              "device_type": null,
-              "machine_type": "n1-standard-4",
-              "os": "Ubuntu-16.04",
-              "pool": "chromium.tests.avd"
-            }
-          ],
-          "named_caches": [
-            {
-              "name": "avd_generic_android23",
-              "path": ".android"
-            },
-            {
-              "name": "system_images_android_23_google_apis_x86",
-              "path": ".emulator_sdk"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "weblayer_instrumentation_test_versions_apk",
-        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_instrumentation_test_versions_apk/"
+        "test": "weblayer_skew_tests",
+        "test_id_prefix": "ninja://weblayer/browser/android/javatests:weblayer_skew_tests/"
       }
     ]
   },
@@ -5547,7 +5146,8 @@
         },
         "name": "weblayer_shell_wpt",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "results_handler": "layout tests",
         "swarming": {
@@ -5585,6 +5185,122 @@
           "shards": 18
         },
         "test_id_prefix": "ninja://weblayer/shell/android:weblayer_shell_wpt/"
+      }
+    ]
+  },
+  "android-weblayer-pie-x86-wpt-smoketest": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb",
+          "--default-exclude",
+          "--include-file=../../third_party/blink/web_tests/android/WPTSmokeTestCases"
+        ],
+        "isolate_name": "weblayer_shell_wpt",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "name": "weblayer_shell_wpt",
+        "resultdb": {
+          "enable": true,
+          "has_native_resultdb_integration": true
+        },
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "machine_type": "n1-standard-8",
+              "os": "Ubuntu-16.04|Ubuntu-18.04",
+              "pool": "chromium.tests.avd"
+            }
+          ],
+          "expiration": 18000,
+          "hard_timeout": 14400,
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 3
+        },
+        "test_id_prefix": "ninja://weblayer/shell/android:weblayer_shell_wpt/"
+      }
+    ]
+  },
+  "android-webview-pie-x86-wpt-fyi-rel": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "isolate_name": "system_webview_wpt",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "name": "system_webview_wpt",
+        "resultdb": {
+          "enable": true,
+          "has_native_resultdb_integration": true
+        },
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "machine_type": "n1-standard-8",
+              "os": "Ubuntu-16.04|Ubuntu-18.04",
+              "pool": "chromium.tests.avd"
+            }
+          ],
+          "expiration": 18000,
+          "hard_timeout": 14400,
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 18
+        },
+        "test_id_prefix": "ninja://android_webview/test:system_webview_wpt/"
       }
     ]
   }

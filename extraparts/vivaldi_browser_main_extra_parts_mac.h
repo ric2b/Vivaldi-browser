@@ -6,7 +6,6 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
-#include <string>
 
 class VivaldiBrowserMainExtraPartsMac : public VivaldiBrowserMainExtraParts {
  public:
@@ -16,10 +15,6 @@ class VivaldiBrowserMainExtraPartsMac : public VivaldiBrowserMainExtraParts {
   // Overridden from ChromeBrowserMainExtraParts:
   void PostEarlyInitialization() override;
   void PreProfileInit() override;
-
-  bool checkVersionPath(std::string location,
-                        std::string pepperPath,
-                        std::string* versionPath);
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraPartsMac);
 };

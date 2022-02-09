@@ -32,7 +32,7 @@ class EntityBuilderFactory {
 
   const BookmarkEntityBuilder NewBookmarkEntityBuilder(
       const std::string& title,
-      base::Optional<std::string> originator_client_item_id = base::nullopt);
+      absl::optional<std::string> originator_client_item_id = absl::nullopt);
 
   NotesEntityBuilder NewNotesEntityBuilder(const std::string& title,
                                            const GURL& url,

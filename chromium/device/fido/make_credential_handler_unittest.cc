@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -47,7 +48,7 @@ namespace {
 
 using TestMakeCredentialRequestCallback = test::StatusAndValuesCallbackReceiver<
     MakeCredentialStatus,
-    base::Optional<AuthenticatorMakeCredentialResponse>,
+    absl::optional<AuthenticatorMakeCredentialResponse>,
     const FidoAuthenticator*>;
 
 }  // namespace
@@ -151,7 +152,7 @@ TEST_F(FidoMakeCredentialHandlerTest, TransportAvailabilityInfo) {
   auto request_handler = CreateMakeCredentialHandler();
 
   EXPECT_EQ(request_handler->transport_availability_info().request_type,
-            FidoRequestHandlerBase::RequestType::kMakeCredential);
+            FidoRequestType::kMakeCredential);
 }
 
 TEST_F(FidoMakeCredentialHandlerTest, TransportAvailabilityInfoRk) {
@@ -392,7 +393,7 @@ ACTION_P(Reply, reply) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(
-          [](base::OnceCallback<void(base::Optional<std::vector<uint8_t>>)>
+          [](base::OnceCallback<void(absl::optional<std::vector<uint8_t>>)>
                  callback,
              std::vector<uint8_t> reply) {
             std::move(callback).Run(std::move(reply));

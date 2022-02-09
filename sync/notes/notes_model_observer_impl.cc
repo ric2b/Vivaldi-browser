@@ -57,8 +57,8 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
 
   const std::string& sync_id = entity->metadata()->server_id();
   const base::Time modification_time = base::Time::Now();
-  const sync_pb::UniquePosition unique_position =
-      ComputePosition(*new_parent, new_index, sync_id).ToProto();
+  const syncer::UniquePosition unique_position =
+      ComputePosition(*new_parent, new_index, sync_id);
 
   sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
 
@@ -74,13 +74,8 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
                                             size_t index) {
   const vivaldi::NoteNode* node = parent->children()[index].get();
 
-  // Assign a temp server id for the entity. Will be overriden by the actual
-  // server id upon receiving commit response.
-  // Local note creations should have used a random GUID so it's safe to
-  // use it as originator client item ID, without the risk for collision.
-  const sync_pb::UniquePosition unique_position =
-      ComputePosition(*parent, index, node->guid().AsLowercaseString())
-          .ToProto();
+  const syncer::UniquePosition unique_position =
+      ComputePosition(*parent, index, node->guid().AsLowercaseString());
 
   sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
 
@@ -169,20 +164,20 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
     return;
   }
 
-  const base::Time modification_time = base::Time::Now();
   sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
 
   // TODO(crbug.com/516866): The below CHECKs are added to debug some crashes.
   // Should be removed after figuring out the reason for the crash.
-  CHECK_EQ(entity, note_tracker_->GetEntityForNoteNode(node));
   if (entity->MatchesSpecificsHash(specifics)) {
     // We should push data to the server only if there is an actual change in
     // the data. We could hit this code path without having actual changes
     return;
   }
-  note_tracker_->Update(entity, entity->metadata()->server_version(),
-                        modification_time,
-                        entity->metadata()->unique_position(), specifics);
+  note_tracker_->Update(
+      entity, entity->metadata()->server_version(),
+      /*modification_time=*/base::Time::Now(),
+      syncer::UniquePosition::FromProto(entity->metadata()->unique_position()),
+      specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
@@ -227,7 +222,7 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
         CreateSpecificsFromNoteNode(child.get(), model);
 
     note_tracker_->Update(entity, entity->metadata()->server_version(),
-                          modification_time, position.ToProto(), specifics);
+                          modification_time, position, specifics);
     // Mark the entity that it needs to be committed.
     note_tracker_->IncrementSequenceNumber(entity);
   }

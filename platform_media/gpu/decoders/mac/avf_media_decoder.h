@@ -13,29 +13,27 @@
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 
-#import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
+#import <AudioToolbox/AudioToolbox.h>
 
 #include <string>
 
 #include "base/callback.h"
-#include "base/task_runner.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/atomic_flag.h"
+#include "base/task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "ui/gfx/geometry/size.h"
-
 
 @class PlayerNotificationObserver;
 @class PlayerObserver;
 
 namespace media {
 
-class AVFAudioTap;
 class DataBuffer;
 class DataRequestHandler;
 
@@ -43,13 +41,12 @@ class AVFMediaDecoderClient {
  public:
   virtual ~AVFMediaDecoderClient() {}
 
-  virtual void MediaSamplesReady(
-      PlatformMediaDataType type, scoped_refptr<DataBuffer> buffer) = 0;
+  virtual void MediaSamplesReady(PlatformStreamType stream_type,
+                                 scoped_refptr<DataBuffer> buffer) = 0;
   virtual void StreamHasEnded() = 0;
 
   virtual bool HasAvailableCapacity() = 0;
 };
-
 
 // The glue between AV Foundation and the media module used for media playback.
 //
@@ -64,15 +61,16 @@ class AVFMediaDecoderClient {
 // AVFMediaDecoderClient.
 class AVFMediaDecoder {
  public:
-  typedef base::Callback<void(bool success)> ResultCB;
+  using InitializeCallback = base::OnceCallback<void(bool success)>;
+  using SeekCallback = base::OnceCallback<void(bool success)>;
   typedef base::RefCountedData<base::AtomicFlag> SharedCancellationFlag;
 
   // |client| must outlive AVFMediaDecoder.
   explicit AVFMediaDecoder(AVFMediaDecoderClient* client);
   ~AVFMediaDecoder();
 
-  void Initialize(ipc_data_source::Info source_info, ResultCB result_cb);
-  void Seek(const base::TimeDelta& time, const ResultCB& result_cb);
+  void Initialize(ipc_data_source::Info source_info, InitializeCallback cb);
+  void Seek(const base::TimeDelta& time, SeekCallback seek_cb);
 
   void NotifyStreamCapacityDepleted();
   void NotifyStreamCapacityAvailable();
@@ -103,23 +101,22 @@ class AVFMediaDecoder {
  private:
   enum PlaybackState { STARTING, PLAYING, STOPPING, STOPPED };
 
-  void AssetKeysLoaded(const ResultCB& initialize_cb,
+  void AssetKeysLoaded(InitializeCallback initialize_cb,
                        base::scoped_nsobject<NSArray> keys);
-  void PlayerStatusKnown(const ResultCB& initialize_cb,
-                         base::scoped_nsobject<id> status);
+  void PlayerStatusKnown(InitializeCallback initialize_cb);
 
   bool CalculateBitrate();
 
-  void InitializeAudioOutput(const ResultCB& initialize_cb);
-  void AudioFormatKnown(const ResultCB& initialize_cb,
+  void InitializeAudioOutput(InitializeCallback initialize_cb);
+  void AudioFormatKnown(InitializeCallback initialize_cb,
                         const AudioStreamBasicDescription& format);
   bool InitializeVideoOutput();
 
-  void AudioSamplesReady(const scoped_refptr<DataBuffer>& buffer);
+  void AudioSamplesReady(scoped_refptr<DataBuffer> buffer);
   void ReadFromVideoOutput(const CMTime& timestamp);
 
   void AutoSeekDone();
-  void SeekDone(const ResultCB& result_cb, bool finished);
+  void SeekDone(SeekCallback seek_cb, bool finished);
   void RunTasksPendingSeekDone();
 
   void PlayerPlayedToEnd(base::StringPiece source);
@@ -130,16 +127,14 @@ class AVFMediaDecoder {
   void PlayIfNotLikelyToStall(base::StringPiece reason, bool likely_to_stall);
   void SeekIfNotLikelyToStall(bool likely_to_stall);
 
-  void ScheduleSeekTask(const base::Closure& seek_task);
-  void SeekTask(const base::TimeDelta& time, const ResultCB& result_cb);
+  void ScheduleSeekTask(base::OnceClosure seek_task);
+  void SeekTask(const base::TimeDelta& time, SeekCallback seek_cb);
   void AutoSeekTask();
 
   bool is_audio_format_known() const {
     return audio_stream_format_.mSampleRate != 0;
   }
-  bool is_video_format_known() const {
-    return video_stream_format_ != NULL;
-  }
+  bool is_video_format_known() const { return video_stream_format_ != nullptr; }
 
   AVAssetTrack* AssetTrackForType(NSString* track_type_name) const;
   AVAssetTrack* VideoTrack() const;
@@ -151,6 +146,9 @@ class AVFMediaDecoder {
   // to block the main thread of the GPU process for that long.
   scoped_refptr<base::TaskRunner> background_runner() const;
 
+  base::scoped_nsobject<AVAudioMix> GetAudioMix(
+      AVAssetTrack* audio_track,
+      InitializeCallback initialize_cb = InitializeCallback());
 
   AVFMediaDecoderClient* const client_;
 
@@ -169,8 +167,6 @@ class AVFMediaDecoder {
   gfx::Size video_coded_size_;
   int bitrate_;
 
-  std::unique_ptr<AVFAudioTap> audio_tap_;
-
   base::TimeDelta last_audio_timestamp_;
   base::TimeDelta last_video_timestamp_;
   PlaybackState playback_state_;
@@ -181,19 +177,18 @@ class AVFMediaDecoder {
 
   // A user- or auto-initiated seek request postponed until AVPlayer is not
   // considered likely to stall for lack of data.
-  base::Closure pending_seek_task_;
+  base::OnceClosure pending_seek_task_;
 
-  // Wraps a |PlayWhenReady()| call to be run once AVPlayer is actually paused
-  // following a -[AVPlayer pause] call.
-  base::Closure play_on_pause_done_task_;
+  // Call |PlayWhenReady()| once AVPlayer is actually paused following a
+  // [AVPlayer pause] call.
+  bool play_on_pause_done_ = false;
 
-  // Wraps a |PlayWhenReady()| call to be run once we are done processing a
-  // seek request.
-  base::Closure play_on_seek_done_task_;
+  // Call |PlayWhenReady()| once we are done processing a seek request.
+  bool play_on_seek_done_ = false;
 
   // Wraps a |Seek()| call to be run once we are done processing an auto-seek
   // request.
-  base::Closure seek_on_seek_done_task_;
+  base::OnceClosure seek_on_seek_done_task_;
 
   bool stream_has_ended_;
   base::TimeDelta min_loaded_range_size_;

@@ -10,12 +10,11 @@
 #include "platform_media/common/platform_ipc_util.h"
 #include "platform_media/common/video_frame_transformer.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline_factory.h"
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 
 #include "base/bind.h"
-#include "base/logging.h"
 #include "base/callback_helpers.h"
+#include "base/logging.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
@@ -25,8 +24,8 @@
 namespace media {
 
 TestPipelineHost::TestPipelineHost() : weak_ptr_factory_(this) {
-  for (int i = 0; i < kPlatformMediaDataTypeCount; ++i) {
-    ipc_decoding_buffers_[i].Init(static_cast<PlatformMediaDataType>(i));
+  for (PlatformStreamType stream_type : AllStreamTypes()) {
+    GetElem(ipc_decoding_buffers_, stream_type).Init(stream_type);
   }
 }
 
@@ -52,10 +51,7 @@ void TestPipelineHost::Initialize(const std::string& mimetype,
   // The reader must be called from the current thread.
   source_reader = BindToCurrentLoop(std::move(source_reader));
 
-  if (!platform_pipeline_factory_) {
-    platform_pipeline_factory_ = PlatformMediaPipelineFactory::Create();
-  }
-  platform_pipeline_ = platform_pipeline_factory_->CreatePipeline();
+  platform_pipeline_ = PlatformMediaPipeline::Create();
   CHECK(platform_pipeline_);
   ipc_data_source::Info source_info;
   source_info.is_streaming = data_source_->IsStreaming();
@@ -66,35 +62,37 @@ void TestPipelineHost::Initialize(const std::string& mimetype,
   source_info.buffer.Init(std::move(data_source_mapping),
                           std::move(source_reader));
 
-  platform_pipeline_->Initialize(std::move(source_info),
-                                 base::Bind(&TestPipelineHost::Initialized,
-                                            weak_ptr_factory_.GetWeakPtr()));
+  platform_pipeline_->Initialize(
+      std::move(source_info),
+      base::BindRepeating(&TestPipelineHost::Initialized,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
-void TestPipelineHost::StartWaitingForSeek() {
-}
+void TestPipelineHost::StartWaitingForSeek() {}
 
 void TestPipelineHost::Seek(base::TimeDelta time,
                             PipelineStatusCallback status_cb) {
-  platform_pipeline_->Seek(time,
-                           base::Bind(&TestPipelineHost::SeekDone,
-                                      base::Passed(std::move(status_cb))));
+  platform_pipeline_->Seek(
+      time, base::BindRepeating(&TestPipelineHost::SeekDone,
+                                base::Passed(std::move(status_cb))));
 }
 
-void TestPipelineHost::ReadDecodedData(
-    PlatformMediaDataType type,
-    DemuxerStream::ReadCB read_cb) {
-  CHECK(ipc_decoding_buffers_[type]) << "Overlapping reads are not supported";
+void TestPipelineHost::ReadDecodedData(PlatformStreamType stream_type,
+                                       DemuxerStream::ReadCB read_cb) {
+  CHECK(GetElem(ipc_decoding_buffers_, stream_type))
+      << "Overlapping reads are not supported";
 
-  ipc_decoding_buffers_[type].set_reply_cb(base::AdaptCallbackForRepeating(
-      base::BindOnce(&TestPipelineHost::DataReady,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(read_cb))));
-  platform_pipeline_->ReadMediaData(std::move(ipc_decoding_buffers_[type]));
+  GetElem(ipc_decoding_buffers_, stream_type)
+      .set_reply_cb(base::AdaptCallbackForRepeating(
+          base::BindOnce(&TestPipelineHost::DataReady,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(read_cb))));
+  platform_pipeline_->ReadMediaData(
+      std::move(GetElem(ipc_decoding_buffers_, stream_type)));
 }
 
 void TestPipelineHost::SeekDone(PipelineStatusCallback status_cb,
                                 bool success) {
-  if(success) {
+  if (success) {
     std::move(status_cb).Run(PipelineStatus::PIPELINE_OK);
     return;
   }
@@ -104,12 +102,11 @@ void TestPipelineHost::SeekDone(PipelineStatusCallback status_cb,
   std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
 }
 
-void TestPipelineHost::Initialized(
-    bool success,
-    int bitrate,
-    const PlatformMediaTimeInfo& time_info,
-    const PlatformAudioConfig& audio_config,
-    const PlatformVideoConfig& video_config) {
+void TestPipelineHost::Initialized(bool success,
+                                   int bitrate,
+                                   const PlatformMediaTimeInfo& time_info,
+                                   const PlatformAudioConfig& audio_config,
+                                   const PlatformVideoConfig& video_config) {
   CHECK(init_cb_);
 
   if (audio_config.is_valid()) {
@@ -159,18 +156,17 @@ void TestPipelineHost::OnReadRawDataDone(
 }
 
 void TestPipelineHost::DataReady(DemuxerStream::ReadCB read_cb,
-    IPCDecodingBuffer ipc_buffer) {
-
-  PlatformMediaDataType type = ipc_buffer.type();
+                                 IPCDecodingBuffer ipc_buffer) {
+  PlatformStreamType stream_type = ipc_buffer.stream_type();
   CHECK(ipc_buffer);
-  CHECK(!ipc_decoding_buffers_[type]) << "unexpected reply";
+  CHECK(!GetElem(ipc_decoding_buffers_, stream_type)) << "unexpected reply";
 
   DemuxerStream::Status reply_status = DemuxerStream::kOk;
   scoped_refptr<DecoderBuffer> decoder_buffer;
   switch (ipc_buffer.status()) {
     case MediaDataStatus::kOk:
-      decoder_buffer =
-          DecoderBuffer::CopyFrom(ipc_buffer.GetDataForTests(), ipc_buffer.data_size());
+      decoder_buffer = DecoderBuffer::CopyFrom(ipc_buffer.GetDataForTests(),
+                                               ipc_buffer.data_size());
       decoder_buffer->set_timestamp(ipc_buffer.timestamp());
       decoder_buffer->set_duration(ipc_buffer.duration());
       break;
@@ -180,11 +176,11 @@ void TestPipelineHost::DataReady(DemuxerStream::ReadCB read_cb,
     case MediaDataStatus::kConfigChanged:
       reply_status = DemuxerStream::kConfigChanged;
       decoder_buffer = nullptr;
-      switch (type) {
-        case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO:
+      switch (stream_type) {
+        case PlatformStreamType::kAudio:
           audio_config_ = ipc_buffer.GetAudioConfig();
           break;
-        case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO:
+        case PlatformStreamType::kVideo:
           video_config_ = ipc_buffer.GetVideoConfig();
           break;
       }
@@ -193,7 +189,7 @@ void TestPipelineHost::DataReady(DemuxerStream::ReadCB read_cb,
       decoder_buffer = new DecoderBuffer(0);
       break;
   }
-  ipc_decoding_buffers_[type] = std::move(ipc_buffer);
+  GetElem(ipc_decoding_buffers_, stream_type) = std::move(ipc_buffer);
 
   std::move(read_cb).Run(reply_status, decoder_buffer);
 }

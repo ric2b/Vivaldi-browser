@@ -5,6 +5,8 @@
 #ifndef TOOLS_GN_FILE_WRITER_H_
 #define TOOLS_GN_FILE_WRITER_H_
 
+#include <string_view>
+
 #include "util/build_config.h"
 
 #if defined(OS_WIN)

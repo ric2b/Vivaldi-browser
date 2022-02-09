@@ -235,6 +235,13 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_LANGUAGES_SEND_TRANSLATE_SWITCH" desc="Appears next to the switch controlling whether or not Vivaldi will offer to translate pages in other languages">
         Offer to translate pages in other languages using Vivaldi's translation service
       </message>
+    <!-- Tab Groups -->
+      <message name="IDS_CONTEXTMENU_OPEN_IN_NEW_TAB_GROUP" desc="Context sensitive menu item to open the selected link in a new tab in a new group. [CHAR_LIMIT=30]">
+        Open in new tab stack
+      </message>
+      <message name="IDS_MENU_GROUP_TABS" desc="Menu item for grouping tabs. [CHAR_LIMIT=27]">
+        Stack tabs
+      </message>
     </messages>
   </release>
 </grit>

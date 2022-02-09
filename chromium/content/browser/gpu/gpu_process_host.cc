@@ -26,6 +26,7 @@
 #include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -126,9 +127,6 @@ gpu::GpuMode GpuProcessHost::last_crash_mode_ = gpu::GpuMode::UNKNOWN;
 static_assert(RESULT_CODE_HUNG == static_cast<int>(gpu::RESULT_CODE_HUNG),
               "Please use the same enum value in both header files.");
 
-// FEATURE_FORCE_ACCESS_TO_GPU
-bool GpuProcessHost::force_allow_access_to_gpu_ = false;
-
 namespace {
 
 // UMA histogram names.
@@ -142,7 +140,10 @@ constexpr char kProcessLifetimeEventsDisplayCompositor[] =
 // Returns the UMA histogram name for the given GPU mode.
 const char* GetProcessLifetimeUmaName(gpu::GpuMode gpu_mode) {
   switch (gpu_mode) {
-    // TODO(sgilhuly): Add separate histograms for the different hardware modes.
+    // TODO(rivr): Add separate histograms for the different hardware modes.
+    case gpu::GpuMode::UNKNOWN:
+      NOTREACHED();
+      return nullptr;
     case gpu::GpuMode::HARDWARE_GL:
     case gpu::GpuMode::HARDWARE_METAL:
     case gpu::GpuMode::HARDWARE_VULKAN:
@@ -151,9 +152,6 @@ const char* GetProcessLifetimeUmaName(gpu::GpuMode gpu_mode) {
       return kProcessLifetimeEventsSwiftShader;
     case gpu::GpuMode::DISPLAY_COMPOSITOR:
       return kProcessLifetimeEventsDisplayCompositor;
-    default:
-      NOTREACHED();
-      return nullptr;
   }
 }
 
@@ -306,6 +304,7 @@ static const char* const kSwitchNames[] = {
 #endif
     switches::kGpuBlocklistTestGroup,
     switches::kGpuDriverBugListTestGroup,
+    switches::kGpuWatchdogTimeoutSeconds,
     switches::kUseCmdDecoder,
     switches::kForceVideoOverlays,
 #if defined(OS_ANDROID)
@@ -552,16 +551,6 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
   DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
                           ? BrowserThread::UI
                           : BrowserThread::IO);
-
-  // Don't grant further access to GPU if it is not allowed.
-  GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
-  DCHECK(gpu_data_manager);
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  if (!(force_allow_access_to_gpu_ || gpu_data_manager->GpuProcessStartAllowed())) {
-    DLOG(ERROR) << "!GpuDataManagerImpl::GpuProcessStartAllowed()";
-    return nullptr;
-  }
 
   // Do not launch the unsandboxed GPU info collection process if GPU is
   // disabled
@@ -882,7 +871,6 @@ bool GpuProcessHost::Init() {
   process_->GetHost()->CreateChannelMojo();
 
   mode_ = GpuDataManagerImpl::GetInstance()->GetGpuMode();
-  DCHECK_NE(mode_, gpu::GpuMode::DISABLED);
 
   if (in_process_) {
     DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
@@ -903,7 +891,7 @@ bool GpuProcessHost::Init() {
 #endif
     if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority))
       options.priority = base::ThreadPriority::DISPLAY;
-    in_process_gpu_thread_->StartWithOptions(options);
+    in_process_gpu_thread_->StartWithOptions(std::move(options));
   } else if (!LaunchGpuProcess()) {
     return false;
   }
@@ -1031,8 +1019,8 @@ gpu::GpuFeatureInfo GpuProcessHost::GetGpuFeatureInfo() const {
 void GpuProcessHost::DidInitialize(
     const gpu::GPUInfo& gpu_info,
     const gpu::GpuFeatureInfo& gpu_feature_info,
-    const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
-    const base::Optional<gpu::GpuFeatureInfo>&
+    const absl::optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
+    const absl::optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu,
     const gfx::GpuExtraInfo& gpu_extra_info) {
   if (GetGpuCrashCount() > 0) {
@@ -1085,7 +1073,7 @@ void GpuProcessHost::MaybeShutdownGpuProcess() {
 }
 
 void GpuProcessHost::DidUpdateGPUInfo(const gpu::GPUInfo& gpu_info) {
-  GpuDataManagerImpl::GetInstance()->UpdateGpuInfo(gpu_info, base::nullopt);
+  GpuDataManagerImpl::GetInstance()->UpdateGpuInfo(gpu_info, absl::nullopt);
 }
 
 #if defined(OS_WIN)
@@ -1136,8 +1124,7 @@ void GpuProcessHost::BindDiscardableMemoryReceiver(
     mojo::PendingReceiver<
         discardable_memory::mojom::DiscardableSharedMemoryManager> receiver) {
   if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
-    discardable_memory::DiscardableSharedMemoryManager::Get()->Bind(
-        std::move(receiver));
+    BindDiscardableMemoryReceiverOnUI(std::move(receiver));
     return;
   }
 
@@ -1369,11 +1356,5 @@ void GpuProcessHost::OnMemoryPressure(
   gpu_host_->gpu_service()->OnMemoryPressure(level);
 }
 #endif
-
-// FEATURE_FORCE_ACCESS_TO_GPU
-// static
-void GpuProcessHost::SetForceAllowAccessToGpu(bool enable) {
-  force_allow_access_to_gpu_ = enable;
-}
 
 }  // namespace content

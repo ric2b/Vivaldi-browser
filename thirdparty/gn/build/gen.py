@@ -37,6 +37,8 @@ class Platform(object):
       self._platform = 'darwin'
     elif self._platform.startswith('mingw'):
       self._platform = 'mingw'
+    elif self._platform.startswith('msys'):
+      self._platform = 'msys'
     elif self._platform.startswith('win'):
       self._platform = 'msvc'
     elif self._platform.startswith('aix'):
@@ -45,14 +47,18 @@ class Platform(object):
       self._platform = 'fuchsia'
     elif self._platform.startswith('freebsd'):
       self._platform = 'freebsd'
+    elif self._platform.startswith('netbsd'):
+      self._platform = 'netbsd'
     elif self._platform.startswith('openbsd'):
       self._platform = 'openbsd'
     elif self._platform.startswith('haiku'):
       self._platform = 'haiku'
+    elif self._platform.startswith('sunos'):
+      self._platform = 'solaris'
 
   @staticmethod
   def known_platforms():
-    return ['linux', 'darwin', 'mingw', 'msvc', 'aix', 'fuchsia', 'freebsd', 'openbsd', 'haiku']
+    return ['linux', 'darwin', 'mingw', 'msys', 'msvc', 'aix', 'fuchsia', 'freebsd', 'netbsd', 'openbsd', 'haiku', 'solaris']
 
   def platform(self):
     return self._platform
@@ -62,6 +68,9 @@ class Platform(object):
 
   def is_mingw(self):
     return self._platform == 'mingw'
+
+  def is_msys(self):
+    return self._platform == 'msys'
 
   def is_msvc(self):
     return self._platform == 'msvc'
@@ -78,8 +87,11 @@ class Platform(object):
   def is_haiku(self):
     return self._platform == 'haiku'
 
+  def is_solaris(self):
+    return self._platform == 'solaris'
+
   def is_posix(self):
-    return self._platform in ['linux', 'freebsd', 'darwin', 'aix', 'openbsd', 'haiku']
+    return self._platform in ['linux', 'freebsd', 'darwin', 'aix', 'openbsd', 'haiku', 'solaris', 'msys', 'netbsd']
 
 
 def main(argv):
@@ -201,12 +213,15 @@ def WriteGenericNinja(path, static_libraries, executables,
   template_filename = os.path.join(SCRIPT_DIR, {
       'msvc': 'build_win.ninja.template',
       'mingw': 'build_linux.ninja.template',
+      'msys': 'build_linux.ninja.template',
       'darwin': 'build_mac.ninja.template',
       'linux': 'build_linux.ninja.template',
       'freebsd': 'build_linux.ninja.template',
       'aix': 'build_aix.ninja.template',
       'openbsd': 'build_openbsd.ninja.template',
       'haiku': 'build_haiku.ninja.template',
+      'solaris': 'build_linux.ninja.template',
+      'netbsd': 'build_linux.ninja.template',
   }[platform.platform()])
 
   with open(template_filename) as f:
@@ -291,6 +306,10 @@ def WriteGNNinja(path, platform, host, options):
     cxx = os.environ.get('CXX', 'g++')
     ld = os.environ.get('LD', 'g++')
     ar = os.environ.get('AR', 'ar -X64')
+  elif platform.is_msys() or platform.is_mingw():
+    cxx = os.environ.get('CXX', 'g++')
+    ld = os.environ.get('LD', 'g++')
+    ar = os.environ.get('AR', 'ar')
   else:
     cxx = os.environ.get('CXX', 'clang++')
     ld = cxx
@@ -322,7 +341,7 @@ def WriteGNNinja(path, platform, host, options):
       ldflags.extend(['-fdata-sections', '-ffunction-sections'])
       if platform.is_darwin():
         ldflags.append('-Wl,-dead_strip')
-      elif not platform.is_aix():
+      elif not platform.is_aix() and not platform.is_solaris():
         # Garbage collection is done by default on aix.
         ldflags.append('-Wl,--gc-sections')
 
@@ -332,6 +351,8 @@ def WriteGNNinja(path, platform, host, options):
           ldflags.append('-Wl,-S')
         elif platform.is_aix():
           ldflags.append('-Wl,-s')
+        elif platform.is_solaris():
+          ldflags.append('-Wl,--strip-all')
         else:
           ldflags.append('-Wl,-strip-all')
 
@@ -357,14 +378,26 @@ def WriteGNNinja(path, platform, host, options):
         '-std=c++17'
     ])
 
-    if platform.is_linux() or platform.is_mingw():
+    if platform.is_linux() or platform.is_mingw() or platform.is_msys():
       ldflags.append('-Wl,--as-needed')
 
       if not options.no_static_libstdcpp:
         ldflags.append('-static-libstdc++')
 
-      # This is needed by libc++.
-      if not platform.is_mingw():
+      if platform.is_mingw() or platform.is_msys():
+        cflags.remove('-std=c++17')
+        cflags.extend([
+          '-Wno-deprecated-copy',
+          '-Wno-implicit-fallthrough',
+          '-Wno-redundant-move',
+          '-Wno-unused-variable',
+          '-Wno-format',             # Use of %llx, which is supported by _UCRT, false positive
+          '-Wno-strict-aliasing',    # Dereferencing punned pointer
+          '-Wno-cast-function-type', # Casting FARPROC to RegDeleteKeyExPtr
+          '-std=gnu++17',
+        ])
+      else:
+        # This is needed by libc++.
         libs.append('-ldl')
     elif platform.is_darwin():
       min_mac_version_flag = '-mmacosx-version-min=10.9'
@@ -380,7 +413,7 @@ def WriteGNNinja(path, platform, host, options):
     if platform.is_posix() and not platform.is_haiku():
       ldflags.append('-pthread')
 
-    if platform.is_mingw():
+    if platform.is_mingw() or platform.is_msys():
       cflags.extend(['-DUNICODE',
                      '-DNOMINMAX',
                      '-DWIN32_LEAN_AND_MEAN',
@@ -482,6 +515,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/command_args.cc',
         'src/gn/command_check.cc',
         'src/gn/command_clean.cc',
+        'src/gn/command_clean_stale.cc',
         'src/gn/command_desc.cc',
         'src/gn/command_format.cc',
         'src/gn/command_gen.cc',
@@ -557,6 +591,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/ninja_target_command_util.cc',
         'src/gn/ninja_target_writer.cc',
         'src/gn/ninja_toolchain_writer.cc',
+        'src/gn/ninja_tools.cc',
         'src/gn/ninja_utils.cc',
         'src/gn/ninja_writer.cc',
         'src/gn/operators.cc',

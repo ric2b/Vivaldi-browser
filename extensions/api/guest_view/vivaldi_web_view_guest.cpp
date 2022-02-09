@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tab_dialogs.h"
@@ -616,7 +617,8 @@ void WebViewGuest::AllowRunningInsecureContent() {
     mixed_content_settings->AllowRunningOfInsecureContent();
   }
 
-  web_contents()->ForEachFrame(base::Bind(&SetAllowRunningInsecureContent));
+  web_contents()->ForEachFrame(
+      base::BindRepeating(&SetAllowRunningInsecureContent));
 }
 
 bool WebViewGuest::ShouldAllowRunningInsecureContent(

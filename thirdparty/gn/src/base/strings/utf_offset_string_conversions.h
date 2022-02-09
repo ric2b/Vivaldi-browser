@@ -93,17 +93,17 @@ bool UTF8ToUTF16WithAdjustments(const char* src,
                                 std::u16string* output,
                                 base::OffsetAdjuster::Adjustments* adjustments);
 std::u16string UTF8ToUTF16WithAdjustments(
-    const std::string_view& utf8,
+    std::string_view utf8,
     base::OffsetAdjuster::Adjustments* adjustments);
 // As above, but instead internally examines the adjustments and applies them
 // to |offsets_for_adjustment|.  Input offsets greater than the length of the
 // input string will be set to std::u16string::npos.  See comments by
 // AdjustOffsets().
 std::u16string UTF8ToUTF16AndAdjustOffsets(
-    const std::string_view& utf8,
+    std::string_view utf8,
     std::vector<size_t>* offsets_for_adjustment);
 std::string UTF16ToUTF8AndAdjustOffsets(
-    const std::u16string_view& utf16,
+    std::u16string_view utf16,
     std::vector<size_t>* offsets_for_adjustment);
 
 }  // namespace base

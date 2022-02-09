@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Изађи из режима целог екрана</translation>
 <translation id="2177950615300672361">Картица у приватном режиму: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модул основног клијента: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Сакриј дугме</translation>
 <translation id="2218515861914035131">Налепи као чист текст</translation>
 <translation id="2249605167705922988">нпр. 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Дозволи идентификаторе за заштићени садржај (можда је потребно поновно покретање рачунара)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Претприказивање: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3241680850019875542">Изаберите основни директоријум проширења који ћете упаковати. Да бисте ажурирали проширење, изаберите и датотеку приватног кључа за поновно коришћење.</translation>
-<translation id="3266179261140759675">Блокирај слање и примање података са затворених сајтова</translation>
 <translation id="3280237271814976245">&amp;Сачувај као...</translation>
 <translation id="3285322247471302225">Нова &amp;картица</translation>
 <translation id="3288047731229977326">Проширења покренута у режиму програмера могу да нашкоде рачунару. Ако нисте програмер, требало би да онемогућите ова проширења покренута у режиму програмера да бисте се заштитили.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Ово може да чита и мења податке сајта</translation>
 <translation id="3560034655160545939">&amp;Провера правописа</translation>
 <translation id="3574917942258583917">Желите ли ипак да изађете из приватног режима?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; жели да дели штампач &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; са групом чији сте власник: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Ако прихватите, сви чланови групе ће моћи да штампају помоћу штампача.</translation>
 <translation id="3587482841069643663">Све</translation>
 <translation id="3627588569887975815">Отвори везу у при&amp;ватном прозору</translation>
 <translation id="3627879631695760395">Инсталирање апликације <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Руковаоци</translation>
 <translation id="3678156199662914018">Проширење: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Захтев за дељење екрана апликације <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Не дозволи затвореним сајтовима да заврше слање или примање података</translation>
 <translation id="3711931198657368127">На&amp;лепи и иди на <ph name="URL" /></translation>
 <translation id="3727187387656390258">Испитај искачући прозор</translation>
 <translation id="3744111561329211289">Синхронизација у позадини</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Креирано је проширење:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Прихвати за групу</translation>
 <translation id="4096508467498758490">Онемогући проширења покренута у режиму програмера</translation>
 <translation id="4100839878934973028">Други програм на рачунару је додао апликацију која може да промени начин на који Vivaldi функционише.</translation>
 <translation id="4109898769411476438">Затвори прегледач пре увоза</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Прикажи детаље</translation>
 <translation id="4907306957610201395">Категорија дозволе</translation>
 <translation id="4912643508233590958">Активирања из стања мировања</translation>
-<translation id="4918086044614829423">Прихвати</translation>
 <translation id="4927753642311223124">Нема грешака, наставите.</translation>
 <translation id="4930714375720679147">Укључи</translation>
 <translation id="4988526792673242964">Странице</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Обриши податке сајта</translation>
 <translation id="6042308850641462728">Више</translation>
 <translation id="6059925163896151826">USB уређаји</translation>
-<translation id="6082651258230788217">Прикажи на траци алата</translation>
 <translation id="6086846494333236931">Инсталирао администратор</translation>
 <translation id="6101226222197207147">Нова апликација је додата (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Проширење је променило подешавања проксија</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Симулирај поновно покретање прегледача</translation>
 <translation id="6445450263907939268">Ако нисте желели ове промене, можете да вратите претходна подешавања.</translation>
 <translation id="6447842834002726250">Колачићи</translation>
-<translation id="6452181791372256707">Одбиј</translation>
 <translation id="6498249116389603658">&amp;Сви ваши језици</translation>
 <translation id="6503077044568424649">Најпосећенији</translation>
 <translation id="6508261954199872201">Апликација: <ph name="APP_NAME" /></translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Да ли је ово страница нове картице коју сте очекивали?</translation>
 <translation id="786073089922909430">Услуга: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Недавна одредишта</translation>
-<translation id="7898627924844766532">Задржи на траци алата</translation>
 <translation id="7903925330883316394">Услужни процес: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Тренутно ван мреже</translation>
 <translation id="7947962633355574091">К&amp;опирај адресу видео записа</translation>
@@ -452,7 +445,6 @@
 <translation id="8725066075913043281">Покушај поново</translation>
 <translation id="8757090071857742562">Није успело пребацивање радне површине.  Проверите да ли сте потврдили упит за почетак дељења екрана.</translation>
 <translation id="8774934320277480003">Горња маргина</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; жели да дели штампач &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; са вама.</translation>
 <translation id="8798099450830957504">Подразумевано</translation>
 <translation id="8800004011501252845">Приказивање одредишта за</translation>
 <translation id="8808478386290700967">Веб-продавница</translation>

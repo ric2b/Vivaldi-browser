@@ -16,7 +16,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
-#include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/sequence_manager/real_time_domain.h"
@@ -31,6 +30,7 @@
 #include "base/time/tick_clock.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 namespace sequence_manager {
@@ -725,7 +725,7 @@ TimeDelta SequenceManagerImpl::GetDelayTillNextDelayedTask(
 
   TimeDelta delay_till_next_task = TimeDelta::Max();
   for (TimeDomain* time_domain : main_thread_only().time_domains) {
-    Optional<TimeDelta> delay = time_domain->DelayTillNextTask(lazy_now);
+    absl::optional<TimeDelta> delay = time_domain->DelayTillNextTask(lazy_now);
     if (!delay)
       continue;
 
@@ -1113,6 +1113,11 @@ std::unique_ptr<NativeWorkHandle> SequenceManagerImpl::OnNativeWorkPending(
   return std::make_unique<NativeWorkHandleImpl>(this, priority);
 }
 
+void SequenceManagerImpl::PrioritizeYieldingToNative(
+    base::TimeTicks prioritize_until) {
+  controller_->PrioritizeYieldingToNative(prioritize_until);
+}
+
 void SequenceManagerImpl::AddDestructionObserver(
     CurrentThread::DestructionObserver* destruction_observer) {
   main_thread_only().destruction_observers.AddObserver(destruction_observer);
@@ -1174,7 +1179,7 @@ void SequenceManagerImpl::RecordCrashKeys(const PendingTask& pending_task) {
   // this.
   //
   // See
-  // https://chromium.googlesource.com/chromium/src/+/master/docs/debugging_with_crash_keys.md
+  // https://chromium.googlesource.com/chromium/src/+/main/docs/debugging_with_crash_keys.md
   // for instructions for symbolizing these crash keys.
   //
   // TODO(skyostil): Find a way to extract the destination function address

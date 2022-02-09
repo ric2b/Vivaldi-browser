@@ -51,7 +51,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   void OnSelectedVideoTrackChanged(const std::vector<MediaTrack::Id>& track_ids,
                                    base::TimeDelta currTime,
                                    TrackChangeCB change_completed_cb) override;
-  base::Optional<container_names::MediaContainerName> GetContainerForMetrics()
+  absl::optional<container_names::MediaContainerName> GetContainerForMetrics()
       const override;
 
   void ResetDataSourceOffset();

@@ -168,6 +168,9 @@ void InstallerState::Clear() {
 }
 
 void InstallerState::SetStage(InstallerStage stage) const {
+  // Do not write Chrome-specific registry update keys.
+  if (kVivaldi)
+    return;
   GoogleUpdateSettings::SetProgress(system_install(), state_key_,
                                     progress_calculator_.Calculate(stage));
 }
@@ -176,7 +179,9 @@ void InstallerState::WriteInstallerResult(
     InstallStatus status,
     int string_resource_id,
     const std::wstring* const launch_cmd) const {
-  if (!vivaldi::IsInstallStandalone()) {
+  // For Vivaldi skip updating the registry with info only relevant to
+  // Google-specific updates.
+  if (!kVivaldi) {
     // clang-format off
   // Use a no-rollback list since this is a best-effort deal.
   std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());

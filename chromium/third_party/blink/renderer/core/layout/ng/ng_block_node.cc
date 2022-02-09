@@ -177,7 +177,7 @@ NOINLINE void DetermineAlgorithmAndRun(const NGLayoutAlgorithmParams& params,
   } else if (box.IsLayoutNGGrid() &&
              RuntimeEnabledFeatures::LayoutNGGridEnabled()) {
     CreateAlgorithmAndRun<NGGridLayoutAlgorithm>(params, callback);
-  } else if (box.IsLayoutImage()) {
+  } else if (box.IsLayoutReplaced()) {
     DCHECK(RuntimeEnabledFeatures::LayoutNGReplacedEnabled());
     CreateAlgorithmAndRun<NGReplacedLayoutAlgorithm>(params, callback);
   } else if (box.IsLayoutNGFieldset()) {
@@ -399,7 +399,7 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
 
   // We may be able to hit the cache without calculating fragment geometry
   // (calculating that isn't necessarily very cheap). So, start off without it.
-  base::Optional<NGFragmentGeometry> fragment_geometry;
+  absl::optional<NGFragmentGeometry> fragment_geometry;
 
   scoped_refptr<const NGLayoutResult> layout_result =
       box_->CachedLayoutResult(constraint_space, break_token, early_break,
@@ -420,10 +420,12 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
     UpdateShapeOutsideInfoIfNeeded(
         *layout_result, constraint_space.PercentageResolutionInlineSize());
 
-    // Even if we can reuse the result, we may still need to recalculate our
-    // overflow. TODO(crbug.com/919415): Explain why.
-    if (box_->NeedsLayoutOverflowRecalc())
-      box_->SetLayoutOverflowFromLayoutResults();
+    if (!RuntimeEnabledFeatures::LayoutNGLayoutOverflowRecalcEnabled()) {
+      // Even if we can reuse the result, we may still need to recalculate our
+      // overflow. TODO(crbug.com/919415): Explain why.
+      if (box_->NeedsLayoutOverflowRecalc())
+        box_->SetLayoutOverflowFromLayoutResults();
+    }
 
     // Return the cached result unless we're marked for layout. We may have
     // added or removed scrollbars during overflow recalculation, which may have
@@ -681,13 +683,13 @@ void NGBlockNode::FinishLayout(
   const auto& physical_fragment =
       To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
 
-  if (box_->IsLayoutImage()) {
+  if (box_->IsLayoutReplaced()) {
     DCHECK(RuntimeEnabledFeatures::LayoutNGReplacedEnabled());
     DCHECK(CanUseNewLayout());
-    // NG images are painted with legacy painters. We need to force a legacy
-    // "layout" so that paint invalidation flags are updated. But we don't want
-    // to use the size that legacy calculates, so we force legacy to use NG's
-    // size via BoxLayoutExtraInput's override fields.
+    // NG replaced elements are painted with legacy painters. We need to force
+    // a legacy "layout" so that paint invalidation flags are updated. But we
+    // don't want to use the size that legacy calculates, so we force legacy to
+    // use NG's size via BoxLayoutExtraInput's override fields.
     BoxLayoutExtraInput input(*box_);
     SetupBoxLayoutExtraInput(constraint_space, *box_, &input);
     NGBoxFragment fragment(constraint_space.GetWritingDirection(),
@@ -706,16 +708,17 @@ void NGBlockNode::FinishLayout(
         << "Legacy layout was supposed to use the size that NG computed";
   }
 
-  // Add all layout results (and fragments) generated from a node to a list in
-  // the layout object. Some extra care is required to correctly overwrite
-  // intermediate layout results: The sequence number of an incoming break token
-  // corresponds with the fragment index in the layout object (off by 1,
-  // though). When writing back a layout result, we remove any fragments in the
-  // layout box at higher indices than that of the one we're writing back.
-  if (layout_result->IsSingleUse())
-    box_->AddLayoutResult(layout_result, FragmentIndex(break_token));
-  else
+  if (physical_fragment.IsOnlyForNode()) {
     box_->SetCachedLayoutResult(layout_result);
+  } else {
+    // Add all layout results (and fragments) generated from a node to a list in
+    // the layout object. Some extra care is required to correctly overwrite
+    // intermediate layout results: The sequence number of an incoming break
+    // token corresponds with the fragment index in the layout object (off by 1,
+    // though). When writing back a layout result, we remove any fragments in
+    // the layout box at higher indices than that of the one we're writing back.
+    box_->AddLayoutResult(layout_result, FragmentIndex(break_token));
+  }
 
   if (block_flow) {
     const NGFragmentItems* items = physical_fragment.Items();
@@ -1009,7 +1012,7 @@ bool NGBlockNode::CanUseNewLayout(const LayoutBox& box) {
   if (box.ForceLegacyLayout())
     return false;
   return box.IsLayoutNGMixin() ||
-         (box.IsLayoutImage() && !box.IsMedia() && !box.IsListMarkerImage() &&
+         (box.IsLayoutReplaced() &&
           RuntimeEnabledFeatures::LayoutNGReplacedEnabled());
 }
 
@@ -1148,7 +1151,10 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
     block->SetLayoutOverflowFromLayoutResults();
   }
 
-  box_->UpdateAfterLayout();
+  // Replaced elements already have |LayoutBox::UpdateAfterLayout| called when
+  // we force a layout for them inside |NGBlockNode::FinishLayout|.
+  if (!box_->IsLayoutReplaced())
+    box_->UpdateAfterLayout();
 
   if (needs_full_invalidation)
     box_->ClearNeedsLayoutWithFullPaintInvalidation();
@@ -1170,7 +1176,6 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
 void NGBlockNode::PlaceChildrenInLayoutBox(
     const NGPhysicalBoxFragment& physical_fragment,
     const NGBlockBreakToken* previous_break_token) const {
-  LayoutBox* rendered_legend = nullptr;
   for (const auto& child_fragment : physical_fragment.Children()) {
     // Skip any line-boxes we have as children, this is handled within
     // NGInlineNode at the moment.
@@ -1178,12 +1183,18 @@ void NGBlockNode::PlaceChildrenInLayoutBox(
       continue;
 
     const auto& box_fragment = *To<NGPhysicalBoxFragment>(child_fragment.get());
-    if (box_fragment.IsFirstForNode()) {
-      if (box_fragment.IsRenderedLegend())
-        rendered_legend = To<LayoutBox>(box_fragment.GetMutableLayoutObject());
-      CopyChildFragmentPosition(box_fragment, child_fragment.offset,
-                                physical_fragment, previous_break_token);
-    }
+    if (!box_fragment.IsFirstForNode())
+      continue;
+
+    // The offset for an OOF positioned node that is added as a child of a
+    // fragmentainer box is handled by
+    // NGOutOfFlowLayoutPart::AddOOFToFragmentainer().
+    if (UNLIKELY(physical_fragment.IsFragmentainerBox() &&
+                 child_fragment->IsOutOfFlowPositioned()))
+      continue;
+
+    CopyChildFragmentPosition(box_fragment, child_fragment.offset,
+                              physical_fragment, previous_break_token);
   }
 }
 
@@ -1263,16 +1274,10 @@ void NGBlockNode::PlaceChildrenInFlowThread(
     const auto& child_fragment = To<NGPhysicalBoxFragment>(*child);
     const auto* child_box = To<LayoutBox>(child_fragment.GetLayoutObject());
     if (child_box && child_box != box_) {
-      if (!child_box->IsColumnSpanAll()) {
-        // TODO(almaher): In order for legacy tree operations to work properly,
-        // we need to CopyChildFragmentPosition(). We should probably also
-        // update the LayoutBox size at the last fragment of an OOF node.
-        // (See comments in CL:2597769).
-        DCHECK(child_box->IsOutOfFlowPositioned());
-        continue;
-      }
       CopyChildFragmentPosition(child_fragment, child.offset,
                                 physical_fragment);
+      if (!child_box->IsColumnSpanAll())
+        continue;
       LayoutBox* placeholder = child_box->SpannerPlaceholder();
       if (!child_fragment.BreakToken()) {
         // Last fragment for this spanner. Update its placeholder.
@@ -1427,6 +1432,9 @@ void NGBlockNode::CopyFragmentItemsToLayoutBox(
             maybe_flipped_offset.ToLayoutPoint());
         if (UNLIKELY(layout_box->HasSelfPaintingLayer()))
           layout_box->Layer()->SetNeedsVisualOverflowRecalc();
+#if DCHECK_IS_ON()
+        layout_box->InvalidateVisualOverflow();
+#endif
         continue;
       }
 
@@ -1497,31 +1505,37 @@ LogicalSize NGBlockNode::GetAspectRatio() const {
   if (!ShouldApplySizeContainment()) {
     IntrinsicSizingInfo legacy_sizing_info;
     To<LayoutReplaced>(box_)->ComputeIntrinsicSizingInfo(legacy_sizing_info);
-    LogicalSize intrinsic_ar{
-        LayoutUnit(legacy_sizing_info.aspect_ratio.Width()),
-        LayoutUnit(legacy_sizing_info.aspect_ratio.Height())};
-    if (!intrinsic_ar.IsEmpty())
-      return intrinsic_ar;
+    if (!legacy_sizing_info.aspect_ratio.IsEmpty()) {
+      return LogicalSize::AspectRatioFromFloatSize(
+          legacy_sizing_info.aspect_ratio);
+    }
   }
   if (ratio.GetType() == EAspectRatioType::kAutoAndRatio)
     return Style().LogicalAspectRatio();
   return LogicalSize();
 }
 
-base::Optional<TransformationMatrix> NGBlockNode::GetTransformForChildFragment(
+absl::optional<TransformationMatrix> NGBlockNode::GetTransformForChildFragment(
     const NGPhysicalBoxFragment& child_fragment,
     PhysicalSize size) const {
   const auto* child_layout_object = child_fragment.GetLayoutObject();
   DCHECK(child_layout_object);
 
   if (!child_layout_object->ShouldUseTransformFromContainer(box_))
-    return base::nullopt;
+    return absl::nullopt;
 
   TransformationMatrix transform;
   child_layout_object->GetTransformFromContainer(box_, PhysicalOffset(),
                                                  transform, &size);
 
   return transform;
+}
+
+bool NGBlockNode::HasNonVisibleBlockOverflow() const {
+  OverflowClipAxes clip_axes = GetOverflowClipAxes();
+  if (Style().IsHorizontalWritingMode())
+    return clip_axes & kOverflowClipY;
+  return clip_axes & kOverflowClipX;
 }
 
 bool NGBlockNode::IsCustomLayoutLoaded() const {

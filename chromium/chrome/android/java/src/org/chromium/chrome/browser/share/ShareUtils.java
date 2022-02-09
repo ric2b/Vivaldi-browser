@@ -10,6 +10,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.url.GURL;
 
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+
 /**
  *  A collection of helper functions for sharing in a non static context.
  */
@@ -26,6 +28,8 @@ public class ShareUtils {
 
         GURL url = tab.getUrl();
         boolean isChromeScheme = url.getScheme().equals(UrlConstants.CHROME_SCHEME)
+                || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_SCHEME)
+                || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME)
                 || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
         boolean isDataScheme = url.getScheme().equals(UrlConstants.DATA_SCHEME);
 

@@ -724,7 +724,7 @@ void UserMediaProcessor::SelectAudioSettings(
   SetupVideoInput();
 }
 
-base::Optional<base::UnguessableToken>
+absl::optional<base::UnguessableToken>
 UserMediaProcessor::DetermineExistingAudioSessionId() {
   DCHECK(current_request_info_->request()->Audio());
 
@@ -755,7 +755,7 @@ UserMediaProcessor::DetermineExistingAudioSessionId() {
     }
   }
 
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 void UserMediaProcessor::SetupVideoInput() {
@@ -763,7 +763,7 @@ void UserMediaProcessor::SetupVideoInput() {
   DCHECK(current_request_info_);
 
   if (!current_request_info_->request()->Video()) {
-    base::Optional<base::UnguessableToken> audio_session_id =
+    absl::optional<base::UnguessableToken> audio_session_id =
         DetermineExistingAudioSessionId();
     GenerateStreamForCurrentRequestInfo(
         audio_session_id, audio_session_id.has_value()
@@ -848,9 +848,9 @@ void UserMediaProcessor::SelectVideoDeviceSettings(
   blink::VideoDeviceCaptureCapabilities capabilities;
   capabilities.device_capabilities =
       ToVideoInputDeviceCapabilities(video_input_capabilities);
-  capabilities.noise_reduction_capabilities = {base::Optional<bool>(),
-                                               base::Optional<bool>(true),
-                                               base::Optional<bool>(false)};
+  capabilities.noise_reduction_capabilities = {absl::optional<bool>(),
+                                               absl::optional<bool>(true),
+                                               absl::optional<bool>(false)};
   blink::VideoCaptureSettings settings = SelectSettingsVideoDeviceCapture(
       std::move(capabilities), user_media_request->VideoConstraints(),
       blink::MediaStreamVideoSource::kDefaultWidth,
@@ -871,7 +871,7 @@ void UserMediaProcessor::SelectVideoDeviceSettings(
       settings, false /* is_content_capture */);
 
   if (current_request_info_->request()->Audio()) {
-    base::Optional<base::UnguessableToken> audio_session_id =
+    absl::optional<base::UnguessableToken> audio_session_id =
         DetermineExistingAudioSessionId();
     GenerateStreamForCurrentRequestInfo(
         audio_session_id, audio_session_id.has_value()
@@ -917,7 +917,7 @@ void UserMediaProcessor::SelectVideoContentSettings() {
 }
 
 void UserMediaProcessor::GenerateStreamForCurrentRequestInfo(
-    base::Optional<base::UnguessableToken> requested_audio_capture_session_id,
+    absl::optional<base::UnguessableToken> requested_audio_capture_session_id,
     blink::mojom::StreamSelectionStrategy strategy) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(current_request_info_);
@@ -1245,6 +1245,24 @@ void UserMediaProcessor::OnDeviceRequestStateChange(
   }
 }
 
+void UserMediaProcessor::OnDeviceCaptureHandleChange(
+    const MediaStreamDevice& device) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  SendLogMessage(base::StringPrintf(
+      "OnDeviceCaptureHandleChange({session_id=%s}, {device_id=%s})",
+      device.session_id().ToString().c_str(), device.id.c_str()));
+
+  MediaStreamSource* const source = FindLocalSource(device);
+  if (!source) {
+    // This happens if the same device is used in several guM requests or
+    // if a user happens to stop a track from JS at the same time
+    // as the underlying media device is unplugged from the system.
+    return;
+  }
+
+  source->OnDeviceCaptureHandleChange(device);
+}
+
 void UserMediaProcessor::Trace(Visitor* visitor) const {
   visitor->Trace(dispatcher_host_);
   visitor->Trace(frame_);
@@ -1402,6 +1420,8 @@ UserMediaProcessor::CreateAudioSource(
   if (blink::IsScreenCaptureMediaType(device.type) ||
       !blink::MediaStreamAudioProcessor::WouldModifyAudio(
           audio_processing_properties)) {
+    SendLogMessage(
+        base::StringPrintf("%s => (no audiprocessing is used)", __func__));
     return std::make_unique<blink::LocalMediaStreamAudioSource>(
         frame_, device,
         base::OptionalOrNullptr(current_request_info_->audio_capture_settings()
@@ -1412,8 +1432,10 @@ UserMediaProcessor::CreateAudioSource(
 
   // The audio device is not associated with screen capture and also requires
   // processing.
+  SendLogMessage(
+      base::StringPrintf("%s => (audiprocessing is required)", __func__));
   return std::make_unique<blink::ProcessedLocalAudioSource>(
-      frame_, device, stream_controls->disable_local_echo,
+      *frame_, device, stream_controls->disable_local_echo,
       audio_processing_properties,
       current_request_info_->audio_capture_settings().num_channels(),
       std::move(source_ready), task_runner_);
@@ -1450,6 +1472,8 @@ void UserMediaProcessor::StartTracks(const String& label) {
         WTF::BindRepeating(&UserMediaProcessor::OnDeviceChanged,
                            WrapWeakPersistent(this)),
         WTF::BindRepeating(&UserMediaProcessor::OnDeviceRequestStateChange,
+                           WrapWeakPersistent(this)),
+        WTF::BindRepeating(&UserMediaProcessor::OnDeviceCaptureHandleChange,
                            WrapWeakPersistent(this)));
   }
 
@@ -1744,17 +1768,28 @@ bool UserMediaProcessor::RemoveLocalSource(MediaStreamSource* source) {
   for (auto* device_it = pending_local_sources_.begin();
        device_it != pending_local_sources_.end(); ++device_it) {
     if (IsSameSource(*device_it, source)) {
-      WebPlatformMediaStreamSource* const source_extra_data =
+      WebPlatformMediaStreamSource* const platform_source =
           source->GetPlatformSource();
-      const bool is_audio_source =
-          source->GetType() == MediaStreamSource::kTypeAudio;
-      NotifyCurrentRequestInfoOfAudioSourceStarted(
-          source_extra_data,
-          is_audio_source ? MediaStreamRequestResult::TRACK_START_FAILURE_AUDIO
-                          : MediaStreamRequestResult::TRACK_START_FAILURE_VIDEO,
-          String::FromUTF8(is_audio_source
-                               ? "Failed to access audio capture device"
-                               : "Failed to access video capture device"));
+      MediaStreamRequestResult result;
+      String message;
+      if (source->GetType() == MediaStreamSource::kTypeAudio) {
+        auto error = MediaStreamAudioSource::From(source)->ErrorCode();
+        if (error.has_value() &&
+            error.value() ==
+                media::AudioCapturerSource::ErrorCode::kSystemPermissions) {
+          result = MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED;
+          message =
+              "System Permssions prevented access to audio capture device";
+        } else {
+          result = MediaStreamRequestResult::TRACK_START_FAILURE_AUDIO;
+          message = "Failed to access audio capture device";
+        }
+      } else {
+        result = MediaStreamRequestResult::TRACK_START_FAILURE_VIDEO;
+        message = "Failed to access video capture device";
+      }
+      NotifyCurrentRequestInfoOfAudioSourceStarted(platform_source, result,
+                                                   message);
       pending_local_sources_.erase(device_it);
       return true;
     }

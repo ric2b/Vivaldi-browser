@@ -101,9 +101,9 @@ void GuestViewInternalCustomBindings::AddRoutes() {
           &GuestViewInternalCustomBindings::RegisterDestructionCallback,
           base::Unretained(this)));
   RouteHandlerFunction(
-     "IsVivaldi",
-      base::Bind(&GuestViewInternalCustomBindings::IsVivaldi,
-                 base::Unretained(this)));
+      "IsVivaldi",
+      base::BindRepeating(&GuestViewInternalCustomBindings::IsVivaldi,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "RegisterElementResizeCallback",
       base::BindRepeating(

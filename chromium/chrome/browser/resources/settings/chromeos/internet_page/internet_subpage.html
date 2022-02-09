@@ -9,6 +9,7 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toggle/cr_toggle.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_indicator.html">
+<link rel="import" href="chrome://resources/cr_elements/md_select_css.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
@@ -22,17 +23,25 @@
 <link rel="import" href="../localized_link/localized_link.html">
 <link rel="import" href="../metrics_recorder.html">
 <link rel="import" href="../os_route.html">
-<link rel="import" href="./cellular_banner.html">
 <link rel="import" href="./cellular_networks_list.html">
 <link rel="import" href="../route_origin_behavior.html">
 <link rel="import" href="internet_page_browser_proxy.html">
+<link rel="import" href="network_always_on_vpn.html">
 
 <dom-module id="settings-internet-subpage">
   <template>
     <style include="cr-shared-style os-settings-icons settings-shared iron-flex">
       #networkListDiv {
-        margin-top: var(--cr-section-vertical-margin);
         min-height: var(--settings-row-min-height);
+      }
+
+      :host(:not([is-showing-vpn_])) #networkListDiv {
+        margin-top: var(--cr-section-vertical-margin);
+      }
+
+      #cellularNetworkList {
+        /* No extra margin-top when displaying the cellular network list. */
+        margin-top: calc(-1*var(--cr-section-vertical-margin));
       }
 
       /* Set padding on children instead of the container itself to ensure that
@@ -71,6 +80,10 @@
         flex: 1;
       }
 
+      network-always-on-vpn {
+        width: 100%;
+      }
+
       #gmscore-notifications-container {
         border-top: var(--cr-separator-line);
         margin: 10px 0;
@@ -97,10 +110,6 @@
         padding-inline-start: 0;
       }
     </style>
-    <template is="dom-if" restamp
-        if="[[isDeviceInhibited_(deviceState, deviceState.inhibitReason)]]">
-      <cellular-banner device-state="[[deviceState]]"></cellular-banner>
-    </template>
     <template is="dom-if" if="[[enableToggleIsVisible_(deviceState)]]">
       <div class="settings-box first">
         <div id="onOff" class="start" on$="[[deviceIsEnabled_(deviceState)]]"
@@ -140,7 +149,7 @@
     <template is="dom-if" if="[[deviceIsEnabled_(deviceState)]]">
       <div id="networkListDiv" class="layout vertical flex">
         <!-- VPN only header for built-in VPNs. -->
-        <template is="dom-if" if="[[matchesType_('VPN', deviceState)]]">
+        <template is="dom-if" if="[[isShowingVpn_]]">
           <div class="vpn-header layout horizontal center">
             <div class="flex settings-box-text">$i18n{networkVpnBuiltin}</div>
             <template is="dom-if" if="[[!vpnIsEnabled_]]">
@@ -178,7 +187,8 @@
               cellular-device-state="[[deviceState]]"
               tether-device-state="[[tetherDeviceState]]"
               global-policy="[[globalPolicy]]"
-              is-connected-to-non-cellular-network="[[isConnectedToNonCellularNetwork]]">
+              is-connected-to-non-cellular-network="[[isConnectedToNonCellularNetwork]]"
+              can-show-spinner="[[!isCellularSetupActive]]">
           </cellular-networks-list>
         </template>
 
@@ -212,7 +222,7 @@
                 "[[getNoNetworksInnerHtml_(deviceState, tetherDeviceState)]]">
         </settings-localized-link>
 
-        <template is="dom-if" if="[[matchesType_('VPN', deviceState)]]">
+        <template is="dom-if" if="[[isShowingVpn_]]">
           <!-- Third party VPNs. -->
           <template is="dom-repeat"
               items="[[getVpnProviders_(vpnProviders, thirdPartyVpns_)]]">
@@ -236,6 +246,21 @@
           </template>
         </template>
       </div>
+
+      <template is="dom-if"
+          if="[[shouldShowVpnPreferences_(isManaged_, isShowingVpn_)]]">
+        <div class="settings-box first">
+          <h2>$i18n{networkVpnPreferences}</h2>
+        </div>
+        <div class="settings-box first">
+          <network-always-on-vpn id="alwaysOnVpnSelector"
+              networks="[[getAlwaysOnVpnNetworks_(deviceState,
+                networkStateList_, thirdPartyVpns_)]]"
+              mode="{{alwaysOnVpnMode_}}"
+              service="{{alwaysOnVpnService_}}">
+          </network-always-on-vpn>
+        </div>
+      </template>
 
       <template is="dom-if"
           if="[[tetherToggleIsVisible_(deviceState, tetherDeviceState)]]">

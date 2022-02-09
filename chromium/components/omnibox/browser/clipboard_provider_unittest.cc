@@ -36,8 +36,8 @@ namespace {
 
 const char kCurrentURL[] = "http://example.com/current";
 const char kClipboardURL[] = "http://example.com/clipboard";
-const char kClipboardText[] = "Search for me";
-const char kClipboardTitleText[] = "\"Search for me\"";
+const char16_t kClipboardText[] = u"Search for me";
+const char16_t kClipboardTitleText[] = u"\"Search for me\"";
 
 class CreateMatchWithContentCallbackWaiter {
  public:
@@ -105,8 +105,8 @@ class ClipboardProviderTest : public testing::Test,
   }
 
   bool IsClipboardEmpty() {
-    return clipboard_content_.GetRecentURLFromClipboard() == base::nullopt &&
-           clipboard_content_.GetRecentTextFromClipboard() == base::nullopt &&
+    return clipboard_content_.GetRecentURLFromClipboard() == absl::nullopt &&
+           clipboard_content_.GetRecentTextFromClipboard() == absl::nullopt &&
            !clipboard_content_.HasRecentImageFromClipboard();
   }
 
@@ -118,7 +118,7 @@ class ClipboardProviderTest : public testing::Test,
     return input;
   }
 
-  void MatchesImageCallback(base::Optional<AutocompleteMatch> match) {
+  void MatchesImageCallback(absl::optional<AutocompleteMatch> match) {
     matches_image_match_ = match;
   }
 
@@ -130,7 +130,7 @@ class ClipboardProviderTest : public testing::Test,
   FakeClipboardRecentContent clipboard_content_;
   std::unique_ptr<MockAutocompleteProviderClient> client_;
   scoped_refptr<ClipboardProvider> provider_;
-  base::Optional<AutocompleteMatch> matches_image_match_;
+  absl::optional<AutocompleteMatch> matches_image_match_;
 
   base::test::TaskEnvironment task_environment_;
 };
@@ -153,6 +153,11 @@ TEST_F(ClipboardProviderTest, EmptyClipboard) {
   EXPECT_TRUE(provider_->matches().empty());
 }
 
+#if !defined(OS_ANDROID)
+// The following tests do not apply to Android.
+// On Android, the Omnibox won't access the content of the system clipboard
+// before users click the reveal button, so the clipboard suggestions will be
+// empty on start.
 TEST_F(ClipboardProviderTest, ClipboardIsCurrentURL) {
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
@@ -185,13 +190,11 @@ TEST_F(ClipboardProviderTest, MatchesText) {
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
   client_->set_template_url_service(std::move(template_url_service));
-  SetClipboardText(base::UTF8ToUTF16(kClipboardText));
+  SetClipboardText(kClipboardText);
   provider_->Start(CreateAutocompleteInput(OmniboxFocusType::ON_FOCUS), false);
   ASSERT_GE(provider_->matches().size(), 1U);
-  EXPECT_EQ(base::UTF8ToUTF16(kClipboardTitleText),
-            provider_->matches().back().contents);
-  EXPECT_EQ(base::UTF8ToUTF16(kClipboardText),
-            provider_->matches().back().fill_into_edit);
+  EXPECT_EQ(kClipboardTitleText, provider_->matches().back().contents);
+  EXPECT_EQ(kClipboardText, provider_->matches().back().fill_into_edit);
   EXPECT_EQ(AutocompleteMatchType::CLIPBOARD_TEXT,
             provider_->matches().back().type);
 }
@@ -213,12 +216,13 @@ TEST_F(ClipboardProviderTest, MatchesImage) {
   ASSERT_TRUE(matches_image_match_);
   EXPECT_EQ(AutocompleteMatchType::CLIPBOARD_IMAGE, matches_image_match_->type);
 }
+#endif  // !defined(OS_ANDROID)
 
 TEST_F(ClipboardProviderTest, DeleteMatch) {
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
   client_->set_template_url_service(std::move(template_url_service));
-  SetClipboardText(base::UTF8ToUTF16(kClipboardText));
+  SetClipboardText(kClipboardText);
   provider_->Start(CreateAutocompleteInput(OmniboxFocusType::ON_FOCUS), false);
   ASSERT_EQ(provider_->matches().size(), 1U);
 
@@ -253,7 +257,7 @@ TEST_F(ClipboardProviderTest, CreateBlankTextMatchOnStart) {
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
   client_->set_template_url_service(std::move(template_url_service));
-  SetClipboardText(base::UTF8ToUTF16(kClipboardText));
+  SetClipboardText(kClipboardText);
   provider_->Start(CreateAutocompleteInput(OmniboxFocusType::ON_FOCUS), false);
   ASSERT_GE(provider_->matches().size(), 1U);
   EXPECT_EQ(AutocompleteMatchType::CLIPBOARD_TEXT,
@@ -299,7 +303,7 @@ TEST_F(ClipboardProviderTest, CreateURLMatchWithContent) {
 }
 
 TEST_F(ClipboardProviderTest, CreateTextMatchWithContent) {
-  SetClipboardText(base::UTF8ToUTF16(kClipboardText));
+  SetClipboardText(kClipboardText);
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
   client_->set_template_url_service(std::move(template_url_service));
@@ -307,8 +311,8 @@ TEST_F(ClipboardProviderTest, CreateTextMatchWithContent) {
   CreateMatchWithContentCallbackWaiter waiter(provider_, &match);
   waiter.WaitForMatchUpdated();
 
-  EXPECT_EQ(base::UTF8ToUTF16(kClipboardTitleText), match.contents);
-  EXPECT_EQ(base::UTF8ToUTF16(kClipboardText), match.fill_into_edit);
+  EXPECT_EQ(kClipboardTitleText, match.contents);
+  EXPECT_EQ(kClipboardText, match.fill_into_edit);
   EXPECT_EQ(AutocompleteMatchType::CLIPBOARD_TEXT, match.type);
 }
 

@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Send Link by Mail</translation>
 <translation id="1454726940098520109">Do Not Show Confirmation Again</translation>
 <translation id="1462666970065907900">Do you really want to close this window?</translation>
+<translation id="1480046233931937785">Credits</translation>
 <translation id="1526344461589023948">An error occurred while trying to save a downloaded update. Please check that the computer has enough disk space and try again later.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">New Private Window</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Open in New Tab</translation>
 <translation id="3027988479108856431">Sadly, your Yandex settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Yandex windows. Then click Continue.</translation>
 <translation id="3084011186245865060">Landscape 6</translation>
+<translation id="3093931836425623631">Vivaldi is made possible by the Chromium open source project and other open source software.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">New Bookmark</translation>
 <translation id="3255747772218936245">Install update</translation>
@@ -64,6 +66,7 @@
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
 <translation id="3795800845758778870">Sadly, your Brave settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Brave windows. Then click Continue.</translation>
+<translation id="3822431842304177896">New Separator</translation>
 <translation id="3832132597516774400">Landscape 5</translation>
 <translation id="3914946330804881301">Imported From Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
@@ -126,7 +129,6 @@
 <translation id="7086554968911045110">Landscape 7</translation>
 <translation id="7111492742514999492">Landscape 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi is made possible by the <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source project and other <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Failed to launch the update installer. Please check that the computer has enough memory or disc space and try again later.</translation>
 <translation id="7658239707568436148">Cancel</translation>
 <translation id="7715497554424665066">&amp;Ignore Update</translation>

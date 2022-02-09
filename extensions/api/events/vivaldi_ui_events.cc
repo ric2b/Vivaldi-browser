@@ -97,7 +97,7 @@ gfx::PointF TransformToWindowUICoordinates(VivaldiBrowserWindow* window,
 
 void SendEventToUI(VivaldiBrowserWindow* window,
                    const std::string& eventname,
-                   std::unique_ptr<base::ListValue> args) {
+                   std::vector<base::Value> args) {
   // TODO(igor@vivaldi.com): This broadcats the event to all windows and
   // extensions forcing our JS code to check in each window if it matches
   // the window id embedded into the event. Find a way to send this only to
@@ -654,13 +654,18 @@ bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
 
 bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
                                       ui::mojom::DragOperation operation,
-                                      bool cancelled,
                                       int screen_x,
                                       int screen_y) {
   if (!::vivaldi::IsTabDragInProgress())
     return false;
   ::vivaldi::SetTabDragInProgress(false);
 
+  bool cancelled = false;
+#ifdef OS_WIN
+  if (::vivaldi::g_cancelled_drag) {
+    cancelled = true;
+  }
+#endif
   bool outside = ::vivaldi::ui_tools::IsOutsideAppWindow(screen_x, screen_y);
   if (!outside && operation == ui::mojom::DragOperation::kNone) {
     // None of browser windows accepted the drag and we do not moving tabs out.

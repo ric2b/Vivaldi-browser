@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -47,6 +48,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -66,9 +68,8 @@ namespace extensions {
 namespace {
 
 bool IsExtensionProcessSharingAllowed() {
-  // TODO(nick): Currently, process sharing is allowed even in
-  // --site-per-process. Lock this down.  https://crbug.com/766267
-  return true;
+  return !base::FeatureList::IsEnabled(
+      extensions_features::kStrictExtensionIsolation);
 }
 
 void AddFrameToSet(std::set<content::RenderFrameHost*>* frames,
@@ -337,7 +338,7 @@ IN_PROC_BROWSER_TEST_F(DefaultProfileExtensionBrowserTest, NoExtensionHosts) {
   // Explicitly get the original and off-the-record-profiles, since on CrOS,
   // the signin profile (profile()) is the off-the-record version.
   Profile* original = profile()->GetOriginalProfile();
-  Profile* otr = original->GetPrimaryOTRProfile();
+  Profile* otr = original->GetPrimaryOTRProfile(/*create_if_needed=*/true);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_EQ(profile(), otr);
   EXPECT_TRUE(chromeos::ProfileHelper::IsSigninProfile(original));
@@ -427,7 +428,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
       content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
       content::NotificationService::AllSources());
   // Open popup in the first extension.
-  test_util->Press(0);
+  test_util->Press(popup->id());
   frame_observer.Wait();
   ASSERT_TRUE(test_util->HasPopup());
 
@@ -975,7 +976,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
       permissions::PermissionRequestManager::ACCEPT_ALL);
 
   content::DownloadTestObserverTerminal observer(
-      content::BrowserContext::GetDownloadManager(profile()), 1,
+      profile()->GetDownloadManager(), 1,
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
   std::string script = base::StringPrintf(
       R"(var anchor = document.createElement('a');
@@ -1426,7 +1427,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // Navigate to the "extension 1" page with two iframes.
   auto url = extension1->url().Resolve("two_iframes.html");
   NavigateToURL(url);
-  auto initiator_origin = base::Optional<url::Origin>(url::Origin::Create(url));
+  auto initiator_origin = absl::optional<url::Origin>(url::Origin::Create(url));
 
   ProcessManager* pm = ProcessManager::Get(profile());
   content::WebContents* tab =
@@ -1648,7 +1649,11 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   {
     content::RenderFrameHost* subframe = ChildFrameAt(main_frame, 0);
     EXPECT_EQ(subframe->GetProcess(), main_frame->GetProcess());
-    EXPECT_EQ(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
+    if (content::AreStrictSiteInstancesEnabled()) {
+      EXPECT_NE(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
+    } else {
+      EXPECT_EQ(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
+    }
   }
 }
 

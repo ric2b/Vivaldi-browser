@@ -63,7 +63,7 @@ int64_t VivaldiTranslateAgent::GetErrorCode() {
   return error_code;
 }
 
-std::string VivaldiTranslateAgent::GetOriginalPageLanguage() {
+std::string VivaldiTranslateAgent::GetPageSourceLanguage() {
   return ExecuteScriptAndGetStringResult("window.vivaldiTranslate.sourceLang");
 }
 
@@ -85,7 +85,8 @@ void VivaldiTranslateAgent::ExecuteScript(const std::string& script) {
 
   WebScriptSource source = WebScriptSource(
       WebString::FromUTF8(script), WebURL(GURL("vivaldi://translate.js")));
-  main_frame->ExecuteScriptInIsolatedWorld(world_id_, source);
+  main_frame->ExecuteScriptInIsolatedWorld(
+      world_id_, source, blink::BackForwardCacheAware::kAllow);
 
   script_injected_ = true;
 }

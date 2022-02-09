@@ -97,10 +97,27 @@ class GPU_EXPORT SharedImageInterface {
   virtual Mailbox CreateSharedImage(
       gfx::GpuMemoryBuffer* gpu_memory_buffer,
       GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      gfx::BufferPlane plane,
       const gfx::ColorSpace& color_space,
       GrSurfaceOrigin surface_origin,
       SkAlphaType alpha_type,
       uint32_t usage) = 0;
+
+  // Same as the above, but specifies gfx::BufferPlane::DEFAULT for |plane|.
+  Mailbox CreateSharedImage(gfx::GpuMemoryBuffer* gpu_memory_buffer,
+                            GpuMemoryBufferManager* gpu_memory_buffer_manager,
+                            const gfx::ColorSpace& color_space,
+                            GrSurfaceOrigin surface_origin,
+                            SkAlphaType alpha_type,
+                            uint32_t usage);
+
+  // Similar to above, but creates backings for all planes in one shot. Needed
+  // on platforms where the planes need to share some state on initialization.
+  // Only implemented on Windows.
+  virtual std::vector<Mailbox> CreateSharedImageVideoPlanes(
+      gfx::GpuMemoryBuffer* gpu_memory_buffer,
+      GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      uint32_t usage);
 
   // The primary purpose of this is API to use an AHB from media/AImageReader in
   // a thread-safe way. The source mailbox passed to this API must be backed by

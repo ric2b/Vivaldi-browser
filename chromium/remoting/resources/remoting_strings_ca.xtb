@@ -32,7 +32,7 @@ Si la casella <ph name="SERVICE_SCRIPT_NAME" /> ja està marcada, desmarca-la i 
 <translation id="2509394361235492552">Connectat a <ph name="HOSTNAME" /></translation>
 <translation id="2540992418118313681">Voleu compartir aquest ordinador perquè un altre usuari el pugui veure i controlar?</translation>
 <translation id="2579271889603567289">L'amfitrió s'ha bloquejat o no s'ha pogut iniciar.</translation>
-<translation id="2599300881200251572">Aquest servei permet les connexions entrants de clients de l'escriptori remot de Chrome.</translation>
+<translation id="2599300881200251572">Aquest servei permet les connexions entrants de clients d'Escriptori remot de Chrome.</translation>
 <translation id="2647232381348739934">Servei de Chromoting</translation>
 <translation id="2676780859508944670">S'hi està treballant...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
@@ -90,7 +90,7 @@ Si la casella <ph name="SERVICE_SCRIPT_NAME" /> ja està marcada, desmarca-la i 
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (fora de línia)</translation>
 <translation id="507204348399810022">Confirmes que vols desactivar les connexions remotes a <ph name="HOSTNAME" />?</translation>
 <translation id="5170982930780719864">L'identificador de l'amfitrió no és vàlid.</translation>
-<translation id="5204575267916639804">Preguntes freqüents</translation>
+<translation id="5204575267916639804">Preguntes més freqüents</translation>
 <translation id="5222676887888702881">Tanca la sessió</translation>
 <translation id="5234764350956374838">Ignora</translation>
 <translation id="5308380583665731573">Connecta</translation>

@@ -66,7 +66,7 @@ void VivaldiDataSource::StartDataRequest(
     const content::WebContents::Getter& wc_getter,
     content::URLDataSource::GotDataCallback callback) {
   std::string data;
-  base::Optional<PathType> type =
+  absl::optional<PathType> type =
       vivaldi_data_url_utils::ParsePath(url.path_piece(), &data);
   if (type) {
     auto it = data_class_handlers_.find(*type);
@@ -85,7 +85,7 @@ std::string VivaldiDataSource::GetMimeType(const std::string& path) {
 }
 
 bool VivaldiDataSource::AllowCaching(const std::string& path) {
-  base::Optional<PathType> type = vivaldi_data_url_utils::ParsePath(path);
+  absl::optional<PathType> type = vivaldi_data_url_utils::ParsePath(path);
   return type == PathType::kLocalPath || type == PathType::kThumbnail;
 }
 

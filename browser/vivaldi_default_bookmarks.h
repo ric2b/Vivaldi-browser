@@ -5,8 +5,6 @@
 #define BROWSER_VIVALDI_DEFAULT_BOOKMARKS_H_
 
 #include "base/callback.h"
-#include "base/optional.h"
-#include "base/strings/string_piece.h"
 
 class Profile;
 

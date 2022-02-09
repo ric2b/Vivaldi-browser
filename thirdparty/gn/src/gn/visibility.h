@@ -32,7 +32,7 @@ class Visibility {
   // Set the visibility to the thing specified by the given value. On failure,
   // returns false and sets the error.
   bool Set(const SourceDir& current_dir,
-           const std::string_view& source_root,
+           std::string_view source_root,
            const Value& value,
            Err* err);
 

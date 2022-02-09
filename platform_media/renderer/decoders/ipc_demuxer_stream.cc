@@ -11,26 +11,23 @@
 #include "base/callback_helpers.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_util.h"
-#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 
 namespace media {
 
 namespace {
 
-PlatformMediaDataType DemuxerTypeToPlatformMediaDataType(
-    DemuxerStream::Type type) {
+PlatformStreamType DemuxerTypeToPlatformStreamType(DemuxerStream::Type type) {
   switch (type) {
     case DemuxerStream::AUDIO:
-      return PlatformMediaDataType::PLATFORM_MEDIA_AUDIO;
-
+      return PlatformStreamType::kAudio;
     case DemuxerStream::VIDEO:
-      return PlatformMediaDataType::PLATFORM_MEDIA_VIDEO;
-
+      return PlatformStreamType::kVideo;
     default:
       NOTREACHED();
-      return PlatformMediaDataType();
+      return PlatformStreamType::kAudio;
   }
 }
 
@@ -46,8 +43,7 @@ IPCDemuxerStream::IPCDemuxerStream(
   DCHECK(ipc_media_pipeline_host_);
 }
 
-IPCDemuxerStream::~IPCDemuxerStream() {
-}
+IPCDemuxerStream::~IPCDemuxerStream() {}
 
 void IPCDemuxerStream::Read(ReadCB read_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -72,8 +68,9 @@ void IPCDemuxerStream::Read(ReadCB read_cb) {
   read_cb_ = std::move(read_cb);
 
   ipc_media_pipeline_host_->ReadDecodedData(
-      DemuxerTypeToPlatformMediaDataType(type_),
-      base::Bind(&IPCDemuxerStream::DataReady, weak_ptr_factory_.GetWeakPtr()));
+      DemuxerTypeToPlatformStreamType(type_),
+      base::BindOnce(&IPCDemuxerStream::DataReady,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 bool IPCDemuxerStream::enabled() const {
@@ -113,8 +110,7 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
       AudioCodec::kCodecPCM, platform_audio_config.format,
       GuessChannelLayout(platform_audio_config.channel_count),
       platform_audio_config.samples_per_second, EmptyExtraData(),
-      EncryptionScheme::kUnencrypted,
-      base::TimeDelta(), 0);
+      EncryptionScheme::kUnencrypted, base::TimeDelta(), 0);
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " Created AudioDecoderConfig with partially HARDCODED values :"
@@ -132,7 +128,8 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
   DCHECK(platform_video_config.is_valid());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Creating VideoDecoderConfig : VideoCodec::kCodecH264 with HARDCODED values";
+          << " Creating VideoDecoderConfig : VideoCodec::kCodecH264 with "
+             "HARDCODED values";
   // This demuxer stream is different from "normal" demuxers in that it outputs
   // decoded data.  To fit into existing media pipeline we hard code some
   // information, which is normally read from the data stream.
@@ -154,9 +151,6 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " VideoCodecProfile : " << GetProfileName(video_config.profile());
-       // << " VideoPixelFormat : "
-       // << VideoPixelFormatToString(video_config.format());
-       // << " ColorSpace : " << video_config.color_space();
 
   return video_config;
 }
@@ -195,8 +189,9 @@ void IPCDemuxerStream::DataReady(Status status,
                                  scoped_refptr<DecoderBuffer> buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!read_cb_.is_null())
+  if (read_cb_) {
     std::move(read_cb_).Run(status, buffer);
+  }
 }
 
 }  // namespace media

@@ -64,75 +64,76 @@ class ContactService : public KeyedService {
   // specified priority. The task will have ownership taken.
   void ScheduleTask(base::OnceClosure task);
 
-  typedef base::Callback<void(std::shared_ptr<ContactResults>)> ContactCallback;
+  typedef base::OnceCallback<void(std::shared_ptr<ContactResults>)>
+      ContactCallback;
 
-  typedef base::Callback<void(std::shared_ptr<CreateContactsResult>)>
+  typedef base::OnceCallback<void(std::shared_ptr<CreateContactsResult>)>
       CreateContactsCallback;
 
-  typedef base::Callback<void(std::shared_ptr<ContactQueryResults>)>
+  typedef base::OnceCallback<void(std::shared_ptr<ContactQueryResults>)>
       QueryContactCallback;
 
-  typedef base::Callback<void(std::shared_ptr<EmailAddressRows>)>
+  typedef base::OnceCallback<void(std::shared_ptr<EmailAddressRows>)>
       QueryEmailAddressesCallback;
 
   base::CancelableTaskTracker::TaskId CreateContact(
       ContactRow ev,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateContacts(
       std::vector<contact::ContactRow> contacts,
-      const CreateContactsCallback& callback,
+      CreateContactsCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId AddEmailAddress(
       EmailAddressRow email,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateEmailAddress(
       EmailAddressRow email,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId RemoveEmailAddress(
       ContactID contact_id,
       EmailAddressID email_id,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId AddProperty(
       AddPropertyObject ev,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateProperty(
       UpdatePropertyObject ev,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId RemoveProperty(
       RemovePropertyObject ev,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllContacts(
-      const QueryContactCallback& callback,
+      QueryContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllEmailAddresses(
-      const QueryEmailAddressesCallback& callback,
+      QueryEmailAddressesCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateContact(
       ContactID contact_id,
       Contact contact,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteContact(
       ContactID contact_id,
-      const ContactCallback& callback,
+      ContactCallback callback,
       base::CancelableTaskTracker* tracker);
 
   // Returns true if this contact service is currently in a mode where

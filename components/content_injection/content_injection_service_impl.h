@@ -20,7 +20,7 @@ class ServiceImpl : public Service,
   ServiceImpl& operator=(const ServiceImpl&) = delete;
 
   // Implementing Service
-  base::Optional<int> RegisterWorldForJSInjection(
+  absl::optional<int> RegisterWorldForJSInjection(
       mojom::JavascriptWorldInfoPtr world_info) override;
   bool AddProvider(Provider* provider) override;
   void OnStaticContentChanged() override;

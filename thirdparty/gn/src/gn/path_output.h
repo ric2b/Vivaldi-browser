@@ -35,7 +35,7 @@ class PathOutput {
   };
 
   PathOutput(const SourceDir& current_dir,
-             const std::string_view& source_root,
+             std::string_view source_root,
              EscapingMode escaping);
   ~PathOutput();
 
@@ -72,13 +72,12 @@ class PathOutput {
 
   // Backend for WriteFile and WriteDir. This appends the given file or
   // directory string to the file.
-  void WritePathStr(std::ostream& out, const std::string_view& str) const;
+  void WritePathStr(std::ostream& out, std::string_view str) const;
 
  private:
   // Takes the given string and writes it out, appending to the inverse
   // current dir. This assumes leading slashes have been trimmed.
-  void WriteSourceRelativeString(std::ostream& out,
-                                 const std::string_view& str) const;
+  void WriteSourceRelativeString(std::ostream& out, std::string_view str) const;
 
   SourceDir current_dir_;
 

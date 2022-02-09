@@ -47,10 +47,9 @@ source_set("signin_impl") {
     "//components/policy/core/common:common_constants",
     "//components/prefs",
     "//components/signin/ios/browser",
-    "//components/version_info",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/browser/main:public",
-    "//ios/chrome/browser/policy",
+    "//ios/chrome/browser/policy:policy_util",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui/authentication/signin/add_account_signin",
     "//ios/chrome/browser/ui/authentication/signin/advanced_settings_signin",
@@ -70,6 +69,7 @@ source_set("unit_tests") {
   deps = [
     ":signin_impl",
     "//base",
+    "//base/test:test_support",
     "//components/pref_registry",
     "//components/sync_preferences",
     "//components/sync_preferences:test_support",
@@ -95,6 +95,7 @@ source_set("constants") {
     "signin_constants.h",
     "signin_constants.mm",
   ]
+  deps = [ "//url" ]
   frameworks = [ "Foundation.framework" ]
 }
 

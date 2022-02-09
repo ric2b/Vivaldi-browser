@@ -2,8 +2,8 @@
 
 #include "extensions/api/infobars/infobars_api.h"
 
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -29,7 +29,7 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
   if (!contents)
     return RespondNow(Error(error));
 
-  InfoBarService *service = InfoBarService::FromWebContents(contents);
+  auto* service = infobars::ContentInfoBarManager::FromWebContents(contents);
   for (size_t i = 0; i < service->infobar_count(); i++) {
     infobars::InfoBar* infobar = service->infobar_at(i);
     if (infobar->delegate()->GetIdentifier() ==
@@ -41,7 +41,7 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
       if (delegate) {
 
 
-        std::unique_ptr<base::ListValue> args(
+        std::vector<base::Value> args(
           extensions::vivaldi::infobars::OnInfobarRemoved::Create(
             tab_id, delegate->GetIdentifier()));
         ::vivaldi::BroadcastEvent(

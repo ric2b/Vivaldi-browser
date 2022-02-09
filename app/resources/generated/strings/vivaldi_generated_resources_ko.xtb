@@ -69,7 +69,6 @@
 <translation id="215753907730220065">전체화면 종료</translation>
 <translation id="2177950615300672361">시크릿 탭: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">네이티브 클라이언트 모듈: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">버튼 숨기기</translation>
 <translation id="2218515861914035131">일반 텍스트로 붙여넣기</translation>
 <translation id="2249605167705922988">예: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">보호된 컨텐츠를 식별하는 것을 허용 (컴퓨터 재시작이 필요할 수도 있음)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">사전 렌더링: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">마이크</translation>
 <translation id="3241680850019875542">압축할 확장 프로그램의 루트 디렉토리를 선택합니다. 확장 프로그램을 업데이트하려면 다시 사용할 비공개 키 파일도 선택합니다.</translation>
-<translation id="3266179261140759675">닫은 사이트에서 데이터를 주고받지 못하도록 차단</translation>
 <translation id="3280237271814976245">다른 이름으로 저장(&amp;A)...</translation>
 <translation id="3285322247471302225">새 탭(&amp;T)</translation>
 <translation id="3288047731229977326">개발자 모드로 실행 중인 확장 프로그램은 컴퓨터에 해를 줄 수 있습니다. 개발자가 아닌 경우 컴퓨터를 안전하게 사용하려면 개발자 모드로 실행 중인 확장 프로그램을 사용 중지해야 합니다.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">사이트 데이터를 읽고 변경할 수 있음</translation>
 <translation id="3560034655160545939">맞춤법 검사(&amp;S)</translation>
 <translation id="3574917942258583917">시크릿 모드를 종료하시겠습니까?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;님이 내가 소유한 그룹(&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;)과의 프린터(&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;) 공유를 요청했습니다. 동의하면 모든 그룹 회원이 해당 프린터로 인쇄할 수 있게 됩니다.</translation>
 <translation id="3587482841069643663">전체</translation>
 <translation id="3627588569887975815">시크릿 창에서 링크 열기(&amp;G)</translation>
 <translation id="3627879631695760395"><ph name="APP" /> 설치...</translation>
 <translation id="3668823961463113931">핸들러</translation>
 <translation id="3678156199662914018">확장 프로그램: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 화면 공유 요청</translation>
+<translation id="3708684582558000260">닫힌 사이트에서 데이터 전송 또는 수신을 완료하도록 허용하지 않음</translation>
 <translation id="3711931198657368127"><ph name="URL" /> 붙여넣기 및 이동(&amp;S)</translation>
 <translation id="3727187387656390258">팝업 검사</translation>
 <translation id="3744111561329211289">백그라운드 동기화</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">확장 프로그램을 만들었습니다:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">그룹 공유 수락</translation>
 <translation id="4096508467498758490">개발자 모드 확장 프로그램 사용 중지</translation>
 <translation id="4100839878934973028">컴퓨터의 다른 프로그램에서 Vivaldi 작동에 영향을 줄 수 있는 앱을 추가했습니다.</translation>
 <translation id="4109898769411476438">가져오기 전에 Firefox 창 닫기</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">세부정보 표시</translation>
 <translation id="4907306957610201395">권한 카테고리</translation>
 <translation id="4912643508233590958">유휴 상태 해제</translation>
-<translation id="4918086044614829423">수락</translation>
 <translation id="4927753642311223124">별로 볼만한 건 없습니다. 다음으로.</translation>
 <translation id="4930714375720679147">사용 설정</translation>
 <translation id="4988526792673242964">페이지</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">저장</translation>
 <translation id="5334142896108694079">스크립트 캐시</translation>
 <translation id="5355926466126177564">검색주소창에서 검색하면 표시되는 페이지가 '<ph name="EXTENSION_NAME" />' 확장 프로그램으로 인해 변경되었습니다.</translation>
-<translation id="5360150013186312835">툴바에서 보기</translation>
+<translation id="5360150013186312835">툴바에 표시</translation>
 <translation id="5362741141255528695">비공개 키 파일을 선택합니다.</translation>
 <translation id="536638840841140142">없음</translation>
 <translation id="5370819323174483825">새로고침(&amp;R)</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">사이트 데이터 삭제</translation>
 <translation id="6042308850641462728">더보기</translation>
 <translation id="6059925163896151826">USB 기기</translation>
-<translation id="6082651258230788217">툴바에 표시</translation>
 <translation id="6086846494333236931">관리자가 설치함</translation>
 <translation id="6101226222197207147">새 앱이 추가됨(<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">인터넷 연결이 제어되고 있습니다</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">브라우저 다시 시작 시뮬레이션</translation>
 <translation id="6445450263907939268">변경하지 않으려는 경우 이전 설정을 복원할 수 있습니다.</translation>
 <translation id="6447842834002726250">쿠키</translation>
-<translation id="6452181791372256707">거부</translation>
 <translation id="6498249116389603658">모든 언어(&amp;A)</translation>
 <translation id="6503077044568424649">자주 방문한 페이지</translation>
 <translation id="6508261954199872201">애플리케이션:<ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">사이트 데이터를 읽고 변경할 수 있음</translation>
 <translation id="708060913198414444">오디오 주소 복사(&amp;O)</translation>
 <translation id="7175353351958621980">불러온 경로:</translation>
-<translation id="7186088072322679094">툴바에 보관</translation>
+<translation id="7186088072322679094">툴바에 고정</translation>
 <translation id="7270858098575133036">사이트에서 시스템 전용 메시지를 사용하여 MIDI 기기에 액세스하려는 경우 확인</translation>
 <translation id="7287143125007575591">액세스가 거부되었습니다.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">설정한 새 탭 페이지가 맞습니까?</translation>
 <translation id="786073089922909430">서비스: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">최근 대상</translation>
-<translation id="7898627924844766532">툴바에 고정</translation>
 <translation id="7903925330883316394">유틸리티: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">현재 오프라인 상태</translation>
 <translation id="7947962633355574091">동영상 주소 복사(&amp;O)</translation>
@@ -452,7 +445,6 @@
 <translation id="8725066075913043281">재시도</translation>
 <translation id="8757090071857742562">데스크톱을 전송할 수 없습니다. 화면 공유 시작을 묻는 메시지에 동의했는지 확인해보세요.</translation>
 <translation id="8774934320277480003">상단 여백</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;님이 프린터(&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;) 공유를 요청했습니다.</translation>
 <translation id="8798099450830957504">기본값</translation>
 <translation id="8800004011501252845">다음 계정의 대상 표시 중</translation>
 <translation id="8808478386290700967">웹 스토어</translation>

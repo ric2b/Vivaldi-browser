@@ -56,12 +56,14 @@ std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
   history_item->id = base::NumberToString(row.id());
-  history_item->url.reset(new std::string(row.url().spec()));
-  history_item->title.reset(new std::string(base::UTF16ToUTF8(row.title())));
+  history_item->url = row.url().spec();
+  history_item->title = base::UTF16ToUTF8(row.title());
   history_item->last_visit_time.reset(
       new double(MilliSecondsFromTime(row.last_visit())));
   history_item->typed_count.reset(new int(row.typed_count()));
-  history_item->visit_count.reset(new int(row.visit_count()));
+  history_item->visit_count = int(row.visit_count());
+  history_item->transition_type =
+      vivaldi::history_private::TRANSITION_TYPE_LINK;
 
   return history_item;
 }
@@ -199,7 +201,7 @@ void HistoryPrivateEventRouter::OnURLsModified(
     urls->push_back(row.url().spec());
   }
   modified.urls.reset(urls);
-  std::unique_ptr<base::ListValue> args = OnVisitModified::Create(modified);
+  std::vector<base::Value> args = OnVisitModified::Create(modified);
 
   DispatchEvent(profile_, OnVisitModified::kEventName, std::move(args));
 }
@@ -208,7 +210,7 @@ void HistoryPrivateEventRouter::OnURLsModified(
 void HistoryPrivateEventRouter::DispatchEvent(
     Profile* profile,
     const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
+    std::vector<base::Value> event_args) {
   if (profile && EventRouter::Get(profile)) {
     EventRouter::Get(profile)->BroadcastEvent(base::WrapUnique(
         new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
@@ -300,18 +302,15 @@ HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
     history_item.id = row.id();
   } else {
     history_item.id = std::to_string(MilliSecondsFromTime(row.visit_time()));
-    history_item.visit_time.reset(
-        new double(MilliSecondsFromTime(row.visit_time())));
   }
   history_item.is_bookmarked = bookmark_model->IsBookmarked(row.url());
-  history_item.visit_time.reset(
-      new double(MilliSecondsFromTime(row.visit_time())));
-  history_item.url.reset(new std::string(row.url().spec()));
-  history_item.title.reset(new std::string(base::UTF16ToUTF8(row.title())));
+  history_item.visit_time = double(MilliSecondsFromTime(row.visit_time()));
+  history_item.url = row.url().spec();
+  history_item.title = base::UTF16ToUTF8(row.title());
   history_item.last_visit_time.reset(
       new double(MilliSecondsFromTime(row.last_visit())));
   history_item.typed_count.reset(new int(row.typed_count()));
-  history_item.visit_count.reset(new int(row.visit_count()));
+  history_item.visit_count = int(row.visit_count());
 
   return history_item;
 }
@@ -406,17 +405,18 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   visitTime.LocalExplode(&exploded);
 
   history_item->id = visit.id;
-  history_item->url.reset(new std::string(visit.url.spec()));
-  history_item->protocol.reset(new std::string(visit.url.scheme()));
-  history_item->address.reset(new std::string(visit.url.host()));
-  history_item->title.reset(new std::string(base::UTF16ToUTF8(visit.title)));
-  history_item->visit_time.reset(
-      new double(MilliSecondsFromTime(visit.visit_time)));
+  history_item->url = visit.url.spec();
+  history_item->protocol = visit.url.spec();
+  history_item->address = visit.url.host();
+  history_item->title = base::UTF16ToUTF8(visit.title);
+  history_item->visit_time = double(MilliSecondsFromTime(visit.visit_time));
   history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
-  history_item->date_key.reset(new std::string(base::StringPrintf(
-      "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month)));
-  history_item->hour.reset(new int(exploded.hour));
-  history_item->visit_count.reset(new int(visit.visit_count));
+  history_item->date_key = base::StringPrintf(
+      "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month);
+  //history_item->date_key.reset(new std::string(base::StringPrintf(
+  //    "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month)));
+  history_item->hour = int(exploded.hour);
+  history_item->visit_count = int(visit.visit_count);
 
   history_item->transition_type =
       HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(

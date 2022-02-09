@@ -211,8 +211,8 @@ void OnLoad(const base::FilePath& profile_file,
   }
 
   base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                        base::Bind(&MenuStorage::OnLoadFinished, storage,
-                                   base::Passed(&details)));
+                 base::BindRepeating(&MenuStorage::OnLoadFinished, storage,
+                                     base::Passed(&details)));
 }
 
 MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
@@ -260,8 +260,8 @@ MenuStorage::MenuStorage(content::BrowserContext* context,
   }
 
   sequenced_task_runner_ = sequenced_task_runner;
-  sequenced_task_runner_->PostTask(FROM_HERE,
-                                   base::Bind(&MakeBackup, writer_.path()));
+  sequenced_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&MakeBackup, writer_.path()));
 }
 
 MenuStorage::~MenuStorage() {
@@ -273,8 +273,8 @@ void MenuStorage::Load(std::unique_ptr<MenuLoadDetails> details) {
   DCHECK(details);
   sequenced_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&OnLoad, writer_.path(), bundled_file_,
-                 weak_factory_.GetWeakPtr(), base::Passed(&details)));
+      base::BindRepeating(&OnLoad, writer_.path(), bundled_file_,
+                          weak_factory_.GetWeakPtr(), base::Passed(&details)));
 }
 
 void MenuStorage::ScheduleSave() {
@@ -282,7 +282,7 @@ void MenuStorage::ScheduleSave() {
     case BACKUP_NONE:
       backup_state_ = BACKUP_DISPATCHED;
       sequenced_task_runner_->PostTaskAndReply(
-          FROM_HERE, base::Bind(&MakeBackup, writer_.path()),
+          FROM_HERE, base::BindOnce(&MakeBackup, writer_.path()),
           base::BindOnce(&MenuStorage::OnBackupFinished,
                          weak_factory_.GetWeakPtr()));
       return;

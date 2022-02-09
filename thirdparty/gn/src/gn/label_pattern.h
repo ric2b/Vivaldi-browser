@@ -30,7 +30,7 @@ class LabelPattern {
   LabelPattern();
   LabelPattern(Type type,
                const SourceDir& dir,
-               const std::string_view& name,
+               std::string_view name,
                const Label& toolchain_label);
   LabelPattern(const LabelPattern& other);
   ~LabelPattern();
@@ -38,7 +38,7 @@ class LabelPattern {
   // Converts the given input string to a pattern. This does special stuff
   // to treat the pattern as a label. Sets the error on failure.
   static LabelPattern GetPattern(const SourceDir& current_dir,
-                                 const std::string_view& source_root,
+                                 std::string_view source_root,
                                  const Value& value,
                                  Err* err);
 

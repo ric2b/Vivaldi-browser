@@ -6,6 +6,7 @@
 #define CHROMEOS_NETWORK_NETWORK_CONNECTION_HANDLER_IMPL_H_
 
 #include "base/component_export.h"
+#include "base/timer/timer.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_connection_handler.h"
@@ -73,15 +74,21 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConnectionHandlerImpl
     ConnectState connect_state;
     base::OnceClosure success_callback;
     network_handler::ErrorCallback error_callback;
+    std::unique_ptr<base::OneShotTimer> timer;
   };
 
   bool HasConnectingNetwork(const std::string& service_path);
 
   ConnectRequest* GetPendingRequest(const std::string& service_path);
+  bool HasPendingCellularRequest() const;
 
   void OnPrepareCellularNetworkForConnectionFailure(
       const std::string& service_path,
       const std::string& error_name);
+
+  void StartConnectTimer(const std::string& service_path,
+                         base::TimeDelta timeout);
+  void OnConnectTimeout(ConnectRequest* service_path);
 
   // Callback from Shill.Service.GetProperties. Parses |properties| to verify
   // whether or not the network appears to be configured. If configured,
@@ -90,7 +97,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConnectionHandlerImpl
   // ConnectToNetwork(), see comment for info.
   void VerifyConfiguredAndConnect(bool check_error_state,
                                   const std::string& service_path,
-                                  base::Optional<base::Value> properties);
+                                  absl::optional<base::Value> properties);
 
   // Queues a connect request until certificates have loaded.
   void QueueConnectRequest(const std::string& service_path);
@@ -117,6 +124,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConnectionHandlerImpl
   void HandleShillConnectFailure(const std::string& service_path,
                                  const std::string& error_name,
                                  const std::string& error_message);
+
+  // Sets connection request to started and calls callback if necessary.
+  void HandleNetworkConnectStarted(ConnectRequest* request);
 
   // Note: |service_path| is passed by value here, because in some cases
   // the value may be located in the map and then it can be deleted, producing
@@ -149,7 +159,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConnectionHandlerImpl
 
   // Map of pending connect requests, used to prevent repeated attempts while
   // waiting for Shill and to trigger callbacks on eventual success or failure.
-  std::map<std::string, ConnectRequest> pending_requests_;
+  std::map<std::string, std::unique_ptr<ConnectRequest>> pending_requests_;
   std::unique_ptr<ConnectRequest> queued_connect_;
 
   // Track certificate loading state.

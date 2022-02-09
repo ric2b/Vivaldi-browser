@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing/content/password_protection/password_protection_request_content.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/thread_pool.h"
 #include "components/safe_browsing/content/password_protection/password_protection_navigation_throttle.h"
@@ -53,6 +54,24 @@ std::unique_ptr<VisualFeatures> ExtractVisualFeatures(
   return features;
 }
 #endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+int GetMinWidthForVisualFeatures() {
+  if (base::FeatureList::IsEnabled(kVisualFeaturesSizes)) {
+    return base::GetFieldTrialParamByFeatureAsInt(
+        kVisualFeaturesSizes, "min_width", kMinWidthForVisualFeatures);
+  }
+
+  return kMinWidthForVisualFeatures;
+}
+
+int GetMinHeightForVisualFeatures() {
+  if (base::FeatureList::IsEnabled(kVisualFeaturesSizes)) {
+    return base::GetFieldTrialParamByFeatureAsInt(
+        kVisualFeaturesSizes, "min_height", kMinHeightForVisualFeatures);
+  }
+
+  return kMinHeightForVisualFeatures;
+}
 
 }  // namespace
 
@@ -117,9 +136,10 @@ void PasswordProtectionRequestContent::MaybeLogPasswordReuseLookupEvent(
                                             password_type(), response);
 }
 
-void PasswordProtectionRequestContent::MaybeAddPingToWebUI() {
-  web_ui_token_ =
-      WebUIInfoSingleton::GetInstance()->AddToPGPings(*request_proto_);
+void PasswordProtectionRequestContent::MaybeAddPingToWebUI(
+    const std::string& oauth_token) {
+  web_ui_token_ = WebUIInfoSingleton::GetInstance()->AddToPGPings(
+      *request_proto_, oauth_token);
 }
 
 void PasswordProtectionRequestContent::MaybeAddResponseToWebUI(
@@ -235,10 +255,23 @@ void PasswordProtectionRequestContent::MaybeCollectVisualFeatures() {
       !password_protection_service()->IsIncognito()) {
     content::RenderWidgetHostView* view =
         web_contents_ ? web_contents_->GetRenderWidgetHostView() : nullptr;
+    base::UmaHistogramBoolean(
+        "PasswordProtection.AndroidVisualFeaturesViewNull", (view == nullptr));
+    if (view) {
+      base::UmaHistogramBoolean(
+          "PasswordProtection.AndroidVisualFeaturesNativeViewNull",
+          (view->GetNativeView() == nullptr));
+    }
     if (view && view->GetNativeView()) {
       gfx::SizeF content_area_size = view->GetNativeView()->viewport_size();
       request_proto_->set_content_area_height(content_area_size.height());
       request_proto_->set_content_area_width(content_area_size.width());
+      base::UmaHistogramCounts10000(
+          "PasswordProtection.AndroidVisualFeaturesNativeViewWidth",
+          content_area_size.width());
+      base::UmaHistogramCounts10000(
+          "PasswordProtection.AndroidVisualFeaturesNativeViewHeight",
+          content_area_size.height());
     }
   }
 #endif
@@ -247,8 +280,8 @@ void PasswordProtectionRequestContent::MaybeCollectVisualFeatures() {
       trigger_type() == LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE &&
       password_protection_service()->IsExtendedReporting() &&
       !password_protection_service()->IsIncognito() &&
-      request_proto_->content_area_width() >= kMinWidthForVisualFeatures &&
-      request_proto_->content_area_height() >= kMinHeightForVisualFeatures;
+      request_proto_->content_area_width() >= GetMinWidthForVisualFeatures() &&
+      request_proto_->content_area_height() >= GetMinHeightForVisualFeatures();
 #if !defined(OS_ANDROID)
   can_collect_visual_features &=
       zoom::ZoomController::GetZoomLevelForWebContents(web_contents_) <=

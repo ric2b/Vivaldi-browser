@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Kilépés a teljes képernyős módból</translation>
 <translation id="2177950615300672361">Inkognitólap: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Natív kliensmodul: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Gomb elrejtése</translation>
 <translation id="2218515861914035131">Beillesztés egyszerű szövegként</translation>
 <translation id="2249605167705922988">pl. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Engedélyezi a védett tartalom azonosítóit (a számítógép újraindítására lehet szükség)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Előmegjelenítés: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Válassza ki a bővítmény gyökérkönyvtárát. A bővítmény frissítéséhez meg kell adni az ismét használandó privátkulcs-fájlt is.</translation>
-<translation id="3266179261140759675">A bezárt webhelyek nem küldhetnek és fogadhatnak adatokat</translation>
 <translation id="3280237271814976245">Mentés &amp;másként...</translation>
 <translation id="3285322247471302225">Új &amp;lap</translation>
 <translation id="3288047731229977326">A fejlesztői módban futó bővítmények kárt okozhatnak számítógépén. Ha Ön nem fejlesztő, akkor a biztonság kedvéért kapcsolja ki a fejlesztői módban futó bővítményeket.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Olvashatod és módosíthatod a webhelyadatokat</translation>
 <translation id="3560034655160545939">Helyesírá&amp;s-ellenőrzés</translation>
 <translation id="3574917942258583917">Mindenképp bezárod az inkognitómódot?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; szeretné megosztani a(z) &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; nyomtatót a te &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt; nevű csoportoddal. Ha elfogadod, a csoport minden tagja tud majd nyomtatni a nyomtatóval.</translation>
 <translation id="3587482841069643663">Mind</translation>
 <translation id="3627588569887975815">Hivatkozás megnyitása inko&amp;gnitó ablakban</translation>
 <translation id="3627879631695760395"><ph name="APP" /> telepítése…</translation>
 <translation id="3668823961463113931">Kezelők</translation>
 <translation id="3678156199662914018">Bővítmény: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Képernyő-megosztási kérés</translation>
+<translation id="3708684582558000260">A bezárt webhelyek nem fejezhetik be az adatküldést és -fogadást</translation>
 <translation id="3711931198657368127"><ph name="URL" /> be&amp;illesztése és felkeresése</translation>
 <translation id="3727187387656390258">Felugró ablak vizsgálata</translation>
 <translation id="3744111561329211289">Szinkronizálás a háttérben</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Bővítmény létrehozva:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Elfogadás a csoportra vonatkozóan</translation>
 <translation id="4096508467498758490">A fejlesztői módban futó bővítmények kikapcsolása</translation>
 <translation id="4100839878934973028">A számítógépen lévő egyik program olyan alkalmazást adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
 <translation id="4109898769411476438">Importálás előtt zárd be a böngészőt</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Részletek megjelenítése</translation>
 <translation id="4907306957610201395">Engedélykategória</translation>
 <translation id="4912643508233590958">Tétlen aktiválások</translation>
-<translation id="4918086044614829423">Elfogadás</translation>
 <translation id="4927753642311223124">Nincs itt semmi látnivaló, menj tovább.</translation>
 <translation id="4930714375720679147">Bekapcsolás</translation>
 <translation id="4988526792673242964">Oldal</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Mentés</translation>
 <translation id="5334142896108694079">Szkript gyorsítótár</translation>
 <translation id="5355926466126177564">A(z) <ph name="EXTENSION_NAME" /> bővítmény módosította, hogy melyik oldal jelenjen meg a cím- és keresősávban indított kereséskor.</translation>
-<translation id="5360150013186312835">Megjelenítés az eszköztáron</translation>
+<translation id="5360150013186312835">Megjelenítés az eszköztárban</translation>
 <translation id="5362741141255528695">Válasszon ki privátkulcs-fájlt.</translation>
 <translation id="536638840841140142">Nincs</translation>
 <translation id="5370819323174483825">Új&amp;ratöltés</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Webhelyadatok törlése</translation>
 <translation id="6042308850641462728">Több</translation>
 <translation id="6059925163896151826">USB-eszközök</translation>
-<translation id="6082651258230788217">Megjelenítés az eszköztárban</translation>
 <translation id="6086846494333236931">Rendszergazda által telepítve</translation>
 <translation id="6101226222197207147">Új alkalmazás hozzáadva (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetkapcsolata felett más vette át az irányítást</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Böngésző újraindításának szimulálása</translation>
 <translation id="6445450263907939268">Ha nem szándékosan végezte el ezeket a módosításokat, visszaállíthatja korábbi beállításait.</translation>
 <translation id="6447842834002726250">Sütik</translation>
-<translation id="6452181791372256707">Elutasítás</translation>
 <translation id="6498249116389603658">&amp;Minden kiválasztott nyelv</translation>
 <translation id="6503077044568424649">Gyakori</translation>
 <translation id="6508261954199872201">Alkalmazás: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Olvashatja és módosíthatja a webhelyadatokat</translation>
 <translation id="708060913198414444">Audi&amp;ocím másolása</translation>
 <translation id="7175353351958621980">Betöltve innen:</translation>
-<translation id="7186088072322679094">Gomb megtartása az eszköztáron</translation>
+<translation id="7186088072322679094">Eszköztárban tart</translation>
 <translation id="7270858098575133036">Kérdezzen meg, amikor egy webhely exkluzív rendszerüzenetekkel szeretné elérni a MIDI-eszközöket</translation>
 <translation id="7287143125007575591">Hozzáférés megtagadva.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Erre az új lap oldalra számított?</translation>
 <translation id="786073089922909430">Szolgáltatás: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Legutóbbi célhelyek</translation>
-<translation id="7898627924844766532">Eszköztárban tart</translation>
 <translation id="7903925330883316394">Segédprogram: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Jelenleg offline</translation>
 <translation id="7947962633355574091">Vide&amp;ocím másolása</translation>
@@ -451,7 +444,6 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8725066075913043281">Újrapróbálás</translation>
 <translation id="8757090071857742562">Nem lehet átküldeni az asztal tartalmát. Ellenőrizd, hogy megerősítetted-e a képernyő megosztásának megkezdésére vonatkozó kérdést.</translation>
 <translation id="8774934320277480003">Felső margó</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; szeretné megosztani veled a(z) &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; nyomtatót.</translation>
 <translation id="8798099450830957504">Alapértelmezett</translation>
 <translation id="8800004011501252845">Célhelyek megjelenítése a következőhöz:</translation>
 <translation id="8808478386290700967">Vivaldi internetes áruház</translation>

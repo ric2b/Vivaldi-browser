@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Отправить ссылку по почте</translation>
 <translation id="1454726940098520109">Не показывать подтверждение</translation>
 <translation id="1462666970065907900">Вы действительно хотите закрыть это окно?</translation>
+<translation id="1480046233931937785">Благодарности</translation>
 <translation id="1526344461589023948">Произошла ошибка при сохранении загруженного обновления. Проверьте наличие дискового пространства и повторите попытку.</translation>
 <translation id="1657174850639146440">Монстр 9</translation>
 <translation id="1676595396635191120">Новое приватное окно</translation>
@@ -41,9 +42,10 @@
 <translation id="2989805286512600854">Открыть в новой вкладке</translation>
 <translation id="3027988479108856431">К сожалению, настройки Яндекс-браузера недоступны при работающем браузере. Для импорта этих настроек в Vivaldi, сохраните свои данные и закройте все окна Яндекс-браузера. Затем нажмите "Продолжить".</translation>
 <translation id="3084011186245865060">Пейзаж 6</translation>
+<translation id="3093931836425623631">Vivaldi создан на базе открытого проекта Chromium и другого ПО с открытым исходным кодом.</translation>
 <translation id="3127383884976966729">Зверушка 7</translation>
 <translation id="3156398087075132709">Новая закладка</translation>
-<translation id="3255747772218936245">Установка обновления</translation>
+<translation id="3255747772218936245">Установить обновление</translation>
 <translation id="3259769196742189631">Валидация на W3C</translation>
 <translation id="3302905971452834934">Монстр 1</translation>
 <translation id="3334610655141903168">(без названия)</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Пейзаж 7</translation>
 <translation id="7111492742514999492">Пейзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi создан с использованием проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> с открытым исходным кодом и другого <ph name="BEGIN_LINK_OSS" />открытого ПО<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Ошибка запуска установщика обновления. Проверьте наличие дискового пространства и памяти, повторите попытку.</translation>
 <translation id="7658239707568436148">Отмена</translation>
 <translation id="7715497554424665066">&amp;Не обновляться</translation>

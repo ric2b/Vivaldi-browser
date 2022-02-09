@@ -7,7 +7,6 @@
 
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/geometry/rect_f.h"
 

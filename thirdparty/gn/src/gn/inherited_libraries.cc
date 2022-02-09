@@ -59,7 +59,7 @@ void InheritedLibraries::Append(const Target* target, bool is_public) {
 void InheritedLibraries::AppendInherited(const InheritedLibraries& other,
                                          bool is_public) {
   // Append all items in order, mark them public only if the're already public
-  // and we're adding them publically.
+  // and we're adding them publicly.
   for (const auto& cur : other.GetOrderedAndPublicFlag())
     Append(cur.first, is_public && cur.second);
 }

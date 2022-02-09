@@ -36,7 +36,7 @@ void BundleDataTargetGenerator::DoRun() {
   }
   if (target_->action_values().outputs().list().size() != 1) {
     *err_ = Err(
-        function_call_, "Target bundle_data must have exactly one ouput.",
+        function_call_, "Target bundle_data must have exactly one output.",
         "You must specify exactly one value in the \"output\" array for the"
         "destination\ninto the generated bundle (see \"gn help bundle_data\"). "
         "If there are multiple\nsources to copy, use source expansion (see "

@@ -18,9 +18,6 @@ const char kLaunchIfEnabled[] = "launch-if-enabled";
 const char kUnregister[] = "unregister";
 
 #if !defined(OFFICIAL_BUILD)
-// The path of setup.exe to use to install a delta download.
-const char kDebugSetupExe[] = "debug-setup-exe";
-
 // Set the version that will be used for update checks and delta downloads.
 const char kDebugVersion[] = "debug-version";
 #endif

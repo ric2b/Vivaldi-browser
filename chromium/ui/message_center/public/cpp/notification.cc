@@ -76,8 +76,9 @@ Notification::Notification(NotificationType type,
       message_(message),
       icon_(icon),
       display_source_(vivaldi::IsVivaldiRunning() &&
-          display_source == base::UTF8ToUTF16(VIVALDI_APP_ID) ?
-                  base::UTF8ToUTF16("Vivaldi") : display_source),
+                              display_source == VIVALDI_APP_ID_U
+                          ? u"Vivaldi"
+                          : display_source),
       origin_url_(origin_url),
       notifier_id_(notifier_id),
       optional_fields_(optional_fields),

@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Mbyll ekranin e madh</translation>
 <translation id="2177950615300672361">Skeda private: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Moduli Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Fsheh butonin</translation>
 <translation id="2218515861914035131">Ngjit si tekst të thjeshtë</translation>
 <translation id="2249605167705922988">p.sh. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autorizoj identifikuesit e materialeve të mbrojtura (mund të kërkojë hapjen nga e para të kompjuterit)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Parainterpretimi vizual: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3241680850019875542">Përzgjidhni katalogun kryesor të shtesës që do të paketohet. Për ta përditësuar, zgjidhet edhe një çelës privat që mund ta përdorni sërish.</translation>
-<translation id="3266179261140759675">Bllokoj dërgimin dhe marrjen e të dhënave nga faqet e mbyllura të internetit</translation>
 <translation id="3280237271814976245">Regjistroj &amp;në...</translation>
 <translation id="3285322247471302225">&amp;Skedë të re</translation>
 <translation id="3288047731229977326">Shtesat që ekzekutohen në variantin e programuesit mund të rrezikojnë kompjuterin. Për sigurinë tuaj, nëse nuk jeni programues, çaktivizojini këto lloje shtesash.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Mund të lexojë dhe ndryshojë të dhënat e faqes</translation>
 <translation id="3560034655160545939">&amp;Korrektori drejtshkrimor</translation>
 <translation id="3574917942258583917">Gjithsesi, do dilni nga seanca private?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; do ta ndajë printerin &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; me një grup në pronësinë tuaj: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Nëse pranoni, printerin do ta përdorin të gjithë pjesëtarët e grupit.</translation>
 <translation id="3587482841069643663">Të gjitha</translation>
 <translation id="3627588569887975815">Hap lidhjen në dritare pri&amp;vate</translation>
 <translation id="3627879631695760395">Instaloni <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Agjentët</translation>
 <translation id="3678156199662914018">Shtesa: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Kërkesë për ndarje ekrani nga <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Nuk autorizoj faqet e mbyllura të internetit që të vazhdojnë dërgimin ose marrjen e të dhënave</translation>
 <translation id="3711931198657368127">Ngj&amp;it dhe shkoj te <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspektoj faqen automatike</translation>
 <translation id="3744111561329211289">Sinkronizimi në sfond</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Krijuat shtesën:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Pranoj për grupin</translation>
 <translation id="4096508467498758490">Çaktivizoj shtesat në variantin e programuesit</translation>
 <translation id="4100839878934973028">Një program kompjuterik instaloi një aplikacion që mund të ndryshojë funksionet e Vivaldit.</translation>
 <translation id="4109898769411476438">Mbyll shfletuesin e internetit para importit</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Tregoj detajet</translation>
 <translation id="4907306957610201395">Kategoria e autorizimit</translation>
 <translation id="4912643508233590958">Daljet nga gjendja joaktive</translation>
-<translation id="4918086044614829423">Pranoj</translation>
 <translation id="4927753642311223124">Vazhdoni, nuk ka gjë me rëndësi.</translation>
 <translation id="4930714375720679147">Aktivizoj</translation>
 <translation id="4988526792673242964">Faqet</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Pastroj të dhënat e faqeve</translation>
 <translation id="6042308850641462728">Më shumë</translation>
 <translation id="6059925163896151826">Aparatet USB</translation>
-<translation id="6082651258230788217">Shfaq në brezin e instrumenteve</translation>
 <translation id="6086846494333236931">Është instaluar nga administratori</translation>
 <translation id="6101226222197207147">U shtua një aplikacion i ri (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Linja e internetit po kontrollohet</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simuloj rinisjen e shfletuesit të internetit</translation>
 <translation id="6445450263907939268">Ktheni vlerat e mëparshme nëse nuk i miratoni ndryshimet.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Refuzoj</translation>
 <translation id="6498249116389603658">Të &amp;gjitha gjuhët tuaja</translation>
 <translation id="6503077044568424649">Më të vizituara</translation>
 <translation id="6508261954199872201">Aplikacioni: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Mund të lexojë dhe ndryshojë të dhënat e faqes</translation>
 <translation id="708060913198414444">K&amp;opjoj adresën e zërit</translation>
 <translation id="7175353351958621980">Është hapur nga:</translation>
-<translation id="7186088072322679094">Ruaj në brezin e instrumenteve</translation>
+<translation id="7186088072322679094">Mbaj në brezin e instrumenteve</translation>
 <translation id="7270858098575133036">Pyes kur faqja do të përdorë mesazhe ekskluzive të sistemit operativ për aksesin në aparatet MIDI</translation>
 <translation id="7287143125007575591">U refuzua aksesi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">A është kjo skeda e re që prisnit?</translation>
 <translation id="786073089922909430">Shërbimi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Destinacionet e fundit</translation>
-<translation id="7898627924844766532">Ruaj në brezin e instrumenteve</translation>
 <translation id="7903925330883316394">Programi utilitar: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Është shkëputur</translation>
 <translation id="7947962633355574091">K&amp;opjoj adresën e figurës</translation>
@@ -452,7 +445,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8725066075913043281">Provoj prapë</translation>
 <translation id="8757090071857742562">Nuk transmetohet tryeza e punës. Kontrolloni a keni dhënë konfirmim për ndarjen e ekranit.</translation>
 <translation id="8774934320277480003">Ana e sipërme</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; do ta ndajë me ju printerin &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8800004011501252845">Tregon destinacionet për</translation>
 <translation id="8808478386290700967">Dyqani i dedikuar</translation>
@@ -474,7 +466,7 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="91568222606626347">Krijoni kombinimin...</translation>
 <translation id="916607977885256133">Figurë-më-figurë</translation>
 <translation id="9170848237812810038">&amp;Kthej</translation>
-<translation id="9215293857209265904">U shtua "<ph name="EXTENSION_NAME" />"</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" u shtua</translation>
 <translation id="9218430445555521422">Caktoj si standard</translation>
 <translation id="9219103736887031265">Imazhet</translation>
 <translation id="93766956588638423">Riparoj shtesën</translation>

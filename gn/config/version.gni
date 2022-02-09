@@ -35,7 +35,7 @@ chrome_dylib_version =
                   "-t",
                   "@BUILD@.@PATCH_HI@.@PATCH_LO@",
                   "-e",
-                  "PATCH_HI=int($GLOBAL_BUILDNUM)/256",
+                  "PATCH_HI=int($GLOBAL_BUILDNUM/256)",
                   "-e",
                   "PATCH_LO=int($GLOBAL_BUILDNUM)%256",
                 ],

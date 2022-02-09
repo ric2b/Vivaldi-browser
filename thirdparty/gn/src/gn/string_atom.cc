@@ -9,7 +9,6 @@
 #include <mutex>
 #include <set>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 #include "gn/hash_table_base.h"
@@ -163,7 +162,7 @@ class StringAtomSet {
    public:
     // Init the n-th string in the slab with |str|.
     // Return its location as well.
-    std::string* init(size_t index, const std::string_view& str) {
+    std::string* init(size_t index, std::string_view str) {
       std::string* result = &items_[index].str;
       new (result) std::string(str);
       return result;

@@ -54,7 +54,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ActivityUtils;
+import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.browser.Features;
@@ -69,7 +69,7 @@ import java.io.IOException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 // clang-format off
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        "enable-features=" + ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID + "<Study",
+        "enable-features=" + ChromeFeatureList.COMMERCE_PRICE_TRACKING + "<Study",
         "force-fieldtrials=Study/Group"})
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
 @Features.DisableFeatures({ChromeFeatureList.START_SURFACE_ANDROID})
@@ -107,7 +107,7 @@ public class PriceTrackingDialogTest {
     @After
     public void tearDown() {
         PriceTrackingUtilities.setIsSignedInAndSyncEnabledForTesting(null);
-        ActivityUtils.clearActivityOrientation(mActivityTestRule.getActivity());
+        ActivityTestUtils.clearActivityOrientation(mActivityTestRule.getActivity());
     }
 
     @Test
@@ -227,7 +227,7 @@ public class PriceTrackingDialogTest {
     public void testRenderPriceTrackingDialog_Landscape() throws IOException {
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
 
-        ActivityUtils.rotateActivityToOrientation(cta, Configuration.ORIENTATION_LANDSCAPE);
+        ActivityTestUtils.rotateActivityToOrientation(cta, Configuration.ORIENTATION_LANDSCAPE);
         MenuUtils.invokeCustomMenuActionSync(
                 InstrumentationRegistry.getInstrumentation(), cta, R.id.track_prices_row_menu_id);
         verifyDialogShowing(cta, true);

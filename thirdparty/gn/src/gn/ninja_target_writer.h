@@ -45,10 +45,10 @@ class NinjaTargetWriter {
   // order-only dependencies for the current target.
   // If num_stamp_uses is small, this might return all input dependencies
   // directly, without writing a stamp file.
-  // If there are no implicit dependencies and no extra target dependencies
+  // If there are no implicit dependencies and no additional target dependencies
   // are passed in, this returns an empty vector.
   std::vector<OutputFile> WriteInputDepsStampAndGetDep(
-      const std::vector<const Target*>& extra_hard_deps,
+      const std::vector<const Target*>& additional_hard_deps,
       size_t num_stamp_uses) const;
 
   // Writes to the output file a final stamp rule for the target that stamps

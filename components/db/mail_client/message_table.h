@@ -39,6 +39,7 @@ class MessageTable {
   bool MatchMessage(const SearchListID& search_list_id, std::u16string search);
   bool AddMessageBody(const SearchListID& sld, std::u16string body);
   bool DeleteMessages(std::vector<SearchListID> search_list_ids);
+  bool RebuildDatabase();
 
  protected:
   virtual sql::Database& GetDB() = 0;

@@ -6,12 +6,12 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 
 #include "app/vivaldi_apptools.h"
-#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
+#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
 #include "chrome/test/base/testing_browser_process.h"
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/adverse_ad_filter_test_harness.h"
-#include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
+#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 
 #include "content/public/common/content_client.h"
@@ -33,9 +33,9 @@ class VivaldiSubresourceFilterTest
     vivaldi::RegisterLocalState(local_state_.registry());
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
     AdverseAdFilterTestHarness::SetUp();
-    VivaldiSubresourceFilterClient::
-        CreateThrottleManagerWithClientForWebContents(web_contents());
 
+    VivaldiSubresourceFilterAdblockingThrottleManager::
+        CreateSubresourceFilterThrottleManagerForWebContents(web_contents());
     browser_content_client_.reset(new VivaldiContentBrowserClient);
     content::SetBrowserClientForTesting(browser_content_client_.get());
   }
@@ -50,11 +50,14 @@ class VivaldiSubresourceFilterTest
     ASSERT_TRUE(url.SchemeIsHTTPOrHTTPS());
     adblock_ = VivaldiAdverseAdFilterListFactory::GetForProfile(
         Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+
+    VivaldiSubresourceFilterAdblockingThrottleManager::FromWebContents(
+        web_contents())
+        ->set_adblock_list(adblock_);
+
+
     adblock_->ClearSiteList();
     adblock_->AddBlockItem(url.host());
-  }
-  VivaldiSubresourceFilterClient* GetClient() {
-    return VivaldiSubresourceFilterClient::FromWebContents(web_contents());
   }
 
  private:

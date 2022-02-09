@@ -14,11 +14,11 @@
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "chromeos/system/scheduler_configuration_manager_base.h"
 #include "components/arc/session/arc_client_adapter.h"
 #include "components/arc/session/arc_session.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 class DefaultScaleFactorRetriever;
@@ -213,6 +213,7 @@ class ArcSessionImpl
                    const std::string& serial_number) override;
   void SetDemoModeDelegate(
       ArcClientAdapter::DemoModeDelegate* delegate) override;
+  void TrimVmMemory(TrimVmMemoryCallback callback) override;
 
   // chromeos::SchedulerConfigurationManagerBase::Observer overrides:
   void OnConfigurationSet(bool success, size_t num_cores_disabled) override;
@@ -254,7 +255,7 @@ class ArcSessionImpl
   void StopArcInstance(bool on_shutdown, bool should_backup_log);
 
   // ArcClientAdapter::Observer:
-  void ArcInstanceStopped() override;
+  void ArcInstanceStopped(bool is_system_shutdown) override;
 
   // Completes the termination procedure. Note that calling this may end up with
   // deleting |this| because the function calls observers' OnSessionStopped().

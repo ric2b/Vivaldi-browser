@@ -267,7 +267,7 @@ bool FilePath::AppendRelativePath(const FilePath& child, FilePath* path) const {
 
 #if defined(FILE_PATH_USES_DRIVE_LETTERS)
   // Windows can access case sensitive filesystems, so component
-  // comparisions must be case sensitive, but drive letters are
+  // comparisons must be case sensitive, but drive letters are
   // never case sensitive.
   if ((FindDriveLetter(*parent_comp) != StringType::npos) &&
       (FindDriveLetter(*child_comp) != StringType::npos)) {

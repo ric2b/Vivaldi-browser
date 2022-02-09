@@ -269,9 +269,11 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   // Unretained() is safe, because ATCodecHelper is required to invoke the
   // callbacks synchronously.
   if (!codec_helper_->Initialize(
-          config, base::Bind(&ATAudioDecoder::InitializeConverter,
-                             base::Unretained(this)),
-          base::Bind(&ATAudioDecoder::ConvertAudio, base::Unretained(this)))) {
+          config,
+          base::BindRepeating(&ATAudioDecoder::InitializeConverter,
+                              base::Unretained(this)),
+          base::BindRepeating(&ATAudioDecoder::ConvertAudio,
+                              base::Unretained(this)))) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": Initialize helper failed for codec : " << GetCodecName(config.codec());
     task_runner_->PostTask(
@@ -494,7 +496,8 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
 
     // ProcessBuffers() computes and sets the timestamp on |output|.
     if (discard_helper_->ProcessBuffers(*dequeued_input, output.get()))
-      task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
+      task_runner_->PostTask(FROM_HERE,
+                             base::BindRepeating(output_cb_, output));
   }
 
   return true;

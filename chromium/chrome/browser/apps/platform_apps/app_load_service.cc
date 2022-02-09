@@ -9,6 +9,7 @@
 #include "chrome/browser/apps/platform_apps/app_load_service_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
+#include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -149,8 +150,8 @@ void AppLoadService::OnExtensionUnloaded(
       const int kRestartAppDelaySec = 4; // wait until app unloading done
       base::PostDelayedTask(
           FROM_HERE, {content::BrowserThread::UI},
-          base::Bind(&AppLoadService::RestartApplication,
-                     base::Unretained(this), extension->id()),
+          base::BindRepeating(&AppLoadService::RestartApplication,
+                              base::Unretained(this), extension->id()),
           base::TimeDelta::FromSeconds(kRestartAppDelaySec));
 
       return;

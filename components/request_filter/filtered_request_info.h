@@ -21,7 +21,7 @@ struct FilteredRequestInfo {
       const network::ResourceRequest& request,
       content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
       bool is_async,
-      base::Optional<int64_t> navigation_id);
+      absl::optional<int64_t> navigation_id);
 
   ~FilteredRequestInfo();
 
@@ -50,7 +50,7 @@ struct FilteredRequestInfo {
   const bool is_async;
 
   // Valid if this request corresponds to a navigation.
-  const base::Optional<int64_t> navigation_id;
+  const absl::optional<int64_t> navigation_id;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FilteredRequestInfo);

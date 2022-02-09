@@ -7,8 +7,8 @@
 
 #include "platform_media/common/platform_media_pipeline_types.h"
 
-#include "chromium/base/memory/read_only_shared_memory_region.h"
 #include "chromium/base/callback.h"
+#include "chromium/base/memory/read_only_shared_memory_region.h"
 
 #include <memory>
 
@@ -29,9 +29,9 @@ class MEDIA_EXPORT IPCDecodingBuffer {
 
   explicit operator bool() const { return !!impl_; }
 
-  void Init(PlatformMediaDataType type);
+  void Init(PlatformStreamType stream_type);
 
-  PlatformMediaDataType type() const { return impl_->type; }
+  PlatformStreamType stream_type() const { return impl_->stream_type; }
 
   void set_reply_cb(const ReplyCB& reply_cb) { impl_->reply_cb = reply_cb; }
 
@@ -72,10 +72,10 @@ class MEDIA_EXPORT IPCDecodingBuffer {
  private:
   // To make the move cheap the class stores all its fields in unique_ptr.
   struct Impl {
-    Impl(PlatformMediaDataType type);
+    Impl(PlatformStreamType stream_type);
     ~Impl();
     ReplyCB reply_cb;
-    const PlatformMediaDataType type;
+    const PlatformStreamType stream_type;
     MediaDataStatus status = MediaDataStatus::kOk;
     int data_size = 0;
     base::TimeDelta timestamp;

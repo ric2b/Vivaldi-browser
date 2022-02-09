@@ -70,7 +70,7 @@ class VivaldiPrefsApiNotification : public KeyedService {
   Profile* profile_;
   PrefChangeRegistrar prefs_registrar_;
   PrefChangeRegistrar local_prefs_registrar_;
-  ::vivaldi::PrefsProperties prefs_properties_;
+  ::vivaldi::PrefPropertiesMap pref_properties_map_;
 
   std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
   base::WeakPtrFactory<VivaldiPrefsApiNotification> weak_ptr_factory_;

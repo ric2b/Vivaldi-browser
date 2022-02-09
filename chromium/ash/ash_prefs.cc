@@ -4,6 +4,7 @@
 
 #include "ash/public/cpp/ash_prefs.h"
 
+#include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller_impl.h"
 #include "ash/ambient/ambient_controller.h"
@@ -37,6 +38,7 @@
 #include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
 #include "ash/system/power/power_prefs.h"
 #include "ash/system/session/logout_button_tray.h"
+#include "ash/system/session/logout_confirmation_controller.h"
 #include "ash/system/unified/top_shortcuts_view.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
@@ -44,6 +46,7 @@
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "components/live_caption/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 
 namespace ash {
@@ -52,6 +55,7 @@ namespace {
 
 // Registers prefs whose default values are same in user and signin prefs.
 void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
+  AcceleratorControllerImpl::RegisterProfilePrefs(registry);
   AccessibilityControllerImpl::RegisterProfilePrefs(registry);
   AppListControllerImpl::RegisterProfilePrefs(registry);
   AssistantControllerImpl::RegisterProfilePrefs(registry);
@@ -70,6 +74,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   holding_space_prefs::RegisterProfilePrefs(registry);
   LoginScreenController::RegisterProfilePrefs(registry, for_test);
   LogoutButtonTray::RegisterProfilePrefs(registry);
+  LogoutConfirmationController::RegisterProfilePrefs(registry);
   KeyboardControllerImpl::RegisterProfilePrefs(registry);
   MediaControllerImpl::RegisterProfilePrefs(registry);
   MessageCenterController::RegisterProfilePrefs(registry);
@@ -96,8 +101,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
         chromeos::prefs::kSuggestedContentEnabled, true,
         user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
     registry->RegisterBooleanPref(
-        prefs::kLiveCaptionEnabled, false,
-        user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+        ::prefs::kLiveCaptionEnabled, false,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   }
 }
 

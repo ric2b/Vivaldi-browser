@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Link per Mail senden</translation>
 <translation id="1454726940098520109">Nicht mehr nachfragen</translation>
 <translation id="1462666970065907900">Wollen Sie dieses Fenster wirklich schließen?</translation>
+<translation id="1480046233931937785">Credits</translation>
 <translation id="1526344461589023948">Beim Versuch, ein heruntergeladenes Update zu speichern, ist ein Fehler aufgetreten. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Neues privates Fenster</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">In neuem Tab öffnen</translation>
 <translation id="3027988479108856431">Leider stehen Ihre Yandex Einstellungen nicht zur Verfügung solange der Browser noch läuft. Um die Einstellungen nach Vivaldi zu importieren, speichern Sie Ihre Dokumente, beenden Sie alle Yandex Fenster und klicken dann auf Fortsetzen.</translation>
 <translation id="3084011186245865060">Landschaft 6</translation>
+<translation id="3093931836425623631">Vivaldi wird durch das Open-Source-Projekt Chromium und andere Open-Source-Software ermöglicht.</translation>
 <translation id="3127383884976966729">Tier 7</translation>
 <translation id="3156398087075132709">Neues Lesezeichen</translation>
 <translation id="3255747772218936245">Jetzt installieren</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Landschaft 7</translation>
 <translation id="7111492742514999492">Landschaft 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi wird durch das <ph name="BEGIN_LINK_CHROMIUM" />Chromium Open Source Projekt<ph name="END_LINK_CHROMIUM" /> und andere <ph name="BEGIN_LINK_OSS" />Open Source Software<ph name="END_LINK_OSS" /> ermöglicht.</translation>
 <translation id="7581266044164103589">Das Update-Installationsprogramm konnte nicht gestartet werden. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="7658239707568436148">Abbrechen</translation>
 <translation id="7715497554424665066">Update &amp;ignorieren</translation>

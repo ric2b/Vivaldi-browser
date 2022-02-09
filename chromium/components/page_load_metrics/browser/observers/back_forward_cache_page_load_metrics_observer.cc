@@ -72,6 +72,16 @@ void BackForwardCachePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
   in_back_forward_cache_ = false;
   back_forward_cache_navigation_ids_.push_back(
       navigation_handle->GetNavigationId());
+
+  // HistoryNavigation is a singular event, and we share the same instance as
+  // long as we use the same source ID.
+  ukm::builders::HistoryNavigation builder(
+      GetUkmSourceIdForBackForwardCacheRestore(
+          back_forward_cache_navigation_ids_.size() - 1));
+  bool amp_flag = GetDelegate().GetMainFrameMetadata().behavior_flags &
+                  blink::kLoadingBehaviorAmpDocumentLoaded;
+  builder.SetBackForwardCache_IsAmpPage(amp_flag);
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 void BackForwardCachePageLoadMetricsObserver::
@@ -251,23 +261,12 @@ void BackForwardCachePageLoadMetricsObserver::
                 normalized_cls_data.sliding_windows_duration1000ms_max_cls))
         .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SlidingWindow_Duration300ms(
             page_load_metrics::LayoutShiftUkmValue(
-                normalized_cls_data.sliding_windows_duration300ms_max_cls))
-        .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SessionWindowByInputs_Gap1000ms_Max5000ms(
-            page_load_metrics::LayoutShiftUkmValue(
-                normalized_cls_data
-                    .session_windows_by_inputs_gap1000ms_max5000ms_max_cls));
+                normalized_cls_data.sliding_windows_duration300ms_max_cls));
     base::UmaHistogramCounts100(
         "PageLoad.LayoutInstability.MaxCumulativeShiftScore."
         "AfterBackForwardCacheRestore.SessionWindow.Gap1000ms.Max5000ms",
         page_load_metrics::LayoutShiftUmaValue(
             normalized_cls_data.session_windows_gap1000ms_max5000ms_max_cls));
-    base::UmaHistogramCounts100(
-        "PageLoad.LayoutInstability.MaxCumulativeShiftScore."
-        "AfterBackForwardCacheRestore.SessionWindowByInputs.Gap1000ms."
-        "Max5000ms",
-        page_load_metrics::LayoutShiftUmaValue(
-            normalized_cls_data
-                .session_windows_by_inputs_gap1000ms_max5000ms_max_cls));
   }
 
   builder.Record(ukm::UkmRecorder::Get());

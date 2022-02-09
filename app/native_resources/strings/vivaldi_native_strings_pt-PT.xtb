@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Enviar ligação por correio eletrónico</translation>
 <translation id="1454726940098520109">Não mostrar confirmação novamente</translation>
 <translation id="1462666970065907900">Quer mesmo fechar esta janela?</translation>
+<translation id="1480046233931937785">Créditos</translation>
 <translation id="1526344461589023948">Ocorreu um erro ao tentar gravar uma atualização transferida. Confirme que o computador tem espaço suficiente em disco e tente novamente mais tarde.</translation>
 <translation id="1657174850639146440">Monstro 9</translation>
 <translation id="1676595396635191120">Nova janela privada</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Abrir num novo separador</translation>
 <translation id="3027988479108856431">Infelizmente, as suas definições do Yandex não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Yandex. Depois, clique em Continuar.</translation>
 <translation id="3084011186245865060">Paisagem 6</translation>
+<translation id="3093931836425623631">O Vivaldi existe graças ao projeto de código aberto Chromium e a outro software de código aberto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Novo favorito</translation>
 <translation id="3255747772218936245">Instalar atualização</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Paisagem 7</translation>
 <translation id="7111492742514999492">Paisagem 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">O Vivaldi existe graças ao projeto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e outro <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Falhou a execução do instalador de atualizações. Confirme que o computador tem memória ou espaço em disco suficiente e tente novamente mais tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7715497554424665066">&amp;Ignorar atualização</translation>

@@ -35,7 +35,7 @@ class CompileCommandsWriter {
       const std::set<std::string>& target_filters_set);
 
  private:
-  // This fuction visits the deps graph of a target in a DFS fashion.
+  // This function visits the deps graph of a target in a DFS fashion.
   static void VisitDeps(const Target* target, std::set<const Target*>* visited);
 };
 

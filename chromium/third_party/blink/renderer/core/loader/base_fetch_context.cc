@@ -17,8 +17,10 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/loader/frame_client_hints_preferences_context.h"
 #include "third_party/blink/renderer/core/loader/subresource_filter.h"
+#include "third_party/blink/renderer/core/loader/subresource_redirect_util.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
@@ -51,14 +53,14 @@ const AtomicString SerializeHeaderString(std::string str) {
 
 namespace blink {
 
-base::Optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
+absl::optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
     ResourceType type,
     const ResourceRequest& resource_request,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
-  base::Optional<ResourceRequestBlockedReason> blocked_reason =
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+  absl::optional<ResourceRequestBlockedReason> blocked_reason =
       CanRequestInternal(type, resource_request, url, options,
                          reporting_disposition, redirect_info);
   if (blocked_reason &&
@@ -69,16 +71,16 @@ base::Optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
   return blocked_reason;
 }
 
-base::Optional<ResourceRequestBlockedReason>
+absl::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CanRequestBasedOnSubresourceFilterOnly(
     ResourceType type,
     const ResourceRequest& resource_request,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
   auto* subresource_filter = GetSubresourceFilter();
-  if (subresource_filter && type != ResourceType::kImportResource &&
+  if (subresource_filter &&
       !subresource_filter->AllowLoad(url, resource_request.GetRequestContext(),
                                      reporting_disposition)) {
     if (reporting_disposition == ReportingDisposition::kReport) {
@@ -89,12 +91,12 @@ BaseFetchContext::CanRequestBasedOnSubresourceFilterOnly(
     return ResourceRequestBlockedReason::kSubresourceFilter;
   }
 
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 bool BaseFetchContext::CalculateIfAdSubresource(
     const ResourceRequestHead& request,
-    const base::Optional<KURL>& alias_url,
+    const absl::optional<KURL>& alias_url,
     ResourceType type,
     const FetchInitiatorInfo& initiator_info) {
   // A derived class should override this if they have more signals than just
@@ -108,8 +110,9 @@ bool BaseFetchContext::CalculateIfAdSubresource(
 
 bool BaseFetchContext::SendConversionRequestInsteadOfRedirecting(
     const KURL& url,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
-    ReportingDisposition reporting_disposition) const {
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info,
+    ReportingDisposition reporting_disposition,
+    const String& devtools_request_id) const {
   return false;
 }
 
@@ -117,10 +120,11 @@ void BaseFetchContext::AddClientHintsIfNecessary(
     const ClientHintsPreferences& hints_preferences,
     const url::Origin& resource_origin,
     bool is_1p_origin,
-    base::Optional<UserAgentMetadata> ua,
+    absl::optional<UserAgentMetadata> ua,
     const PermissionsPolicy* policy,
-    const base::Optional<ClientHintImageInfo>& image_info,
-    const base::Optional<WTF::AtomicString>& lang,
+    const absl::optional<ClientHintImageInfo>& image_info,
+    const absl::optional<WTF::AtomicString>& lang,
+    const absl::optional<WTF::AtomicString>& prefers_color_scheme,
     ResourceRequest& request) {
   // If the feature is enabled, then client hints are allowed only on secure
   // URLs.
@@ -224,7 +228,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   if (ShouldSendClientHint(
           ClientHintsMode::kStandard, policy, resource_origin, is_1p_origin,
           network::mojom::blink::WebClientHintsType::kRtt, hints_preferences)) {
-    base::Optional<base::TimeDelta> http_rtt =
+    absl::optional<base::TimeDelta> http_rtt =
         GetNetworkStateNotifier().GetWebHoldbackHttpRtt();
     if (!http_rtt) {
       http_rtt = GetNetworkStateNotifier().HttpRtt();
@@ -242,7 +246,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
                            is_1p_origin,
                            network::mojom::blink::WebClientHintsType::kDownlink,
                            hints_preferences)) {
-    base::Optional<double> throughput_mbps =
+    absl::optional<double> throughput_mbps =
         GetNetworkStateNotifier().GetWebHoldbackDownlinkThroughputMbps();
     if (!throughput_mbps) {
       throughput_mbps = GetNetworkStateNotifier().DownlinkThroughputMbps();
@@ -259,7 +263,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   if (ShouldSendClientHint(
           ClientHintsMode::kStandard, policy, resource_origin, is_1p_origin,
           network::mojom::blink::WebClientHintsType::kEct, hints_preferences)) {
-    base::Optional<WebEffectiveConnectionType> holdback_ect =
+    absl::optional<WebEffectiveConnectionType> holdback_ect =
         GetNetworkStateNotifier().GetWebHoldbackEffectiveType();
     if (!holdback_ect)
       holdback_ect = GetNetworkStateNotifier().EffectiveType();
@@ -334,6 +338,17 @@ void BaseFetchContext::AddClientHintsIfNecessary(
           SerializeHeaderString(ua->full_version));
     }
   }
+
+  if (ShouldSendClientHint(
+          ClientHintsMode::kStandard, policy, resource_origin, is_1p_origin,
+          network::mojom::blink::WebClientHintsType::kPrefersColorScheme,
+          hints_preferences) &&
+      prefers_color_scheme) {
+    request.SetHttpHeaderField(
+        blink::kClientHintsHeaderMapping[static_cast<size_t>(
+            network::mojom::blink::WebClientHintsType::kPrefersColorScheme)],
+        prefers_color_scheme.value());
+  }
 }
 
 void BaseFetchContext::PrintAccessDeniedMessage(const KURL& url) const {
@@ -358,7 +373,7 @@ void BaseFetchContext::PrintAccessDeniedMessage(const KURL& url) const {
       mojom::ConsoleMessageLevel::kError, message));
 }
 
-base::Optional<ResourceRequestBlockedReason>
+absl::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckCSPForRequest(
     mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
@@ -373,7 +388,7 @@ BaseFetchContext::CheckCSPForRequest(
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
 }
 
-base::Optional<ResourceRequestBlockedReason>
+absl::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckCSPForRequestInternal(
     mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
@@ -385,7 +400,12 @@ BaseFetchContext::CheckCSPForRequestInternal(
     ContentSecurityPolicy::CheckHeaderType check_header_type) const {
   if (options.content_security_policy_option ==
       network::mojom::CSPDisposition::DO_NOT_CHECK) {
-    return base::nullopt;
+    return absl::nullopt;
+  }
+
+  if (ShouldDisableCSPCheckForSubresourceRedirectOrigin(request_context,
+                                                        redirect_status, url)) {
+    return absl::nullopt;
   }
 
   ContentSecurityPolicy* csp =
@@ -398,17 +418,17 @@ BaseFetchContext::CheckCSPForRequestInternal(
                          reporting_disposition, check_header_type)) {
     return ResourceRequestBlockedReason::kCSP;
   }
-  return base::nullopt;
+  return absl::nullopt;
 }
 
-base::Optional<ResourceRequestBlockedReason>
+absl::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CanRequestInternal(
     ResourceType type,
     const ResourceRequest& resource_request,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
   if (GetResourceFetcherProperties().IsDetached()) {
     if (!resource_request.GetKeepalive() || !redirect_info) {
       return ResourceRequestBlockedReason::kOther;
@@ -455,7 +475,7 @@ BaseFetchContext::CanRequestInternal(
   // restricted to data urls.
   if (options.initiator_info.name == fetch_initiator_type_names::kUacss) {
     if (type == ResourceType::kImage && url.ProtocolIsData()) {
-      return base::nullopt;
+      return absl::nullopt;
     }
     return ResourceRequestBlockedReason::kOther;
   }
@@ -481,7 +501,7 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kCSP;
   }
 
-  if (type == ResourceType::kScript || type == ResourceType::kImportResource) {
+  if (type == ResourceType::kScript) {
     if (!AllowScriptFromSource(url)) {
       // TODO(estark): Use a different ResourceRequestBlockedReason here, since
       // this check has nothing to do with CSP. https://crbug.com/600795
@@ -527,21 +547,26 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kOther;
   }
 
-  if (SendConversionRequestInsteadOfRedirecting(url, redirect_info,
-                                                reporting_disposition)) {
+  // Redirect `ResourceRequest`s don't have a DevToolsId set, but are
+  // associated with the requestId of the initial request. The right
+  // DevToolsId needs to be resolved via the InspectorId.
+  const String devtools_request_id =
+      IdentifiersFactory::RequestId(nullptr, resource_request.InspectorId());
+  if (SendConversionRequestInsteadOfRedirecting(
+          url, redirect_info, reporting_disposition, devtools_request_id)) {
     return ResourceRequestBlockedReason::kConversionRequest;
   }
 
   // Let the client have the final say into whether or not the load should
   // proceed.
-  if (GetSubresourceFilter() && type != ResourceType::kImportResource) {
+  if (GetSubresourceFilter()) {
     if (!GetSubresourceFilter()->AllowLoad(url, request_context,
                                            reporting_disposition)) {
       return ResourceRequestBlockedReason::kSubresourceFilter;
     }
   }
 
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 bool BaseFetchContext::ShouldSendClientHint(

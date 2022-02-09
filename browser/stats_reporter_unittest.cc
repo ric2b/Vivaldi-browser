@@ -39,34 +39,34 @@ void ExpectReportingDataMatch(
     const base::Value& os_reporting_data) {
   const std::string* uid = os_reporting_data.FindStringKey("unique_user_id");
   EXPECT_TRUE(uid && *uid == local_reporting_data.user_id);
-  base::Optional<int> pings_since_last_month =
+  absl::optional<int> pings_since_last_month =
       os_reporting_data.FindIntKey("pings_since_last_month");
   EXPECT_TRUE(pings_since_last_month &&
               *pings_since_last_month ==
                   local_reporting_data.pings_since_last_month);
-  base::Optional<base::Time> next_daily_ping =
+  absl::optional<base::Time> next_daily_ping =
       util::ValueToTime(os_reporting_data.FindKey("next_daily_ping"));
   EXPECT_TRUE(next_daily_ping &&
               *next_daily_ping == local_reporting_data.next_pings.daily);
-  base::Optional<base::Time> next_weekly_ping =
+  absl::optional<base::Time> next_weekly_ping =
       util::ValueToTime(os_reporting_data.FindKey("next_weekly_ping"));
   EXPECT_TRUE(next_weekly_ping &&
               *next_weekly_ping == local_reporting_data.next_pings.weekly);
-  base::Optional<base::Time> next_monthly_ping =
+  absl::optional<base::Time> next_monthly_ping =
       util::ValueToTime(os_reporting_data.FindKey("next_monthly_ping"));
   EXPECT_TRUE(next_monthly_ping &&
               *next_monthly_ping == local_reporting_data.next_pings.monthly);
-  base::Optional<base::Time> next_trimestrial_ping =
+  absl::optional<base::Time> next_trimestrial_ping =
       util::ValueToTime(os_reporting_data.FindKey("next_trimestrial_ping"));
   EXPECT_TRUE(next_trimestrial_ping &&
               *next_trimestrial_ping ==
                   local_reporting_data.next_pings.trimestrial);
-  base::Optional<base::Time> next_semestrial_ping =
+  absl::optional<base::Time> next_semestrial_ping =
       util::ValueToTime(os_reporting_data.FindKey("next_semestrial_ping"));
   EXPECT_TRUE(next_semestrial_ping &&
               *next_semestrial_ping ==
                   local_reporting_data.next_pings.semestrial);
-  base::Optional<base::Time> next_yearly_ping =
+  absl::optional<base::Time> next_yearly_ping =
       util::ValueToTime(os_reporting_data.FindKey("next_yearly_ping"));
   EXPECT_TRUE(next_yearly_ping &&
               *next_yearly_ping == local_reporting_data.next_pings.yearly);
@@ -84,7 +84,7 @@ TEST(StatsReporterTest, FirstRunNormal) {
   std::string legacy_user_id = "";
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   std::string request_url;
   std::string body;
@@ -207,7 +207,7 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(360);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
@@ -279,7 +279,7 @@ TEST(StatsReporterTest, NewInstallation) {
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
@@ -390,7 +390,7 @@ TEST(StatsReporterTest, MovedStandalone) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(360);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", other_uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 6);
@@ -447,7 +447,7 @@ TEST(StatsReporterTest, UseLegacyUserId) {
   std::string legacy_user_id = "abc123def456";
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   std::string request_url;
   std::string body;
@@ -526,7 +526,7 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(360);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
@@ -606,7 +606,7 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(360);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 7);
@@ -687,7 +687,7 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(360);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 0);
@@ -767,7 +767,7 @@ TEST(StatsReporterTest, LongRun) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(5);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 20);
@@ -1130,7 +1130,7 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
   local_state_reporting_data.next_pings.yearly =
       time + base::TimeDelta::FromDays(50);
 
-  base::Optional<base::Value> os_profile_reporting_data_json(
+  absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 10);

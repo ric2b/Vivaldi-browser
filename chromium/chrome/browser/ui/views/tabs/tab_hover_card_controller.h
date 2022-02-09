@@ -62,7 +62,6 @@ class TabHoverCardController : public views::ViewObserver,
   // TabHoverCardMetrics::Delegate:
   size_t GetTabCount() const override;
   bool ArePreviewsEnabled() const override;
-  bool HasPreviewImage() const override;
   views::Widget* GetHoverCardWidget() override;
 
   void CreateHoverCard(Tab* tab);
@@ -78,6 +77,9 @@ class TabHoverCardController : public views::ViewObserver,
   bool ShouldShowImmediately(const Tab* tab) const;
 
   const views::View* GetTargetAnchorView() const;
+
+  // Helper for recording metrics when a card becomes fully visible to the user.
+  void OnCardFullyVisible();
 
   // Animator events:
   void OnFadeAnimationEnded(views::WidgetFadeAnimator* animator,
@@ -103,6 +105,8 @@ class TabHoverCardController : public views::ViewObserver,
   TabHoverCardBubbleView* hover_card_ = nullptr;
   base::ScopedObservation<views::View, views::ViewObserver>
       hover_card_observation_{this};
+  base::ScopedObservation<views::View, views::ViewObserver>
+      target_tab_observation_{this};
   std::unique_ptr<EventSniffer> event_sniffer_;
 
   // Handles metrics around cards being seen by the user.

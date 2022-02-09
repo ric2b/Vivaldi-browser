@@ -18,11 +18,16 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/optimization_guide/content/browser/optimization_guide_decider.h"
+#include "components/optimization_guide/core/hint_cache.h"
+#include "components/optimization_guide/core/optimization_guide_store.h"
+#include "components/optimization_guide/core/push_notification_manager.h"
 #include "url/android/gurl_android.h"
 #include "url/gurl.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaArrayOfByteArrayToBytesVector;
+using base::android::JavaByteArrayToString;
 using base::android::JavaIntArrayToIntVector;
 using base::android::JavaParamRef;
 using base::android::JavaRef;
@@ -63,6 +68,61 @@ void OnOptimizationGuideDecision(
 }
 
 }  // namespace
+
+// static
+std::vector<proto::HintNotificationPayload>
+OptimizationGuideBridge::GetCachedNotifications(
+    proto::OptimizationType optimization_type) {
+  JNIEnv* env = AttachCurrentThread();
+  const JavaRef<jobjectArray>& j_encoded_notifications =
+      Java_OptimizationGuideBridge_getEncodedPushNotifications(
+          env, static_cast<int>(optimization_type));
+  if (!j_encoded_notifications)
+    return {};
+
+  std::vector<std::vector<uint8_t>> encoded_notifications;
+  JavaArrayOfByteArrayToBytesVector(env, j_encoded_notifications,
+                                    &encoded_notifications);
+
+  std::vector<proto::HintNotificationPayload> notifications;
+  for (const auto& encoded_notification : encoded_notifications) {
+    proto::HintNotificationPayload notification;
+    if (notification.ParseFromString(std::string(encoded_notification.begin(),
+                                                 encoded_notification.end()))) {
+      notifications.push_back(notification);
+    }
+  }
+
+  return notifications;
+}
+
+// static
+bool OptimizationGuideBridge::DidOptimizationTypeOverflow(
+    proto::OptimizationType opt_type) {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_OptimizationGuideBridge_didPushNotificationCacheOverflow(
+      env, static_cast<int>(opt_type));
+}
+
+// static
+void OptimizationGuideBridge::ClearCacheForOptimizationType(
+    proto::OptimizationType opt_type) {
+  JNIEnv* env = AttachCurrentThread();
+  Java_OptimizationGuideBridge_clearCachedPushNotifications(
+      env, static_cast<int>(opt_type));
+}
+
+// static
+void OptimizationGuideBridge::OnNotificationNotHandledByNative(
+    proto::HintNotificationPayload notification) {
+  std::string encoded_notification;
+  if (!notification.SerializeToString(&encoded_notification))
+    return;
+
+  JNIEnv* env = AttachCurrentThread();
+  Java_OptimizationGuideBridge_onPushNotificationNotHandledByNative(
+      env, ToJavaByteArray(env, encoded_notification));
+}
 
 static jlong JNI_OptimizationGuideBridge_Init(JNIEnv* env) {
   // TODO(sophiechang): Figure out how to separate factory to avoid circular
@@ -106,27 +166,60 @@ void OptimizationGuideBridge::RegisterOptimizationTypes(
       optimization_types);
 }
 
+void OptimizationGuideBridge::CanApplyOptimizationAsync(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& java_gurl,
+    jint optimization_type,
+    const JavaParamRef<jobject>& java_callback) {
+  DCHECK(optimization_guide_keyed_service_->GetHintsManager());
+  optimization_guide_keyed_service_->GetHintsManager()
+      ->CanApplyOptimizationAsync(
+          *url::GURLAndroid::ToNativeGURL(env, java_gurl),
+          /*navigation_id=*/absl::nullopt,
+          static_cast<optimization_guide::proto::OptimizationType>(
+              optimization_type),
+          base::BindOnce(&OnOptimizationGuideDecision,
+                         ScopedJavaGlobalRef<jobject>(env, java_callback)));
+}
+
 void OptimizationGuideBridge::CanApplyOptimization(
     JNIEnv* env,
     const JavaParamRef<jobject>& java_gurl,
     jint optimization_type,
     const JavaParamRef<jobject>& java_callback) {
-  if (!optimization_guide_keyed_service_->GetHintsManager()) {
-    // The decider is not initialized yet, so return unknown.
-    OnOptimizationGuideDecision(
-        java_callback, optimization_guide::OptimizationGuideDecision::kUnknown,
-        {});
-    return;
-  }
-
-  optimization_guide_keyed_service_->GetHintsManager()
-      ->CanApplyOptimizationAsync(
+  OptimizationMetadata optimization_metadata;
+  optimization_guide::OptimizationGuideDecision decision =
+      optimization_guide_keyed_service_->CanApplyOptimization(
           *url::GURLAndroid::ToNativeGURL(env, java_gurl),
-          /*navigation_id=*/base::nullopt,
           static_cast<optimization_guide::proto::OptimizationType>(
               optimization_type),
-          base::BindOnce(&OnOptimizationGuideDecision,
-                         ScopedJavaGlobalRef<jobject>(env, java_callback)));
+          &optimization_metadata);
+  OnOptimizationGuideDecision(java_callback, decision, optimization_metadata);
+}
+
+void OptimizationGuideBridge::OnNewPushNotification(
+    JNIEnv* env,
+    const JavaRef<jbyteArray>& j_encoded_notification) {
+  if (!j_encoded_notification)
+    return;
+
+  proto::HintNotificationPayload notification;
+  std::string encoded_notification;
+  JavaByteArrayToString(env, j_encoded_notification, &encoded_notification);
+  if (!notification.ParseFromString(encoded_notification))
+    return;
+
+  if (!notification.has_hint_key())
+    return;
+
+  OptimizationGuideHintsManager* hints_manager =
+      optimization_guide_keyed_service_->GetHintsManager();
+  PushNotificationManager* push_manager =
+      hints_manager ? hints_manager->push_notification_manager() : nullptr;
+  if (!push_manager)
+    return;
+
+  push_manager->OnNewPushNotification(notification);
 }
 
 }  // namespace android

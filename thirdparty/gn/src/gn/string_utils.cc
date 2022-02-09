@@ -287,8 +287,8 @@ bool ExpandStringLiteral(Scope* scope,
   return true;
 }
 
-size_t EditDistance(const std::string_view& s1,
-                    const std::string_view& s2,
+size_t EditDistance(std::string_view s1,
+                    std::string_view s2,
                     size_t max_edit_distance) {
   // The algorithm implemented below is the "classic"
   // dynamic-programming algorithm for computing the Levenshtein
@@ -329,7 +329,7 @@ size_t EditDistance(const std::string_view& s1,
   return row[n];
 }
 
-std::string_view SpellcheckString(const std::string_view& text,
+std::string_view SpellcheckString(std::string_view text,
                                   const std::vector<std::string_view>& words) {
   const size_t kMaxValidEditDistance = 3u;
 

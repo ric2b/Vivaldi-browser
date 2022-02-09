@@ -23,25 +23,29 @@
 #include "media/base/video_frame.h"
 #include "net/base/mime_util.h"
 
-#include "platform_media/gpu/decoders/mac/data_request_handler.h"
-#include "platform_media/gpu/decoders/mac/avf_audio_tap.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
 #include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
+#include "platform_media/gpu/decoders/mac/avf_audio_tap.h"
+#include "platform_media/gpu/decoders/mac/data_request_handler.h"
 
 namespace {
-typedef base::Callback<void(base::scoped_nsobject<id>)> PlayerObserverCallback;
+using PlayerObserverOnceCallback = base::OnceClosure;
+using PlayerObserverRepeatingCallback =
+    base::RepeatingCallback<void(base::scoped_nsobject<id>)>;
 }  // namespace
 
 @interface PlayerObserver : NSObject {
  @private
   NSString* keyPath_;
-  PlayerObserverCallback callback_;
+  base::OnceClosure once_callback_;
+  PlayerObserverRepeatingCallback repeating_callback_;
 }
 
-@property (retain,readonly) NSString* keyPath;
+@property(retain, readonly) NSString* keyPath;
 
 - (id)initForKeyPath:(NSString*)keyPath
-        withCallback:(const PlayerObserverCallback&)callback;
+         withOnceCallback:(base::OnceClosure)once_callback
+    withRepeatingCallback:(PlayerObserverRepeatingCallback)repeating_callback;
 @end
 
 @implementation PlayerObserver
@@ -49,10 +53,12 @@ typedef base::Callback<void(base::scoped_nsobject<id>)> PlayerObserverCallback;
 @synthesize keyPath = keyPath_;
 
 - (id)initForKeyPath:(NSString*)keyPath
-        withCallback:(const PlayerObserverCallback&)callback {
+         withOnceCallback:(base::OnceClosure)once_callback
+    withRepeatingCallback:(PlayerObserverRepeatingCallback)repeating_callback {
   if ((self = [super init])) {
     keyPath_ = [keyPath retain];
-    callback_ = callback;
+    once_callback_ = std::move(once_callback);
+    repeating_callback_ = std::move(repeating_callback);
   }
   return self;
 }
@@ -62,8 +68,13 @@ typedef base::Callback<void(base::scoped_nsobject<id>)> PlayerObserverCallback;
                         change:(NSDictionary*)change
                        context:(void*)context {
   if ([keyPath isEqualToString:[self keyPath]]) {
-    callback_.Run(base::scoped_nsobject<id>(
-        [[change objectForKey:NSKeyValueChangeNewKey] retain]));
+    if (once_callback_) {
+      std::move(once_callback_).Run();
+    }
+    if (repeating_callback_) {
+      repeating_callback_.Run(base::scoped_nsobject<id>(
+          [[change objectForKey:NSKeyValueChangeNewKey] retain]));
+    }
   }
 }
 
@@ -71,22 +82,24 @@ typedef base::Callback<void(base::scoped_nsobject<id>)> PlayerObserverCallback;
 
 @interface PlayerNotificationObserver : NSObject {
  @private
-  base::Closure callback_;
+  base::OnceClosure callback_;
 }
-- (id)initWithCallback:(const base::Closure&)callback;
+- (id)initWithCallback:(base::OnceClosure)callback;
 @end
 
 @implementation PlayerNotificationObserver
 
-- (id)initWithCallback:(const base::Closure&)callback {
+- (id)initWithCallback:(base::OnceClosure)callback {
   if ((self = [super init])) {
-    callback_ = callback;
+    callback_ = std::move(callback);
   }
   return self;
 }
 
 - (void)observe:(NSNotification*)notification {
-  callback_.Run();
+  if (callback_) {
+    std::move(callback_).Run();
+  }
 }
 
 @end
@@ -109,8 +122,8 @@ class BackgroundThread {
  public:
   BackgroundThread() : thread_("OpMediaDecoder") { CHECK(thread_.Start()); }
 
-  static BackgroundThread * getInstance() {
-    static BackgroundThread * instance = new BackgroundThread();
+  static BackgroundThread* getInstance() {
+    static BackgroundThread* instance = new BackgroundThread();
     return instance;
   }
 
@@ -135,10 +148,9 @@ class ScopedBufferLock {
   const CVPixelBufferRef buffer_;
 };
 
-scoped_refptr<DataBuffer> GetVideoFrame(
-    AVPlayerItemVideoOutput* video_output,
-    const CMTime& timestamp,
-    const gfx::Size& coded_size) {
+scoped_refptr<DataBuffer> GetVideoFrame(AVPlayerItemVideoOutput* video_output,
+                                        const CMTime& timestamp,
+                                        const gfx::Size& coded_size) {
   TRACE_EVENT0("IPC_MEDIA", __FUNCTION__);
 
   base::ScopedCFTypeRef<CVPixelBufferRef> pixel_buffer;
@@ -161,34 +173,33 @@ scoped_refptr<DataBuffer> GetVideoFrame(
 
   ScopedBufferLock auto_lock(pixel_buffer);
 
-  int strides[3] = { 0 };
-  size_t plane_sizes[3] = { 0 };
-  const int video_frame_planes[] = { VideoFrame::kYPlane,
-                                     VideoFrame::kUPlane,
-                                     VideoFrame::kVPlane };
+  int strides[3] = {0};
+  size_t plane_sizes[3] = {0};
+  const int video_frame_planes[] = {VideoFrame::kYPlane, VideoFrame::kUPlane,
+                                    VideoFrame::kVPlane};
 
   // The planes in the pixel buffer are YUV, but PassThroughVideoDecoder
   // assumes YVU, so we switch the order of the last two planes.
-  const int planes[] = { 0, 2, 1 };
+  const int planes[] = {0, 2, 1};
   for (int i = 0; i < 3; ++i) {
     const int plane = planes[i];
 
     // TODO(wdzierzanowski): Use real stride values for video config. Will be
     // fixed in work package DNA-21454
     strides[plane] = CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, plane);
-    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " strides[" << plane << "] = " << strides[plane];
+    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " strides[" << plane
+            << "] = " << strides[plane];
 
-    plane_sizes[plane] = strides[plane] * VideoFrame::PlaneSize(
-          VideoPixelFormat::PIXEL_FORMAT_YV12,
-          video_frame_planes[plane],
-          coded_size).height();
+    plane_sizes[plane] =
+        strides[plane] *
+        VideoFrame::PlaneSize(VideoPixelFormat::PIXEL_FORMAT_YV12,
+                              video_frame_planes[plane], coded_size)
+            .height();
   }
 
   // Copy all planes into contiguous memory.
   const int data_size = plane_sizes[0] + plane_sizes[1] + plane_sizes[2];
-  scoped_refptr<DataBuffer> video_data_buffer =
-      new DataBuffer(data_size);
+  scoped_refptr<DataBuffer> video_data_buffer = new DataBuffer(data_size);
   size_t data_offset = 0;
   for (int i = 0; i < 3; ++i) {
     const int plane = planes[i];
@@ -210,7 +221,9 @@ void SetAudioMix(
     const scoped_refptr<AVFMediaDecoder::SharedCancellationFlag> canceled,
     AVPlayerItem* item,
     base::scoped_nsobject<AVAudioMix> audio_mix) {
-  DCHECK(BackgroundThread::getInstance()->task_runner()->RunsTasksInCurrentSequence());
+  DCHECK(BackgroundThread::getInstance()
+             ->task_runner()
+             ->RunsTasksInCurrentSequence());
   TRACE_EVENT0("IPC_MEDIA", __FUNCTION__);
 
   if (canceled->data.IsSet())
@@ -233,10 +246,9 @@ bool IsPlayerLikelyToStallWithRanges(
         CMTimeToTimeDelta(time_range.start) +
         CMTimeToTimeDelta(time_range.duration);
     if (end_of_loaded_range >= CMTimeToTimeDelta([item duration]))
-        return false;
+      return false;
 
-    const base::TimeDelta current_time =
-        CMTimeToTimeDelta([item currentTime]);
+    const base::TimeDelta current_time = CMTimeToTimeDelta([item currentTime]);
     return end_of_loaded_range - current_time < min_range_size;
   }
 
@@ -249,20 +261,20 @@ bool IsPlayerLikelyToStall(
     const scoped_refptr<AVFMediaDecoder::SharedCancellationFlag> canceled,
     AVPlayerItem* item,
     base::TimeDelta min_range_size) {
-  DCHECK(BackgroundThread::getInstance()->task_runner()->RunsTasksInCurrentSequence());
+  DCHECK(BackgroundThread::getInstance()
+             ->task_runner()
+             ->RunsTasksInCurrentSequence());
   TRACE_EVENT0("IPC_MEDIA", "will stall?");
 
   if (canceled->data.IsSet())
     return false;
 
   return IsPlayerLikelyToStallWithRanges(
-      item,
-      base::scoped_nsobject<NSArray>([[item loadedTimeRanges] retain]),
+      item, base::scoped_nsobject<NSArray>([[item loadedTimeRanges] retain]),
       min_range_size);
 }
 
 }  // namespace
-
 
 AVFMediaDecoder::AVFMediaDecoder(AVFMediaDecoderClient* client)
     : client_(client),
@@ -319,7 +331,7 @@ AVFMediaDecoder::~AVFMediaDecoder() {
 }
 
 void AVFMediaDecoder::Initialize(ipc_data_source::Info source_info,
-                                 ResultCB initialize_cb) {
+                                 InitializeCallback initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   data_request_handler_ = base::MakeRefCounted<media::DataRequestHandler>();
@@ -327,47 +339,39 @@ void AVFMediaDecoder::Initialize(ipc_data_source::Info source_info,
                               dispatch_get_main_queue());
 
   base::scoped_nsobject<NSArray> asset_keys_to_load_and_test(
-      [[NSArray arrayWithObjects:@"playable",
-                                 @"hasProtectedContent",
-                                 @"tracks",
-                                 @"duration",
-                                 nil] retain]);
-  const base::Closure asset_keys_loaded_cb =
-      BindToCurrentLoop(base::Bind(&AVFMediaDecoder::AssetKeysLoaded,
-                                          weak_ptr_factory_.GetWeakPtr(),
-                                          std::move(initialize_cb),
-                                          asset_keys_to_load_and_test));
-
+      [[NSArray arrayWithObjects:@"playable", @"hasProtectedContent", @"tracks",
+                                 @"duration", nil] retain]);
+  __block base::OnceClosure asset_keys_loaded_cb =
+      BindToCurrentLoop(base::BindOnce(
+          &AVFMediaDecoder::AssetKeysLoaded, weak_ptr_factory_.GetWeakPtr(),
+          std::move(initialize_cb), asset_keys_to_load_and_test));
   [data_request_handler_->GetAsset()
       loadValuesAsynchronouslyForKeys:asset_keys_to_load_and_test
                     completionHandler:^{
-                      asset_keys_loaded_cb.Run();
+                      std::move(asset_keys_loaded_cb).Run();
                     }];
 }
 
-void AVFMediaDecoder::Seek(const base::TimeDelta& time,
-                           const ResultCB& result_cb) {
+void AVFMediaDecoder::Seek(const base::TimeDelta& time, SeekCallback seek_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "AVFMediaDecoder::Seek", this);
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Seeking to " << time.InMicroseconds() << " per pipeline request";
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Seeking to "
+          << time.InMicroseconds() << " per pipeline request";
 
   if (seeking_) {
-    DCHECK(seek_on_seek_done_task_.is_null());
+    DCHECK(!seek_on_seek_done_task_);
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Auto-seeking now, postponing pipeline seek request";
-    seek_on_seek_done_task_ = base::Bind(&AVFMediaDecoder::Seek,
-                                         weak_ptr_factory_.GetWeakPtr(),
-                                         time,
-                                         result_cb);
+    seek_on_seek_done_task_ =
+        base::BindOnce(&AVFMediaDecoder::Seek, weak_ptr_factory_.GetWeakPtr(),
+                       time, std::move(seek_cb));
     return;
   }
 
-  ScheduleSeekTask(base::Bind(&AVFMediaDecoder::SeekTask,
-                              weak_ptr_factory_.GetWeakPtr(),
-                              time,
-                              result_cb));
+  ScheduleSeekTask(base::BindOnce(&AVFMediaDecoder::SeekTask,
+                                  weak_ptr_factory_.GetWeakPtr(), time,
+                                  std::move(seek_cb)));
 }
 
 void AVFMediaDecoder::NotifyStreamCapacityDepleted() {
@@ -388,8 +392,7 @@ void AVFMediaDecoder::NotifyStreamCapacityDepleted() {
     return;
   }
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " PAUSING AVPlayer";
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " PAUSING AVPlayer";
   playback_state_ = STOPPING;
   [player_ pause];
 }
@@ -404,11 +407,10 @@ void AVFMediaDecoder::NotifyStreamCapacityAvailable() {
 base::TimeDelta AVFMediaDecoder::start_time() const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  return GetStartTimeFromTrack(has_audio_track() ? AudioTrack()
-                                                        : VideoTrack());
+  return GetStartTimeFromTrack(has_audio_track() ? AudioTrack() : VideoTrack());
 }
 
-void AVFMediaDecoder::AssetKeysLoaded(const ResultCB& initialize_cb,
+void AVFMediaDecoder::AssetKeysLoaded(InitializeCallback initialize_cb,
                                       base::scoped_nsobject<NSArray> keys) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -419,50 +421,46 @@ void AVFMediaDecoder::AssetKeysLoaded(const ResultCB& initialize_cb,
   AVAsset* asset = data_request_handler_->GetAsset();
   for (NSString* key in keys.get()) {
     NSError* error = nil;
-    if ([asset statusOfValueForKey:key error:&error] !=
-        AVKeyValueStatusLoaded) {
+    if ([asset statusOfValueForKey:key
+                             error:&error] != AVKeyValueStatusLoaded) {
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
               << " Can't access asset key: " << [key UTF8String];
-      initialize_cb.Run(false);
+      std::move(initialize_cb).Run(false);
       return;
     }
   }
 
   if (![asset isPlayable]) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Asset is not playable";
-    initialize_cb.Run(false);
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Asset is not playable";
+    std::move(initialize_cb).Run(false);
     return;
   }
 
   if ([asset hasProtectedContent]) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Asset has protected content";
-    initialize_cb.Run(false);
+    std::move(initialize_cb).Run(false);
     return;
   }
 
   // We can play this asset.
 
-  AVPlayerItem* player_item =
-      [AVPlayerItem playerItemWithAsset:asset];
-  player_.reset([[AVPlayer alloc]
-      initWithPlayerItem:player_item]);
+  AVPlayerItem* player_item = [AVPlayerItem playerItemWithAsset:asset];
+  player_.reset([[AVPlayer alloc] initWithPlayerItem:player_item]);
 
-  const PlayerObserverCallback status_known_cb =
-      BindToCurrentLoop(base::Bind(&AVFMediaDecoder::PlayerStatusKnown,
-                                          weak_ptr_factory_.GetWeakPtr(),
-                                          initialize_cb));
+  base::OnceClosure status_known_cb = BindToCurrentLoop(
+      base::BindOnce(&AVFMediaDecoder::PlayerStatusKnown,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(initialize_cb)));
 
   if ([player_ status] == AVPlayerStatusReadyToPlay) {
-    status_known_cb.Run(
-        base::scoped_nsobject<id>([@(AVPlayerStatusReadyToPlay) retain]));
+    std::move(status_known_cb).Run();
   } else {
     DCHECK([player_ status] == AVPlayerStatusUnknown);
 
-    status_observer_.reset(
-        [[PlayerObserver alloc] initForKeyPath:@"status"
-                                  withCallback:status_known_cb]);
+    status_observer_.reset([[PlayerObserver alloc]
+               initForKeyPath:@"status"
+             withOnceCallback:std::move(status_known_cb)
+        withRepeatingCallback:PlayerObserverRepeatingCallback()]);
 
     [player_ addObserver:status_observer_
               forKeyPath:[status_observer_ keyPath]
@@ -471,9 +469,7 @@ void AVFMediaDecoder::AssetKeysLoaded(const ResultCB& initialize_cb,
   }
 }
 
-void AVFMediaDecoder::PlayerStatusKnown(
-    const ResultCB& initialize_cb,
-    base::scoped_nsobject<id> /* status */) {
+void AVFMediaDecoder::PlayerStatusKnown(InitializeCallback initialize_cb) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Player status: " << [player_ status];
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -481,45 +477,44 @@ void AVFMediaDecoder::PlayerStatusKnown(
   if ([player_ status] != AVPlayerStatusReadyToPlay) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Player status changed to not playable";
-    initialize_cb.Run(false);
+    std::move(initialize_cb).Run(false);
     return;
   }
 
   if (!has_video_track() && !has_audio_track()) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " No tracks to play";
-    initialize_cb.Run(false);
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No tracks to play";
+    std::move(initialize_cb).Run(false);
     return;
   }
 
   if (!CalculateBitrate()) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Bitrate unavailable";
-    initialize_cb.Run(false);
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Bitrate unavailable";
+    std::move(initialize_cb).Run(false);
     return;
   }
 
   // AVPlayer is ready to play.
 
-  duration_ =
-      CMTimeToTimeDelta([[[player_ currentItem] asset] duration]);
+  duration_ = CMTimeToTimeDelta([[[player_ currentItem] asset] duration]);
 
-  const PlayerObserverCallback rate_cb = BindToCurrentLoop(base::Bind(
-      &AVFMediaDecoder::PlayerRateChanged, weak_ptr_factory_.GetWeakPtr()));
-  rate_observer_.reset(
-      [[PlayerObserver alloc] initForKeyPath:@"rate" withCallback:rate_cb]);
+  PlayerObserverRepeatingCallback rate_cb =
+      BindToCurrentLoop(base::BindRepeating(&AVFMediaDecoder::PlayerRateChanged,
+                                            weak_ptr_factory_.GetWeakPtr()));
+  rate_observer_.reset([[PlayerObserver alloc]
+             initForKeyPath:@"rate"
+           withOnceCallback:base::OnceClosure()
+      withRepeatingCallback:std::move(rate_cb)]);
 
   [player_ addObserver:rate_observer_
             forKeyPath:[rate_observer_ keyPath]
                options:NSKeyValueObservingOptionNew
                context:nil];
 
-  const base::Closure finish_cb =
-      BindToCurrentLoop(base::Bind(&AVFMediaDecoder::PlayerPlayedToEnd,
-                                          weak_ptr_factory_.GetWeakPtr(),
-                                          "notification"));
-  played_to_end_observer_.reset(
-      [[PlayerNotificationObserver alloc] initWithCallback:finish_cb]);
+  base::OnceClosure finish_cb = BindToCurrentLoop(
+      base::BindOnce(&AVFMediaDecoder::PlayerPlayedToEnd,
+                     weak_ptr_factory_.GetWeakPtr(), "notification"));
+  played_to_end_observer_.reset([[PlayerNotificationObserver alloc]
+      initWithCallback:std::move(finish_cb)]);
 
   [[NSNotificationCenter defaultCenter]
       addObserver:played_to_end_observer_
@@ -532,13 +527,13 @@ void AVFMediaDecoder::PlayerStatusKnown(
              name:AVPlayerItemFailedToPlayToEndTimeNotification
            object:[player_ currentItem]];
 
-  const PlayerObserverCallback time_ranges_changed_cb =
-      BindToCurrentLoop(
-          base::Bind(&AVFMediaDecoder::PlayerItemTimeRangesChanged,
-                     weak_ptr_factory_.GetWeakPtr()));
-  player_item_loaded_times_observer_.reset(
-      [[PlayerObserver alloc] initForKeyPath:@"loadedTimeRanges"
-                                withCallback:time_ranges_changed_cb]);
+  PlayerObserverRepeatingCallback time_ranges_changed_cb = BindToCurrentLoop(
+      base::BindRepeating(&AVFMediaDecoder::PlayerItemTimeRangesChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
+  player_item_loaded_times_observer_.reset([[PlayerObserver alloc]
+             initForKeyPath:@"loadedTimeRanges"
+           withOnceCallback:base::OnceClosure()
+      withRepeatingCallback:std::move(time_ranges_changed_cb)]);
 
   [[player_ currentItem]
       addObserver:player_item_loaded_times_observer_
@@ -546,7 +541,7 @@ void AVFMediaDecoder::PlayerStatusKnown(
           options:NSKeyValueObservingOptionNew
           context:nil];
 
-  InitializeAudioOutput(initialize_cb);
+  InitializeAudioOutput(std::move(initialize_cb));
 }
 
 bool AVFMediaDecoder::CalculateBitrate() {
@@ -572,17 +567,17 @@ void AVFMediaDecoder::PlayerItemTimeRangesChanged(
   const bool likely_to_stall = IsPlayerLikelyToStallWithRanges(
       [player_ currentItem], new_ranges_value, min_loaded_range_size_);
 
-  if (!pending_seek_task_.is_null())
+  if (pending_seek_task_) {
     SeekIfNotLikelyToStall(likely_to_stall);
-  else
+  } else {
     PlayIfNotLikelyToStall("has enough data", likely_to_stall);
+  }
 }
 
 void AVFMediaDecoder::PlayerRateChanged(base::scoped_nsobject<id> new_rate) {
   const int new_rate_value =
       [base::mac::ObjCCastStrict<NSNumber>(new_rate.get()) intValue];
-  VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " : " << new_rate_value;
+  VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " : " << new_rate_value;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (new_rate_value > 0) {
@@ -603,10 +598,9 @@ void AVFMediaDecoder::PlayerRateChanged(base::scoped_nsobject<id> new_rate) {
 
   playback_state_ = STOPPED;
 
-  const base::TimeDelta current_time =
-      CMTimeToTimeDelta([player_ currentTime]);
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " AVPlayer was PAUSED @" << current_time.InMicroseconds();
+  const base::TimeDelta current_time = CMTimeToTimeDelta([player_ currentTime]);
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " AVPlayer was PAUSED @"
+          << current_time.InMicroseconds();
 
   if (last_audio_timestamp_ >= duration_) {
     PlayerPlayedToEnd("pause");
@@ -619,13 +613,13 @@ void AVFMediaDecoder::PlayerRateChanged(base::scoped_nsobject<id> new_rate) {
     // to preserve audio signal continuity when |player_| resumes playing, we
     // have to seek forwards to the last audio timestamp we got, see
     // |AutoSeekTask()|.
-    ScheduleSeekTask(base::Bind(&AVFMediaDecoder::AutoSeekTask,
-                                weak_ptr_factory_.GetWeakPtr()));
+    ScheduleSeekTask(base::BindOnce(&AVFMediaDecoder::AutoSeekTask,
+                                    weak_ptr_factory_.GetWeakPtr()));
   }
 
-  if (!play_on_pause_done_task_.is_null()) {
-    play_on_pause_done_task_.Run();
-    play_on_pause_done_task_.Reset();
+  if (play_on_pause_done_) {
+    play_on_pause_done_ = false;
+    PlayWhenReady("Player rate changed");
   }
 }
 
@@ -650,15 +644,11 @@ void AVFMediaDecoder::PlayWhenReady(base::StringPiece reason) {
   }
 
   base::PostTaskAndReplyWithResult(
-      background_runner().get(),
-      FROM_HERE,
-      base::BindOnce(&IsPlayerLikelyToStall,
-                 background_tasks_canceled_,
-                 [player_ currentItem],
-                 min_loaded_range_size_),
+      background_runner().get(), FROM_HERE,
+      base::BindOnce(&IsPlayerLikelyToStall, background_tasks_canceled_,
+                     [player_ currentItem], min_loaded_range_size_),
       base::BindOnce(&AVFMediaDecoder::PlayIfNotLikelyToStall,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 reason));
+                     weak_ptr_factory_.GetWeakPtr(), reason));
 }
 
 void AVFMediaDecoder::PlayIfNotLikelyToStall(base::StringPiece reason,
@@ -693,18 +683,16 @@ void AVFMediaDecoder::PlayIfNotLikelyToStall(base::StringPiece reason,
   // emits another such notification, and we can't provide a new buffer until
   // we play our AVPlayer again.  Thus, instead of just ignoring this
   // notification, postpone it.
-  const base::Closure play_task = base::Bind(
-      &AVFMediaDecoder::PlayWhenReady, weak_ptr_factory_.GetWeakPtr(), reason);
   if (seeking_) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Temporarily ignoring '"
             << reason << "' notification while seeking";
-    play_on_seek_done_task_ = play_task;
+    play_on_seek_done_ = true;
     return;
   }
   if (playback_state_ == STOPPING) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Temporarily ignoring '"
             << reason << "' notification while pausing";
-    play_on_pause_done_task_ = play_task;
+    play_on_pause_done_ = true;
     return;
   }
 
@@ -716,8 +704,8 @@ void AVFMediaDecoder::PlayIfNotLikelyToStall(base::StringPiece reason,
 }
 
 void AVFMediaDecoder::SeekIfNotLikelyToStall(bool likely_to_stall) {
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << '(' << likely_to_stall << ')';
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << '(' << likely_to_stall
+          << ')';
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (likely_to_stall)
@@ -726,69 +714,62 @@ void AVFMediaDecoder::SeekIfNotLikelyToStall(bool likely_to_stall) {
   // If |PlayerItemTimeRangesChanged()| is called while seek task is scheduled
   // but not finished yet, then pending_seek_task_ might be consumed already
   // and might be null here.
-  if (!pending_seek_task_.is_null()) {
-    pending_seek_task_.Run();
-    pending_seek_task_.Reset();
+  if (pending_seek_task_) {
+    std::move(pending_seek_task_).Run();
   }
 }
 
-void AVFMediaDecoder::ScheduleSeekTask(const base::Closure& seek_task) {
+void AVFMediaDecoder::ScheduleSeekTask(base::OnceClosure seek_task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!seeking_);
-  DCHECK(pending_seek_task_.is_null());
+  DCHECK(!pending_seek_task_);
 
   // We must not request a seek if AVPlayer's internal buffers are drained.
   // Sometimes, AVPlayer never finishes the seek if the seek is started in such
   // a state.
 
   seeking_ = true;
-  pending_seek_task_ = seek_task;
+  pending_seek_task_ = std::move(seek_task);
 
   base::PostTaskAndReplyWithResult(
-      background_runner().get(),
-      FROM_HERE,
-      base::BindOnce(&IsPlayerLikelyToStall,
-                 background_tasks_canceled_,
-                 [player_ currentItem],
-                 min_loaded_range_size_),
+      background_runner().get(), FROM_HERE,
+      base::BindOnce(&IsPlayerLikelyToStall, background_tasks_canceled_,
+                     [player_ currentItem], min_loaded_range_size_),
       base::BindOnce(&AVFMediaDecoder::SeekIfNotLikelyToStall,
-                 weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AVFMediaDecoder::SeekTask(const base::TimeDelta& time,
-                               const ResultCB& result_cb) {
+                               SeekCallback seek_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   const scoped_refptr<base::TaskRunner> runner = background_runner();
 
-  const base::Closure set_audio_mix_task =
+  __block base::OnceClosure set_audio_mix_task =
       has_audio_track()
           // The audio mix will have to be reset to preserve A/V
           // synchronization.
-          ? base::Bind(&SetAudioMix,
-                       background_tasks_canceled_,
-                       [player_ currentItem],
-                       audio_tap_->GetAudioMix())
-          : base::Closure();
+          ? base::BindOnce(&SetAudioMix, background_tasks_canceled_,
+                           [player_ currentItem], GetAudioMix(AudioTrack()))
+          : base::OnceClosure();
 
-  const base::Callback<void(bool)> seek_done_cb = BindToCurrentLoop(
-      base::Bind(&AVFMediaDecoder::SeekDone,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 result_cb));
+  __block base::OnceCallback<void(bool)> seek_done_cb = BindToCurrentLoop(
+      base::BindOnce(&AVFMediaDecoder::SeekDone, weak_ptr_factory_.GetWeakPtr(),
+                     std::move(seek_cb)));
 
   [player_ seekToTime:TimeDeltaToCMTime(time)
-        toleranceBefore:CoreMediaGlueCMTimeToCMTime(
-                            kCMTimeZero)
-         toleranceAfter:CoreMediaGlueCMTimeToCMTime(
-                            kCMTimeZero)
+        toleranceBefore:CoreMediaGlueCMTimeToCMTime(kCMTimeZero)
+         toleranceAfter:CoreMediaGlueCMTimeToCMTime(kCMTimeZero)
       completionHandler:^(BOOL finished) {
         VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                << (finished ? "  Seek DONE" : "  Seek was interrupted/rejected");
-        if (finished && !set_audio_mix_task.is_null()) {
-          runner->PostTaskAndReply(FROM_HERE, set_audio_mix_task,
-                                   base::Bind(seek_done_cb, true));
+                << (finished ? "  Seek DONE"
+                             : "  Seek was interrupted/rejected");
+        if (finished && set_audio_mix_task) {
+          runner->PostTaskAndReply(
+              FROM_HERE, std::move(set_audio_mix_task),
+              base::BindOnce(std::move(seek_done_cb), true));
         } else {
-          seek_done_cb.Run(finished);
+          std::move(seek_done_cb).Run(finished);
         }
       }];
 }
@@ -797,40 +778,37 @@ void AVFMediaDecoder::AutoSeekTask() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(playback_state_, STOPPED);
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Auto-seeking to " << last_audio_timestamp_.InMicroseconds();
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Auto-seeking to "
+          << last_audio_timestamp_.InMicroseconds();
 
   const scoped_refptr<base::TaskRunner> runner = background_runner();
 
   // The audio mix will have to be reset to prevent a "phase shift" in the
   // series of audio buffers.  The rendering end of the Chrome pipeline
   // treats such shifts as errors.
-  const base::Closure set_audio_mix_task =
-      base::Bind(&SetAudioMix,
-                 background_tasks_canceled_,
-                 [player_ currentItem],
-                 audio_tap_->GetAudioMix());
+  __block base::OnceClosure set_audio_mix_task =
+      base::BindOnce(&SetAudioMix, background_tasks_canceled_,
+                     [player_ currentItem], GetAudioMix(AudioTrack()));
 
-  const base::Closure auto_seek_done_cb = BindToCurrentLoop(base::Bind(
-      &AVFMediaDecoder::AutoSeekDone, weak_ptr_factory_.GetWeakPtr()));
+  __block base::OnceClosure auto_seek_done_cb =
+      BindToCurrentLoop(base::BindOnce(&AVFMediaDecoder::AutoSeekDone,
+                                       weak_ptr_factory_.GetWeakPtr()));
 
   [player_ seekToTime:TimeDeltaToCMTime(last_audio_timestamp_)
-        toleranceBefore:CoreMediaGlueCMTimeToCMTime(
-                            kCMTimeZero)
-         toleranceAfter:CoreMediaGlueCMTimeToCMTime(
-                            kCMTimeZero)
+        toleranceBefore:CoreMediaGlueCMTimeToCMTime(kCMTimeZero)
+         toleranceAfter:CoreMediaGlueCMTimeToCMTime(kCMTimeZero)
       completionHandler:^(BOOL finished) {
         VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
                 << (finished ? " Auto-seek DONE"
                              : " Auto-seek was interrupted/rejected");
         // Need to set a new audio mix whether the auto-seek was successful
         // or not.  We will most likely continue decoding.
-        runner->PostTaskAndReply(FROM_HERE, set_audio_mix_task,
-                                 auto_seek_done_cb);
+        runner->PostTaskAndReply(FROM_HERE, std::move(set_audio_mix_task),
+                                 std::move(auto_seek_done_cb));
       }];
 }
 
-void AVFMediaDecoder::InitializeAudioOutput(const ResultCB& initialize_cb) {
+void AVFMediaDecoder::InitializeAudioOutput(InitializeCallback initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(player_ != NULL);
 
@@ -840,10 +818,9 @@ void AVFMediaDecoder::InitializeAudioOutput(const ResultCB& initialize_cb) {
   // supported) we proceed with video initialization, to show at least
   // audio-less video.
   if (audio_track == NULL) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Playing video only";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Playing video only";
     DCHECK(has_video_track());
-    AudioFormatKnown(initialize_cb, audio_stream_format_);
+    AudioFormatKnown(std::move(initialize_cb), audio_stream_format_);
     return;
   }
 
@@ -856,28 +833,35 @@ void AVFMediaDecoder::InitializeAudioOutput(const ResultCB& initialize_cb) {
   // samples obtained through the audio processing tap.
   [player_ setVolume:0.0];
 
-  audio_tap_.reset(
-      new AVFAudioTap(audio_track,
-                      base::ThreadTaskRunnerHandle::Get(),
-                      base::Bind(&AVFMediaDecoder::AudioFormatKnown,
-                                 weak_ptr_factory_.GetWeakPtr(),
-                                 initialize_cb),
-                      base::Bind(&AVFMediaDecoder::AudioSamplesReady,
-                                 weak_ptr_factory_.GetWeakPtr())));
-
-  base::scoped_nsobject<AVAudioMix> audio_mix = audio_tap_->GetAudioMix();
+  base::scoped_nsobject<AVAudioMix> audio_mix =
+      GetAudioMix(audio_track, std::move(initialize_cb));
   if (audio_mix.get() == nil) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Could not create AVAudioMix with audio processing tap";
-    initialize_cb.Run(false);
     return;
   }
 
   [[player_ currentItem] setAudioMix:audio_mix];
 }
 
+base::scoped_nsobject<AVAudioMix> AVFMediaDecoder::GetAudioMix(
+    AVAssetTrack* audio_track,
+    InitializeCallback initialize_cb) {
+  AVFAudioTap::FormatKnownCB format_known_cb;
+  if (initialize_cb) {
+    format_known_cb = base::BindOnce(&AVFMediaDecoder::AudioFormatKnown,
+                                     weak_ptr_factory_.GetWeakPtr(),
+                                     std::move(initialize_cb));
+  }
+  return AVFAudioTap::GetAudioMix(
+      audio_track, base::ThreadTaskRunnerHandle::Get(),
+      std::move(format_known_cb),
+      base::BindRepeating(&AVFMediaDecoder::AudioSamplesReady,
+                          weak_ptr_factory_.GetWeakPtr()));
+}
+
 void AVFMediaDecoder::AudioFormatKnown(
-    const ResultCB& initialize_cb,
+    InitializeCallback initialize_cb,
     const AudioStreamBasicDescription& format) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!is_audio_format_known());
@@ -890,21 +874,23 @@ void AVFMediaDecoder::AudioFormatKnown(
 
   if (has_video_track()) {
     if (!InitializeVideoOutput()) {
-      initialize_cb.Run(false);
+      if (initialize_cb) {
+        std::move(initialize_cb).Run(false);
+      }
       return;
     }
   }
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " PLAYING AVPlayer";
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " PLAYING AVPlayer";
   playback_state_ = STARTING;
   [player_ play];
 
-  initialize_cb.Run(true);
+  if (initialize_cb) {
+    std::move(initialize_cb).Run(true);
+  }
 }
 
-void AVFMediaDecoder::AudioSamplesReady(
-    const scoped_refptr<DataBuffer>& buffer) {
+void AVFMediaDecoder::AudioSamplesReady(scoped_refptr<DataBuffer> buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (seeking_ || stream_has_ended_) {
@@ -916,8 +902,8 @@ void AVFMediaDecoder::AudioSamplesReady(
 
   if (last_audio_timestamp_ != media::kNoTimestamp &&
       buffer->timestamp() <= last_audio_timestamp_) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Audio buffer @" << buffer->timestamp().InMicroseconds()
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Audio buffer @"
+            << buffer->timestamp().InMicroseconds()
             << " older than last buffer @"
             << last_audio_timestamp_.InMicroseconds() << ", dropping";
     return;
@@ -925,8 +911,7 @@ void AVFMediaDecoder::AudioSamplesReady(
 
   last_audio_timestamp_ = buffer->timestamp();
 
-  client_->MediaSamplesReady(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
-                             buffer);
+  client_->MediaSamplesReady(PlatformStreamType::kAudio, std::move(buffer));
 }
 
 bool AVFMediaDecoder::InitializeVideoOutput() {
@@ -941,8 +926,7 @@ bool AVFMediaDecoder::InitializeVideoOutput() {
       [[VideoTrack() formatDescriptions] objectAtIndex:0]);
 
   const CMVideoDimensions coded_size =
-      CMVideoFormatDescriptionGetDimensions(
-          video_stream_format());
+      CMVideoFormatDescriptionGetDimensions(video_stream_format());
   video_coded_size_ = gfx::Size(coded_size.width, coded_size.height);
 
   NSDictionary* output_settings = @{
@@ -954,18 +938,17 @@ bool AVFMediaDecoder::InitializeVideoOutput() {
 
   [[player_ currentItem] addOutput:video_output_];
 
-  const base::Callback<void(const CMTime&)> periodic_cb =
-      BindToCurrentLoop(base::Bind(&AVFMediaDecoder::ReadFromVideoOutput,
-                                          weak_ptr_factory_.GetWeakPtr()));
+  const base::RepeatingCallback<void(const CMTime&)> periodic_cb =
+      BindToCurrentLoop(
+          base::BindRepeating(&AVFMediaDecoder::ReadFromVideoOutput,
+                              weak_ptr_factory_.GetWeakPtr()));
 
-  CMTime interval =
-      CMTimeMake(1, VideoFrameRate());
+  CMTime interval = CMTimeMake(1, VideoFrameRate());
   id handle = [player_
-      addPeriodicTimeObserverForInterval:CoreMediaGlueCMTimeToCMTime(
-                                             interval)
+      addPeriodicTimeObserverForInterval:CoreMediaGlueCMTimeToCMTime(interval)
                                    queue:nil
                               usingBlock:^(CMTime time) {
-                                periodic_cb.Run(time);
+                                std::move(periodic_cb).Run(time);
                               }];
   DCHECK(time_observer_handle_.get() == nil);
   time_observer_handle_.reset([handle retain]);
@@ -980,9 +963,9 @@ void AVFMediaDecoder::ReadFromVideoOutput(const CMTime& cm_timestamp) {
   if (seeking_ || playback_state_ != PLAYING || stream_has_ended_) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Not reading video output: "
-            << (seeking_ ? "seeking" : playback_state_ != PLAYING
-                                            ? "not playing"
-                                            : "stream has ended");
+            << (seeking_ ? "seeking"
+                         : playback_state_ != PLAYING ? "not playing"
+                                                      : "stream has ended");
     return;
   }
 
@@ -990,9 +973,8 @@ void AVFMediaDecoder::ReadFromVideoOutput(const CMTime& cm_timestamp) {
 
   if (last_video_timestamp_ != media::kNoTimestamp &&
       timestamp <= last_video_timestamp_) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Video buffer @" << timestamp.InMicroseconds()
-            << " older than last buffer @"
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Video buffer @"
+            << timestamp.InMicroseconds() << " older than last buffer @"
             << last_video_timestamp_.InMicroseconds() << ", dropping";
     return;
   }
@@ -1007,8 +989,7 @@ void AVFMediaDecoder::ReadFromVideoOutput(const CMTime& cm_timestamp) {
 
   last_video_timestamp_ = buffer->timestamp();
 
-  client_->MediaSamplesReady(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO,
-                             buffer);
+  client_->MediaSamplesReady(PlatformStreamType::kVideo, buffer);
 }
 
 void AVFMediaDecoder::AutoSeekDone() {
@@ -1022,7 +1003,7 @@ void AVFMediaDecoder::AutoSeekDone() {
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "AVFMediaDecoder::Auto-seek", this);
 }
 
-void AVFMediaDecoder::SeekDone(const ResultCB& result_cb, bool finished) {
+void AVFMediaDecoder::SeekDone(SeekCallback seek_cb, bool finished) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -1032,7 +1013,7 @@ void AVFMediaDecoder::SeekDone(const ResultCB& result_cb, bool finished) {
   last_audio_timestamp_ = media::kNoTimestamp;
   last_video_timestamp_ = media::kNoTimestamp;
 
-  result_cb.Run(finished);
+  std::move(seek_cb).Run(finished);
 
   RunTasksPendingSeekDone();
 
@@ -1042,20 +1023,18 @@ void AVFMediaDecoder::SeekDone(const ResultCB& result_cb, bool finished) {
 void AVFMediaDecoder::RunTasksPendingSeekDone() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!seek_on_seek_done_task_.is_null()) {
-    seek_on_seek_done_task_.Run();
-    seek_on_seek_done_task_.Reset();
+  if (seek_on_seek_done_task_) {
+    std::move(seek_on_seek_done_task_).Run();
   }
 
-  if (!play_on_seek_done_task_.is_null()) {
-    play_on_seek_done_task_.Run();
-    play_on_seek_done_task_.Reset();
+  if (play_on_seek_done_) {
+    play_on_seek_done_ = false;
+    PlayWhenReady("Pending seek done");
   }
 }
 
 void AVFMediaDecoder::PlayerPlayedToEnd(base::StringPiece source) {
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << '(' << source << ')';
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << '(' << source << ')';
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (stream_has_ended_)

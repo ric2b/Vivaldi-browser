@@ -294,7 +294,9 @@ void SpeechRecognizerImpl::Capture(const AudioBus* data,
   CHECK(audio_converter_->data_was_converted());
 }
 
-void SpeechRecognizerImpl::OnCaptureError(const std::string& message) {
+void SpeechRecognizerImpl::OnCaptureError(
+    media::AudioCapturerSource::ErrorCode code,
+    const std::string& message) {
   FSMEventArgs event_args(EVENT_AUDIO_ERROR);
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&SpeechRecognizerImpl::DispatchEvent,
@@ -536,7 +538,7 @@ void SpeechRecognizerImpl::ProcessAudioPipeline(const AudioChunk& raw_audio) {
 }
 
 void SpeechRecognizerImpl::OnDeviceInfo(
-    const base::Optional<media::AudioParameters>& params) {
+    const absl::optional<media::AudioParameters>& params) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   device_params_ = params.value_or(AudioParameters());
   DVLOG(1) << "Device parameters: " << device_params_.AsHumanReadableString();

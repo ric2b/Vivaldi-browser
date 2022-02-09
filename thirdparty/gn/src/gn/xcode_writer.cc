@@ -31,13 +31,12 @@
 #include "gn/scheduler.h"
 #include "gn/settings.h"
 #include "gn/source_file.h"
+#include "gn/string_output_buffer.h"
 #include "gn/substitution_writer.h"
 #include "gn/target.h"
 #include "gn/value.h"
 #include "gn/variables.h"
 #include "gn/xcode_object.h"
-
-#include <iostream>
 
 namespace {
 
@@ -101,10 +100,7 @@ enum TargetOsType {
 };
 
 const char* kXCTestFileSuffixes[] = {
-    "egtest.m",
-    "egtest.mm",
-    "xctest.m",
-    "xctest.mm",
+    "egtest.m", "egtest.mm", "xctest.m", "xctest.mm", "UITests.m", "UITests.mm",
 };
 
 const char kXCTestModuleTargetNamePostfix[] = "_module";
@@ -305,15 +301,9 @@ void AddXCTestFilesToTestModuleTarget(const std::vector<SourceFile>& sources,
                                       SourceDir source_dir,
                                       const BuildSettings* build_settings) {
   for (const SourceFile& source : sources) {
-    std::string source_path = RebasePath(source.value(), source_dir,
-                                         build_settings->root_path_utf8());
-
-    // Test files need to be known to Xcode for proper indexing and for
-    // discovery of tests function for XCTest and XCUITest, but the compilation
-    // is done via ninja and thus must prevent Xcode from compiling the files by
-    // adding '-help' as per file compiler flag.
-    project->AddSourceFile(source_path, source_path, CompilerFlags::HELP,
-                           native_target);
+    const std::string source_path = RebasePath(
+        source.value(), source_dir, build_settings->root_path_utf8());
+    project->AddSourceFile(source_path, source_path, native_target);
   }
 }
 
@@ -500,7 +490,8 @@ bool XcodeWorkspace::WriteWorkspaceDataFile(const std::string& name,
   if (source_file.is_null())
     return false;
 
-  std::stringstream out;
+  StringOutputBuffer storage;
+  std::ostream out(&storage);
   out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       << "<Workspace\n"
       << "   version = \"1.0\">\n"
@@ -509,8 +500,8 @@ bool XcodeWorkspace::WriteWorkspaceDataFile(const std::string& name,
       << "   </FileRef>\n"
       << "</Workspace>\n";
 
-  return WriteFileIfChanged(build_settings_->GetFullPath(source_file),
-                            out.str(), err);
+  return storage.WriteToFileIfChanged(build_settings_->GetFullPath(source_file),
+                                      err);
 }
 
 bool XcodeWorkspace::WriteSettingsFile(const std::string& name,
@@ -522,7 +513,8 @@ bool XcodeWorkspace::WriteSettingsFile(const std::string& name,
   if (source_file.is_null())
     return false;
 
-  std::stringstream out;
+  StringOutputBuffer storage;
+  std::ostream out(&storage);
   out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       << "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
       << "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
@@ -541,8 +533,8 @@ bool XcodeWorkspace::WriteSettingsFile(const std::string& name,
   out << "</dict>\n"
       << "</plist>\n";
 
-  return WriteFileIfChanged(build_settings_->GetFullPath(source_file),
-                            out.str(), err);
+  return storage.WriteToFileIfChanged(build_settings_->GetFullPath(source_file),
+                                      err);
 }
 
 // Class responsible for constructing and writing the .xcodeproj from the
@@ -700,8 +692,7 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
   for (const SourceFile& source : sorted_sources) {
     const std::string source_file = RebasePath(
         source.value(), source_dir, build_settings_->root_path_utf8());
-    project_.AddSourceFileToIndexingTarget(source_file, source_file,
-                                           CompilerFlags::NONE);
+    project_.AddSourceFileToIndexingTarget(source_file, source_file);
   }
 
   return true;
@@ -776,12 +767,6 @@ bool XcodeProject::AddTargetsFromBuilder(const Builder& builder, Err* err) {
 bool XcodeProject::AddCXTestSourceFilesForTestModuleTargets(
     const std::map<const Target*, PBXNativeTarget*>& bundle_targets,
     Err* err) {
-  // With the New Build System, the hack of calling clang with --help to get
-  // Xcode to see and parse the file without building them no longer work so
-  // disable it for the moment. See https://crbug.com/1103230 for details.
-  if (options_.build_system == XcodeBuildSystem::kNew)
-    return true;
-
   const SourceDir source_dir("//");
 
   // Needs to search for xctest files under the application targets, and this
@@ -862,11 +847,12 @@ bool XcodeProject::WriteFile(Err* err) const {
   if (pbxproj_file.is_null())
     return false;
 
-  std::stringstream pbxproj_string_out;
+  StringOutputBuffer storage;
+  std::ostream pbxproj_string_out(&storage);
   WriteFileContent(pbxproj_string_out);
 
-  if (!WriteFileIfChanged(build_settings_->GetFullPath(pbxproj_file),
-                          pbxproj_string_out.str(), err)) {
+  if (!storage.WriteToFileIfChanged(build_settings_->GetFullPath(pbxproj_file),
+                                    err)) {
     return false;
   }
 

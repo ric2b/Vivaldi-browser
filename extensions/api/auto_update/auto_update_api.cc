@@ -46,6 +46,7 @@ void AutoUpdateAPI::SendDidDownloadUpdate(const base::Version& version) {
 void AutoUpdateAPI::SendWillInstallUpdateOnQuit(const base::Version& version) {
   std::string version_string =
       version.IsValid() ? version.GetString() : std::string();
+  LOG(INFO) << "Pending update, version=" << version_string;
   ::vivaldi::BroadcastEventToAllProfiles(
       auto_update::OnWillInstallUpdateOnQuit::kEventName,
       auto_update::OnWillInstallUpdateOnQuit::Create(version_string));
@@ -69,6 +70,58 @@ void AutoUpdateAPI::SendDidAbortWithError(const std::string& desc,
   ::vivaldi::BroadcastEventToAllProfiles(
       auto_update::OnDidAbortWithError::kEventName,
       auto_update::OnDidAbortWithError::Create(desc, reason));
+}
+
+void AutoUpdateGetUpdateStatusFunction::SendResult(
+    absl::optional<AutoUpdateStatus> status,
+    std::string version,
+    std::string release_notes_url) {
+  namespace Results = vivaldi::auto_update::GetUpdateStatus::Results;
+
+  vivaldi::auto_update::UpdateOperationStatus status_object;
+  if (status) {
+    switch (*status) {
+      case AutoUpdateStatus::kNoUpdate:
+        status_object.status =
+            vivaldi::auto_update::UPDATE_OPERATION_STATUS_ENUM_NOUPDATE;
+        break;
+      case AutoUpdateStatus::kDidAbortWithError:
+        status_object.status = vivaldi::auto_update::
+            UPDATE_OPERATION_STATUS_ENUM_DIDABORTWITHERROR;
+        break;
+      case AutoUpdateStatus::kDidFindValidUpdate:
+        status_object.status = vivaldi::auto_update::
+            UPDATE_OPERATION_STATUS_ENUM_DIDFINDVALIDUPDATE;
+        break;
+      case AutoUpdateStatus::kWillDownloadUpdate:
+        status_object.status = vivaldi::auto_update::
+            UPDATE_OPERATION_STATUS_ENUM_WILLDOWNLOADUPDATE;
+        break;
+      case AutoUpdateStatus::kDidDownloadUpdate:
+        status_object.status = vivaldi::auto_update::
+            UPDATE_OPERATION_STATUS_ENUM_DIDDOWNLOADUPDATE;
+        break;
+      case AutoUpdateStatus::kWillInstallUpdateOnQuit:
+        status_object.status = vivaldi::auto_update::
+            UPDATE_OPERATION_STATUS_ENUM_WILLINSTALLUPDATEONQUIT;
+        break;
+      case AutoUpdateStatus::kUpdaterDidRelaunchApplication:
+        status_object.status = vivaldi::auto_update::
+            UPDATE_OPERATION_STATUS_ENUM_UPDATERDIDRELAUNCHAPPLICATION;
+        break;
+    }
+  }
+  status_object.version = std::move(version);
+  status_object.release_notes_url = std::move(release_notes_url);
+
+  Respond(ArgumentList(Results::Create(status_object)));
+}
+
+ExtensionFunction::ResponseAction AutoUpdateHasAutoUpdatesFunction::Run() {
+  namespace Results = vivaldi::auto_update::HasAutoUpdates::Results;
+
+  bool has_auto_updates = HasAutoUpdates();
+  return RespondNow(ArgumentList(Results::Create(has_auto_updates)));
 }
 
 }  // namespace extensions

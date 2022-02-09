@@ -21,5 +21,10 @@
 "qwant.com",
 "startpage.com",
 
+// Sites that fails or use messages like Add to Chrome
+
+// VB-65894
+"mojeek.com",
+
 // VB-64209: Videos on ted.com fail if we use the chrome user agent.
 "ted.com",

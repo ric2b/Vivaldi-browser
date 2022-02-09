@@ -5,37 +5,23 @@
 //
 // This file is an original work developed by Opera Software ASA
 
-#include "platform_media/gpu/pipeline/platform_media_pipeline_factory.h"
-
-#include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
+#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 
 #include "base/logging.h"
 #include "media/base/win/mf_initializer.h"
 
+#include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
+
 namespace media {
 
-namespace {
-
-class WMFMediaPipelineFactory : public PlatformMediaPipelineFactory {
- public:
-  std::unique_ptr<PlatformMediaPipeline> CreatePipeline() override {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-    if(!InitializeMediaFoundation()) {
-      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                  << " Failed to initialize Media Foundation ";
-      return nullptr;
-    }
-    return std::make_unique<WMFMediaPipeline>();
+/* static */
+std::unique_ptr<PlatformMediaPipeline> PlatformMediaPipeline::Create() {
+  if (!InitializeMediaFoundation()) {
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to initialize Media Foundation ";
+    return nullptr;
   }
-};
-
-}  // namespace
-
-// static
-std::unique_ptr<PlatformMediaPipelineFactory>
-PlatformMediaPipelineFactory::Create() {
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  return std::make_unique<WMFMediaPipelineFactory>();
+  return std::make_unique<WMFMediaPipeline>();
 }
 
 }  // namespace media

@@ -22,6 +22,12 @@ class BrowserContext;
 
 namespace extensions {
 
+namespace vivaldi {
+namespace vivaldi_account {
+struct PendingRegistration;
+}  // namespace vivaldi_account
+}  // namespace vivaldi
+
 class VivaldiAccountEventRouter
     : public ::vivaldi::VivaldiAccountManager::Observer,
       public ::vivaldi::VivaldiAccountPasswordHandler::Observer {
@@ -113,6 +119,43 @@ class VivaldiAccountGetStateFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiAccountGetStateFunction);
+};
+
+class VivaldiAccountSetPendingRegistrationFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("vivaldiAccount.setPendingRegistration",
+                             VIVALDI_ACCOUNT_SET_PENDING_REGISTRATION)
+  VivaldiAccountSetPendingRegistrationFunction() = default;
+
+ private:
+  ~VivaldiAccountSetPendingRegistrationFunction() override = default;
+  void OnEncryptDone(
+      std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+          pending_registration,
+      std::unique_ptr<std::string> encrypted_password,
+      bool result);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountSetPendingRegistrationFunction);
+};
+
+class VivaldiAccountGetPendingRegistrationFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("vivaldiAccount.getPendingRegistration",
+                             VIVALDI_ACCOUNT_GET_PENDING_REGISTRATION)
+  VivaldiAccountGetPendingRegistrationFunction() = default;
+
+ private:
+  ~VivaldiAccountGetPendingRegistrationFunction() override = default;
+  void OnDecryptDone(
+      std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+          pending_registration,
+      bool result);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountGetPendingRegistrationFunction);
 };
 
 }  // namespace extensions

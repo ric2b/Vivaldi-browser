@@ -719,7 +719,7 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
 
       if (!output_cb_.is_null()) {
         task_runner_->PostTask(FROM_HERE,
-                               base::Bind(output_cb_, output_buffer));
+                               base::BindRepeating(output_cb_, output_buffer));
       } else {
         return E_ABORT;
       }
@@ -956,7 +956,8 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
       const_cast<uint8_t*>(data_buffer->data() +
                            (rows * stride + rows * stride / 4)),
       const_cast<uint8_t*>(data_buffer->data() + (rows * stride)), timestamp);
-  frame->AddDestructionObserver(base::Bind(&BufferHolder, data_buffer));
+  frame->AddDestructionObserver(
+      base::BindRepeating(&BufferHolder, data_buffer));
   return frame;
 }
 

@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "calendar/calendar_model_observer.h"
 #include "calendar/calendar_service.h"
 #include "calendar/calendar_service_factory.h"
@@ -325,7 +326,7 @@ void CalendarEventRouter::OnEventCreated(CalendarService* service,
                                          const calendar::EventResult& event) {
   std::unique_ptr<CalendarEvent> createdEvent = CreateVivaldiEvent(event);
 
-  std::unique_ptr<base::ListValue> args = OnEventCreated::Create(*createdEvent);
+  std::vector<base::Value> args = OnEventCreated::Create(*createdEvent);
   DispatchEvent(OnEventCreated::kEventName, std::move(args));
 }
 
@@ -333,7 +334,7 @@ void CalendarEventRouter::OnEventDeleted(CalendarService* service,
                                          const calendar::EventResult& event) {
   std::unique_ptr<CalendarEvent> deletedEvent = CreateVivaldiEvent(event);
 
-  std::unique_ptr<base::ListValue> args = OnEventRemoved::Create(*deletedEvent);
+  std::vector<base::Value> args = OnEventRemoved::Create(*deletedEvent);
   DispatchEvent(OnEventRemoved::kEventName, std::move(args));
 }
 
@@ -341,7 +342,7 @@ void CalendarEventRouter::OnEventChanged(CalendarService* service,
                                          const calendar::EventResult& event) {
   std::unique_ptr<CalendarEvent> changedEvent = CreateVivaldiEvent(event);
 
-  std::unique_ptr<base::ListValue> args = OnEventChanged::Create(*changedEvent);
+  std::vector<base::Value> args = OnEventChanged::Create(*changedEvent);
   DispatchEvent(OnEventChanged::kEventName, std::move(args));
 }
 
@@ -349,8 +350,7 @@ void CalendarEventRouter::OnEventTypeCreated(
     CalendarService* service,
     const calendar::EventTypeRow& row) {
   EventType createdEvent = GetEventType(row);
-  std::unique_ptr<base::ListValue> args =
-      OnEventTypeCreated::Create(createdEvent);
+  std::vector<base::Value> args = OnEventTypeCreated::Create(createdEvent);
   DispatchEvent(OnEventTypeCreated::kEventName, std::move(args));
 }
 
@@ -358,8 +358,7 @@ void CalendarEventRouter::OnEventTypeDeleted(
     CalendarService* service,
     const calendar::EventTypeRow& row) {
   EventType deletedEvent = GetEventType(row);
-  std::unique_ptr<base::ListValue> args =
-      OnEventTypeRemoved::Create(deletedEvent);
+  std::vector<base::Value> args = OnEventTypeRemoved::Create(deletedEvent);
   DispatchEvent(OnEventTypeRemoved::kEventName, std::move(args));
 }
 
@@ -367,32 +366,28 @@ void CalendarEventRouter::OnEventTypeChanged(
     CalendarService* service,
     const calendar::EventTypeRow& row) {
   EventType changedEvent = GetEventType(row);
-  std::unique_ptr<base::ListValue> args =
-      OnEventTypeChanged::Create(changedEvent);
+  std::vector<base::Value> args = OnEventTypeChanged::Create(changedEvent);
   DispatchEvent(OnEventTypeChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarCreated(CalendarService* service,
                                             const CalendarRow& row) {
   Calendar createCalendar = GetCalendarItem(row);
-  std::unique_ptr<base::ListValue> args =
-      OnCalendarCreated::Create(createCalendar);
+  std::vector<base::Value> args = OnCalendarCreated::Create(createCalendar);
   DispatchEvent(OnCalendarCreated::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarDeleted(CalendarService* service,
                                             const CalendarRow& row) {
   Calendar deletedCalendar = GetCalendarItem(row);
-  std::unique_ptr<base::ListValue> args =
-      OnCalendarChanged::Create(deletedCalendar);
+  std::vector<base::Value> args = OnCalendarChanged::Create(deletedCalendar);
   DispatchEvent(OnCalendarRemoved::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarChanged(CalendarService* service,
                                             const CalendarRow& row) {
   Calendar changedCalendar = GetCalendarItem(row);
-  std::unique_ptr<base::ListValue> args =
-      OnCalendarChanged::Create(changedCalendar);
+  std::vector<base::Value> args = OnCalendarChanged::Create(changedCalendar);
   DispatchEvent(OnCalendarChanged::kEventName, std::move(args));
 }
 
@@ -400,20 +395,19 @@ void CalendarEventRouter::OnNotificationChanged(
     CalendarService* service,
     const calendar::NotificationRow& row) {
   Notification changedNotification = CreateNotification(row);
-  std::unique_ptr<base::ListValue> args =
+  std::vector<base::Value> args =
       OnNotificationChanged::Create(changedNotification);
   DispatchEvent(OnNotificationChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarModified(CalendarService* service) {
-  std::unique_ptr<base::ListValue> args(new base::ListValue);
+  std::vector<base::Value> args;
   DispatchEvent(OnCalendarDataChanged::kEventName, std::move(args));
 }
 
 // Helper to actually dispatch an event to extension listeners.
-void CalendarEventRouter::DispatchEvent(
-    const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
+void CalendarEventRouter::DispatchEvent(const std::string& event_name,
+                                        std::vector<base::Value> event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(base::WrapUnique(
@@ -423,7 +417,7 @@ void CalendarEventRouter::DispatchEvent(
 }
 
 void BroadcastCalendarEvent(const std::string& eventname,
-                            std::unique_ptr<base::ListValue> args,
+                            std::vector<base::Value> args,
                             content::BrowserContext* context) {
   std::unique_ptr<extensions::Event> event(
       new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
@@ -481,7 +475,7 @@ ExtensionFunction::ResponseAction CalendarGetAllEventsFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllEvents(
-      base::Bind(&CalendarGetAllEventsFunction::GetAllEventsComplete, this),
+      base::BindOnce(&CalendarGetAllEventsFunction::GetAllEventsComplete, this),
       &task_tracker_);
 
   return RespondLater();  // GetAllEventsComplete() will be called
@@ -519,7 +513,7 @@ ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
 
   model->CreateCalendarEvent(
       createEvent,
-      base::Bind(&CalendarEventCreateFunction::CreateEventComplete, this),
+      base::BindOnce(&CalendarEventCreateFunction::CreateEventComplete, this),
       &task_tracker_);
   return RespondLater();
 }
@@ -556,7 +550,7 @@ ExtensionFunction::ResponseAction CalendarEventsCreateFunction::Run() {
 
   model->CreateCalendarEvents(
       event_rows,
-      base::Bind(&CalendarEventsCreateFunction::CreateEventsComplete, this),
+      base::BindOnce(&CalendarEventsCreateFunction::CreateEventsComplete, this),
       &task_tracker_);
 
   return RespondLater();
@@ -773,7 +767,7 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->UpdateCalendarEvent(
       eventId, updatedEvent,
-      base::Bind(&CalendarUpdateEventFunction::UpdateEventComplete, this),
+      base::BindOnce(&CalendarUpdateEventFunction::UpdateEventComplete, this),
       &task_tracker_);
   return RespondLater();  // UpdateEventComplete() will be called
                           // asynchronously.
@@ -808,7 +802,7 @@ ExtensionFunction::ResponseAction CalendarDeleteEventFunction::Run() {
 
   model->DeleteCalendarEvent(
       eventId,
-      base::Bind(&CalendarDeleteEventFunction::DeleteEventComplete, this),
+      base::BindOnce(&CalendarDeleteEventFunction::DeleteEventComplete, this),
       &task_tracker_);
   return RespondLater();  // DeleteEventComplete() will be called
                           // asynchronously.
@@ -931,7 +925,8 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->CreateCalendar(
-      createCalendar, base::Bind(&CalendarCreateFunction::CreateComplete, this),
+      createCalendar,
+      base::BindOnce(&CalendarCreateFunction::CreateComplete, this),
       &task_tracker_);
   return RespondLater();
 }
@@ -953,7 +948,7 @@ ExtensionFunction::ResponseAction CalendarGetAllFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllCalendars(
-      base::Bind(&CalendarGetAllFunction::GetAllComplete, this),
+      base::BindOnce(&CalendarGetAllFunction::GetAllComplete, this),
       &task_tracker_);
 
   return RespondLater();  // GetAllComplete() will be called
@@ -1060,7 +1055,7 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->UpdateCalendar(
       calendarId, updatedCalendar,
-      base::Bind(&CalendarUpdateFunction::UpdateCalendarComplete, this),
+      base::BindOnce(&CalendarUpdateFunction::UpdateCalendarComplete, this),
       &task_tracker_);
   return RespondLater();  // UpdateCalendarComplete() will be called
                           // asynchronously.
@@ -1095,7 +1090,7 @@ ExtensionFunction::ResponseAction CalendarDeleteFunction::Run() {
 
   model->DeleteCalendar(
       calendarId,
-      base::Bind(&CalendarDeleteFunction::DeleteCalendarComplete, this),
+      base::BindOnce(&CalendarDeleteFunction::DeleteCalendarComplete, this),
       &task_tracker_);
   return RespondLater();  // DeleteCalendarComplete() will be called
                           // asynchronously.
@@ -1114,8 +1109,8 @@ ExtensionFunction::ResponseAction CalendarGetAllEventTypesFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllEventTypes(
-      base::Bind(&CalendarGetAllEventTypesFunction::GetAllEventTypesComplete,
-                 this),
+      base::BindOnce(
+          &CalendarGetAllEventTypesFunction::GetAllEventTypesComplete, this),
       &task_tracker_);
 
   return RespondLater();  // CalendarGetAllEventTypesFunction() will be called
@@ -1158,8 +1153,8 @@ ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
 
   model->CreateEventType(
       create_event_type,
-      base::Bind(&CalendarEventTypeCreateFunction::CreateEventTypeComplete,
-                 this),
+      base::BindOnce(&CalendarEventTypeCreateFunction::CreateEventTypeComplete,
+                     this),
       &task_tracker_);
   return RespondLater();
 }
@@ -1211,8 +1206,8 @@ ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
 
   model->UpdateEventType(
       event_type_id, update_event_type,
-      base::Bind(&CalendarEventTypeUpdateFunction::UpdateEventTypeComplete,
-                 this),
+      base::BindOnce(&CalendarEventTypeUpdateFunction::UpdateEventTypeComplete,
+                     this),
       &task_tracker_);
   return RespondLater();
 }
@@ -1243,8 +1238,8 @@ ExtensionFunction::ResponseAction CalendarDeleteEventTypeFunction::Run() {
 
   model->DeleteEventType(
       event_type_id,
-      base::Bind(&CalendarDeleteEventTypeFunction::DeleteEventTypeComplete,
-                 this),
+      base::BindOnce(&CalendarDeleteEventTypeFunction::DeleteEventTypeComplete,
+                     this),
       &task_tracker_);
   return RespondLater();  // DeleteEventTypeComplete() will be called
                           // asynchronously.
@@ -1291,7 +1286,7 @@ ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->CreateRecurrenceException(
       row,
-      base::Bind(
+      base::BindOnce(
           &CalendarCreateEventExceptionFunction::CreateEventExceptionComplete,
           this),
       &task_tracker_);
@@ -1315,7 +1310,7 @@ ExtensionFunction::ResponseAction CalendarGetAllNotificationsFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllNotifications(
-      base::Bind(
+      base::BindOnce(
           &CalendarGetAllNotificationsFunction::GetAllNotificationsComplete,
           this),
       &task_tracker_);
@@ -1362,7 +1357,7 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->CreateNotification(
       row,
-      base::Bind(
+      base::BindOnce(
           &CalendarCreateNotificationFunction::CreateNotificationComplete,
           this),
       &task_tracker_);
@@ -1431,7 +1426,7 @@ ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->UpdateNotification(
       eventId, update_notification,
-      base::Bind(
+      base::BindOnce(
           &CalendarUpdateNotificationFunction::UpdateNotificationComplete,
           this),
       &task_tracker_);
@@ -1469,7 +1464,7 @@ ExtensionFunction::ResponseAction CalendarDeleteNotificationFunction::Run() {
 
   model->DeleteNotification(
       notification_id,
-      base::Bind(
+      base::BindOnce(
           &CalendarDeleteNotificationFunction::DeleteNotificationComplete,
           this),
       &task_tracker_);
@@ -1516,7 +1511,7 @@ ExtensionFunction::ResponseAction CalendarCreateInviteFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->CreateInvite(
       row,
-      base::Bind(&CalendarCreateInviteFunction::CreateInviteComplete, this),
+      base::BindOnce(&CalendarCreateInviteFunction::CreateInviteComplete, this),
       &task_tracker_);
 
   return RespondLater();
@@ -1551,7 +1546,7 @@ ExtensionFunction::ResponseAction CalendarDeleteInviteFunction::Run() {
 
   model->DeleteInvite(
       invite_id,
-      base::Bind(&CalendarDeleteInviteFunction::DeleteInviteComplete, this),
+      base::BindOnce(&CalendarDeleteInviteFunction::DeleteInviteComplete, this),
       &task_tracker_);
   return RespondLater();  // DeleteInviteComplete() will be called
                           // asynchronously.
@@ -1614,7 +1609,7 @@ ExtensionFunction::ResponseAction CalendarUpdateInviteFunction::Run() {
 
   model->UpdateInvite(
       updateInvite,
-      base::Bind(&CalendarUpdateInviteFunction::UpdateInviteComplete, this),
+      base::BindOnce(&CalendarUpdateInviteFunction::UpdateInviteComplete, this),
       &task_tracker_);
   return RespondLater();  // DeleteInviteComplete() will be called
                           // asynchronously.
@@ -1628,8 +1623,6 @@ void CalendarUpdateInviteFunction::UpdateInviteComplete(
     vivaldi::calendar::Invite invite = CreateInviteItem(results->inviteRow);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::UpdateInvite::Results::Create(invite)));
-
-    Respond(NoArguments());
   }
 }
 
@@ -1651,7 +1644,8 @@ ExtensionFunction::ResponseAction CalendarCreateAccountFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->CreateAccount(
       row,
-      base::Bind(&CalendarCreateAccountFunction::CreateAccountComplete, this),
+      base::BindOnce(&CalendarCreateAccountFunction::CreateAccountComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();
@@ -1685,7 +1679,8 @@ ExtensionFunction::ResponseAction CalendarDeleteAccountFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->DeleteAccount(
       accountId,
-      base::Bind(&CalendarDeleteAccountFunction::DeleteAccountComplete, this),
+      base::BindOnce(&CalendarDeleteAccountFunction::DeleteAccountComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();
@@ -1750,7 +1745,8 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
 
   model->UpdateAccount(
       row,
-      base::Bind(&CalendarUpdateAccountFunction::UpdateAccountComplete, this),
+      base::BindOnce(&CalendarUpdateAccountFunction::UpdateAccountComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();
@@ -1772,7 +1768,8 @@ ExtensionFunction::ResponseAction CalendarGetAllAccountsFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllAccounts(
-      base::Bind(&CalendarGetAllAccountsFunction::GetAllAccountsComplete, this),
+      base::BindOnce(&CalendarGetAllAccountsFunction::GetAllAccountsComplete,
+                     this),
       &task_tracker_);
 
   return RespondLater();
@@ -1794,7 +1791,7 @@ ExtensionFunction::ResponseAction CalendarGetAllEventTemplatesFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
   model->GetAllEventTemplates(
-      base::Bind(
+      base::BindOnce(
           &CalendarGetAllEventTemplatesFunction::GetAllEventTemplatesComplete,
           this),
       &task_tracker_);

@@ -59,6 +59,7 @@ const char kVivaldiUpdate[] = "vivaldi-update";
 // executable is a development build unrelated to the installation.
 const char kVivaldiDebugTargetExe[] = "vivaldi-debug-target-exe";
 
+const char kDebugSetupCommandEnvironment[] = "VIVALDI_DEBUG_SETUP_COMMAND";
 #endif
 
 const wchar_t kUninstallSurveyUrl[] =

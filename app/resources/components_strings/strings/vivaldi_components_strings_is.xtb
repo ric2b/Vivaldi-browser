@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Halda áfram</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Keyri villugreiningu á nettengingu<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Tilkynningar</translation>
+<translation id="2491414235131909199">Viðbót setti þessa síðu á bannlista</translation>
 <translation id="2501278716633472235">Farðu tilbaka</translation>
 <translation id="2539524384386349900">Greina</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendi ógilt svar.</translation>
@@ -144,7 +145,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="5838278095973806738">Þú ættir ekki að skrá inn neinar viðkvæmar upplýsingar á þessari síðu (til dæmis lykilorð og kreditkort) þar sem að upplýsingunum gæti verið stolið af tölvuþrjótum.</translation>
 <translation id="5869405914158311789">Ekki náðist í síðu</translation>
 <translation id="5932224571077948991">Síða sýnir uppáþrengjandi eða villandi auglýsingar</translation>
-<translation id="5990559369517809815">Beiðnum á þjón hefur verið hamlað af viðbót.</translation>
 <translation id="6051221802930200923">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vefsíðan notar vottorðs festingu (e. certificate pinning). Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
 <translation id="6146055958333702838">Athugaðu allar snúrur og endurræstu alla beina (e. router) og mótöld (e. modem) eða önnur
    nettingingartæki sem þú gætir verið að notast við.</translation>

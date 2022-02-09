@@ -126,7 +126,7 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
     content::RenderFrameHost* frame,
     int render_process_id,
     URLLoaderFactoryType type,
-    base::Optional<int64_t> navigation_id,
+    absl::optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -152,8 +152,7 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
           static_cast<Profile*>(browser_context)->GetOriginalProfile() ==
               browser_context_));
   RequestFilterProxyingURLLoaderFactory::StartProxying(
-      browser_context,
-      frame ? frame->GetProcess()->GetID() : render_process_id,
+      browser_context, frame ? frame->GetProcess()->GetID() : render_process_id,
       frame ? frame->GetRoutingID() : MSG_ROUTING_NONE,
       frame ? frame->GetRenderViewHost()->GetRoutingID() : MSG_ROUTING_NONE,
       &request_handler_, &request_id_generator_, std::move(navigation_id),
@@ -171,7 +170,7 @@ void RequestFilterManager::ProxiedProxyWebSocket(
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const GURL& site_for_cookies,
-    const base::Optional<std::string>& user_agent,
+    const absl::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -194,7 +193,7 @@ void RequestFilterManager::ProxyWebSocket(
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const GURL& site_for_cookies,
-    const base::Optional<std::string>& user_agent,
+    const absl::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>

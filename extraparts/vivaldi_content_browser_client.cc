@@ -6,7 +6,7 @@
 #include "chrome/browser/chrome_browser_main.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
-#include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
+#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
 #include "components/translate/content/common/translate.mojom.h"
 #include "content/public/browser/browser_main_parts.h"
@@ -55,11 +55,11 @@ VivaldiContentBrowserClient::CreateThrottlesForNavigation(
   if ((vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) &&
       adblock_list->has_sites()) {
     content::WebContents* web_contents = handle->GetWebContents();
-    if (auto* subresource_filter_client =
-            VivaldiSubresourceFilterClient::FromWebContents(web_contents)) {
-      subresource_filter_client->SetAdblockList(adblock_list);
-      subresource_filter_client->MaybeAppendNavigationThrottles(handle,
-                                                                &throttles);
+    if (auto* vivaldi_subresource_throttle_manager =
+            VivaldiSubresourceFilterAdblockingThrottleManager::FromWebContents(
+                web_contents)) {
+      vivaldi_subresource_throttle_manager->MaybeAppendNavigationThrottles(
+          handle, &throttles);
     }
   }
 

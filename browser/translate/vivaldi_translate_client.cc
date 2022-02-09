@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,6 +25,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill_assistant/browser/public/runtime_manager.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -184,7 +184,7 @@ void VivaldiTranslateClient::GetTranslateLanguages(
   DCHECK(target != NULL);
 
   *source = translate::TranslateDownloadManager::GetLanguageCode(
-      GetLanguageState().original_language());
+      GetLanguageState().source_language());
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
@@ -281,7 +281,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
   translate::TranslateInfoBarDelegate::Create(
       step != translate::TRANSLATE_STEP_BEFORE_TRANSLATE,
       translate_manager_->GetWeakPtr(),
-      InfoBarService::FromWebContents(web_contents()),
+      infobars::ContentInfoBarManager::FromWebContents(web_contents()),
       web_contents()->GetBrowserContext()->IsOffTheRecord(), step,
       source_language, target_language, error_type, triggered_from_menu);
 #else
@@ -298,7 +298,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
       CreateTranslatePrefs(profile->GetPrefs());
   if (!profile->IsOffTheRecord()) {
     std::string source = translate::TranslateDownloadManager::GetLanguageCode(
-        GetLanguageState().original_language());
+        GetLanguageState().source_language());
     std::string auto_translate_language =
         translate::TranslateManager::GetAutoTargetLanguage(
             source, translate_prefs.get());
@@ -353,7 +353,7 @@ int VivaldiTranslateClient::GetInfobarIconID() const {
 }
 
 void VivaldiTranslateClient::ManualTranslateWhenReady() {
-  if (GetLanguageState().original_language().empty()) {
+  if (GetLanguageState().source_language().empty()) {
     manual_translate_on_ready_ = true;
   } else {
     translate::TranslateManager* manager = GetTranslateManager();

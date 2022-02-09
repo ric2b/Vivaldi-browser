@@ -151,7 +151,7 @@ class ScopedAllowCrossThreadRefCountAccess final {
 //   };
 //
 // You should always make your destructor non-public, to avoid any code deleting
-// the object accidently while there are references to it.
+// the object accidentally while there are references to it.
 //
 //
 // The ref count manipulation to RefCounted is NOT thread safe and has DCHECKs

@@ -18,7 +18,6 @@
 #include "chrome/browser/ash/login/error_screens_histogram_helper.h"
 #include "chrome/browser/ash/login/screens/network_error.h"
 #include "chrome/browser/ash/login/wizard_context.h"
-#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -26,8 +25,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
-namespace chromeos {
-
+namespace ash {
 namespace {
 
 constexpr const char kUserActionAcceptUpdateOverCellular[] =
@@ -94,7 +92,7 @@ std::string UpdateScreen::GetResultString(Result result) {
     case Result::UPDATE_ERROR:
       return "UpdateError";
     case Result::UPDATE_SKIPPED:
-      return chromeos::BaseScreen::kNotApplicable;
+      return BaseScreen::kNotApplicable;
   }
 }
 
@@ -131,12 +129,6 @@ bool UpdateScreen::MaybeSkip(WizardContext* context) {
     return true;
   }
 
-  if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
-    LOG(WARNING) << "Skip OOBE Update for remora devices.";
-    exit_callback_.Run(VersionUpdater::Result::UPDATE_SKIPPED);
-    return true;
-  }
-
   const auto* skip_screen_key = context->configuration.FindKeyOfType(
       configuration::kUpdateSkipUpdate, base::Value::Type::BOOLEAN);
   const bool skip_screen = skip_screen_key && skip_screen_key->GetBool();
@@ -157,10 +149,8 @@ void UpdateScreen::ShowImpl() {
         base::BindRepeating(&UpdateScreen::OnAccessibilityStatusChanged,
                             weak_factory_.GetWeakPtr()));
   }
-  if (!power_manager_subscription_) {
-    power_manager_subscription_ = std::make_unique<
-        ScopedObserver<PowerManagerClient, PowerManagerClient::Observer>>(this);
-    power_manager_subscription_->Add(PowerManagerClient::Get());
+  if (!power_manager_subscription_.IsObserving()) {
+    power_manager_subscription_.Observe(PowerManagerClient::Get());
   }
   PowerManagerClient::Get()->RequestStatusUpdate();
 #if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -181,7 +171,7 @@ void UpdateScreen::ShowImpl() {
 
 void UpdateScreen::HideImpl() {
   accessibility_subscription_ = {};
-  power_manager_subscription_.reset();
+  power_manager_subscription_.Reset();
   show_timer_.Stop();
   if (view_)
     view_->Hide();
@@ -451,7 +441,7 @@ void UpdateScreen::SetUpdateStatusMessage(int percent,
 void UpdateScreen::UpdateBatteryWarningVisibility() {
   if (!view_)
     return;
-  const base::Optional<power_manager::PowerSupplyProperties>& proto =
+  const absl::optional<power_manager::PowerSupplyProperties>& proto =
       PowerManagerClient::Get()->GetLastStatus();
   if (!proto.has_value())
     return;
@@ -516,4 +506,4 @@ void UpdateScreen::OnErrorScreenHidden() {
   Show(context());
 }
 
-}  // namespace chromeos
+}  // namespace ash

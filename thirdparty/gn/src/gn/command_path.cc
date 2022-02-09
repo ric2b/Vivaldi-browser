@@ -137,7 +137,7 @@ void InsertTargetsIntoFoundPaths(const PathVector& path,
   // Don't try to insert the 0th item in the list which is the "from" target.
   // The search will be run more than once (for the different path types) and
   // if the "from" target was in the list, subsequent passes could never run
-  // the starting point is alredy in the list of targets considered).
+  // the starting point is already in the list of targets considered).
   //
   // One might imagine an alternate implementation where all items are counted
   // here but the "from" item is erased at the beginning of each search, but
@@ -313,7 +313,7 @@ Example
 
 int RunPath(const std::vector<std::string>& args) {
   if (args.size() != 3) {
-    Err(Location(), "You're holding it wrong.",
+    Err(Location(), "Unknown command format. See \"gn help path\"",
         "Usage: \"gn path <out_dir> <target_one> <target_two>\"")
         .PrintToStdout();
     return 1;

@@ -64,6 +64,7 @@
 <translation id="3732388226447288666">动物 2</translation>
 <translation id="3732439195215136813">动物 5</translation>
 <translation id="3795800845758778870">遗憾，无法在Brave浏览器运行期间导入它的设置。请保存当前工作并关闭所有Brave窗口，然后点击“继续”。</translation>
+<translation id="3822431842304177896">新增分隔线</translation>
 <translation id="3832132597516774400">风景 5</translation>
 <translation id="3914946330804881301">从 Opera 导入</translation>
 <translation id="3921292902397893431">怪兽 8</translation>
@@ -126,7 +127,6 @@
 <translation id="7086554968911045110">风景 7</translation>
 <translation id="7111492742514999492">风景 9</translation>
 <translation id="7337881442233988129">Chromium 浏览器</translation>
-<translation id="7496505986576158197">Vivaldi的诞生离不开<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />开源项目及其他<ph name="BEGIN_LINK_OSS" />开源软件<ph name="END_LINK_OSS" />。</translation>
 <translation id="7581266044164103589">启动更新安装器失败。请检查是否有足够的内存或存储空间然后重试。</translation>
 <translation id="7658239707568436148">取消</translation>
 <translation id="7715497554424665066">忽略更新(&amp;I)</translation>

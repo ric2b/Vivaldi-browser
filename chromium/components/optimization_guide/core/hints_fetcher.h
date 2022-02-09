@@ -13,11 +13,11 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "components/optimization_guide/proto/hints.pb.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 class PrefService;
@@ -59,7 +59,7 @@ enum class HintsFetcherRequestStatus {
 // to pass back the fetched hints response from the remote Optimization Guide
 // Service.
 using HintsFetchedCallback = base::OnceCallback<void(
-    base::Optional<std::unique_ptr<proto::GetHintsResponse>>)>;
+    absl::optional<std::unique_ptr<proto::GetHintsResponse>>)>;
 
 // A class to handle requests for optimization hints from a remote Optimization
 // Guide Service.
@@ -100,6 +100,16 @@ class HintsFetcher {
   // Clear all the hosts and expiration times from the
   // HintsFetcherHostsSuccessfullyFetched dictionary pref.
   static void ClearHostsSuccessfullyFetched(PrefService* pref_service);
+
+  // Clear the given host from the HintsFetcherHostsSuccessfullyFetched
+  // dictionary pref.
+  static void ClearSingleFetchedHost(PrefService* pref_service,
+                                     const std::string& host);
+
+  // Adds a fetched host at the given time. Used only for testing.
+  static void AddFetchedHostForTesting(PrefService* pref_service,
+                                       const std::string& host,
+                                       base::Time time);
 
   // Return whether the host was covered by a hints fetch and any returned hints
   // would not have expired.

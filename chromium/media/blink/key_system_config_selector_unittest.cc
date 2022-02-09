@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/pattern.h"
+#include "build/build_config.h"
 #include "media/base/cdm_config.h"
 #include "media/base/eme_constants.h"
 #include "media/base/key_systems.h"
@@ -44,8 +45,10 @@ const char kRecommendIdentifierRobustness[] = "recommend_identifier";
 const char kRequireIdentifierRobustness[] = "require_identifier";
 const char kDisallowHwSecureCodecRobustness[] = "disallow_hw_secure_codec";
 const char kRequireHwSecureCodecRobustness[] = "require_hw_secure_codec";
-const char kRequireHwSecureCodecAndIdentifierRobustness[] =
-    "require_hw_secure_codec_and_identifier";
+const char kRequireIdentifierAndHwSecureCodecRobustness[] =
+    "require_identifier_and_hw_secure_codec";
+const char kRequireIdentifierPersistenceAndHwSecureCodecRobustness[] =
+    "require_identifier_persistence_and_hw_secure_codec";
 const char kUnsupportedRobustness[] = "unsupported";
 
 // Test container mime types. Supported types are prefixed with audio/video so
@@ -283,7 +286,15 @@ class FakeKeySystems : public KeySystems {
   EmeConfigRule GetRobustnessConfigRule(
       const std::string& key_system,
       EmeMediaType media_type,
-      const std::string& requested_robustness) const override {
+      const std::string& requested_robustness,
+      const bool* hw_secure_requirement) const override {
+    // TODO(crbug.com/1204284): Remove the `hw_secure_requirement` parameter.
+    // This only exists as a temporary solution until a larger refactoring is
+    // done. We are only testing the explicit thing it is fixing here.
+    if (hw_secure_requirement && *hw_secure_requirement &&
+        distinctive_identifier == EmeFeatureSupport::NOT_SUPPORTED) {
+      return EmeConfigRule::NOT_SUPPORTED;
+    }
     if (requested_robustness.empty())
       return EmeConfigRule::SUPPORTED;
     if (requested_robustness == kSupportedRobustness)
@@ -296,8 +307,13 @@ class FakeKeySystems : public KeySystems {
       return EmeConfigRule::HW_SECURE_CODECS_NOT_ALLOWED;
     if (requested_robustness == kRequireHwSecureCodecRobustness)
       return EmeConfigRule::HW_SECURE_CODECS_REQUIRED;
-    if (requested_robustness == kRequireHwSecureCodecAndIdentifierRobustness)
+    if (requested_robustness == kRequireIdentifierAndHwSecureCodecRobustness)
       return EmeConfigRule::IDENTIFIER_AND_HW_SECURE_CODECS_REQUIRED;
+    if (requested_robustness ==
+        kRequireIdentifierPersistenceAndHwSecureCodecRobustness) {
+      return EmeConfigRule::
+          IDENTIFIER_PERSISTENCE_AND_HW_SECURE_CODECS_REQUIRED;
+    }
     if (requested_robustness == kUnsupportedRobustness)
       return EmeConfigRule::NOT_SUPPORTED;
 
@@ -718,7 +734,13 @@ TEST_F(KeySystemConfigSelectorTest,
   config.distinctive_identifier = MediaKeysRequirement::kOptional;
   configs_.push_back(config);
 
+#if defined(OS_ANDROID)
+  SelectConfigRequestsPermissionAndReturnsConfig();
+  EXPECT_EQ(MediaKeysRequirement::kRequired, config_.distinctive_identifier);
+  EXPECT_TRUE(cdm_config_.allow_distinctive_identifier);
+#else
   SelectConfigReturnsError();
+#endif  // defined(OS_ANDROID)
 }
 
 TEST_F(KeySystemConfigSelectorTest,
@@ -731,7 +753,13 @@ TEST_F(KeySystemConfigSelectorTest,
   config.distinctive_identifier = MediaKeysRequirement::kRequired;
   configs_.push_back(config);
 
+#if defined(OS_ANDROID)
+  SelectConfigRequestsPermissionAndReturnsConfig();
+  EXPECT_EQ(MediaKeysRequirement::kRequired, config_.distinctive_identifier);
+  EXPECT_TRUE(cdm_config_.allow_distinctive_identifier);
+#else
   SelectConfigReturnsError();
+#endif  // defined(OS_ANDROID)
 }
 
 // --- persistentState ---
@@ -1233,9 +1261,13 @@ TEST_F(KeySystemConfigSelectorTest,
   config.video_capabilities = video_capabilities;
   configs_.push_back(config);
 
+#if defined(OS_ANDROID)
+  SelectConfigRequestsPermissionAndReturnsConfig();
+#else
   SelectConfigReturnsConfig();
-  ASSERT_EQ(1u, config_.video_capabilities.size());
+#endif  // defined(OS_ANDROID)
   EXPECT_EQ(MediaKeysRequirement::kNotAllowed, config_.distinctive_identifier);
+  ASSERT_EQ(1u, config_.video_capabilities.size());
 }
 
 TEST_F(KeySystemConfigSelectorTest,
@@ -1486,10 +1518,10 @@ TEST_F(KeySystemConfigSelectorTest,
   SelectConfigReturnsError();
 }
 
-// --- HW Secure and Identifier Robustness ---
+// --- Identifier and HW Secure Robustness ---
 
 TEST_F(KeySystemConfigSelectorTest,
-       HwSecureCodecAndIdentifier_IncompatibleCodecAndRobustness) {
+       IdentifierAndHwSecureCodec_IncompatibleCodecAndRobustness) {
   media_permission_->is_granted = true;
   key_systems_->distinctive_identifier = EmeFeatureSupport::REQUESTABLE;
 
@@ -1498,7 +1530,7 @@ TEST_F(KeySystemConfigSelectorTest,
   video_capabilities[0].mime_type = kSupportedVideoContainer;
   video_capabilities[0].codecs = kDisallowHwSecureCodec;
   video_capabilities[0].robustness =
-      kRequireHwSecureCodecAndIdentifierRobustness;
+      kRequireIdentifierAndHwSecureCodecRobustness;
 
   auto config = EmptyConfiguration();
   config.video_capabilities = video_capabilities;
@@ -1508,7 +1540,7 @@ TEST_F(KeySystemConfigSelectorTest,
 }
 
 TEST_F(KeySystemConfigSelectorTest,
-       HwSecureCodecAndIdentifier_IncompatibleCapabilities) {
+       IdentifierAndHwSecureCodec_IncompatibleCapabilities) {
   media_permission_->is_granted = true;
   key_systems_->distinctive_identifier = EmeFeatureSupport::REQUESTABLE;
 
@@ -1517,7 +1549,7 @@ TEST_F(KeySystemConfigSelectorTest,
   video_capabilities[0].mime_type = kSupportedVideoContainer;
   video_capabilities[0].codecs = kSupportedVideoCodec;
   video_capabilities[0].robustness =
-      kRequireHwSecureCodecAndIdentifierRobustness;
+      kRequireIdentifierAndHwSecureCodecRobustness;
   video_capabilities[1].content_type = "disallow_hw_secure_codec";
   video_capabilities[1].mime_type = kSupportedVideoContainer;
   video_capabilities[1].codecs = kDisallowHwSecureCodec;
@@ -1536,7 +1568,7 @@ TEST_F(KeySystemConfigSelectorTest,
 }
 
 TEST_F(KeySystemConfigSelectorTest,
-       HwSecureCodecAndIdentifier_UnsupportedCapabilityNotAffectingRules) {
+       IdentifierAndHwSecureCodec_UnsupportedCapabilityNotAffectingRules) {
   media_permission_->is_granted = true;
   key_systems_->distinctive_identifier = EmeFeatureSupport::REQUESTABLE;
 
@@ -1549,7 +1581,7 @@ TEST_F(KeySystemConfigSelectorTest,
   video_capabilities[1].mime_type = kSupportedVideoContainer;
   video_capabilities[1].codecs = kRequireHwSecureCodec;
   video_capabilities[1].robustness =
-      kRequireHwSecureCodecAndIdentifierRobustness;
+      kRequireIdentifierAndHwSecureCodecRobustness;
 
   auto config = EmptyConfiguration();
   config.video_capabilities = video_capabilities;
@@ -1561,6 +1593,72 @@ TEST_F(KeySystemConfigSelectorTest,
   EXPECT_EQ("require_hw_secure_codec",
             config_.video_capabilities[0].content_type);
   EXPECT_TRUE(cdm_config_.use_hw_secure_codecs);
+}
+
+TEST_F(KeySystemConfigSelectorTest,
+       HwSecureCodecAndIdentifier_IdentifierAndHwSecureCodecsDisjoint) {
+  media_permission_->is_granted = false;
+  key_systems_->distinctive_identifier = EmeFeatureSupport::NOT_SUPPORTED;
+
+  std::vector<WebMediaKeySystemMediaCapability> video_capabilities(2);
+  video_capabilities[0].content_type = "require_hw_secure_codec";
+  video_capabilities[0].mime_type = kSupportedVideoContainer;
+  video_capabilities[0].codecs = kRequireHwSecureCodec;
+  video_capabilities[0].robustness = "";
+
+  auto config = EmptyConfiguration();
+  config.video_capabilities = video_capabilities;
+  configs_.push_back(config);
+
+  SelectConfigReturnsError();
+}
+
+// --- Identifier, Persistence and HW Secure Robustness ---
+
+TEST_F(KeySystemConfigSelectorTest,
+       IdentifierPersistenceAndHwSecureCodec_Supported) {
+  media_permission_->is_granted = true;
+  key_systems_->persistent_state = EmeFeatureSupport::REQUESTABLE;
+  key_systems_->distinctive_identifier = EmeFeatureSupport::REQUESTABLE;
+
+  std::vector<WebMediaKeySystemMediaCapability> video_capabilities(1);
+  video_capabilities[0].content_type = "require_hw_secure_codec";
+  video_capabilities[0].mime_type = kSupportedVideoContainer;
+  video_capabilities[0].codecs = kSupportedVideoCodec;
+  video_capabilities[0].robustness =
+      kRequireIdentifierPersistenceAndHwSecureCodecRobustness;
+
+  auto config = EmptyConfiguration();
+  config.video_capabilities = video_capabilities;
+  configs_.push_back(config);
+
+  SelectConfigRequestsPermissionAndReturnsConfig();
+  EXPECT_EQ(MediaKeysRequirement::kRequired, config_.distinctive_identifier);
+  EXPECT_EQ(MediaKeysRequirement::kRequired, config_.persistent_state);
+  ASSERT_EQ(1u, config_.video_capabilities.size());
+  EXPECT_EQ("require_hw_secure_codec",
+            config_.video_capabilities[0].content_type);
+  EXPECT_TRUE(cdm_config_.use_hw_secure_codecs);
+}
+
+TEST_F(KeySystemConfigSelectorTest,
+       IdentifierPersistenceAndHwSecureCodec_NotSupported) {
+  media_permission_->is_granted = true;
+  key_systems_->persistent_state = EmeFeatureSupport::NOT_SUPPORTED;
+  key_systems_->distinctive_identifier = EmeFeatureSupport::REQUESTABLE;
+
+  std::vector<WebMediaKeySystemMediaCapability> video_capabilities(1);
+  video_capabilities[0].content_type = "require_hw_secure_codec";
+  video_capabilities[0].mime_type = kSupportedVideoContainer;
+  video_capabilities[0].codecs = kSupportedVideoCodec;
+  video_capabilities[0].robustness =
+      kRequireIdentifierPersistenceAndHwSecureCodecRobustness;
+
+  auto config = EmptyConfiguration();
+  config.video_capabilities = video_capabilities;
+  configs_.push_back(config);
+
+  SelectConfigReturnsError();
 }
 
 // --- audioCapabilities ---

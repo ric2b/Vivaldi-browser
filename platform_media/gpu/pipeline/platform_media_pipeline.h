@@ -15,7 +15,6 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "media/base/media_export.h"
 
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
@@ -34,12 +33,15 @@ struct PlatformVideoConfig;
 class MEDIA_EXPORT PlatformMediaPipeline {
  public:
   using InitializeCB =
-      base::Callback<void(bool success,
-                          int bitrate,
-                          const PlatformMediaTimeInfo& time_info,
-                          const PlatformAudioConfig& audio_config,
-                          const PlatformVideoConfig& video_config)>;
-  using SeekCB = base::Callback<void(bool success)>;
+      base::OnceCallback<void(bool success,
+                              int bitrate,
+                              const PlatformMediaTimeInfo& time_info,
+                              const PlatformAudioConfig& audio_config,
+                              const PlatformVideoConfig& video_config)>;
+  using SeekCB = base::OnceCallback<void(bool success)>;
+
+  // The implementation is in a platform-specific file.
+  static std::unique_ptr<PlatformMediaPipeline> Create();
 
   virtual ~PlatformMediaPipeline() {}
 

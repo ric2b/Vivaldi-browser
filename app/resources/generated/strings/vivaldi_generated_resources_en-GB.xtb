@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Exit Full Screen</translation>
 <translation id="2177950615300672361">Incognito Tab: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Hide button</translation>
 <translation id="2218515861914035131">Paste as plain text</translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Allow identifiers for protected content (computer restart may be required)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microphone</translation>
 <translation id="3241680850019875542">Select the root directory of the extension to pack. To update an extension, also select the private key file to reuse.</translation>
-<translation id="3266179261140759675">Block closed sites from sending and receiving data</translation>
 <translation id="3280237271814976245">Save &amp;as...</translation>
 <translation id="3285322247471302225">New &amp;Tab</translation>
 <translation id="3288047731229977326">Extensions running in developer mode can harm your computer. If you're not a developer, you should disable these extensions running in developer mode to stay safe.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">This can read and change site data</translation>
 <translation id="3560034655160545939">&amp;Spell check</translation>
 <translation id="3574917942258583917">Exit incognito mode anyway?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wants to share a printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; with a group you own: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. If you accept, all group members will be able to print to the printer.</translation>
 <translation id="3587482841069643663">All</translation>
 <translation id="3627588569887975815">Open link in inco&amp;gnito window</translation>
 <translation id="3627879631695760395">Install <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Handlers</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Screen Sharing Request</translation>
+<translation id="3708684582558000260">Don't allow closed sites to finish sending or receiving data</translation>
 <translation id="3711931198657368127">Pa&amp;ste and Go to <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspect popup</translation>
 <translation id="3744111561329211289">Background sync</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Created the extension:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Accept for group</translation>
 <translation id="4096508467498758490">Disable developer mode extensions</translation>
 <translation id="4100839878934973028">Another programme on your computer added an app that may change the way Vivaldi works.</translation>
 <translation id="4109898769411476438">Close Browser Before Importing</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Show Details</translation>
 <translation id="4907306957610201395">Permission Category</translation>
 <translation id="4912643508233590958">Idle Wake Ups</translation>
-<translation id="4918086044614829423">Accept</translation>
 <translation id="4927753642311223124">Nothing to see here, move along.</translation>
 <translation id="4930714375720679147">Turn On</translation>
 <translation id="4988526792673242964">Pages</translation>
@@ -242,6 +238,7 @@
 <translation id="5036662165765606524">Do not allow any site to download multiple files automatically</translation>
 <translation id="5039804452771397117">Allow</translation>
 <translation id="5057110919553308744">When you click the extension</translation>
+<translation id="5059526285558225588">Choose what to share</translation>
 <translation id="5063480226653192405">Usage</translation>
 <translation id="5116628073786783676">Sa&amp;ve Audio As...</translation>
 <translation id="5143374789336132547">The extension "<ph name="EXTENSION_NAME" />" has changed the page that is shown when you click the Home button.</translation>
@@ -305,7 +302,6 @@
 <translation id="6011449291337289699">Clear site data</translation>
 <translation id="6042308850641462728">More</translation>
 <translation id="6059925163896151826">USB devices</translation>
-<translation id="6082651258230788217">Show in toolbar</translation>
 <translation id="6086846494333236931">Installed by your administrator</translation>
 <translation id="6101226222197207147">New app added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Your Internet connection is being controlled</translation>
@@ -332,7 +328,6 @@
 <translation id="6406303162637086258">Simulate browser restart</translation>
 <translation id="6445450263907939268">If you didn't want these changes, you can restore your previous settings.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Reject</translation>
 <translation id="6498249116389603658">&amp;All your languages</translation>
 <translation id="6503077044568424649">Most visited</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
@@ -402,7 +397,6 @@
 <translation id="7857949311770343000">Is this the new tab page that you were expecting?</translation>
 <translation id="786073089922909430">Service: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Recent Destinations</translation>
-<translation id="7898627924844766532">Keep in toolbar</translation>
 <translation id="7903925330883316394">Utility: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Currently offline</translation>
 <translation id="7947962633355574091">C&amp;opy Video Address</translation>
@@ -451,7 +445,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8725066075913043281">Try again</translation>
 <translation id="8757090071857742562">Unable to cast desktop.  Check to see if you confirmed the prompt to start sharing your screen.</translation>
 <translation id="8774934320277480003">Top margin</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wants to share a printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; with you.</translation>
 <translation id="8798099450830957504">Default</translation>
 <translation id="8800004011501252845">Showing destinations for</translation>
 <translation id="8808478386290700967">Web Store</translation>

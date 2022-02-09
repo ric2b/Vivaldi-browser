@@ -30,8 +30,6 @@ MEDIA_EXPORT std::string Loggable(const AudioDecoderConfig & config);
 
 MEDIA_EXPORT std::string Loggable(const PlatformAudioConfig & config);
 
-MEDIA_EXPORT std::string LoggableMediaType(PlatformMediaDataType type);
-
 }
 
 #endif  // PLATFORM_MEDIA_COMMON_PLATFORM_LOGGING_UTIL_H_

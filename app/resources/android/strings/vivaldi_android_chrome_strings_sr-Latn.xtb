@@ -1,4 +1,54 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr-Latn">
+<translation id="1397811292916898096">Pretraži pomoću: <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Prebacuj normalne/privatne kartice</translation>
+<translation id="1644574205037202324">Istorija</translation>
+<translation id="17513872634828108">Otvorene kartice</translation>
+<translation id="1829244130665387512">Pronađi na stranici</translation>
+<translation id="2038563949887743358">Uključi zahtevanje desktop verzije sajta</translation>
+<translation id="2306442503286132111">Obeleživač je sačuvan u fascikli <ph name="FOLDER_NAME" /></translation>
+<translation id="2433507940547922241">Izgled</translation>
+<translation id="2501278716633472235">Idi nazad</translation>
+<translation id="2633278372998075009">Privatne kartice</translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> obeleživač}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> obeleživača}}</translation>
+<translation id="3076631378407175873">Autorsko pravo <ph name="YEAR" />. Vivaldi Technologies AS. Sva prava zadržana.</translation>
+<translation id="3234355010754616171">Nova privatna kartica</translation>
+<translation id="3377025655491224618">Privatna kartica</translation>
+<translation id="3518985090088779359">Prihvati i nastavi</translation>
+<translation id="3700829948786686853">Dobro došli u Vivaldi</translation>
+<translation id="3719826155360621982">Matična stranica</translation>
+<translation id="385051799172605136">Nazad</translation>
+<translation id="4121750346708795461">Korišćenjem ove aplikacije prihvatate Vivaldi <ph name="BEGIN_LINK1" />Ugovor o licenciranju sa krajnjim korisnikom<ph name="END_LINK1" /> i <ph name="BEGIN_LINK2" />Politiku privatnosti<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Otvori u privatnoj kartici</translation>
+<translation id="4526803704855831732">Privatne kartice</translation>
+<translation id="4759238208242260848">Preuzimanja</translation>
+<translation id="4865987431642283918">Podrazumevani jezik uređaja</translation>
+<translation id="4883379392681899581">Napusti privatni režim</translation>
+<translation id="4943872375798546930">Nema rezultata</translation>
+<translation id="49576331685473090">Blokator sadržaja</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" /> skladište</translation>
+<translation id="5186185447130319458">Privatno</translation>
+<translation id="5233638681132016545">Nova kartica</translation>
+<translation id="572328651809341494">Nedavne kartice</translation>
+<translation id="5840488417521835756">Saznajte više o temama na veb sajtovima bez napuštanja stranice. Funkcija „Dodirnite za pretragu“ je dostupna samo kada je Google postavljen kao podrazumevani pretraživač u Vivaldi pregledaču. Ona šalje reč i njen okolni kontekst u Google pretragu vraćajući definicije, slike, rezultate pretrage i druge detalje.
+
+Da biste prilagodili termin za pretragu, pritisnite i zadržite da biste ga izabrali. Da biste pretragu učinili preciznijom, prevucite panel nagore do kraja i dodirnite polje za pretragu.</translation>
+<translation id="6150320133806434356">Obeleživač je sačuvan</translation>
+<translation id="6336451774241870485">Nova privatna kartica</translation>
+<translation id="6585139692466700358">Ponudi prevod stranica na druge jezike koristeći Vivald-jevu uslugu prevođenja</translation>
+<translation id="6593061639179217415">Desktop verzija sajta</translation>
+<translation id="6610147964972079463">Zatvori privatne kartice</translation>
+<translation id="706339621163631076">Politika privatnosti pregledača</translation>
+<translation id="732145680195464316">Obeleživač je sačuvan u <ph name="PRODUCT_NAME" /></translation>
+<translation id="7427132068601343474">O Vivaldi pregledaču</translation>
+<translation id="7465104139234185284">Zatvori sve privatne kartice</translation>
+<translation id="7519434535192513364">Funkcija „Dodirnite za pretragu“ je dostupna samo kada je Google postavljen kao podrazumevani pretraživač u Vivaldi pregledaču. Ona šalje izabranu reč i aktuelnu stranicu kao kontekst u Google pretragu. Možete je isključiti u <ph name="BEGIN_LINK" />Podešavanjima<ph name="END_LINK" />.</translation>
+<translation id="804786196054284061">Ugovor o licenciranju sa krajnjim korisnikom</translation>
+<translation id="85991616550051997">Idi na matičnu stranicu</translation>
+<translation id="8820817407110198400">Obeleživači</translation>
+<translation id="9063523880881406963">Isključi zahtevanje desktop verzije sajta</translation>
+<translation id="9080642952018487277">Uđi u privatni režim</translation>
 </translationbundle>

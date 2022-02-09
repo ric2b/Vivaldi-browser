@@ -7,13 +7,16 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
-#include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
+#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/content_activation_list_utils.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/navigation_console_logger.h"
-#include "components/subresource_filter/content/browser/subresource_filter_client.h"
+#include "components/subresource_filter/content/browser/ruleset_service.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "content/public/browser/navigation_handle.h"
@@ -27,12 +30,11 @@ using subresource_filter::NavigationConsoleLogger;
 using subresource_filter::SubresourceFilterObserverManager;
 using subresource_filter::ActivationScope;
 
+
 VivaldiSubresourceFilterAdblockingThrottle::
     VivaldiSubresourceFilterAdblockingThrottle(
-        content::NavigationHandle* handle,
-        VivaldiSubresourceFilterClient* client)
+        content::NavigationHandle* handle)
     : NavigationThrottle(handle),
-      filter_client_(client),
       browser_context_(handle->GetStartingSiteInstance()->GetBrowserContext()) {
   DCHECK(handle->IsInMainFrame());
   CheckCurrentUrl();
@@ -72,8 +74,17 @@ const char* VivaldiSubresourceFilterAdblockingThrottle::GetNameForLogging() {
 }
 
 void VivaldiSubresourceFilterAdblockingThrottle::CheckCurrentUrl() {
-  bool matched = filter_client_->adblock_list()->IsSiteInList(
-      navigation_handle()->GetURL());
+  VivaldiSubresourceFilterAdblockingThrottleManager* manager =
+  VivaldiSubresourceFilterAdblockingThrottleManager::FromWebContents(
+      navigation_handle()->GetWebContents());
+
+  DCHECK(manager);
+
+  AdverseAdFilterListService* adblock_list = manager->adblock_list();
+
+  DCHECK(adblock_list);
+
+  bool matched = adblock_list->IsSiteInList(navigation_handle()->GetURL());
 
   check_results_.emplace_back();
   size_t request_id = check_results_.size() - 1;
@@ -87,7 +98,7 @@ void VivaldiSubresourceFilterAdblockingThrottle::CheckCurrentUrl() {
     result->threat_metadata.subresource_filter_match =
         safe_browsing::SubresourceFilterMatch(
             {{safe_browsing::SubresourceFilterType::ABUSIVE,
-               safe_browsing::SubresourceFilterLevel::ENFORCE}});
+              safe_browsing::SubresourceFilterLevel::ENFORCE}});
   } else {
     result->threat_type = safe_browsing::SBThreatType::SB_THREAT_TYPE_SAFE;
   }

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">계속</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />네트워크 진단 실행<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">알림</translation>
+<translation id="2491414235131909199">확장 프로그램에서 차단한 페이지</translation>
 <translation id="2501278716633472235">이전으로</translation>
 <translation id="2539524384386349900">감지</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />에서 잘못된 응답을 전송했습니다.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">공격자에 의해 도난당할 수 있으므로 이 사이트에 비밀번호나 신용카드 등 민감한 정보를 입력해서는 안 됩니다.</translation>
 <translation id="5869405914158311789">사이트에 연결할 수 없음</translation>
 <translation id="5932224571077948991">사이트에서 방해가 되거나 사용자를 현혹하는 광고를 표시함</translation>
-<translation id="5990559369517809815">서버에 대한 요청이 확장 프로그램에 의해 차단되었습니다.</translation>
 <translation id="6051221802930200923">현재 <ph name="SITE" />에서 인증서 고정을 사용하기 때문에 방문할 수 없습니다. 네트워크 오류와 공격은 대부분 일시적이므로 나중에 이 페이지가 정상적으로 작동할 수 있습니다.</translation>
 <translation id="6146055958333702838">케이블을 확인하고 사용 중인 라우터, 모뎀 또는 기타 네트워크 기기를
     재부팅하시기 바랍니다.</translation>

@@ -6,6 +6,7 @@
 #define TOOLS_GN_SCOPE_PER_FILE_PROVIDER_H_
 
 #include <memory>
+#include <string_view>
 
 #include "base/macros.h"
 #include "gn/scope.h"
@@ -21,7 +22,7 @@ class ScopePerFileProvider : public Scope::ProgrammaticProvider {
   ~ScopePerFileProvider() override;
 
   // ProgrammaticProvider implementation.
-  const Value* GetProgrammaticValue(const std::string_view& ident) override;
+  const Value* GetProgrammaticValue(std::string_view ident) override;
 
  private:
   const Value* GetCurrentToolchain();

@@ -24,14 +24,13 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
-import org.chromium.chrome.browser.offlinepages.prefetch.PrefetchConfiguration;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
-import org.chromium.chrome.browser.signin.SigninActivityLauncherImpl;
+import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
@@ -40,6 +39,8 @@ import org.chromium.chrome.browser.sync.settings.SignInPreference;
 import org.chromium.chrome.browser.sync.settings.SyncPromoPreference;
 import org.chromium.chrome.browser.sync.settings.SyncPromoPreference.State;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
@@ -56,6 +57,7 @@ import java.util.Map;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.vivaldi.browser.preferences.NewTabPositionMainPreference;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiSyncPreference;
 
@@ -76,6 +78,7 @@ public class MainSettings extends PreferenceFragmentCompat
     public static final String PREF_SEARCH_ENGINE = "search_engine";
     public static final String PREF_PASSWORDS = "passwords";
     public static final String PREF_HOMEPAGE = "homepage";
+    public static final String PREF_TOOLBAR_SHORTCUT = "toolbar_shortcut";
     public static final String PREF_UI_THEME = "ui_theme";
     public static final String PREF_PRIVACY = "privacy";
     public static final String PREF_SAFETY_CHECK = "safety_check";
@@ -113,6 +116,7 @@ public class MainSettings extends PreferenceFragmentCompat
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getActivity().setTitle(R.string.settings);
         if (!ChromeApplicationImpl.isVivaldi())
         mPasswordCheck = PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl());
     }
@@ -195,7 +199,7 @@ public class MainSettings extends PreferenceFragmentCompat
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // If we are on Android O+ the Notifications preference should lead to the Android
-            // Settings notifications page, not to Chrome's notifications settings page.
+            // Settings notifications page.
             Preference notifications = findPreference(PREF_NOTIFICATIONS);
             notifications.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent();
@@ -203,16 +207,12 @@ public class MainSettings extends PreferenceFragmentCompat
                 intent.putExtra(Settings.EXTRA_APP_PACKAGE,
                         ContextUtils.getApplicationContext().getPackageName());
                 startActivity(intent);
-                // We handle the click so the default action (opening NotificationsPreference)
-                // isn't triggered.
+                // We handle the click so the default action isn't triggered.
                 return true;
             });
-        } else if (!PrefetchConfiguration.isPrefetchingFlagEnabled()) {
-            // The Notifications Preferences page currently contains the Content Suggestions
-            // Notifications setting (used only by the Offline Prefetch feature) and an entry to the
-            // per-website notification settings page. The latter can be accessed from Site
-            // Settings, so we only show the entry to the Notifications Preferences page if the
-            // Prefetching feature flag is enabled.
+        } else {
+            // The per-website notification settings page can be accessed from Site
+            // Settings, so we don't need to show this here.
             getPreferenceScreen().removePreference(findPreference(PREF_NOTIFICATIONS));
         }
 
@@ -233,6 +233,15 @@ public class MainSettings extends PreferenceFragmentCompat
             mManageSync.setVisible(true);
             findPreference(PREF_GOOGLE_SERVICES).setVisible(true);
         }
+
+        if (!ChromeApplicationImpl.isVivaldi())
+        new AdaptiveToolbarStatePredictor(null).recomputeUiState(uiState -> {
+            // We don't show the toolbar shortcut settings page if disabled from finch.
+            // Note, we can still have the old data collection experiment running for which
+            // |canShowUi| might be true. In that case, just hide the settings page.
+            if (uiState.canShowUi && !AdaptiveToolbarFeatures.isSingleVariantModeEnabled()) return;
+            getPreferenceScreen().removePreference(findPreference(PREF_TOOLBAR_SHORTCUT));
+        });
     }
 
     /**
@@ -290,6 +299,10 @@ public class MainSettings extends PreferenceFragmentCompat
                 (ChromeBasePreference) findPreference(PREF_DATA_REDUCTION);
         if (dataReduction != null)
         dataReduction.setSummary(DataReductionPreferenceFragment.generateSummary(getResources()));
+
+        // Vivaldi: Update summaries.
+        Preference newTabPositionPref = getPreferenceScreen().findPreference("new_tab_position");
+        newTabPositionPref.setSummary(NewTabPositionMainPreference.updateSummary());
     }
 
     private Preference addPreferenceIfAbsent(String key) {
@@ -346,7 +359,7 @@ public class MainSettings extends PreferenceFragmentCompat
                 SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
                 settingsLauncher.launchSettingsActivity(context, ManageSyncSettings.class);
             } else {
-                SigninActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
+                SyncConsentActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
                         context, SigninAccessPoint.SETTINGS, primaryAccountName);
             }
             return true;

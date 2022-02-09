@@ -44,6 +44,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -61,7 +62,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.ViewUtils;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -297,29 +297,6 @@ public class LocationBarTest {
             mLocationBarMediator.onConfigurationChanged(configuration);
             Assert.assertFalse(mLocationBarMediator.isUrlBarFocused());
         });
-    }
-
-    @Test
-    @MediumTest
-    public void testTemplateUrlServiceChange() throws InterruptedException {
-        doReturn(false).when(mLocaleManager).needToCheckForSearchEnginePromo();
-        setupSearchEngineLogo(GOOGLE_URL);
-        startActivityNormally();
-        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mLocationBarMediator.onTemplateURLServiceChanged());
-
-        mActivityTestRule.typeInOmnibox("", true);
-        Assert.assertEquals(R.drawable.ic_logo_googleg_20dp,
-                mLocationBarCoordinator.getStatusCoordinatorForTesting()
-                        .getSecurityIconResourceIdForTesting());
-
-        setupSearchEngineLogo(NON_GOOGLE_URL);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mLocationBarMediator.onTemplateURLServiceChanged());
-        Assert.assertEquals(R.drawable.ic_search,
-                mLocationBarCoordinator.getStatusCoordinatorForTesting()
-                        .getSecurityIconResourceIdForTesting());
     }
 
     @Test
@@ -611,12 +588,9 @@ public class LocationBarTest {
     @Test
     @SmallTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mLocationBarMediator.updateSearchEngineStatusIcon(); });
 
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         onView(withId(R.id.location_bar_status_icon)).check(matches(not(isDisplayed())));
@@ -625,12 +599,10 @@ public class LocationBarTest {
     @Test
     @SmallTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
+    @DisabledTest(message = "https://crbug.com/1227573")
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP_nonGoogleSearchEngine() {
         setupSearchEngineLogo(NON_GOOGLE_URL);
         startActivityNormally();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mLocationBarMediator.updateSearchEngineStatusIcon(); });
 
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         onView(withId(R.id.location_bar_status_icon)).check(matches(not(isDisplayed())));
@@ -639,12 +611,9 @@ public class LocationBarTest {
     @Test
     @SmallTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP_incognito() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mLocationBarMediator.updateSearchEngineStatusIcon(); });
 
         mActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL, /* incognito= */ true);
         onView(withId(R.id.location_bar_status_icon)).check(matches(not(isDisplayed())));
@@ -652,12 +621,9 @@ public class LocationBarTest {
 
     @Test
     @SmallTest
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
     public void testOmniboxSearchEngineLogo_focusedOnSRP() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mLocationBarMediator.updateSearchEngineStatusIcon(); });
 
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         TestThreadUtils.runOnUiThreadBlocking(() -> { mUrlBar.requestFocus(); });
@@ -668,12 +634,9 @@ public class LocationBarTest {
     @Test
     @SmallTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures(ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO)
     public void testOmniboxSearchEngineLogo_ntpToSite() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mLocationBarMediator.updateSearchEngineStatusIcon(); });
 
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         onView(withId(R.id.location_bar_status_icon)).check(matches(not(isDisplayed())));
@@ -684,12 +647,9 @@ public class LocationBarTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO)
     public void testOmniboxSearchEngineLogo_siteToSite() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mLocationBarMediator.updateSearchEngineStatusIcon(); });
 
         mActivityTestRule.loadUrl(UrlConstants.CHROME_BLANK_URL);
         onView(withId(R.id.location_bar_status_icon)).check(matches(isDisplayed()));

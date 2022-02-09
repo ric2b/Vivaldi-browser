@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Odeslat odkaz poštou</translation>
 <translation id="1454726940098520109">Již nezobrazovat</translation>
 <translation id="1462666970065907900">Opravdu chcete uzavřít toto okno?</translation>
+<translation id="1480046233931937785">Titulky</translation>
 <translation id="1526344461589023948">Při pokusu o uložení stahované aktualizace došlo k chybě. Zkontrolujte, že má váš počítač dostatek volného místa na disku a zkuste to znovu.</translation>
 <translation id="1657174850639146440">Týpek (Příšerka 9)</translation>
 <translation id="1676595396635191120">Nové soukromé okno</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Otevřít v novém listu</translation>
 <translation id="3027988479108856431">Je nám líto, ale nemůžeme získat nastavení prohlížeče Yandex, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Yandexu. Pak klepněte na Pokračovat.</translation>
 <translation id="3084011186245865060">Potok (Krajina 6)</translation>
+<translation id="3093931836425623631">Vivaldi existuje díky Chromium open source projektu a dalšímu otevřenému software.</translation>
 <translation id="3127383884976966729">Panda velká (Zvířena 7)</translation>
 <translation id="3156398087075132709">Nová záložka</translation>
 <translation id="3255747772218936245">Instalovat aktualizaci</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Noc ve skalách (Krajina 7)</translation>
 <translation id="7111492742514999492">Větrný mlýn (Krajina 9)</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Prohlížeč Vivaldi mohl vzniknout díky <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source projektu a dalšímu <ph name="BEGIN_LINK_OSS" />otevřenému softwaru<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Instalátor aktualizace se nepodařilo spustit. Zkontrolujte, že má váš počítač dostatek volné paměti a místa na disku a zkuste to znovu.</translation>
 <translation id="7658239707568436148">Zrušit</translation>
 <translation id="7715497554424665066">&amp;Odložit aktualizaci</translation>

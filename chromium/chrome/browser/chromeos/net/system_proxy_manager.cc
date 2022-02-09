@@ -6,8 +6,10 @@
 
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -76,12 +78,29 @@ class SystemProxyLoginHandler : public content::LoginDelegate {
                              const std::string& password,
                              LoginAuthRequiredCallback auth_required_callback) {
     std::move(auth_required_callback)
-        .Run(base::make_optional<net::AuthCredentials>(
+        .Run(absl::make_optional<net::AuthCredentials>(
             base::UTF8ToUTF16(username), base::UTF8ToUTF16(password)));
   }
 
   base::WeakPtrFactory<SystemProxyLoginHandler> weak_factory_{this};
 };
+
+// If system-proxy is enabled via policy, it can be used by both Chrome OS
+// system services and the PlayStore. If enabled via flag, system-proxy can only
+// be used by system services which explicitly ask to use system-proxy for HTTP
+// proxy authentication. Otherwise, system-proxy is disabled.
+chromeos::SystemProxyManager::SystemProxyState DetermineSystemProxyState(
+    bool policy_enabled) {
+  if (policy_enabled)
+    return chromeos::SystemProxyManager::SystemProxyState::kEnabledForAll;
+
+  if (base::FeatureList::IsEnabled(
+          ash::features::kSystemProxyForSystemServices)) {
+    return chromeos::SystemProxyManager::SystemProxyState::
+        kEnabledForSystemServices;
+  }
+  return chromeos::SystemProxyManager::SystemProxyState::kDisabled;
+}
 
 }  // namespace
 
@@ -108,9 +127,21 @@ SystemProxyManager::SystemProxyManager(PrefService* local_state) {
                           weak_factory_.GetWeakPtr()));
   DCHECK(NetworkHandler::IsInitialized());
   NetworkHandler::Get()->network_state_handler()->AddObserver(this, FROM_HERE);
+
+  system_proxy_state_ = DetermineSystemProxyState(/*policy_enabled=*/false);
+
+  // Start the system-proxy worker that authenticates system services.
+  if (system_proxy_state_ == SystemProxyState::kEnabledForSystemServices) {
+    SendPolicyAuthenticationCredentials(/*username=*/"",
+                                        /*password=*/"",
+                                        /*force_send=*/true);
+  }
 }
 
 SystemProxyManager::~SystemProxyManager() {
+  if (IsEnabled()) {
+    SendShutDownRequest(system_proxy::TrafficOrigin::ALL);
+  }
   DCHECK(NetworkHandler::IsInitialized());
   NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
                                                                  FROM_HERE);
@@ -134,10 +165,20 @@ void SystemProxyManager::Shutdown() {
   }
 }
 
-std::string SystemProxyManager::SystemServicesProxyPacString() const {
-  return system_proxy_enabled_ && !system_services_address_.empty()
-             ? "PROXY " + system_services_address_
-             : std::string();
+std::string SystemProxyManager::SystemServicesProxyPacString(
+    SystemProxyOverride system_proxy_override) const {
+  if (system_proxy_override == SystemProxyOverride::kOptOut ||
+      system_services_address_.empty()) {
+    return std::string();
+  }
+
+  if (system_proxy_state_ == SystemProxyState::kEnabledForAll ||
+      (system_proxy_state_ == SystemProxyState::kEnabledForSystemServices &&
+       system_proxy_override == SystemProxyOverride::kOptIn)) {
+    return "PROXY " + system_services_address_;
+  }
+
+  return std::string();
 }
 
 void SystemProxyManager::StartObservingPrimaryProfilePrefs(Profile* profile) {
@@ -158,9 +199,12 @@ void SystemProxyManager::StartObservingPrimaryProfilePrefs(Profile* profile) {
       proxy_config::prefs::kProxy,
       base::BindRepeating(&SystemProxyManager::OnProxyConfigChanged,
                           base::Unretained(this)));
-  if (system_proxy_enabled_) {
+  if (IsEnabled()) {
     OnProxyConfigChanged();
     OnKerberosAccountChanged();
+  }
+
+  if (system_proxy_state_ == SystemProxyState::kEnabledForAll) {
     OnArcEnabledChanged();
   }
 }
@@ -173,7 +217,7 @@ void SystemProxyManager::StopObservingPrimaryProfilePrefs() {
 }
 
 void SystemProxyManager::ClearUserCredentials() {
-  if (!system_proxy_enabled_) {
+  if (!IsEnabled()) {
     return;
   }
 
@@ -188,29 +232,37 @@ void SystemProxyManager::SetPolicySettings(
     const std::string& system_services_username,
     const std::string& system_services_password,
     const std::vector<std::string>& auth_schemes) {
-  system_proxy_enabled_ = system_proxy_enabled;
   system_services_username_ = system_services_username;
   system_services_password_ = system_services_password;
   policy_credentials_auth_schemes_ = auth_schemes;
 
-  if (!system_proxy_enabled_) {
-    // Send a shut-down command to the daemon. Since System-proxy is started via
-    // dbus activation, if the daemon is inactive, this command will start the
-    // daemon and tell it to exit.
-    // TODO(crbug.com/1055245,acostinas): Do not send shut-down command if
-    // System-proxy is inactive.
-    system_proxy::ShutDownRequest request;
-    request.set_traffic_type(system_proxy::TrafficOrigin::ALL);
-    SystemProxyClient::Get()->ShutDownProcess(
-        request, base::BindOnce(&SystemProxyManager::OnShutDownProcess,
-                                weak_factory_.GetWeakPtr()));
+  if (system_proxy_state_ == SystemProxyState::kDisabled &&
+      !system_proxy_enabled) {
+    return;  // nothing to do
+  }
+
+  system_proxy_state_ = DetermineSystemProxyState(system_proxy_enabled);
+
+  if (system_proxy_state_ == SystemProxyState::kDisabled) {
     system_services_address_.clear();
     SetUserTrafficProxyPref(std::string());
     CloseAuthenticationUI();
+    SendShutDownRequest(system_proxy::TrafficOrigin::ALL);
     return;
   }
 
-  if (IsManagedProxyConfigured()) {
+  if (system_proxy_state_ == SystemProxyState::kEnabledForSystemServices) {
+    // Start the system-proxy worker for system services and make sure the
+    // system-proxy worker for ARC is shut down.
+    SendPolicyAuthenticationCredentials(/*username=*/"",
+                                        /*password=*/"",
+                                        /*force_send=*/true);
+    SetUserTrafficProxyPref(std::string());
+    SendShutDownRequest(system_proxy::TrafficOrigin::USER);
+  }
+
+  if (IsManagedProxyConfigured() &&
+      system_proxy_state_ == SystemProxyState::kEnabledForAll) {
     // Force send the configuration in case the credentials hand't changed, but
     // `policy_credentials_auth_schemes_` has.
     SendPolicyAuthenticationCredentials(system_services_username_,
@@ -231,7 +283,8 @@ void SystemProxyManager::SetPolicySettings(
 
   // Fire once to cover the case where the SystemProxySetting policy is set
   // during a user session.
-  if (IsArcEnabled()) {
+  if (IsArcEnabled() &&
+      system_proxy_state_ == SystemProxyState::kEnabledForAll) {
     OnArcEnabledChanged();
   }
 }
@@ -248,7 +301,7 @@ void SystemProxyManager::OnKerberosAccountChanged() {
 }
 
 void SystemProxyManager::OnArcEnabledChanged() {
-  if (!system_proxy_enabled_) {
+  if (system_proxy_state_ != SystemProxyState::kEnabledForAll) {
     return;
   }
 
@@ -278,6 +331,10 @@ bool SystemProxyManager::IsArcEnabled() const {
          primary_profile_->GetPrefs()->GetBoolean(arc::prefs::kArcEnabled);
 }
 
+bool SystemProxyManager::IsEnabled() const {
+  return system_proxy_state_ != SystemProxyState::kDisabled;
+}
+
 void SystemProxyManager::SendUserAuthenticationCredentials(
     const system_proxy::ProtectionSpace& protection_space,
     const std::string& username,
@@ -285,7 +342,7 @@ void SystemProxyManager::SendUserAuthenticationCredentials(
   // System-proxy is started via d-bus activation, meaning the first d-bus call
   // will start the daemon. Check that System-proxy was not disabled by policy
   // while looking for credentials so we don't accidentally restart it.
-  if (!system_proxy_enabled_) {
+  if (!IsEnabled()) {
     return;
   }
 
@@ -294,9 +351,10 @@ void SystemProxyManager::SendUserAuthenticationCredentials(
   user_credentials.set_password(password);
 
   system_proxy::SetAuthenticationDetailsRequest request;
-  request.set_traffic_type(IsArcEnabled()
-                               ? system_proxy::TrafficOrigin::ALL
-                               : system_proxy::TrafficOrigin::SYSTEM);
+  request.set_traffic_type(
+      IsArcEnabled() && system_proxy_state_ == SystemProxyState::kEnabledForAll
+          ? system_proxy::TrafficOrigin::ALL
+          : system_proxy::TrafficOrigin::SYSTEM);
   *request.mutable_credentials() = user_credentials;
   *request.mutable_protection_space() = protection_space;
 
@@ -309,7 +367,7 @@ void SystemProxyManager::SendPolicyAuthenticationCredentials(
     const std::string& username,
     const std::string& password,
     bool force_send) {
-  if (!system_proxy_enabled_)
+  if (!IsEnabled())
     return;
 
   if (!force_send &&
@@ -338,14 +396,15 @@ void SystemProxyManager::SendPolicyAuthenticationCredentials(
 }
 
 void SystemProxyManager::SendKerberosAuthenticationDetails() {
-  if (!system_proxy_enabled_) {
+  if (!IsEnabled()) {
     return;
   }
 
   system_proxy::SetAuthenticationDetailsRequest request;
-  request.set_traffic_type(IsArcEnabled()
-                               ? system_proxy::TrafficOrigin::ALL
-                               : system_proxy::TrafficOrigin::SYSTEM);
+  request.set_traffic_type(
+      IsArcEnabled() && system_proxy_state_ == SystemProxyState::kEnabledForAll
+          ? system_proxy::TrafficOrigin::ALL
+          : system_proxy::TrafficOrigin::SYSTEM);
   request.set_kerberos_enabled(
       local_state_->GetBoolean(prefs::kKerberosEnabled));
   if (primary_profile_) {
@@ -366,13 +425,22 @@ void SystemProxyManager::SendEmptyCredentials(
                                     /*password=*/std::string());
 }
 
+void SystemProxyManager::SendShutDownRequest(
+    system_proxy::TrafficOrigin traffic) {
+  system_proxy::ShutDownRequest request;
+  request.set_traffic_type(traffic);
+  SystemProxyClient::Get()->ShutDownProcess(
+      request, base::BindOnce(&SystemProxyManager::OnShutDownProcess,
+                              weak_factory_.GetWeakPtr()));
+}
+
 void SystemProxyManager::SetSystemProxyEnabledForTest(bool enabled) {
-  system_proxy_enabled_ = enabled;
+  system_proxy_state_ =
+      enabled ? SystemProxyState::kEnabledForAll : SystemProxyState::kDisabled;
 }
 
 void SystemProxyManager::SetSystemServicesProxyUrlForTest(
     const std::string& local_proxy_url) {
-  system_proxy_enabled_ = true;
   system_services_address_ = local_proxy_url;
 }
 
@@ -411,8 +479,8 @@ bool SystemProxyManager::CanUsePolicyCredentials(
     return false;
   }
 
-  if (!system_proxy_enabled_ || system_services_username_.empty() ||
-      system_services_password_.empty()) {
+  if (system_proxy_state_ != SystemProxyState::kEnabledForAll ||
+      system_services_username_.empty() || system_services_password_.empty()) {
     return false;
   }
 
@@ -525,6 +593,9 @@ void SystemProxyManager::OnWorkerActive(
     system_services_address_ = details.local_proxy_url();
     return;
   }
+  if (system_proxy_state_ != SystemProxyState::kEnabledForAll)
+    return;
+
   SetUserTrafficProxyPref(details.local_proxy_url());
 }
 
@@ -567,7 +638,7 @@ void SystemProxyManager::OnAuthenticationRequired(
     SendEmptyCredentials(protection_space);
     return;
   }
-  content::BrowserContext::GetDefaultStoragePartition(primary_profile_)
+  primary_profile_->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->LookupProxyAuthCredentials(
           proxy_server, protection_space.scheme(),
@@ -579,7 +650,7 @@ void SystemProxyManager::OnAuthenticationRequired(
 
 void SystemProxyManager::LookupProxyAuthCredentialsCallback(
     const system_proxy::ProtectionSpace& protection_space,
-    const base::Optional<net::AuthCredentials>& credentials) {
+    const absl::optional<net::AuthCredentials>& credentials) {
   if (!credentials) {
     // Ask the user for credentials
     ShowAuthenticationNotification(protection_space, /*show_error=*/false);

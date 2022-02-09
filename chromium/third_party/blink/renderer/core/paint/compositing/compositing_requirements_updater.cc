@@ -145,6 +145,8 @@ class CompositingRequirementsUpdater::OverlapMap {
 };
 
 class CompositingRequirementsUpdater::RecursionData {
+  STACK_ALLOCATED();
+
  public:
   explicit RecursionData(PaintLayer* compositing_ancestor)
       : compositing_ancestor_(compositing_ancestor),

@@ -33,28 +33,31 @@ namespace media {
 
 namespace {
 
+constexpr const char* GetDecodeDataReadTraceEventName(PlatformStreamType type) {
+  switch (type) {
+    case PlatformStreamType::kAudio:
+      return "ReadAudioData";
+    case PlatformStreamType::kVideo:
+      return "ReadVideoData";
+  }
+}
 
-const char* const kDecodedDataReadTraceEventNames[] = {"ReadAudioData",
-                                                       "ReadVideoData"};
-static_assert(base::size(kDecodedDataReadTraceEventNames) ==
-                  kPlatformMediaDataTypeCount,
-              "Incorrect number of defined tracing event names.");
-
-template <PlatformMediaDataType type, typename ConfigType>
+template <typename ConfigType>
 void HandleConfigChange(const ConfigType& new_config,
-                        ConfigType* current_config,
-                        MediaPipelineMsg_DecodedDataReady_Params* params) {
-  params->type = type;
+                        ConfigType& current_config,
+                        MediaPipelineMsg_DecodedDataReady_Params& params) {
+  params.stream_type = ConfigType::kStreamType;
 
   if (!new_config.is_valid()) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-               << " Invalid configuration received";
-    params->status = MediaDataStatus::kMediaError;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " Invalid "
+               << GetStreamTypeName(ConfigType::kStreamType)
+               << " configuration received";
+    params.status = MediaDataStatus::kMediaError;
     return;
   }
 
-  *current_config = new_config;
-  params->status = MediaDataStatus::kConfigChanged;
+  current_config = new_config;
+  params.status = MediaDataStatus::kConfigChanged;
 }
 
 }  // namespace
@@ -76,8 +79,9 @@ IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
   if (is_connected()) {
     TRACE_EVENT0("IPC_MEDIA", "Stop");
 
-    channel_->Send(new MediaPipelineMsg_Destroy(routing_id_));
+    channel_->GetGpuChannel().VivaldiDestroyMediaPipeline(routing_id_);
     channel_->RemoveRoute(routing_id_);
+    routing_id_ = MSG_ROUTING_NONE;
   }
 }
 
@@ -89,8 +93,18 @@ void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
   DCHECK(callback);
   DCHECK(init_callback_.is_null());
 
+  routing_id_ = channel_->GenerateRouteID();
+  channel_->AddRoute(routing_id_, weak_ptr_factory_.GetWeakPtr());
+
+  init_callback_ = std::move(callback);
+  int64_t size = -1;
+  if (!data_source_->GetSize(&size)) {
+    size = -1;
+  }
+
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " With Mimetype : " << mimetype;
+          << " Initialize pipeline routing_id=" << routing_id_
+          << " size=" << size << " mimetype=" << mimetype;
 
   base::MappedReadOnlyRegion region =
       base::ReadOnlySharedMemoryRegion::Create(kIPCSourceSharedMemorySize);
@@ -100,31 +114,15 @@ void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
     std::move(callback).Run(false);
     return;
   }
-
-  routing_id_ = channel_->GenerateRouteID();
-
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Create pipeline";
-
-  if (!channel_->Send(new MediaPipelineMsg_New(routing_id_))) {
-    std::move(callback).Run(false);
-    return;
-  }
-
-  channel_->AddRoute(routing_id_, weak_ptr_factory_.GetWeakPtr());
-
-  init_callback_ = std::move(callback);
-  int64_t size = -1;
-  if (!data_source_->GetSize(&size))
-    size = -1;
-
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Initialize pipeline - size of source : " << size;
-
   raw_mapping_ = std::move(region.mapping);
-  channel_->Send(new MediaPipelineMsg_Initialize(
-      routing_id_, size, data_source_->IsStreaming(), mimetype,
-      std::move(region.region)));
+
+  gpu::mojom::VivaldiMediaPipelineParamsPtr params(base::in_place);
+  params->route_id = routing_id_;
+  params->data_source_size = size;
+  params->is_data_source_streaming = data_source_->IsStreaming();
+  params->mime_type = mimetype;
+  params->data_source_buffer = std::move(region.region);
+  channel_->GetGpuChannel().VivaldiStartNewMediaPipeline(std::move(params));
 }
 
 void IPCMediaPipelineHostImpl::OnInitialized(
@@ -143,21 +141,18 @@ void IPCMediaPipelineHostImpl::OnInitialized(
 
   if (audio_config.is_valid()) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " Audio Config Acceptable : "
-            << Loggable(audio_config);
+            << " Audio Config Acceptable : " << Loggable(audio_config);
     audio_config_ = audio_config;
   } else {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Audio Config is not Valid "
-                 << Loggable(audio_config);
+                 << " Audio Config is not Valid " << Loggable(audio_config);
   }
 
   if (video_config.is_valid()) {
     video_config_ = video_config;
   } else {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Video Config is not Valid "
-                 << Loggable(video_config);
+                 << " Video Config is not Valid " << Loggable(video_config);
   }
 
   success = success && bitrate >= 0;
@@ -197,8 +192,7 @@ void IPCMediaPipelineHostImpl::OnSought(bool success) {
   }
 
   LOG_IF(WARNING, !success)
-      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-      << " PIPELINE_ERROR_ABORT";
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " PIPELINE_ERROR_ABORT";
 
   std::move(seek_callback_)
       .Run(success ? PipelineStatus::PIPELINE_OK
@@ -207,29 +201,28 @@ void IPCMediaPipelineHostImpl::OnSought(bool success) {
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "Seek", this);
 }
 
-void IPCMediaPipelineHostImpl::ReadDecodedData(
-    PlatformMediaDataType type,
-    DemuxerStream::ReadCB read_cb) {
+void IPCMediaPipelineHostImpl::ReadDecodedData(PlatformStreamType stream_type,
+                                               DemuxerStream::ReadCB read_cb) {
   DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
-  DCHECK(!is_read_in_progress(type)) << "Overlapping reads are not supported";
+  DCHECK(!is_read_in_progress(stream_type))
+      << "Overlapping reads are not supported";
   DCHECK(is_connected());
 
-  TRACE_EVENT_ASYNC_BEGIN0(
-      "IPC_MEDIA", kDecodedDataReadTraceEventNames[type], this);
+  TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA",
+                           GetDecodeDataReadTraceEventName(stream_type), this);
 
   if (!channel_->Send(
-          new MediaPipelineMsg_ReadDecodedData(routing_id_, type))) {
+          new MediaPipelineMsg_ReadDecodedData(routing_id_, stream_type))) {
     std::move(read_cb).Run(DemuxerStream::kAborted, nullptr);
     return;
   }
 
-  decoded_data_read_callbacks_[type] = std::move(read_cb);
+  GetElem(decoded_data_read_callbacks_, stream_type) = std::move(read_cb);
 }
 
-void IPCMediaPipelineHostImpl::OnReadRawData(
-    int64_t tag,
-    int64_t position,
-    int size) {
+void IPCMediaPipelineHostImpl::OnReadRawData(int64_t tag,
+                                             int64_t position,
+                                             int size) {
   DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "ReadRawData", this);
@@ -329,7 +322,8 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
   DCHECK(!region.IsValid() ||
          (params.status == MediaDataStatus::kOk && params.size > 0));
 
-  if (!is_read_in_progress(params.type)) {
+  const PlatformStreamType stream_type = params.stream_type;
+  if (!is_read_in_progress(stream_type)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " Unexpected MediaPipelineMsg_DecodedDataReady";
     return;
@@ -341,13 +335,14 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
       if (region.IsValid()) {
         VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                 << " new decoding region size=" << region.GetSize()
-                << " type=" << params.type;
+                << " stream_type=" << GetStreamTypeName(params.stream_type);
         // Release the old cached mapping before allocating new one
-        decoded_mappings_[params.type] = base::ReadOnlySharedMemoryMapping();
-        decoded_mappings_[params.type] = region.Map();
+        GetElem(decoded_mappings_, stream_type) =
+            base::ReadOnlySharedMemoryMapping();
+        GetElem(decoded_mappings_, stream_type) = region.Map();
         // We no longer need the region.
         region = base::ReadOnlySharedMemoryRegion();
-        if (!decoded_mappings_[params.type].IsValid()) {
+        if (!GetElem(decoded_mappings_, stream_type).IsValid()) {
           LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                      << " Failed to map " << region.GetSize();
           decoding_error = true;
@@ -358,32 +353,33 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
       size_t decoded_size = 0;
       if (params.size > 0) {
         decoded_size = static_cast<size_t>(params.size);
-        if (!decoded_mappings_[params.type].IsValid() ||
-            decoded_size > decoded_mappings_[params.type].size()) {
+        if (!GetElem(decoded_mappings_, stream_type).IsValid() ||
+            decoded_size > GetElem(decoded_mappings_, stream_type).size()) {
           LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                      << " Inavlid decoding size " << params.size;
           decoding_error = true;
           break;
         }
-        decoded_memory = decoded_mappings_[params.type].GetMemoryAs<uint8_t>();
+        decoded_memory =
+            GetElem(decoded_mappings_, stream_type).GetMemoryAs<uint8_t>();
       }
       scoped_refptr<DecoderBuffer> buffer =
           DecoderBuffer::CopyFrom(decoded_memory, decoded_size);
       buffer->set_timestamp(params.timestamp);
       buffer->set_duration(params.duration);
 
-      std::move(decoded_data_read_callbacks_[params.type])
+      std::move(GetElem(decoded_data_read_callbacks_, stream_type))
           .Run(DemuxerStream::kOk, buffer);
       break;
     }
 
     case MediaDataStatus::kEOS:
-      std::move(decoded_data_read_callbacks_[params.type])
+      std::move(GetElem(decoded_data_read_callbacks_, stream_type))
           .Run(DemuxerStream::kOk, DecoderBuffer::CreateEOSBuffer());
       break;
 
     case MediaDataStatus::kConfigChanged:
-      std::move(decoded_data_read_callbacks_[params.type])
+      std::move(GetElem(decoded_data_read_callbacks_, stream_type))
           .Run(DemuxerStream::kConfigChanged, nullptr);
       break;
 
@@ -397,36 +393,30 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
   }
 
   if (decoding_error) {
-    // Note that this is a decoder error rather than demuxer error.  Don't
-    // return DemuxerStream::kAborted.  Instead, return an empty buffer so
-    // that the decoder can signal a decoder error.
-    std::move(decoded_data_read_callbacks_[params.type])
-        .Run(DemuxerStream::kOk, new DecoderBuffer(0));
+    std::move(GetElem(decoded_data_read_callbacks_, stream_type))
+        .Run(DemuxerStream::kError, nullptr);
   }
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA",
-                         kDecodedDataReadTraceEventNames[params.type], this);
+                         GetDecodeDataReadTraceEventName(stream_type), this);
 }
 
 void IPCMediaPipelineHostImpl::OnAudioConfigChanged(
     const PlatformAudioConfig& new_audio_config) {
   DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
-  if (!is_read_in_progress(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO)) {
+  if (!is_read_in_progress(PlatformStreamType::kAudio)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " Unexpected MediaPipelineMsg_AudioConfigChanged";
     return;
   }
 
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Previous Config "
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " Previous Config "
           << Loggable(audio_config_);
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " New Config "
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " New Config "
           << Loggable(new_audio_config);
 
   MediaPipelineMsg_DecodedDataReady_Params params;
-  HandleConfigChange<PlatformMediaDataType::PLATFORM_MEDIA_AUDIO>(
-      new_audio_config, &audio_config_, &params);
+  HandleConfigChange(new_audio_config, audio_config_, params);
   OnDecodedDataReady(params);
 }
 
@@ -434,21 +424,18 @@ void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
     const PlatformVideoConfig& new_video_config) {
   DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
-  if (!is_read_in_progress(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO)) {
+  if (!is_read_in_progress(PlatformStreamType::kVideo)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " Unexpected MediaPipelineMsg_VideoConfigChanged";
     return;
   }
 
   MediaPipelineMsg_DecodedDataReady_Params params;
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Previous Config "
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " Previous Config "
           << Loggable(video_config_);
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " New Config "
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " New Config "
           << Loggable(new_video_config);
-  HandleConfigChange<PlatformMediaDataType::PLATFORM_MEDIA_VIDEO>(
-      new_video_config, &video_config_, &params);
+  HandleConfigChange(new_video_config, video_config_, params);
 
   OnDecodedDataReady(params);
 }

@@ -5,6 +5,8 @@
 #ifndef TOOLS_GN_NINJA_TARGET_COMMAND_WRITER_H_
 #define TOOLS_GN_NINJA_TARGET_COMMAND_WRITER_H_
 
+#include <string_view>
+
 #include "base/json/string_escape.h"
 #include "gn/config_values_extractors.h"
 #include "gn/escape.h"

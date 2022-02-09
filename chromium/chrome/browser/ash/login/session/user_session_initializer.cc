@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/session/user_session_initializer.h"
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/system/sys_info.h"
@@ -13,6 +14,11 @@
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/arc/session/arc_service_launcher.h"
 #include "chrome/browser/ash/camera_mic/vm_camera_mic_manager.h"
+#include "chrome/browser/ash/child_accounts/child_status_reporting_service_factory.h"
+#include "chrome/browser/ash/child_accounts/child_user_service_factory.h"
+#include "chrome/browser/ash/child_accounts/family_user_metrics_service_factory.h"
+#include "chrome/browser/ash/child_accounts/screen_time_controller_factory.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/lock_screen_apps/state_controller.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager.h"
@@ -21,11 +27,6 @@
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
-#include "chrome/browser/chromeos/child_accounts/child_status_reporting_service_factory.h"
-#include "chrome/browser/chromeos/child_accounts/child_user_service_factory.h"
-#include "chrome/browser/chromeos/child_accounts/family_user_metrics_service_factory.h"
-#include "chrome/browser/chromeos/child_accounts/screen_time_controller_factory.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/eche_app/eche_app_manager_factory.h"
 #include "chrome/browser/chromeos/phonehub/phone_hub_manager_factory.h"
 #include "chrome/browser/chromeos/policy/app_install_event_log_manager_wrapper.h"
@@ -49,9 +50,12 @@
 #include "components/rlz/rlz_tracker.h"
 #endif
 
-namespace chromeos {
-
+namespace ash {
 namespace {
+
+// TODO(https://crbug.com/1164001): remove when moved to ash::
+using ::chromeos::InstallAttributes;
+
 UserSessionInitializer* g_instance = nullptr;
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -69,7 +73,7 @@ UserSessionInitializer::RlzInitParams CollectRlzParams() {
   UserSessionInitializer::RlzInitParams params;
   params.disabled = base::PathExists(GetRlzDisabledFlagPath());
   params.time_since_oobe_completion =
-      chromeos::StartupUtils::GetTimeSinceOobeFlagFileCreation();
+      StartupUtils::GetTimeSinceOobeFlagFileCreation();
   return params;
 }
 #endif
@@ -81,6 +85,19 @@ void OnGetNSSCertDatabaseForUser(net::NSSCertDatabase* database) {
     return;
 
   NetworkCertLoader::Get()->SetUserNSSDB(database);
+}
+
+void OnNoiseCancellationSupportedRetrieved(
+    absl::optional<bool> noise_cancellation_supported) {
+  DCHECK(features::IsInputNoiseCancellationUiEnabled());
+  if (noise_cancellation_supported.has_value() &&
+      noise_cancellation_supported.value()) {
+    PrefService* local_state = g_browser_process->local_state();
+    const bool noise_cancellation_enabled =
+        local_state->GetBoolean(prefs::kInputNoiseCancellationEnabled);
+    chromeos::CrasAudioClient::Get()->SetNoiseCancellationEnabled(
+        noise_cancellation_enabled);
+  }
 }
 
 }  // namespace
@@ -105,7 +122,13 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
   user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile);
 
   if (user_manager::UserManager::Get()->GetPrimaryUser() == user) {
-    DCHECK_EQ(primary_profile_, nullptr);
+    // TODO(https://crbug.com/1208416): Investigate why OnUserProfileLoaded
+    // is called more than once.
+    if (primary_profile_ != nullptr) {
+      NOTREACHED();
+      CHECK_EQ(primary_profile_, profile);
+      return;
+    }
     primary_profile_ = profile;
 
     InitRlz(profile);
@@ -133,9 +156,9 @@ void UserSessionInitializer::InitRlz(Profile* profile) {
   // if it is empty.  The latter is to correct a problem in older builds where
   // an empty brand code would be persisted if the first login after OOBE was
   // a guest session.
-  if (!g_browser_process->local_state()->HasPrefPath(prefs::kRLZBrand) ||
+  if (!g_browser_process->local_state()->HasPrefPath(::prefs::kRLZBrand) ||
       g_browser_process->local_state()
-          ->Get(prefs::kRLZBrand)
+          ->Get(::prefs::kRLZBrand)
           ->GetString()
           .empty()) {
     // Read brand code asynchronously from an OEM data and repost ourselves.
@@ -202,7 +225,7 @@ void UserSessionInitializer::InitializePrimaryProfileServices(
   if (crostini_manager)
     crostini_manager->MaybeUpdateCrostini();
 
-  if (chromeos::features::IsClipboardHistoryEnabled()) {
+  if (features::IsClipboardHistoryEnabled()) {
     clipboard_image_model_factory_impl_ =
         std::make_unique<ClipboardImageModelFactoryImpl>(profile);
   }
@@ -215,7 +238,7 @@ void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
   DCHECK(profile);
 
   // Ensure that the `HoldingSpaceKeyedService` for `profile` is created.
-  ash::HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(profile);
+  HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(profile);
 
   if (is_primary_user) {
     DCHECK_EQ(primary_profile_, profile);
@@ -239,6 +262,11 @@ void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
     // Pciguard is turned on.
     PciguardClient::Get()->SendExternalPciDevicesPermissionState(
         pcie_tunneling_allowed);
+
+    if (features::IsInputNoiseCancellationUiEnabled()) {
+      chromeos::CrasAudioClient::Get()->GetNoiseCancellationSupported(
+          base::BindOnce(&OnNoiseCancellationSupportedRetrieved));
+    }
   }
 }
 
@@ -276,13 +304,14 @@ void UserSessionInitializer::InitRlzImpl(Profile* profile,
     // Empty brand code means an organic install (no RLZ pings are sent).
     google_brand::chromeos::ClearBrandForCurrentSession();
   }
-  if (params.disabled != local_state->GetBoolean(prefs::kRLZDisabled)) {
+  if (params.disabled != local_state->GetBoolean(::prefs::kRLZDisabled)) {
     // When switching to RLZ enabled/disabled state, clear all recorded events.
     rlz::RLZTracker::ClearRlzState();
-    local_state->SetBoolean(prefs::kRLZDisabled, params.disabled);
+    local_state->SetBoolean(::prefs::kRLZDisabled, params.disabled);
   }
   // Init the RLZ library.
-  int ping_delay = profile->GetPrefs()->GetInteger(prefs::kRlzPingDelaySeconds);
+  int ping_delay =
+      profile->GetPrefs()->GetInteger(::prefs::kRlzPingDelaySeconds);
   // Negative ping delay means to send ping immediately after a first search is
   // recorded.
   bool send_ping_immediately = ping_delay < 0;
@@ -302,4 +331,4 @@ void UserSessionInitializer::InitRlzImpl(Profile* profile,
   inited_for_testing_ = true;
 }
 
-}  // namespace chromeos
+}  // namespace ash

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Continue</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Running Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifications</translation>
+<translation id="2491414235131909199">This page has been blocked by an extension</translation>
 <translation id="2501278716633472235">Go back</translation>
 <translation id="2539524384386349900">Detect</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sent an invalid response.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">You should not enter any sensitive information on this site (for example, passwords or credit cards), because it could be stolen by attackers.</translation>
 <translation id="5869405914158311789">This site can’t be reached</translation>
 <translation id="5932224571077948991">Site shows intrusive or misleading ads</translation>
-<translation id="5990559369517809815">Requests to the server have been blocked by an extension.</translation>
 <translation id="6051221802930200923">You cannot visit <ph name="SITE" /> right now because the website uses certificate pinning. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="6146055958333702838">Check any cables and reboot any routers, modems or other network
     devices you may be using.</translation>
@@ -226,6 +226,7 @@
 <translation id="9039213469156557790">Furthermore, this page includes other resources which are not secure. These resources can be viewed by others while in transit, and can be modified by an attacker to change the behaviour of the page.</translation>
 <translation id="9062620674789239642">It may have been moved, edited, or deleted.</translation>
 <translation id="9069693763241529744">Blocked by an extension</translation>
+<translation id="910924428752220542">Vivaldi Passwords</translation>
 <translation id="9169664750068251925">Always block on this site</translation>
 <translation id="9180553614777056266">Ad Blocker</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>

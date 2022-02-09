@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 
+#include <Shlobj.h>
 #include <comutil.h>
 #include <taskschd.h>
 #include <wrl.h>
@@ -18,6 +19,7 @@
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/win_util.h"
 #include "chrome/install_static/product_install_details.h"
+#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/version_info/version_info_values.h"
 
@@ -52,7 +54,7 @@ enum class Subaction {
   kUnregister,
 };
 
-base::Optional<Subaction> FindIfSubaction(
+absl::optional<Subaction> FindIfSubaction(
     const base::CommandLine& command_line) {
   if (command_line.HasSwitch(kDisable))
     return Subaction::kDisable;
@@ -64,7 +66,7 @@ base::Optional<Subaction> FindIfSubaction(
     return Subaction::kLaunchIfEnabled;
   if (command_line.HasSwitch(kUnregister))
     return Subaction::kUnregister;
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 std::wstring TimeToSchedulerString(base::Time t) {
@@ -105,9 +107,12 @@ bool GetSchedulerServiceAndRoot(
 }
 
 std::wstring GetSchedulerTaskName() {
+  std::wstring install_hash = GetInstallHash(/*for_task_scheduler=*/true);
+  if (install_hash.empty())
+    return std::wstring();
   std::wstring task_name(kVivaldiScheduleTaskNamePrefix);
   task_name += '-';
-  task_name += winsparkle::GetExeDirHash(false);
+  task_name += install_hash;
   return task_name;
 }
 
@@ -122,6 +127,8 @@ bool GetSchedulerRegisteredTask(
     return false;
 
   std::wstring task_name = GetSchedulerTaskName();
+  if (task_name.empty())
+    return false;
   HRESULT hr = pRootFolder->GetTask(_bstr_t(task_name.c_str()),
                                     pRegisteredTask.GetAddressOf());
   if (FAILED(hr)) {
@@ -180,6 +187,22 @@ bool EnableSchedulerTask(bool create_enabled = true) {
     return false;
   }
 
+  if (DoesRunAsSystemService()) {
+    Microsoft::WRL::ComPtr<IPrincipal> principal;
+    hr = pTask->get_Principal(&principal);
+    if (FAILED(hr)) {
+      LOG(ERROR) << base::StringPrintf("ITask::get_Principal failed hr=0x%lx",
+                                       hr);
+      return false;
+    }
+    hr = principal->put_RunLevel(TASK_RUNLEVEL_HIGHEST);
+    if (FAILED(hr)) {
+      LOG(ERROR) << base::StringPrintf(
+          "IPrincipal::put_RunLevel failed hr=0x%lx", hr);
+      return false;
+    }
+  }
+
   Microsoft::WRL::ComPtr<ITriggerCollection> pTriggerCollection;
   hr = pTask->get_Triggers(&pTriggerCollection);
   if (FAILED(hr)) {
@@ -231,6 +254,46 @@ bool EnableSchedulerTask(bool create_enabled = true) {
     return false;
   }
 
+  const wchar_t* const subdaily_check_pattern =
+#ifdef OFFICIAL_BUILD
+      // In official builds check for update daily unless this runs as a system
+      // service when we want to check for updates each 8 hours to compensate
+      // for not running the update check on the browser start.
+      DoesRunAsSystemService() ? L"PT8H" : nullptr
+#else
+      // Check hourly in internal or soprano builds.
+      L"PT1H"
+#endif
+      ;
+
+  if (subdaily_check_pattern) {
+    Microsoft::WRL::ComPtr<IRepetitionPattern> repetition_pattern;
+    hr = pDailyTrigger->get_Repetition(&repetition_pattern);
+    if (FAILED(hr)) {
+      LOG(ERROR) << base::StringPrintf(
+          "IDailyTrigger::get_Repetition failed hr=0x%lx", hr);
+      return false;
+    }
+    hr = repetition_pattern->put_Duration(_bstr_t(L"P1D"));
+    if (FAILED(hr)) {
+      LOG(ERROR) << base::StringPrintf(
+          "IRepetitionPattern::put_Duration failed hr=0x%lx", hr);
+      return false;
+    }
+    hr = repetition_pattern->put_Interval(_bstr_t(subdaily_check_pattern));
+    if (FAILED(hr)) {
+      LOG(ERROR) << base::StringPrintf(
+          "IRepetitionPattern::put_Interval failed hr=0x%lx", hr);
+      return false;
+    }
+    hr = repetition_pattern->put_StopAtDurationEnd(VARIANT_FALSE);
+    if (FAILED(hr)) {
+      LOG(ERROR) << base::StringPrintf(
+          "IRepetitionPattern::put_StopAtDurationEnd failed hr=0x%lx", hr);
+      return false;
+    }
+  }
+
   Microsoft::WRL::ComPtr<IActionCollection> pActionCollection;
   hr = pTask->get_Actions(pActionCollection.GetAddressOf());
   if (FAILED(hr)) {
@@ -259,7 +322,7 @@ bool EnableSchedulerTask(bool create_enabled = true) {
   pAction.Reset();
 
   base::CommandLine task_command =
-      vivaldi::GetCommonUpdateNotifierCommand(winsparkle::GetExeDir());
+      vivaldi::GetCommonUpdateNotifierCommand(GetExeDir());
   task_command.AppendSwitch(kFromScheduler);
 
   hr =
@@ -278,8 +341,7 @@ bool EnableSchedulerTask(bool create_enabled = true) {
     return false;
   }
 
-  hr = pExecAction->put_WorkingDirectory(
-      _bstr_t(winsparkle::GetExeDir().value().c_str()));
+  hr = pExecAction->put_WorkingDirectory(_bstr_t(GetExeDir().value().c_str()));
   if (FAILED(hr)) {
     LOG(ERROR) << base::StringPrintf(
         "IExecAction::put_WorkingDirectory failed hr=0x%lx", hr);
@@ -312,12 +374,23 @@ bool EnableSchedulerTask(bool create_enabled = true) {
   }
 
   std::wstring task_name = GetSchedulerTaskName();
+  if (task_name.empty())
+    return false;
 
   Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
-  hr = pRootFolder->RegisterTaskDefinition(
-      _bstr_t(task_name.c_str()), pTask.Get(), TASK_CREATE_OR_UPDATE,
-      _variant_t(), _variant_t(), TASK_LOGON_INTERACTIVE_TOKEN, _variant_t(L""),
-      pRegisteredTask.GetAddressOf());
+  if (DoesRunAsSystemService()) {
+    VARIANT varPassword;
+    varPassword.vt = VT_EMPTY;
+    hr = pRootFolder->RegisterTaskDefinition(
+        _bstr_t(task_name.c_str()), pTask.Get(), TASK_CREATE_OR_UPDATE,
+        _variant_t(L"SYSTEM"), varPassword, TASK_LOGON_SERVICE_ACCOUNT,
+        _variant_t(L""), pRegisteredTask.GetAddressOf());
+  } else {
+    hr = pRootFolder->RegisterTaskDefinition(
+        _bstr_t(task_name.c_str()), pTask.Get(), TASK_CREATE_OR_UPDATE,
+        _variant_t(), _variant_t(), TASK_LOGON_INTERACTIVE_TOKEN,
+        _variant_t(L""), pRegisteredTask.GetAddressOf());
+  }
   if (FAILED(hr)) {
     LOG(ERROR) << base::StringPrintf(
         "ITaskFolder::RegisterTaskDefinition failed hr=0x%lx", hr);
@@ -381,7 +454,7 @@ bool IsEnabledSchedulerTask(bool check_for_autorun, bool& enabled) {
   }
 
   // Remove the no longer needed autorun entry.
-  vivaldi::DisableUpdateNotifierAsAutorun(winsparkle::GetExeDir());
+  vivaldi::DisableUpdateNotifierAsAutorun(GetExeDir());
   return true;
 }
 
@@ -391,6 +464,8 @@ bool UnregisterSchedulerTask() {
   if (!GetSchedulerServiceAndRoot(pService, pRootFolder))
     return false;
   std::wstring task_name = GetSchedulerTaskName();
+  if (task_name.empty())
+    return false;
   HRESULT hr = pRootFolder->DeleteTask(_bstr_t(task_name.c_str()), 0);
   if (FAILED(hr)) {
     if (hr == kNotFoundObjectError) {
@@ -407,6 +482,38 @@ bool UnregisterSchedulerTask() {
 ExitCode RunTaskSchedulerSubAction(Subaction subaction,
                                    bool& fallthrough_to_main_action) {
   DCHECK(!fallthrough_to_main_action);
+
+  if (DoesRunAsSystemService()) {
+    switch (subaction) {
+      case Subaction::kLaunchIfEnabled:
+        LOG(ERROR) << "Unsupported action for a system installation";
+        return ExitCode::kError;
+      case Subaction::kEnable:
+      case Subaction::kDisable:
+      case Subaction::kIsEnabled:
+      case Subaction::kUnregister:
+        break;
+    }
+    if (!::IsUserAnAdmin()) {
+      // Follow setup_main.cc and launch itself as a privileged process. We
+      // append "--run-as-admin" to the command line to check if we we already
+      // tried that.
+      base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+      if (cmd_line.HasSwitch(installer::switches::kRunAsAdmin)) {
+        LOG(ERROR) << "Non admin user can not perform the request action.";
+        return ExitCode::kError;
+      }
+      base::CommandLine new_cmd(base::CommandLine::NO_PROGRAM);
+      new_cmd.AppendArguments(cmd_line, true);
+      new_cmd.AppendSwitch(installer::switches::kRunAsAdmin);
+      DWORD exit_code = 1;
+      InstallUtil::ExecuteExeAsAdmin(new_cmd, &exit_code);
+
+      // Directly terminate the process with the given exe code from the child.
+      ::ExitProcess(exit_code);
+    }
+  }
+
   // This is based on
   // https://docs.microsoft.com/en-us/windows/win32/taskschd/daily-trigger-example--c---
 
@@ -431,7 +538,8 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
     case Subaction::kDisable:
       if (!DisableSchedulerTask())
         return ExitCode::kError;
-      vivaldi::SendQuitUpdateNotifier(winsparkle::GetExeDir());
+      vivaldi::SendQuitUpdateNotifier(GetExeDir(),
+                                      /*global=*/DoesRunAsSystemService());
       break;
     case Subaction::kIsEnabled: {
       bool enabled = false;
@@ -467,10 +575,10 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
 ExitCode RunSubAction(Subaction action, bool& fallthrough_to_main_action) {
   DCHECK(!fallthrough_to_main_action);
   DLOG(INFO) << "Task scheduler subaction " << static_cast<int>(action);
-  if (winsparkle::IsUsingTaskScheduler()) {
+  if (IsUsingTaskScheduler()) {
     return RunTaskSchedulerSubAction(action, fallthrough_to_main_action);
   }
-  base::FilePath exe_dir = winsparkle::GetExeDir();
+  base::FilePath exe_dir = GetExeDir();
   switch (action) {
     case Subaction::kDisable:
     case Subaction::kUnregister: {
@@ -498,45 +606,54 @@ ExitCode RunSubAction(Subaction action, bool& fallthrough_to_main_action) {
 }
 
 void InitLog(const base::CommandLine& command_line) {
-  bool enabled = false;
-  std::wstring log_file;
-  if (command_line.HasSwitch(installer::switches::kEnableLogging)) {
-    enabled = true;
-    log_file =
-        command_line.GetSwitchValueNative(installer::switches::kEnableLogging);
-  } else if (command_line.HasSwitch(switches::kVivaldiUpdateURL)) {
-    // For convenience activate logging with --vuu to the default file.
-    enabled = true;
-  }
+  static const char* const verbose_switches[] = {
+      installer::switches::kVerboseLogging,
 
-  if (!enabled) {
-    // Unless disabled explicitly Chromium logs by default to default.log in the
-    // exe directory.
-    logging::LoggingSettings settings;
-    settings.logging_dest = logging::LOG_NONE;
-    logging::InitLogging(settings);
-    logging::SetMinLogLevel(logging::LOGGING_FATAL);
-    return;
-  }
+      // Treat --enable-logging as a synnonymous to --verbose-logging to support
+      // older usage.
+      installer::switches::kEnableLogging,
 
-  if (log_file.empty()) {
-    base::FilePath temp_dir;
-    if (base::GetTempDir(&temp_dir)) {
-      log_file = temp_dir.value();
-      log_file += L"\\vivaldi_installer.log";
+      // For convenience do verbose logging with --vuu  as well.
+      switches::kVivaldiUpdateURL,
+  };
+  bool verbose = false;
+  for (const char* verbose_switch : verbose_switches) {
+    if (command_line.HasSwitch(verbose_switch)) {
+      verbose = true;
+      break;
     }
   }
-  base::RouteStdioToConsole(false);
+
+  base::FilePath log_file;
+  if (!command_line.HasSwitch(installer::switches::kDisableLogging)) {
+    log_file = command_line.GetSwitchValuePath(installer::switches::kLogFile);
+    if (log_file.empty()) {
+      base::FilePath temp_dir;
+      if (base::GetTempDir(&temp_dir)) {
+        log_file = temp_dir.AppendASCII("vivaldi_installer.log");
+      }
+    }
+  }
 
   logging::LoggingSettings settings;
-  settings.logging_dest = logging::LOG_NONE;
-  if (DCHECK_IS_ON()) {
-    settings.logging_dest |= logging::LOG_TO_SYSTEM_DEBUG_LOG;
+  if (log_file.empty()) {
+    settings.logging_dest = logging::LOG_NONE;
+  } else {
+    settings.logging_dest = logging::LOG_TO_FILE;
+    settings.log_file_path = log_file.value().c_str();
   }
-  settings.logging_dest |= logging::LOG_TO_STDERR;
-  if (!log_file.empty()) {
-    settings.logging_dest |= logging::LOG_TO_FILE;
-    settings.log_file_path = log_file.c_str();
+
+  if (!verbose) {
+    // Do a minimal level of logging as it should not leak any sensitive
+    // information. This is similar to the installer.
+    logging::SetMinLogLevel(logging::LOGGING_WARNING);
+  } else {
+    // Attach to console if any to make stderr output working.
+    base::RouteStdioToConsole(false);
+    if (DCHECK_IS_ON()) {
+      settings.logging_dest |= logging::LOG_TO_SYSTEM_DEBUG_LOG;
+    }
+    settings.logging_dest |= logging::LOG_TO_STDERR;
   }
   logging::InitLogging(settings);
 }
@@ -557,87 +674,76 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
 
   base::FilePath current_exe_path = vivaldi::GetPathOfCurrentExe();
   if (command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
-    winsparkle::g_install_dir =
+    g_install_dir =
         command_line.GetSwitchValuePath(vivaldi::constants::kVivaldiInstallDir);
   }
 
   // Check for switch combinations that should not be used together.
   int unique_switches = 0;
 
+  DCHECK(g_mode == UpdateMode::kNone);
   if (command_line.HasSwitch(kInstallMode)) {
     unique_switches++;
-    winsparkle::g_install_mode = true;
+    g_mode = UpdateMode::kNetworkInstall;
   }
-  if (!winsparkle::g_install_mode) {
+  if (g_mode != UpdateMode::kNetworkInstall) {
     base::FilePath update_install_dir =
-        winsparkle::g_install_dir.empty() ? current_exe_path.DirName().DirName()
-                                          : winsparkle::g_install_dir;
+        g_install_dir.empty() ? current_exe_path.DirName().DirName()
+                              : g_install_dir;
 
-    base::Optional<vivaldi::InstallType> existing_install_type =
+    absl::optional<vivaldi::InstallType> existing_install_type =
         vivaldi::FindInstallType(update_install_dir);
 #if defined(COMPONENT_BUILD)
-    if (winsparkle::g_install_dir.empty()) {
+    if (g_install_dir.empty()) {
       // A development build defaults to use an update mode if the install
       // directory is not given explicitly.
       DCHECK(!existing_install_type)
           << "Build directory should not have Application subfolder.";
-      winsparkle::g_build_dir = current_exe_path.DirName();
-      winsparkle::g_install_type = vivaldi::InstallType::kForCurrentUser;
+      g_build_dir = current_exe_path.DirName();
+      g_install_type = vivaldi::InstallType::kForCurrentUser;
     } else
 #endif
         if (existing_install_type) {
-      winsparkle::g_install_type = *existing_install_type;
-      winsparkle::g_install_dir = std::move(update_install_dir);
+      g_install_type = *existing_install_type;
+      g_install_dir = std::move(update_install_dir);
     } else {
       // Running update_notifier.exe not from the installation exe directory
       // switches to the installation mode. If g_install_type is empty, we keep
       // it empty to fallback to the default installation directory.
-      winsparkle::g_install_mode = true;
+      g_mode = UpdateMode::kNetworkInstall;
       unique_switches++;
     }
   }
 
-  if (winsparkle::g_install_mode && !winsparkle::g_install_dir.empty()) {
-    // If install mode points to an existing installation, default to the type
-    // of that installation.
-    base::Optional<vivaldi::InstallType> existing_install_type =
-        vivaldi::FindInstallType(winsparkle::g_install_dir);
+  if (g_mode == UpdateMode::kNetworkInstall && !g_install_dir.empty()) {
+    // If the installation directory points to an existing installation, default
+    // to the type of that installation.
+    absl::optional<vivaldi::InstallType> existing_install_type =
+        vivaldi::FindInstallType(g_install_dir);
     if (existing_install_type) {
-      winsparkle::g_install_type = *existing_install_type;
+      g_install_type = *existing_install_type;
     }
   }
 
-  if (!winsparkle::g_install_mode) {
+  if (g_mode != UpdateMode::kNetworkInstall) {
     // Make sure to use a working directory not pointing to the
     // version-specific sub-directory of the installation. This way if the
     // installer cannot kill the notifier for some reason during the update,
     // at least it will still be possible to delete the old version-specific
     // directory.
-    base::SetCurrentDirectory(winsparkle::GetExeDir());
-  }
-
-  if (winsparkle::g_install_mode) {
-    // The network installer is always a manual action by the user.
-    winsparkle::g_manual_check = true;
+    base::SetCurrentDirectory(GetExeDir());
   }
 
   if (command_line.HasSwitch(switches::kVivaldiSilentUpdate)) {
-    unique_switches++;
-    if (winsparkle::g_install_type != vivaldi::InstallType::kForCurrentUser) {
-      LOG(INFO)
-          << "Ignoring --" << switches::kVivaldiSilentUpdate
-          << " as it is not supported for stanalone or system installations";
-    } else {
-      winsparkle::g_silent_update = true;
-    }
+    g_mode = UpdateMode::kSilentUpdate;
   }
 
   if (command_line.HasSwitch(kCheckForUpdates)) {
     unique_switches++;
-    winsparkle::g_manual_check = true;
+    g_mode = UpdateMode::kManualCheck;
   }
 
-  base::Optional<Subaction> subaction = FindIfSubaction(command_line);
+  absl::optional<Subaction> subaction = FindIfSubaction(command_line);
   if (subaction) {
     unique_switches++;
   }
@@ -654,18 +760,26 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
       return exit_code;
   }
 
-  if (!winsparkle::g_install_mode) {
-    DCHECK(!winsparkle::GetExeDir().empty());
-    winsparkle::g_app_version =
-        vivaldi::GetInstallVersion(winsparkle::GetExeDir());
-    DLOG(INFO) << "Installed Vivaldi version: " << winsparkle::g_app_version;
+  if (g_mode != UpdateMode::kNetworkInstall) {
+    DCHECK(!GetExeDir().empty());
+    g_app_version = vivaldi::GetInstallVersion(GetExeDir());
+    DLOG(INFO) << "Installed Vivaldi version: " << g_app_version;
 #if !defined(OFFICIAL_BUILD)
     if (command_line.HasSwitch(kDebugVersion)) {
-      winsparkle::g_app_version =
+      g_app_version =
           base::Version(command_line.GetSwitchValueASCII(kDebugVersion));
     }
 #endif
   }
+
+  if (g_mode == UpdateMode::kNone) {
+    if (g_install_type == vivaldi::InstallType::kForAllUsers) {
+      g_mode = UpdateMode::kSilentDownload;
+    } else {
+      g_mode = UpdateMode::kSilentUpdate;
+    }
+  }
+
   base::AtExitManager at_exit;
   base::SingleThreadTaskExecutor executor(base::MessagePumpType::UI);
 
@@ -683,5 +797,5 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prev, wchar_t*, int) {
 
   // Directly call ExitProcess() to skip any C++ global destructors in wxWidgets
   // and terminate all threads immediately.
-  ExitProcess(static_cast<int>(exit_code));
+  ::ExitProcess(static_cast<int>(exit_code));
 }

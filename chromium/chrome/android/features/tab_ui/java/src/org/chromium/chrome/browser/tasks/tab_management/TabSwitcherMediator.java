@@ -146,6 +146,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private FirstMeaningfulPaintRecorder mFirstMeaningfulPaintRecorder;
     private boolean mRegisteredFirstMeaningfulPaintRecorder;
     private @TabListCoordinator.TabListMode int mMode;
+    private Context mContext;
 
     /**
      * Interface to delegate resetting the tab grid.
@@ -242,6 +243,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mMultiWindowModeStateDispatcher = multiWindowModeStateDispatcher;
         mMode = mode;
+        mContext = context;
 
         mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
@@ -506,7 +508,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private void updateTopControlsProperties() {
         // If the Start surface is enabled, it will handle the margins and positioning of the tab
         // switcher. So, we shouldn't do it here.
-        if (StartSurfaceConfiguration.isStartSurfaceEnabled()) {
+        if (ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled()) {
             mContainerViewModel.set(TOP_MARGIN, 0);
             mContainerViewModel.set(SHADOW_TOP_OFFSET, 0);
             return;
@@ -575,7 +577,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
                 RecordUserAction.record("MobileTabSwitched");
             }
             // Only log when you switch a tab page directly from tab switcher.
-            if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+            if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)
                     || getRelatedTabs(tab.getId()).size() == 1) {
                 RecordUserAction.record(
                         "MobileTabSwitched." + TabSwitcherCoordinator.COMPONENT_NAME);
@@ -627,7 +629,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         } else {
             List<PseudoTab> allTabs;
             try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-                allTabs = PseudoTab.getAllPseudoTabsFromStateFile();
+                allTabs = PseudoTab.getAllPseudoTabsFromStateFile(mContext);
             }
             hasTabs = allTabs != null && !allTabs.isEmpty();
         }
@@ -694,7 +696,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         } else if (CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)) {
             List<PseudoTab> allTabs;
             try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-                allTabs = PseudoTab.getAllPseudoTabsFromStateFile();
+                allTabs = PseudoTab.getAllPseudoTabsFromStateFile(mContext);
             }
             mResetHandler.resetWithTabs(allTabs, TabUiFeatureUtilities.isTabToGtsAnimationEnabled(),
                     mShowTabsInMruOrder);
@@ -879,7 +881,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     }
 
     private boolean ableToOpenDialog(Tab tab) {
-        return TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+        return TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)
                 && mTabModelSelector.isIncognitoSelected() == tab.isIncognito()
                 && getRelatedTabs(tab.getId()).size() != 1;
     }

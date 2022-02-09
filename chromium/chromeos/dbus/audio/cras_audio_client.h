@@ -19,6 +19,7 @@
 #include "chromeos/dbus/audio/audio_node.h"
 #include "chromeos/dbus/audio/volume_state.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace dbus {
 class Bus;
@@ -103,6 +104,12 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
   // Gets any available group ID for the system AEC
   virtual void GetSystemAecGroupId(DBusMethodCallback<int32_t> callback) = 0;
 
+  // Gets if system NS is supported.
+  virtual void GetSystemNsSupported(DBusMethodCallback<bool> callback) = 0;
+
+  // Gets if system AGC is supported.
+  virtual void GetSystemAgcSupported(DBusMethodCallback<bool> callback) = 0;
+
   // Gets an array of audio input and output nodes.
   virtual void GetNodes(DBusMethodCallback<AudioNodeList> callback) = 0;
 
@@ -132,6 +139,13 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
 
   // Sets input mute state to |mute_on| value.
   virtual void SetInputMute(bool mute_on) = 0;
+
+  // Sets input noise cancellation state to |noise_cancellation_on| value.
+  virtual void SetNoiseCancellationEnabled(bool noise_cancellation_on) = 0;
+
+  // Gets if Noise Cancellation is supported.
+  virtual void GetNoiseCancellationSupported(
+      DBusMethodCallback<bool> callback) = 0;
 
   // Sets the active output node to |node_id|.
   virtual void SetActiveOutputNode(uint64_t node_id) = 0;
@@ -177,6 +191,12 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
   // The dbus message will be dropped if this feature is not supported on the
   // |node_id|.
   virtual void SwapLeftRight(uint64_t node_id, bool swap) = 0;
+
+  // Sets the display |rotation| attribute of the primary active output device.
+  // The dbus message will be dropped if this feature is not supported on the
+  // |node_id|.
+  virtual void SetDisplayRotation(uint64_t node_id,
+                                  cras::DisplayRotation rotation) = 0;
 
   virtual void SetGlobalOutputChannelRemix(
       int32_t channels,

@@ -13,7 +13,10 @@ import java.lang.annotation.RetentionPolicy;
  * FeatureConstants contains the String name of all base::Feature in-product help features declared
  * in //components/feature_engagement/public/feature_constants.h.
  */
-@StringDef({FeatureConstants.ADD_TO_HOMESCREEN_MESSAGE_FEATURE,
+@StringDef({FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_NEW_TAB_FEATURE,
+        FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_SHARE_FEATURE,
+        FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_FEATURE,
+        FeatureConstants.ADD_TO_HOMESCREEN_MESSAGE_FEATURE,
         FeatureConstants.ADD_TO_HOMESCREEN_TEXT_BUBBLE_FEATURE,
         FeatureConstants.DOWNLOAD_PAGE_FEATURE, FeatureConstants.DOWNLOAD_PAGE_SCREENSHOT_FEATURE,
         FeatureConstants.DOWNLOAD_HOME_FEATURE, FeatureConstants.DOWNLOAD_INDICATOR_FEATURE,
@@ -49,9 +52,17 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.CHROME_REENGAGEMENT_NOTIFICATION_2_FEATURE,
         FeatureConstants.CHROME_REENGAGEMENT_NOTIFICATION_3_FEATURE,
         FeatureConstants.PWA_INSTALL_AVAILABLE_FEATURE, FeatureConstants.PAGE_INFO_FEATURE,
-        FeatureConstants.IPH_SHARE_SCREENSHOT_FEATURE})
+        FeatureConstants.IPH_SHARE_SCREENSHOT_FEATURE, FeatureConstants.IPH_WEB_FEED_FOLLOW_FEATURE,
+        FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE,
+        FeatureConstants.SHARED_HIGHLIGHTING_BUILDER_FEATURE})
 @Retention(RetentionPolicy.SOURCE)
 public @interface FeatureConstants {
+    String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_NEW_TAB_FEATURE =
+            "IPH_AdaptiveButtonInTopToolbarCustomization_NewTab";
+    String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_SHARE_FEATURE =
+            "IPH_AdaptiveButtonInTopToolbarCustomization_Share";
+    String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_FEATURE =
+            "IPH_AdaptiveButtonInTopToolbarCustomization_VoiceSearch";
     String ADD_TO_HOMESCREEN_MESSAGE_FEATURE = "IPH_AddToHomescreenMessage";
     String ADD_TO_HOMESCREEN_TEXT_BUBBLE_FEATURE = "IPH_AddToHomescreenTextBubble";
     String DOWNLOAD_PAGE_FEATURE = "IPH_DownloadPage";
@@ -233,7 +244,7 @@ public @interface FeatureConstants {
     /**
      * An IPH feature to inform users that installing a PWA is an option.
      */
-    String PWA_INSTALL_AVAILABLE_FEATURE = "IPH_PwaInstallAvailable";
+    String PWA_INSTALL_AVAILABLE_FEATURE = "IPH_PwaInstallAvailableFeature";
 
     /**
      * An IPH feature to inform about changing permissions in PageInfo.
@@ -244,4 +255,19 @@ public @interface FeatureConstants {
      * An IPH feature to inform users about the screenshot sharing feature.
      */
     String IPH_SHARE_SCREENSHOT_FEATURE = "IPH_ShareScreenshot";
+
+    /**
+     * An IPH feature to inform users about the WebFeed follow feature.
+     */
+    String IPH_WEB_FEED_FOLLOW_FEATURE = "IPH_WebFeedFollow";
+
+    /**
+     * A dialog IPH feature to inform users about the WebFeed post-follow.
+     */
+    String IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE = "IPH_WebFeedPostFollowDialog";
+
+    /**
+     * An IPH feature to inform users about the link-to-text on selection share.
+     */
+    String SHARED_HIGHLIGHTING_BUILDER_FEATURE = "IPH_SharedHighlightingBuilder";
 }

@@ -17,6 +17,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/flat_map.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/location.h"
@@ -78,7 +79,6 @@
 #include "extensions/common/extension_set.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/public/cpp/ash_features.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #endif
 
@@ -212,10 +212,15 @@ class SessionRestoreImpl : public BrowserListObserver {
           (*i)->user_title, (*i)->window_id.id());
       browsers.push_back(browser);
 
+      // A foreign session window will not contain tab groups, however an
+      // instance is still required for RestoreTabsToBrowser.
+      base::flat_map<tab_groups::TabGroupId, tab_groups::TabGroupId>
+          new_group_ids;
+
       // Restore and show the browser.
       const int initial_tab_count = 0;
-      RestoreTabsToBrowser(*(*i), browser, initial_tab_count,
-                           &created_contents);
+      RestoreTabsToBrowser(*(*i), browser, initial_tab_count, &created_contents,
+                           &new_group_ids);
       NotifySessionServiceOfRestoredTabs(browser, initial_tab_count);
     }
 
@@ -260,7 +265,7 @@ class SessionRestoreImpl : public BrowserListObserver {
           use_new_window ? 0 : browser->tab_strip_model()->active_index() + 1;
       web_contents = chrome::AddRestoredTab(
           browser, tab.navigations, tab_index, selected_index,
-          tab.extension_app_id, base::nullopt,
+          tab.extension_app_id, absl::nullopt,
           disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB,  // selected
           tab.pinned, base::TimeTicks(), nullptr, tab.user_agent_override,
           true /* from_session_restore */,
@@ -379,7 +384,13 @@ class SessionRestoreImpl : public BrowserListObserver {
     chromeos::BootTimesRecorder::Get()->AddLoginTimeMarker(
         "SessionRestore-GotSession", false);
 #endif
-    read_error_ = read_error;
+
+    // This function could be called twice from both SessionService and
+    // AppSessionService. If one of them returns error, then |read_error_| is
+    // true. So check whether |read_error_| has been set as true to prevent the
+    // result is overwritten.
+    if (!read_error_)
+      read_error_ = read_error;
 
     // Copy windows into windows_ so that we can combine both app and browser
     // windows together before doing a one-pass restore.
@@ -459,7 +470,7 @@ class SessionRestoreImpl : public BrowserListObserver {
     if (windows->empty()) {
       // Restore was unsuccessful. The DOM storage system can also delete its
       // data, since no session restore will happen at a later point in time.
-      content::BrowserContext::GetDefaultStoragePartition(profile_)
+      profile_->GetDefaultStoragePartition()
           ->GetDOMStorageContext()
           ->StartScavengingUnusedSessionStorage();
       return FinishedTabCreation(false, false, created_contents);
@@ -545,16 +556,16 @@ class SessionRestoreImpl : public BrowserListObserver {
 
       // 5. Restore tabs in |browser|. This will also call Show() on |browser|
       //    if its initial show state is not mimimized.
-      // However, with desks restore enabled, a window is restored to its parent
-      // desk, which can be non-active desk, and left invisible but unminimized.
-      RestoreTabsToBrowser(*(*i), browser, initial_tab_count, created_contents);
+      // For the cases that users have more than one desk, a window is restored
+      // to its parent desk, which can be non-active desk, and left invisible
+      // but unminimized.
+      base::flat_map<tab_groups::TabGroupId, tab_groups::TabGroupId>
+          new_group_ids;
+      RestoreTabsToBrowser(*(*i), browser, initial_tab_count, created_contents,
+                           &new_group_ids);
       (*tab_count) += (static_cast<int>(browser->tab_strip_model()->count()) -
                        initial_tab_count);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-      DCHECK(browser->window()->IsVisible() ||
-             browser->window()->IsMinimized() ||
-             ash::features::IsBentoEnabled());
-#else
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
       DCHECK(browser->window()->IsVisible() ||
              browser->window()->IsMinimized() || ::vivaldi::IsVivaldiRunning());
 #endif
@@ -564,7 +575,7 @@ class SessionRestoreImpl : public BrowserListObserver {
       TabGroupModel* group_model = browser->tab_strip_model()->group_model();
       for (auto& session_tab_group : (*i)->tab_groups) {
         TabGroup* model_tab_group =
-            group_model->GetTabGroup(session_tab_group->id);
+            group_model->GetTabGroup(new_group_ids.at(session_tab_group->id));
         DCHECK(model_tab_group);
         model_tab_group->SetVisualData(session_tab_group->visual_data);
       }
@@ -610,7 +621,7 @@ class SessionRestoreImpl : public BrowserListObserver {
     // sessionStorages needed for the session restore have now been recreated
     // by RestoreTab. Now it's safe for the DOM storage system to start
     // deleting leftover data.
-    content::BrowserContext::GetDefaultStoragePartition(profile_)
+    profile_->GetDefaultStoragePartition()
         ->GetDOMStorageContext()
         ->StartScavengingUnusedSessionStorage();
     return last_normal_browser;
@@ -639,10 +650,13 @@ class SessionRestoreImpl : public BrowserListObserver {
   // tabs but pinned tabs will be pushed in front.
   // If there are no existing tabs, the tab at |window.selected_tab_index| will
   // be selected. Otherwise, the tab selection will remain untouched.
-  void RestoreTabsToBrowser(const sessions::SessionWindow& window,
-                            Browser* browser,
-                            int initial_tab_count,
-                            std::vector<RestoredTab>* created_contents) {
+  void RestoreTabsToBrowser(
+      const sessions::SessionWindow& window,
+      Browser* browser,
+      int initial_tab_count,
+      std::vector<RestoredTab>* created_contents,
+      base::flat_map<tab_groups::TabGroupId, tab_groups::TabGroupId>*
+          new_group_ids) {
     DVLOG(1) << "RestoreTabsToBrowser " << window.tabs.size();
     // TODO(https://crbug.com/1032348): Change to DCHECK once we understand
     // why some browsers don't have an active tab on startup.
@@ -688,8 +702,8 @@ class SessionRestoreImpl : public BrowserListObserver {
       // the existing ones. E.g. this happens in Win8 Metro where we merge
       // windows or when launching a hosted app from the app launcher.
       int tab_index = i + initial_tab_count;
-      RestoreTab(tab, browser, created_contents, tab_index, is_selected_tab,
-                 last_active_time);
+      RestoreTab(tab, browser, created_contents, new_group_ids, tab_index,
+                 is_selected_tab, last_active_time);
     }
   }
 
@@ -701,6 +715,8 @@ class SessionRestoreImpl : public BrowserListObserver {
   void RestoreTab(const sessions::SessionTab& tab,
                   Browser* browser,
                   std::vector<RestoredTab>* created_contents,
+                  base::flat_map<tab_groups::TabGroupId,
+                                 tab_groups::TabGroupId>* new_group_ids,
                   const int tab_index,
                   bool is_selected_tab,
                   base::TimeTicks last_active_time) {
@@ -719,15 +735,27 @@ class SessionRestoreImpl : public BrowserListObserver {
     scoped_refptr<content::SessionStorageNamespace> session_storage_namespace;
     if (!tab.session_storage_persistent_id.empty()) {
       session_storage_namespace =
-          content::BrowserContext::GetDefaultStoragePartition(profile_)
+          profile_->GetDefaultStoragePartition()
               ->GetDOMStorageContext()
               ->RecreateSessionStorage(tab.session_storage_persistent_id);
+    }
+
+    // Relabel group IDs to prevent duplicating groups. See crbug.com/1202102.
+    absl::optional<tab_groups::TabGroupId> new_group;
+    if (tab.group) {
+      auto it = new_group_ids->find(*tab.group);
+      if (it == new_group_ids->end()) {
+        it = new_group_ids
+                 ->emplace(*tab.group, tab_groups::TabGroupId::GenerateNew())
+                 .first;
+      }
+      new_group = it->second;
     }
 
     // Apply the stored group.
     WebContents* web_contents = chrome::AddRestoredTab(
         browser, tab.navigations, tab_index, selected_index,
-        tab.extension_app_id, tab.group, is_selected_tab, tab.pinned,
+        tab.extension_app_id, new_group, is_selected_tab, tab.pinned,
         last_active_time, session_storage_namespace.get(),
         tab.user_agent_override, true /* from_session_restore */,
         tab.page_action_overrides, tab.ext_data);
@@ -736,7 +764,7 @@ class SessionRestoreImpl : public BrowserListObserver {
 
     RestoredTab restored_tab(web_contents, is_selected_tab,
                              tab.extension_app_id.empty(), tab.pinned,
-                             tab.group);
+                             new_group);
     created_contents->push_back(restored_tab);
 
     // If this isn't the selected tab, there's nothing else to do.
@@ -898,12 +926,13 @@ class SessionRestoreImpl : public BrowserListObserver {
 
 // static
 Browser* SessionRestore::RestoreSession(
-    Profile* profile, Browser* browser,
+    Profile* profile,
+    Browser* browser,
     SessionRestore::BehaviorBitmask behavior,
     const std::vector<GURL>& urls_to_open) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::BootTimesRecorder::Get()->AddLoginTimeMarker(
-      "SessionRestore-Start", false);
+  chromeos::BootTimesRecorder::Get()->AddLoginTimeMarker("SessionRestore-Start",
+                                                         false);
 #endif
   DCHECK(profile);
   DCHECK(SessionServiceFactory::GetForProfile(profile));
@@ -924,15 +953,13 @@ void SessionRestore::RestoreSessionAfterCrash(Browser* browser) {
   auto* profile = browser->profile();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Bento restores a window to the right desk, so we should not
-  // reuse any browser window. Otherwise, the conflict of the parent desk
-  // arises because tabs created in this |browser| should remain in the
-  // current active desk, but the first restored window should be restored
-  // to its saved parent desk before a crash. This also avoids users'
-  // confusion of the current window disappearing from the current desk
-  // after pressing a restore button.
-  if (ash::features::IsBentoEnabled())
-    browser = nullptr;
+  // Desks restore a window to the right desk, so we should not reuse any
+  // browser window. Otherwise, the conflict of the parent desk arises because
+  // tabs created in this |browser| should remain in the current active desk,
+  // but the first restored window should be restored to its saved parent desk
+  // before a crash. This also avoids users' confusion of the current window
+  // disappearing from the current desk after pressing a restore button.
+  browser = nullptr;
 #endif
 
   SessionRestore::BehaviorBitmask behavior =

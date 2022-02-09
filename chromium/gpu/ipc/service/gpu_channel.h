@@ -21,8 +21,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
+#include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/context_result.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
+#include "gpu/ipc/common/gpu_channel.mojom.h"
 #include "gpu/ipc/service/command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/shared_image_stub.h"
@@ -34,7 +36,9 @@
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gpu_preference.h"
 
-struct GPUCreateCommandBufferConfig;
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/gpu/pipeline/propmedia_gpu_channel.h"
+#endif
 
 namespace base {
 class WaitableEvent;
@@ -49,6 +53,10 @@ class Scheduler;
 class SharedImageStub;
 class StreamTexture;
 class SyncPointManager;
+
+namespace mojom {
+class GpuChannel;
+}
 
 // Encapsulates an IPC channel between the GPU process and one renderer
 // process. On the renderer side there's a corresponding GpuChannelHost.
@@ -146,16 +154,29 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
       gfx::GpuMemoryBufferHandle handle,
       const gfx::Size& size,
       gfx::BufferFormat format,
+      gfx::BufferPlane plane,
       SurfaceHandle surface_handle);
 
   void HandleMessage(const IPC::Message& msg);
 
-  // Some messages such as WaitForGetOffsetInRange and WaitForTokenInRange are
-  // processed as soon as possible because the client is blocked until they
-  // are completed.
-  void HandleOutOfOrderMessage(const IPC::Message& msg);
+  // Executes a DeferredRequest that was previously received and has now been
+  // scheduled by the scheduler.
+  void ExecuteDeferredRequest(mojom::DeferredRequestParamsPtr params);
+
+  void WaitForTokenInRange(
+      int32_t routing_id,
+      int32_t start,
+      int32_t end,
+      mojom::GpuChannel::WaitForTokenInRangeCallback callback);
+  void WaitForGetOffsetInRange(
+      int32_t routing_id,
+      uint32_t set_get_buffer_count,
+      int32_t start,
+      int32_t end,
+      mojom::GpuChannel::WaitForGetOffsetInRangeCallback callback);
 
   void HandleMessageForTesting(const IPC::Message& msg);
+  mojom::GpuChannel& GetGpuChannelForTesting();
 
   ImageDecodeAcceleratorStub* GetImageDecodeAcceleratorStub() const;
 
@@ -171,9 +192,13 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
     return shared_image_stub_.get();
   }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  void SetProprietaryMediaMessageListener(IPC::Listener* listener);
-#endif
+  void CreateCommandBuffer(
+      mojom::CreateCommandBufferParamsPtr init_params,
+      int32_t routing_id,
+      base::UnsafeSharedMemoryRegion shared_state_shm,
+      mojom::GpuChannel::CreateCommandBufferCallback callback);
+  void DestroyCommandBuffer(int32_t routing_id);
+  bool CreateStreamTexture(int32_t stream_id);
 
  private:
   // Takes ownership of the renderer process handle.
@@ -188,18 +213,9 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
              bool is_gpu_host,
              ImageDecodeAcceleratorWorker* image_decode_accelerator_worker);
 
-  bool OnControlMessageReceived(const IPC::Message& msg);
-
-  void HandleMessageHelper(const IPC::Message& msg);
+  void OnDestroyCommandBuffer(int32_t route_id);
 
   // Message handlers for control messages.
-  void OnCreateCommandBuffer(const GPUCreateCommandBufferConfig& init_params,
-                             int32_t route_id,
-                             base::UnsafeSharedMemoryRegion shared_state_shm,
-                             gpu::ContextResult* result,
-                             gpu::Capabilities* capabilities);
-  void OnDestroyCommandBuffer(int32_t route_id);
-  void OnCreateStreamTexture(int32_t stream_id, bool* succeeded);
   bool CreateSharedImageStub();
 
   std::unique_ptr<IPC::SyncChannel> sync_channel_;  // nullptr in tests.
@@ -257,7 +273,8 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  IPC::Listener* proprietary_media_message_listener_ = nullptr;
+  friend PropmediaGpuChannel;
+  PropmediaGpuChannel prop_media_gpu_channel;
 #endif
 
   // Member variables should appear before the WeakPtrFactory, to ensure that

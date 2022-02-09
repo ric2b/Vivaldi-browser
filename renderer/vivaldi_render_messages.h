@@ -9,6 +9,7 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_message_start.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -24,25 +25,6 @@ IPC_STRUCT_BEGIN(VivaldiViewMsg_RequestThumbnailForFrame_Params)
   IPC_STRUCT_MEMBER(gfx::Size, target_size)
   IPC_STRUCT_MEMBER(int, callback_id)
   IPC_STRUCT_MEMBER(int, client_id)
-IPC_STRUCT_END()
-
-IPC_STRUCT_BEGIN(VivaldiViewMsg_AccessKeyDefinition)
-  IPC_STRUCT_MEMBER(std::string, access_key)
-  IPC_STRUCT_MEMBER(std::string, tagname)
-  IPC_STRUCT_MEMBER(std::string, title)
-  IPC_STRUCT_MEMBER(std::string, href)
-  IPC_STRUCT_MEMBER(std::string, value)
-  IPC_STRUCT_MEMBER(std::string, id)
-  IPC_STRUCT_MEMBER(std::string, textContent)
-IPC_STRUCT_END()
-
-IPC_STRUCT_BEGIN(VivaldiViewMsg_NavigationRect)
-  IPC_STRUCT_MEMBER(int, x)
-  IPC_STRUCT_MEMBER(int, y)
-  IPC_STRUCT_MEMBER(int, width)
-  IPC_STRUCT_MEMBER(int, height)
-  IPC_STRUCT_MEMBER(std::string, href)
-  IPC_STRUCT_MEMBER(std::string, path)
 IPC_STRUCT_END()
 
 IPC_MESSAGE_CONTROL0(VivaldiMsg_MediaElementAddedEvent)
@@ -74,23 +56,9 @@ IPC_MESSAGE_ROUTED4(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
 
 IPC_MESSAGE_ROUTED0(VivaldiFrameHostMsg_ResumeParser)
 
-IPC_MESSAGE_ROUTED0(VivaldiViewMsg_GetAccessKeysForPage)
-
-IPC_MESSAGE_ROUTED1(VivaldiViewHostMsg_GetAccessKeysForPage_ACK,
-                    std::vector<VivaldiViewMsg_AccessKeyDefinition>)
-
 IPC_MESSAGE_ROUTED1(VivaldiViewMsg_AccessKeyAction, std::string)
 
 IPC_MESSAGE_ROUTED2(VivaldiViewMsg_ScrollPage, std::string, int)
-
-IPC_MESSAGE_ROUTED0(VivaldiViewMsg_GetSpatialNavigationRects)
-
-IPC_MESSAGE_ROUTED1(VivaldiViewHostMsg_GetSpatialNavigationRects_ACK,
-                    std::vector<VivaldiViewMsg_NavigationRect>)
-
-IPC_MESSAGE_ROUTED0(VivaldiViewMsg_GetScrollPosition)
-
-IPC_MESSAGE_ROUTED2(VivaldiViewHostMsg_GetScrollPosition_ACK, int, int)
 
 IPC_MESSAGE_ROUTED3(VivaldiViewMsg_ActivateElementFromPoint, int, int, int)
 

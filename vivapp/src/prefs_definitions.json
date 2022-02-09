@@ -446,6 +446,17 @@
         "default": "system",
         "syncable": true
       },
+      "week_number_rule": {
+        "description": "What is the first week. Values represent the day of January that must be in week #1",
+        "type": "enum",
+        "enum_values": {
+          "4": 0,
+          "1": 1,
+          "7": 2
+        },
+        "default": "4",
+        "syncable": true
+      },
       "display_mode": {
         "type": "enum",
         "enum_values": {
@@ -503,6 +514,12 @@
       "default_notification": {
         "type": "integer",
         "default": -1,
+        "syncable": false
+      },
+      "hidden_hides_notifications": {
+        "description": "Hide notifications for hidden calendars?",
+        "type": "boolean",
+        "default": false,
         "syncable": false
       },
       "display": {
@@ -1006,6 +1023,12 @@
         "type": "boolean",
         "default": true,
         "syncable": true
+      },
+      "smtp_logs_on": {
+        "description": "Are smtp actions logged in debug console?",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
       },
       "status": {
         "button_style": {
@@ -1583,8 +1606,20 @@
       }
     },
     "chained_commands": {
+      "version": {
+        "description": "Chain Command version",
+        "type": "integer",
+        "default": 0,
+        "syncable": false
+      },
       "command_list": {
         "description": "A list of chained commands",
+        "type": "list",
+        "syncable": false,
+        "default": []
+      },
+      "deleted_command_list": {
+        "description": "A list of deleted, default chains",
         "type": "list",
         "syncable": false,
         "default": []
@@ -2250,6 +2285,18 @@
         },
         "open_in_current": {
           "description": "Open links within current tab stack",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "open_accordions": {
+          "description": "List of expanded accordions",
+          "type": "list",
+          "default": [],
+          "syncable": false
+        },
+        "auto_expand": {
+          "description": "Expand accordions automatically when tab is activated",
           "type": "boolean",
           "default": true,
           "syncable": true

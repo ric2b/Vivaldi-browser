@@ -15,13 +15,15 @@
 #include <windows.h>
 
 #include "base/win/win_util.h"
-#elif defined(OS_FREEBSD)
+#elif defined(OS_FREEBSD) || defined(OS_NETBSD)
 #include <limits.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #elif defined(OS_HAIKU)
 #include <OS.h>
 #include <image.h>
+#elif defined(OS_SOLARIS)
+#include <stdlib.h>
 #endif
 
 #if defined(OS_MACOSX)
@@ -67,6 +69,18 @@ base::FilePath GetExePath() {
   return base::FilePath(buf);
 }
 
+#elif defined(OS_NETBSD)
+
+base::FilePath GetExePath() {
+  int mib[] = {CTL_KERN, KERN_PROC_ARGS, getpid(), KERN_PROC_PATHNAME};
+  char buf[PATH_MAX];
+  size_t buf_size = PATH_MAX;
+  if (sysctl(mib, 4, buf, &buf_size, nullptr, 0) == -1) {
+    return base::FilePath();
+  }
+  return base::FilePath(buf);
+}
+
 #elif defined(OS_HAIKU)
 
 base::FilePath GetExePath() {
@@ -78,6 +92,16 @@ base::FilePath GetExePath() {
     }
   }
   return base::FilePath(std::string(i_info.name));
+}
+
+#elif defined(OS_SOLARIS)
+
+base::FilePath GetExePath() {
+  const char *raw = getexecname();
+  if (raw == NULL) {
+    return base::FilePath();
+  }
+  return base::FilePath(raw);
 }
 
 #else

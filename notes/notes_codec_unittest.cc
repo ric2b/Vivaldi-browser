@@ -28,16 +28,16 @@ using notes_helper::CreateAutoIndexedContent;
 namespace vivaldi {
 namespace {
 
-const char kUrl1Title[] = "url1";
+const char16_t kUrl1Title[] = u"url1";
 const char kUrl1Url[] = "http://www.url1.com";
-const char kUrl2Title[] = "url2";
+const char16_t kUrl2Title[] = u"url2";
 const char kUrl2Url[] = "http://www.url2.com";
-const char kUrl3Title[] = "url3";
+const char16_t kUrl3Title[] = u"url3";
 const char kUrl3Url[] = "http://www.url3.com";
-const char kUrl4Title[] = "url4";
+const char16_t kUrl4Title[] = u"url4";
 const char kUrl4Url[] = "http://www.url4.com";
-const char kFolder1Title[] = "folder1";
-const char kFolder2Title[] = "folder2";
+const char16_t kFolder1Title[] = u"folder1";
+const char16_t kFolder2Title[] = u"folder2";
 
 // Helper to verify the two given notes nodes.
 void AssertNodesEqual(const NoteNode* expected, const NoteNode* actual) {
@@ -84,27 +84,27 @@ class NotesCodecTest : public testing::Test {
   NotesModel* CreateTestModel1(int index = 0) {
     std::unique_ptr<NotesModel> model(CreateTestNotesModel());
     const NoteNode* note_node = model->main_node();
-    model->AddNote(note_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
+    model->AddNote(note_node, 0, kUrl1Title, GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent(index)));
     return model.release();
   }
   NotesModel* CreateTestModel2() {
     std::unique_ptr<NotesModel> model(CreateTestNotesModel());
     const NoteNode* note_node = model->main_node();
-    model->AddNote(note_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
+    model->AddNote(note_node, 0, kUrl1Title, GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
-    model->AddNote(note_node, 1, ASCIIToUTF16(kUrl2Title), GURL(kUrl2Url),
+    model->AddNote(note_node, 1, kUrl2Title, GURL(kUrl2Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
   }
   NotesModel* CreateTestModel3() {
     std::unique_ptr<NotesModel> model(CreateTestNotesModel());
     const NoteNode* note_node = model->main_node();
-    model->AddNote(note_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
+    model->AddNote(note_node, 0, kUrl1Title, GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     const NoteNode* folder1 =
-        model->AddFolder(note_node, 1, ASCIIToUTF16(kFolder1Title));
-    model->AddNote(folder1, 0, ASCIIToUTF16(kUrl2Title), GURL(kUrl2Url),
+        model->AddFolder(note_node, 1, kFolder1Title);
+    model->AddNote(folder1, 0, kUrl2Title, GURL(kUrl2Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
   }
@@ -292,10 +292,10 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
 
   // add a few extra nodes to notes model and make sure IDs are still uniuqe.
   const NoteNode* notes_node = decoded_model->main_node();
-  decoded_model->AddNote(notes_node, 0, ASCIIToUTF16("new url1"),
+  decoded_model->AddNote(notes_node, 0, u"new url1",
                          GURL("http://newurl1.com"),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
-  decoded_model->AddNote(notes_node, 0, ASCIIToUTF16("new url2"),
+  decoded_model->AddNote(notes_node, 0, u"new url2",
                          GURL("http://newurl2.com"),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
 
@@ -318,11 +318,11 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
   // ID persistence is working properly.
   const NoteNode* notes_node = decoded_model->main_node();
   decoded_model->AddNote(notes_node, notes_node->children().size(),
-                         ASCIIToUTF16(kUrl3Title), GURL(kUrl3Url),
+                         kUrl3Title, GURL(kUrl3Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
   const NoteNode* folder2_node = decoded_model->AddFolder(
-      notes_node, notes_node->children().size(), ASCIIToUTF16(kFolder2Title));
-  decoded_model->AddNote(folder2_node, 0, ASCIIToUTF16(kUrl4Title),
+      notes_node, notes_node->children().size(), kFolder2Title);
+  decoded_model->AddNote(folder2_node, 0, kUrl4Title,
                          GURL(kUrl4Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
 

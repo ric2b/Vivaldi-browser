@@ -181,7 +181,7 @@ Examples
 
 int RunCheck(const std::vector<std::string>& args) {
   if (args.size() != 1 && args.size() != 2) {
-    Err(Location(), "You're holding it wrong.",
+    Err(Location(), "Unknown command format. See \"gn help check\"",
         "Usage: \"gn check <out_dir> [<target_label>]\"")
         .PrintToStdout();
     return 1;

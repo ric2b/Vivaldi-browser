@@ -35,8 +35,10 @@ extern const char kVivaldiSilent[];
 extern const char kVivaldiStandalone[];
 extern const char kVivaldiUpdate[];
 
-// Vivaldi installer switches for debugging not supported in the official build.
+// Vivaldi installer switches and environment for debugging not supported in
+// official builds.
 extern const char kVivaldiDebugTargetExe[];
+extern const char kDebugSetupCommandEnvironment[];
 
 extern const wchar_t kUninstallSurveyUrl[];
 

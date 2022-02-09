@@ -808,7 +808,7 @@ bool NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
          (IsWindowOnCurrentVirtualDesktop(hwnd) == true);
 }
 
-base::Optional<bool> NativeWindowOcclusionTrackerWin::
+absl::optional<bool> NativeWindowOcclusionTrackerWin::
     WindowOcclusionCalculator::IsWindowOnCurrentVirtualDesktop(HWND hwnd) {
   if (!virtual_desktop_manager_)
     return true;
@@ -818,7 +818,7 @@ base::Optional<bool> NativeWindowOcclusionTrackerWin::
           hwnd, &on_current_desktop))) {
     return on_current_desktop;
   }
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 }  // namespace aura

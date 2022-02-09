@@ -35,6 +35,7 @@
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/draggable_region.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
+#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_family.h"
@@ -537,9 +538,10 @@ void VivaldiNativeAppWindowViews::Layout() {
 void VivaldiNativeAppWindowViews::ViewHierarchyChanged(
     const views::ViewHierarchyChangedDetails& details) {
   if (details.is_add && details.child == this) {
-    web_view_ = new views::WebView(NULL);
+    content::WebContents* contents = window_->web_contents();
+    web_view_ = new views::WebView(contents->GetBrowserContext());
     AddChildView(web_view_);
-    web_view_->SetWebContents(window_->web_contents());
+    web_view_->SetWebContents(contents);
   }
 }
 

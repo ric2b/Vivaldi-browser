@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Ելք լիաէկրան ռեժիմից</translation>
 <translation id="2177950615300672361">Ներդիր՝ գաղտնի ռեժիմում. <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Հանգույց Native Client. <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Թաքցնել կոճակը</translation>
 <translation id="2218515861914035131">Փակցնել որպես պարզ տեքստ</translation>
 <translation id="2249605167705922988">օր.՝ 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Թույլ տալ իդենտիֆիկատորներ պաշտպանված բովանդակության համար (կարող է պահանջվել համակարգչի վերագործարկում)</translation>
@@ -136,7 +135,6 @@
 <translation id="3222066309010235055">Նախնական ռենդեր. <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Խոսափող</translation>
 <translation id="3241680850019875542">Ընտրեք արմատային պանակը՝ ընդլայնումը փաթեթավորելու համար։ Ընդլայնումը թարմացնելու համար ընտրեք նաև մասնավոր բանալիի ֆայլը՝ վերօգտագործելու համար։</translation>
-<translation id="3266179261140759675">Արգելափակել տվյալների ուղարկումն ու ստացումը փակված կայքերի կողմից</translation>
 <translation id="3280237271814976245">Պահպանել &amp;որպես…</translation>
 <translation id="3285322247471302225">Նոր &amp;ներդիր</translation>
 <translation id="3288047731229977326">Մշակողի ռեժիմում աշխատող ընդլայնումները կարող են վնասել Ձեր համակարգչին։ Եթե Դուք մշակող չեք, ապա անջատեք այդ ընդլայնումներն ապահովության համար։</translation>
@@ -159,13 +157,13 @@
 <translation id="354068948465830244">Կարող է կարդալ և փոփոխել կայքի տեղեկույթը</translation>
 <translation id="3560034655160545939">Ո&amp;ւղղագրության ստուգում</translation>
 <translation id="3574917942258583917">Այնուամենայնիվ դո՞ւրս գալ գաղտնի ռեժիմից։</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;-ն ուզում է &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; տպիչն ընդհանրացնել Ձեզ պատկանող &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt; խմբի հետ։ Եթե հաստատեք, խմբի բոլոր անդամները կկարողանան տպել այդ տպիչով։</translation>
 <translation id="3587482841069643663">Բոլորը</translation>
 <translation id="3627588569887975815">Բացել հղումը &amp;գաղտնի պատուհանում</translation>
 <translation id="3627879631695760395">Տեղակայել «<ph name="APP" />» հավելվածը…</translation>
 <translation id="3668823961463113931">Մշակիչներ</translation>
 <translation id="3678156199662914018">Ընդլայնում. <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Էկրանի ընդհանրացման հարցում <ph name="APP_NAME" />-ից</translation>
+<translation id="3708684582558000260">Թույլ չտալ փակված կայքերին ավարտել տվյալների ուղարկումը կամ ստացումը</translation>
 <translation id="3711931198657368127">Փակ&amp;ցնել ու անցնել <ph name="URL" /></translation>
 <translation id="3727187387656390258">Հետազոտել թռուցիկը</translation>
 <translation id="3744111561329211289">Ֆոնային սինք</translation>
@@ -193,7 +191,6 @@
 <translation id="4087089424473531098">Ընդլայնումը ստեղծված է.
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Հաստատել խմբի համար</translation>
 <translation id="4096508467498758490">Անջատել մշակողի ռեժիմում աշխատող ընդլայնումները</translation>
 <translation id="4100839878934973028">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է հավելված, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
 <translation id="4109898769411476438">Փակեք բրաուզերը մինչ ներկրելը</translation>
@@ -215,7 +212,7 @@
 <translation id="4423376891418188461">Վերականգնել կարգավորումները</translation>
 <translation id="4434045419905280838">Թռուցիկներ և վերահասցեավորումներ</translation>
 <translation id="4478664379124702289">Պահպանել հղու&amp;մը որպես…</translation>
-<translation id="4579581181964204535">Հնարավոր չէ հեռարձակել <ph name="HOST_NAME" />-ը։</translation>
+<translation id="4579581181964204535">Չի հաջողվում հեռարձակել <ph name="HOST_NAME" />-ը։</translation>
 <translation id="4593021220803146968">&amp;Գնալ <ph name="URL" /></translation>
 <translation id="4595560905247879544">Հավելվածներն ու ընդլայնումները կարող է փոփոխել միայն մենեջերը (<ph name="CUSTODIAN_NAME" />)։</translation>
 <translation id="4613271546271159013">Էջը, որը երևում է նոր ներդիր բացելիս՝ փոխվել է ընդլայնման կողմից։</translation>
@@ -229,7 +226,6 @@
 <translation id="488785315393301722">Ցուցադրել մանրամասները</translation>
 <translation id="4907306957610201395">Թույլտվության կարգախումբ</translation>
 <translation id="4912643508233590958">Անգործ վիճակից արթնացումներ</translation>
-<translation id="4918086044614829423">Հաստատել</translation>
 <translation id="4927753642311223124">Այստեղ տեսնելու բան չկա, ամեն ինչ կարգին է։</translation>
 <translation id="4930714375720679147">Միացնել</translation>
 <translation id="4988526792673242964">Էջեր</translation>
@@ -305,13 +301,12 @@
 <translation id="6011449291337289699">Կայքի տվյալների մաքրում</translation>
 <translation id="6042308850641462728">Ավելին</translation>
 <translation id="6059925163896151826">USB սարքեր</translation>
-<translation id="6082651258230788217">Ցույց տալ գործիքների երիզում</translation>
 <translation id="6086846494333236931">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
 <translation id="6101226222197207147">Ավելացված է նոր հավելված (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ձեր ինտերնետ միացման վրա կողմնակի ազդեցություն կա</translation>
 <translation id="6147020289383635445">Տպման նախադիտումը ձախողվեց։</translation>
 <translation id="6156863943908443225">Սկրիպտների քեշ</translation>
-<translation id="6169666352732958425">Հնարավոր չէ հեռարձակել աշխատաէկրանը։</translation>
+<translation id="6169666352732958425">Չի հաջողվում հեռարձակել աշխատաէկրանը։</translation>
 <translation id="6196854373336333322">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոփոխել է պրոքսի կարգավորումները, ինչը նշանակում է, որ այն կարող է փոխել, ընդհատել կամ ծածուկ հսկել այն ամենն, ինչ Դուք անում եք ցանցում։ Եթե չգիտեք, թե ինչու է այս փոփոխությունը կատարվել, հավանաբար չունեք դրա կարիքը։</translation>
 <translation id="6206311232642889873">Պատճ&amp;ենել պատկերը</translation>
 <translation id="6239558157302047471">Կրկին բեռնել &amp;ֆրեյմը</translation>
@@ -332,7 +327,6 @@
 <translation id="6406303162637086258">Ձևացնել բրաուզերի վերագործարկում</translation>
 <translation id="6445450263907939268">Եթե Դուք չեք ցանկացել այս փոփոխությունները, կարող եք վերականգնել նախկին կարգավորումները։</translation>
 <translation id="6447842834002726250">Քուքիներ</translation>
-<translation id="6452181791372256707">Մերժել</translation>
 <translation id="6498249116389603658">Ձեր &amp;բոլոր լեզուները</translation>
 <translation id="6503077044568424649">Ամենաայցելվողներ</translation>
 <translation id="6508261954199872201">Հավելված. <ph name="APP_NAME" /></translation>
@@ -402,7 +396,6 @@
 <translation id="7857949311770343000">Արդյոք սա՞ է նոր ներդիրի՝ Ձեր ակնկալած էջը։</translation>
 <translation id="786073089922909430">Սպասարկում. <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Արդի վերջնակետեր</translation>
-<translation id="7898627924844766532">Պահել գործիքների երիզում</translation>
 <translation id="7903925330883316394">Օժանդակ ծրագիր. <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Հիմա ցանցում չէ</translation>
 <translation id="7947962633355574091">Պա&amp;տճենել տեսանյութի հասցեն</translation>
@@ -419,7 +412,7 @@
 Պահեք բանալիի ֆայլն ապահով վայրում։ Այն Ձեզ պետք կգա ընդլայնման նոր տարբերակներ ստեղծելու համար։</translation>
 <translation id="8004582292198964060">Բրաուզեր</translation>
 <translation id="8018313076035239964">Կառավարեք՝ ինչ տեղեկույթ կարող են վեբ կայքերն օգտագործել և ինչ բովանդակություն կարող են Ձեզ ցույց տալ</translation>
-<translation id="8032244173881942855">Հնարավոր չէ հեռարձակել ներդիրը։</translation>
+<translation id="8032244173881942855">Չի հաջողվում հեռարձակել ներդիրը։</translation>
 <translation id="8071432093239591881">Տպել որպես պատկեր</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ԿԲ</translation>
 <translation id="8137559199583651773">Կառավարել ընդլայնումները</translation>
@@ -449,9 +442,8 @@
 <translation id="8708000541097332489">Մաքրել ելնելիս</translation>
 <translation id="8714838604780058252">Ֆոնային գրաֆիկա</translation>
 <translation id="8725066075913043281">Նորից փորձել</translation>
-<translation id="8757090071857742562">Հնարավոր չէ հեռարձակել աշխատաէկրանը։ Ստուգեք՝ արդյոք թույլատրե՞լ եք էկրանի ընդհանրացումը։</translation>
+<translation id="8757090071857742562">Չի հաջողվում հեռարձակել աշխատաէկրանը։ Ստուգեք՝ արդյոք հաստատել եք էկրանի ընդհանրացման հարցումը։</translation>
 <translation id="8774934320277480003">Վերին լուսանցք</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;-ն ուզում է &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; տպիչն ընդհանրացնել Ձեր հետ։</translation>
 <translation id="8798099450830957504">Ստանդարտ</translation>
 <translation id="8800004011501252845">Վերջնակետեր հետևյալ հաշվից՝</translation>
 <translation id="8808478386290700967">Ինտերնետ-խանութ</translation>

@@ -5,8 +5,12 @@
 #ifndef BASE_THREADING_THREAD_RESTRICTIONS_H_
 #define BASE_THREADING_THREAD_RESTRICTIONS_H_
 
+#include <memory>
+
 #include "base/base_export.h"
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
+#include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -98,7 +102,6 @@
 // that's okay.
 
 class BrowserProcessImpl;
-class ChromeJsErrorReportProcessor;
 class ChromeNSSCryptoModuleDelegate;
 class HistogramSynchronizer;
 class KeyStorageLinux;
@@ -113,6 +116,10 @@ class AwFormDatabaseService;
 class CookieManager;
 class ScopedAllowInitGLBindings;
 class VizCompositorThreadRunnerWebView;
+}
+namespace ash {
+class MojoUtils;
+class BrowserDataMigrator;
 }
 namespace audio {
 class OutputDevice;
@@ -136,7 +143,6 @@ class TileTaskManagerImpl;
 }
 namespace chromeos {
 class BlockingMethodCaller;
-class MojoUtils;
 namespace system {
 class StatisticsProviderImpl;
 }
@@ -151,7 +157,7 @@ class SystemReportComponent;
 namespace content {
 class BrowserGpuChannelHostFactory;
 class BrowserMainLoop;
-class BrowserProcessSubThread;
+class BrowserProcessIOThread;
 class BrowserShutdownProfileDumper;
 class BrowserTestBase;
 class CategorizedWorkerPool;
@@ -289,10 +295,6 @@ class ScopedAllowThreadJoinForWebRtcTransport;
 }
 }
 
-namespace resource_coordinator {
-class TabManagerDelegate;
-}
-
 namespace service_manager {
 class ServiceProcessLauncher;
 }
@@ -349,6 +351,8 @@ class StackSamplingProfiler;
 class Thread;
 class WaitableEvent;
 
+struct BooleanWithStack;
+
 bool PathProviderWin(int, FilePath*);
 
 #if DCHECK_IS_ON()
@@ -386,7 +390,7 @@ class BASE_EXPORT ScopedDisallowBlocking {
 
  private:
 #if DCHECK_IS_ON()
-  const bool was_disallowed_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ScopedDisallowBlocking);
@@ -394,6 +398,8 @@ class BASE_EXPORT ScopedDisallowBlocking {
 
 class BASE_EXPORT ScopedAllowBlocking {
  private:
+  FRIEND_TEST_ALL_PREFIXES(ThreadRestrictionsTest,
+                           NestedAllowRestoresPreviousStack);
   FRIEND_TEST_ALL_PREFIXES(ThreadRestrictionsTest, ScopedAllowBlocking);
   friend class ScopedAllowBlockingForTesting;
 
@@ -402,9 +408,10 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class AdjustOOMScoreHelper;
   friend class StackSamplingProfiler;
   friend class android_webview::ScopedAllowInitGLBindings;
+  friend class ash::MojoUtils;  // http://crbug.com/1055467
+  friend class ash::BrowserDataMigrator;
   friend class blink::DiskDataAllocator;
-  friend class chromeos::MojoUtils;  // http://crbug.com/1055467
-  friend class content::BrowserProcessSubThread;
+  friend class content::BrowserProcessIOThread;
   friend class content::NetworkServiceInstancePrivate;
   friend class content::PepperPrintSettingsManagerImpl;
   friend class content::RenderProcessHostImpl;
@@ -422,7 +429,6 @@ class BASE_EXPORT ScopedAllowBlocking {
 #endif
   friend class printing::PrintJobWorker;
   friend class remoting::ScopedBypassIOThreadRestrictions;  // crbug.com/1144161
-  friend class resource_coordinator::TabManagerDelegate;  // crbug.com/778703
   friend class web::WebSubThread;
   friend class weblayer::BrowserContextImpl;
   friend class weblayer::ContentBrowserClientImpl;
@@ -436,10 +442,22 @@ class BASE_EXPORT ScopedAllowBlocking {
   ~ScopedAllowBlocking();
 
 #if DCHECK_IS_ON()
-  const bool was_disallowed_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
 
+  friend class VivaldiScopedAllowBlocking;
+
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBlocking);
+};
+
+// A version of ScopedAllowBlocking to use in Vivaldi code without the need to
+// make a class or a function that instantiate the class a friend of it. Use as
+// the last resort measure if making the code to run on a worker thread requires
+// too much Chromium changes.
+class VivaldiScopedAllowBlocking: public ScopedAllowBlocking {
+ public:
+  VivaldiScopedAllowBlocking() {}
+  ~VivaldiScopedAllowBlocking() {}
 };
 
 class ScopedAllowBlockingForTesting {
@@ -479,9 +497,8 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class blink::scheduler::WorkerThread;
   friend class chrome_cleaner::ResetShortcutsComponent;
   friend class chrome_cleaner::SystemReportComponent;
-  friend class ::ChromeJsErrorReportProcessor;
   friend class content::BrowserMainLoop;
-  friend class content::BrowserProcessSubThread;
+  friend class content::BrowserProcessIOThread;
   friend class content::ServiceWorkerContextClient;
   friend class device::UsbContext;
   friend class functions::ExecScriptScopedAllowBaseSyncPrimitives;
@@ -510,7 +527,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   ~ScopedAllowBaseSyncPrimitives() EMPTY_BODY_IF_DCHECK_IS_OFF;
 
 #if DCHECK_IS_ON()
-  const bool was_disallowed_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitives);
@@ -607,13 +624,13 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   ~ScopedAllowBaseSyncPrimitivesOutsideBlockingScope();
 
 #if DCHECK_IS_ON()
-  const bool was_disallowed_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
 
   // Since this object is used to indicate that sync primitives will be used to
   // wait for an event ignore the current operation for hang watching purposes
   // since the wait time duration is unknown.
-  base::HangWatchScopeDisabled hang_watch_scope_disabled_;
+  base::IgnoreHangsInScope hang_watch_scope_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitivesOutsideBlockingScope);
 };
@@ -630,7 +647,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesForTesting {
 
  private:
 #if DCHECK_IS_ON()
-  const bool was_disallowed_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitivesForTesting);
@@ -645,9 +662,9 @@ class BASE_EXPORT ScopedAllowUnresponsiveTasksForTesting {
 
  private:
 #if DCHECK_IS_ON()
-  const bool was_disallowed_base_sync_;
-  const bool was_disallowed_blocking_;
-  const bool was_disallowed_cpu_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_base_sync_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_blocking_;
+  std::unique_ptr<BooleanWithStack> was_disallowed_cpu_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowUnresponsiveTasksForTesting);
@@ -686,7 +703,7 @@ class BASE_EXPORT ThreadRestrictions {
 
    private:
 #if DCHECK_IS_ON()
-    const bool was_allowed_;
+    std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
 
     DISALLOW_COPY_AND_ASSIGN(ScopedAllowIO);
@@ -698,11 +715,17 @@ class BASE_EXPORT ThreadRestrictions {
   // Returns the previous value.
   //
   // DEPRECATED. Use ScopedAllowBlocking(ForTesting) or ScopedDisallowBlocking.
-  static bool SetIOAllowed(bool allowed);
+  //
+  // NOT_TAIL_CALLED so it's always evident who irrevocably altered the
+  // allowance.
+  static bool NOT_TAIL_CALLED SetIOAllowed(bool allowed);
 
   // Set whether the current thread can use singletons.  Returns the previous
   // value.
-  static bool SetSingletonAllowed(bool allowed);
+  //
+  // NOT_TAIL_CALLED so it's always evident who irrevocably altered the
+  // allowance.
+  static bool NOT_TAIL_CALLED SetSingletonAllowed(bool allowed);
 
   // Check whether the current thread is allowed to use singletons (Singleton /
   // LazyInstance).  DCHECKs if not.
@@ -748,7 +771,10 @@ class BASE_EXPORT ThreadRestrictions {
 
 #if DCHECK_IS_ON()
   // DEPRECATED. Use ScopedAllowBaseSyncPrimitives.
-  static bool SetWaitAllowed(bool allowed);
+  //
+  // NOT_TAIL_CALLED so it's always evident who irrevocably altered the
+  // allowance.
+  static bool NOT_TAIL_CALLED SetWaitAllowed(bool allowed);
 #else
   static bool SetWaitAllowed(bool allowed) { return true; }
 #endif

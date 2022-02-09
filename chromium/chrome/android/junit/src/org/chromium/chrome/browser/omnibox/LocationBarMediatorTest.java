@@ -26,6 +26,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.animation.ObjectAnimator;
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -79,7 +80,6 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -87,6 +87,7 @@ import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
 
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -99,6 +100,8 @@ import java.util.List;
                 LocationBarMediatorTest.GSAStateShadow.class,
                 LocationBarMediatorTest.DownloadUtilsShadow.class})
 @Features.EnableFeatures(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)
+@Features.DisableFeatures({ChromeFeatureList.VOICE_BUTTON_IN_TOP_TOOLBAR,
+        ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2})
 public class LocationBarMediatorTest {
     @Implements(UrlUtilities.class)
     static class ShadowUrlUtilities {
@@ -203,10 +206,6 @@ public class LocationBarMediatorTest {
     @Mock
     private KeyEvent.DispatcherState mKeyDispatcherState;
     @Mock
-    private TemplateUrl mGoogleSearchEngine;
-    @Mock
-    private TemplateUrl mNonGoogleSearchEngine;
-    @Mock
     private BackKeyBehaviorDelegate mOverrideBackKeyBehaviorDelegate;
     @Mock
     private WindowAndroid mWindowAndroid;
@@ -236,6 +235,7 @@ public class LocationBarMediatorTest {
     private LocationBarMediator mMediator;
     private LocationBarMediator mTabletMediator;
     private UrlBarData mUrlBarData;
+    private boolean mIsToolbarMicEnabled;
 
     @Before
     public void setUp() {
@@ -244,6 +244,7 @@ public class LocationBarMediatorTest {
         doReturn(mTemplateUrlService).when(mTemplateUrlServiceSupplier).get();
         doReturn(mRootView).when(mLocationBarLayout).getRootView();
         doReturn(mRootView).when(mLocationBarTablet).getRootView();
+        doReturn(new WeakReference<Activity>(null)).when(mWindowAndroid).getActivity();
         mJniMocker.mock(ProfileJni.TEST_HOOKS, mProfileNativesJniMock);
         mJniMocker.mock(OmniboxPrerenderJni.TEST_HOOKS, mPrerenderJni);
         SearchEngineLogoUtils.setInstanceForTesting(mSearchEngineLogoUtils);
@@ -255,7 +256,8 @@ public class LocationBarMediatorTest {
                 mLocationBarLayout, mLocationBarDataProvider, mProfileSupplier,
                 mPrivacyPreferencesManager, mOverrideUrlLoadingDelegate, mLocaleManager,
                 mTemplateUrlServiceSupplier, mOverrideBackKeyBehaviorDelegate, mWindowAndroid,
-                /*isTablet=*/false, mSearchEngineLogoUtils, mLensController, noAction);
+                /*isTablet=*/false, mSearchEngineLogoUtils, mLensController, noAction,
+                tab -> true, (tab, transition) -> {}, () -> mIsToolbarMicEnabled);
         mMediator.setCoordinators(mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);
         ObjectAnimatorShadow.setUrlAnimator(mUrlAnimator);
         GSAStateShadow.setGSAState(mGSAState);
@@ -264,7 +266,8 @@ public class LocationBarMediatorTest {
                 mLocationBarTablet, mLocationBarDataProvider, mProfileSupplier,
                 mPrivacyPreferencesManager, mOverrideUrlLoadingDelegate, mLocaleManager,
                 mTemplateUrlServiceSupplier, mOverrideBackKeyBehaviorDelegate, mWindowAndroid,
-                /*isTablet=*/true, mSearchEngineLogoUtils, mLensController, noAction);
+                /*isTablet=*/true, mSearchEngineLogoUtils, mLensController, noAction,
+                tab -> true, (tab, transition) -> {}, () -> mIsToolbarMicEnabled);
         mTabletMediator.setCoordinators(
                 mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);
     }
@@ -623,51 +626,23 @@ public class LocationBarMediatorTest {
     }
 
     @Test
-    public void testTemplateUrlServiceChanged() {
-        doReturn(false).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
-        doReturn(mNonGoogleSearchEngine)
-                .when(mTemplateUrlService)
-                .getDefaultSearchEngineTemplateUrl();
-        mMediator.onTemplateURLServiceChanged();
-
-        verify(mStatusCoordinator)
-                .updateSearchEngineStatusIcon(
-                        false, mSearchEngineLogoUtils.getSearchLogoUrl(mTemplateUrlService));
-
-        doReturn(true).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
-        doReturn(mGoogleSearchEngine).when(mTemplateUrlService).getDefaultSearchEngineTemplateUrl();
-        mMediator.onTemplateURLServiceChanged();
-
-        verify(mStatusCoordinator)
-                .updateSearchEngineStatusIcon(
-                        true, mSearchEngineLogoUtils.getSearchLogoUrl(mTemplateUrlService));
-
-        // Calling onTemplateURLServiceChanged with the exact same data shouldn't trigger any calls.
-        mMediator.onTemplateURLServiceChanged();
-
-        verify(mStatusCoordinator, times(1))
-                .updateSearchEngineStatusIcon(
-                        true, mSearchEngineLogoUtils.getSearchLogoUrl(mTemplateUrlService));
-
-        doReturn(false).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
-        doReturn(mNonGoogleSearchEngine)
-                .when(mTemplateUrlService)
-                .getDefaultSearchEngineTemplateUrl();
-        mMediator.onTemplateURLServiceChanged();
-
-        verify(mStatusCoordinator, times(2))
-                .updateSearchEngineStatusIcon(
-                        false, mSearchEngineLogoUtils.getSearchLogoUrl(mTemplateUrlService));
-    }
-
-    @Test
     public void testUpdateAssistantVoiceSearchDrawablesAndColors() {
         AssistantVoiceSearchService avs = Mockito.mock(AssistantVoiceSearchService.class);
         ColorStateList csl = Mockito.mock(ColorStateList.class);
-        doReturn(csl).when(avs).getMicButtonColorStateList(anyInt(), anyObject());
+        doReturn(csl).when(avs).getButtonColorStateList(anyInt(), anyObject());
         mMediator.setAssistantVoiceSearchServiceForTesting(avs);
 
         verify(mLocationBarLayout).setMicButtonTint(csl);
+    }
+
+    @Test
+    public void testUpdateLensButtonColors() {
+        AssistantVoiceSearchService avs = Mockito.mock(AssistantVoiceSearchService.class);
+        ColorStateList csl = Mockito.mock(ColorStateList.class);
+        doReturn(csl).when(avs).getButtonColorStateList(anyInt(), anyObject());
+        mMediator.setAssistantVoiceSearchServiceForTesting(avs);
+
+        verify(mLocationBarLayout).setLensButtonTint(csl);
     }
 
     @Test
@@ -933,6 +908,20 @@ public class LocationBarMediatorTest {
 
     @Test
     public void testButtonVisibility_phone() {
+        // Regression test for phones: toolbar mic visibility shouldn't impact the location
+        // bar mic.
+        verifyPhoneMicButtonVisibility();
+    }
+
+    @Test
+    @Features.EnableFeatures(ChromeFeatureList.VOICE_BUTTON_IN_TOP_TOOLBAR)
+    public void testButtonVisibility_toolbarMicEnabled_phone() {
+        // Regression test for phones: toolbar mic visibility shouldn't impact the location
+        // bar mic.
+        verifyPhoneMicButtonVisibility();
+    }
+
+    private void verifyPhoneMicButtonVisibility() {
         VoiceRecognitionHandler voiceRecognitionHandler = mock(VoiceRecognitionHandler.class);
         mMediator.setVoiceRecognitionHandlerForTesting(voiceRecognitionHandler);
         mMediator.onFinishNativeInitialization();
@@ -954,15 +943,70 @@ public class LocationBarMediatorTest {
     }
 
     @Test
+    public void testMicButtonVisibility_toolbarMicDisabled_tablet() {
+        mIsToolbarMicEnabled = false;
+        verifyMicButtonVisibilityWhenFocusChanges(true);
+    }
+
+    @Test
+    public void testMicButtonVisibility_toolbarMicEnabled_tablet() {
+        mIsToolbarMicEnabled = true;
+        verifyMicButtonVisibilityWhenFocusChanges(false);
+    }
+
+    // Sets up and executes a test for visibility of a mic button on a tablet.
+    // The mic button should not be visible if toolbar mic is visible as well.
+    private void verifyMicButtonVisibilityWhenFocusChanges(boolean shouldBeVisible) {
+        VoiceRecognitionHandler voiceRecognitionHandler = mock(VoiceRecognitionHandler.class);
+        mTabletMediator.setVoiceRecognitionHandlerForTesting(voiceRecognitionHandler);
+        mTabletMediator.onFinishNativeInitialization();
+        mTabletMediator.setShouldShowButtonsWhenUnfocusedForTablet(true);
+        mTabletMediator.setIsUrlBarFocusedWithoutAnimationsForTesting(true);
+        mTabletMediator.onUrlFocusChange(true);
+        doReturn("").when(mUrlCoordinator).getTextWithAutocomplete();
+        doReturn(true).when(voiceRecognitionHandler).isVoiceSearchEnabled();
+        Mockito.reset(mLocationBarTablet);
+
+        mTabletMediator.updateButtonVisibility();
+        verify(mLocationBarTablet).setMicButtonVisibility(shouldBeVisible);
+    }
+
+    @Test
     public void testButtonVisibility_showMicUnfocused() {
         VoiceRecognitionHandler voiceRecognitionHandler = mock(VoiceRecognitionHandler.class);
         mMediator.setVoiceRecognitionHandlerForTesting(voiceRecognitionHandler);
         mMediator.onFinishNativeInitialization();
+        mTabletMediator.setShouldShowButtonsWhenUnfocusedForTablet(false);
         mMediator.setShouldShowMicButtonWhenUnfocusedForPhone(true);
         doReturn(true).when(voiceRecognitionHandler).isVoiceSearchEnabled();
 
         mMediator.updateButtonVisibility();
         verify(mLocationBarLayout).setMicButtonVisibility(true);
+    }
+
+    @Test
+    public void testButtonVisibility_showMicUnfocused_toolbarMicDisabled_tablet() {
+        mIsToolbarMicEnabled = false;
+        verifyMicButtonVisibilityWhenShowMicUnfocused(true);
+    }
+
+    @Test
+    public void testButtonVisibility_showMicUnfocused_toolbarMicEnabled_tablet() {
+        mIsToolbarMicEnabled = true;
+        verifyMicButtonVisibilityWhenShowMicUnfocused(false);
+    }
+
+    private void verifyMicButtonVisibilityWhenShowMicUnfocused(boolean shouldBeVisible) {
+        mTabletMediator.onFinishNativeInitialization();
+        mTabletMediator.setShouldShowButtonsWhenUnfocusedForTablet(false);
+        mTabletMediator.setShouldShowMicButtonWhenUnfocusedForTesting(true);
+        VoiceRecognitionHandler voiceRecognitionHandler = mock(VoiceRecognitionHandler.class);
+        mTabletMediator.setVoiceRecognitionHandlerForTesting(voiceRecognitionHandler);
+        doReturn(true).when(voiceRecognitionHandler).isVoiceSearchEnabled();
+        Mockito.reset(mLocationBarTablet);
+
+        mTabletMediator.updateButtonVisibility();
+        verify(mLocationBarTablet).setMicButtonVisibility(shouldBeVisible);
     }
 
     @Test
@@ -972,6 +1016,7 @@ public class LocationBarMediatorTest {
         Mockito.reset(mLocationBarTablet);
         mTabletMediator.updateButtonVisibility();
 
+        verify(mLocationBarTablet).setMicButtonVisibility(false);
         verify(mLocationBarTablet).setBookmarkButtonVisibility(true);
         verify(mLocationBarTablet).setSaveOfflineButtonVisibility(true, true);
     }
@@ -984,6 +1029,7 @@ public class LocationBarMediatorTest {
         Mockito.reset(mLocationBarTablet);
         mTabletMediator.updateButtonVisibility();
 
+        verify(mLocationBarTablet).setMicButtonVisibility(false);
         verify(mLocationBarTablet).setBookmarkButtonVisibility(false);
         verify(mLocationBarTablet).setSaveOfflineButtonVisibility(false, true);
     }

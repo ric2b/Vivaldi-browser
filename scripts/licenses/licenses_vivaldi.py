@@ -10,7 +10,7 @@ from licenses_vivaldi_texts import onlineLicenses
 
 try:
   f = open(normpath("gen/vivaldi/vivapp/module_list"), 'r')
-  maindeps = f.read()
+  maindeps = f.read().decode("utf-8")
   f.close()
 except:
   maindeps = ""
@@ -43,13 +43,13 @@ for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
     if exists(file_name):
       entry["License File"] = file_name
       f = open(file_name)
-      entry["license"] = f.read()
+      entry["license"] = f.read().decode("utf-8")
       f.close()
       break
 
   # get one word license type from package.json
   f = open(join(moduledir, "package.json"))
-  pjson = json.loads(f.read())
+  pjson = json.loads(f.read().decode("utf-8"))
   f.close()
   preferred = None
   if "license" in pjson:
@@ -85,7 +85,7 @@ for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
     "ISC",
     "MIT Licensed. http://www.opensource.org/licenses/mit-license.php",
     "MIT",
-    "MPL-2.0 OR Apache-2.0",
+    "(MPL-2.0 OR Apache-2.0)",
     "MPL",
     "Public Domain",
     "WTFPL"

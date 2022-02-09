@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <queue>
 #include <string>
 #include <utility>
@@ -113,7 +114,7 @@ BookmarkBridge::BookmarkBridge(JNIEnv* env,
       partner_bookmarks_shim_(nullptr) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   profile_ = ProfileAndroid::FromProfileAndroid(j_profile);
-  profile_observer_.Add(profile_);
+  profile_observation_.Observe(profile_);
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(profile_);
   managed_bookmark_service_ =
       ManagedBookmarkServiceFactory::GetForProfile(profile_);
@@ -146,8 +147,10 @@ BookmarkBridge::BookmarkBridge(JNIEnv* env,
 }
 
 BookmarkBridge::~BookmarkBridge() {
-  if (profile_)
-    profile_observer_.Remove(profile_);
+  if (profile_) {
+    DCHECK(profile_observation_.IsObservingSource(profile_));
+    profile_observation_.Reset();
+  }
   bookmark_model_->RemoveObserver(this);
   if (partner_bookmarks_shim_)
     partner_bookmarks_shim_->RemoveObserver(this);
@@ -701,8 +704,8 @@ void BookmarkBridge::SearchBookmarks(JNIEnv* env,
   std::vector<const BookmarkNode*> results;
 
   bookmarks::QueryFields query;
-  query.word_phrase_query.reset(new std::u16string(
-      base::android::ConvertJavaStringToUTF16(env, j_query)));
+  query.word_phrase_query = std::make_unique<std::u16string>(
+      base::android::ConvertJavaStringToUTF16(env, j_query));
 
   GetBookmarksMatchingProperties(bookmark_model_, query, max_results, &results);
 
@@ -889,8 +892,8 @@ void BookmarkBridge::StartGroupingUndos(JNIEnv* env,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(IsLoaded());
   DCHECK(!grouped_bookmark_actions_.get());  // shouldn't have started already
-  grouped_bookmark_actions_.reset(
-      new bookmarks::ScopedGroupBookmarkActions(bookmark_model_));
+  grouped_bookmark_actions_ =
+      std::make_unique<bookmarks::ScopedGroupBookmarkActions>(bookmark_model_);
 }
 
 void BookmarkBridge::EndGroupingUndos(JNIEnv* env,

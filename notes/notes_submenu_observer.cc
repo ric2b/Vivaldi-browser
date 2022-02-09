@@ -131,7 +131,7 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
       // Truncate string if it is too long
       if (title.length() > MAX_NOTES_MENUITEM_LENGTH) {
         title = title.substr(0, MAX_NOTES_MENUITEM_LENGTH - 3) +
-            base::UTF8ToUTF16("...");
+            u"...";
       }
 
       bool underline = underline_letter;

@@ -69,6 +69,7 @@ update_template_instance("//third_party/blink/renderer/platform/loader:loader") 
 
 update_target("//content/browser:browser") {
   sources += [
+    "//vivaldi/components/content/vivaldi_content_delegates.h",
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
     "//vivaldi/components/content/vivaldi_renderers.cc",

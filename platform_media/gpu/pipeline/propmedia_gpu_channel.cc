@@ -6,73 +6,53 @@
 
 #include "platform_media/gpu/pipeline/propmedia_gpu_channel.h"
 
-#include "platform_media/common/media_pipeline_messages.h"
-#include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline_factory.h"
-
-#include "base/command_line.h"
 #include "gpu/command_buffer/common/scheduling_priority.h"
 #include "gpu/command_buffer/service/scheduler.h"
-#include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/service/gpu_channel.h"
-#include "gpu/ipc/service/gpu_channel_manager.h"
+
+#include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
 
 namespace gpu {
 
-ProprietaryMediaGpuChannel::ProprietaryMediaGpuChannel(gpu::GpuChannel* channel)
-    : channel_(channel) {}
+std::unique_ptr<PropmediaGpuChannel::PipelineBase> (
+    *PropmediaGpuChannel::g_create_pipeline)() = nullptr;
 
-ProprietaryMediaGpuChannel::~ProprietaryMediaGpuChannel() {}
+PropmediaGpuChannel::PropmediaGpuChannel() = default;
+PropmediaGpuChannel::~PropmediaGpuChannel() = default;
 
-bool ProprietaryMediaGpuChannel::Send(IPC::Message* msg) {
-  return channel_->Send(msg);
-}
+/* static */
+void PropmediaGpuChannel::StartNewMediaPipeline(
+    base::WeakPtr<GpuChannel> channel,
+    gpu::mojom::VivaldiMediaPipelineParamsPtr params) {
+  if (!channel)
+    return;
+  PropmediaGpuChannel& self = channel->prop_media_gpu_channel;
+  std::unique_ptr<PipelineBase> ipc_media_pipeline = g_create_pipeline();
 
-bool ProprietaryMediaGpuChannel::OnMessageReceived(const IPC::Message& msg) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(ProprietaryMediaGpuChannel, msg)
-    IPC_MESSAGE_HANDLER(MediaPipelineMsg_New, OnNewMediaPipeline)
-    IPC_MESSAGE_HANDLER(MediaPipelineMsg_Destroy, OnDestroyMediaPipeline)
-    IPC_MESSAGE_UNHANDLED(handled = OnPipelineMessageReceived(msg))
-  IPC_END_MESSAGE_MAP()
-  return handled;
-}
-
-bool ProprietaryMediaGpuChannel::OnPipelineMessageReceived(
-    const IPC::Message& msg) {
-
-  if (channel_->scheduler())
-    return false;
-
-  media::IPCMediaPipeline* pipeline = media_pipelines_.Lookup(msg.routing_id());
-
-  if (pipeline)
-      return pipeline->OnMessageReceived(msg);
-
-  return false;
-}
-
-void ProprietaryMediaGpuChannel::OnNewMediaPipeline(int32_t route_id) {
-  if (!pipeline_factory_) {
-    pipeline_factory_ = media::PlatformMediaPipelineFactory::Create();
+  // Initialize the channel route before any IPC that the pipeline
+  // initialization may trigger. so we can receive IPC messages to ensure that we can receive IPC messages
+  // inside pipeline->Initialize() below.
+  PipelineBase* pipeline = ipc_media_pipeline.get();
+  SequenceId sequence_id;
+  if (channel->scheduler()) {
+    sequence_id =
+        channel->scheduler()->CreateSequence(SchedulingPriority::kNormal);
   }
-  auto ipc_media_pipeline = std::make_unique<media::IPCMediaPipeline>(
-      this, route_id, pipeline_factory_.get());
+  channel->AddRoute(params->route_id, sequence_id, pipeline);
+  self.pipelines_[params->route_id] = std::move(ipc_media_pipeline);
 
-  if (channel_->scheduler()) {
-    SequenceId sequence_id =
-        channel_->scheduler()->CreateSequence(SchedulingPriority::kNormal);
-    channel_->AddRoute(route_id, sequence_id, ipc_media_pipeline.get());
-  }
-
-  media_pipelines_.AddWithID(std::move(ipc_media_pipeline), route_id);
+  pipeline->Initialize(channel.get(), std::move(params));
 }
 
-void ProprietaryMediaGpuChannel::OnDestroyMediaPipeline(int32_t route_id) {
-  media_pipelines_.Remove(route_id);
-
-  if (channel_->scheduler()) {
-    channel_->RemoveRoute(route_id);
-  }
+/* static */
+void PropmediaGpuChannel::DestroyMediaPipeline(
+    base::WeakPtr<GpuChannel> channel,
+    int32_t route_id) {
+  if (!channel)
+    return;
+  PropmediaGpuChannel& self = channel->prop_media_gpu_channel;
+  channel->RemoveRoute(route_id);
+  self.pipelines_.erase(route_id);
 }
+
 }  // namespace gpu

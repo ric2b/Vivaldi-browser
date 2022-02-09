@@ -14,7 +14,13 @@ SwitchAccessItemScanManagerTest = class extends SwitchAccessE2ETest {
           'BackButtonNode', '/switch_access/nodes/back_button_node.js');
       await importModule(
           ['BasicNode', 'BasicRootNode'], '/switch_access/nodes/basic_node.js');
+      await importModule(
+          ['KeyboardNode', 'KeyboardRootNode'],
+          '/switch_access/nodes/keyboard_node.js');
       await importModule('SACache', '/switch_access/cache.js');
+      await importModule(
+          'SwitchAccessMenuAction',
+          '/switch_access/switch_access_constants.js');
       await importModule(
           'SwitchAccessPredicate', '/switch_access/switch_access_predicate.js');
       await importModule('Navigator', '/switch_access/navigator.js');
@@ -40,6 +46,34 @@ SwitchAccessItemScanManagerTest = class extends SwitchAccessE2ETest {
         pageContents, 'Could not find group corresponding to page contents');
     this.navigator.moveTo_(pageContents);
     Navigator.byItem.enterGroup();
+  }
+
+  // TODO(anastasi): this should probably be extracted to a helper class
+  // and after some time delay, print out the current state for debugging.
+  untilFocusIs(expected) {
+    const doesMatch = (expected) => {
+      const newNode = Navigator.byItem.node_;
+      const automationNode = newNode.automationNode || {};
+      return (!expected.instance || newNode instanceof expected.instance) &&
+          (!expected.role || expected.role === automationNode.role) &&
+          (!expected.className ||
+           expected.className === automationNode.className);
+    };
+    return new Promise(resolve => {
+      if (doesMatch(expected)) {
+        resolve(Navigator.byItem.node_);
+        return;
+      }
+      const original = Navigator.byItem.setNode_.bind(Navigator.byItem);
+      Navigator.byItem.setNode_ = (node) => {
+        original(node);
+        if (doesMatch(expected)) {
+          Navigator.byItem.setNode_ = original;
+          resolve(Navigator.byItem.node_);
+          return;
+        }
+      };
+    });
   }
 };
 
@@ -347,3 +381,89 @@ TEST_F(
             {type: chrome.automation.TreeChangeType.NODE_REMOVED});
       });
     });
+
+TEST_F(
+    'SwitchAccessItemScanManagerTest', 'ScanAndTypeVirtualKeyboard',
+    function() {
+      const website = `<input type="text" id="input"></input>`;
+      this.runWithLoadedTree(website, async (root) => {
+        // SA initially focuses this node; wait for it first.
+        await this.untilFocusIs(
+            {className: 'BrowserNonClientFrameViewChromeOS'});
+
+        // Move to the text field.
+        this.navigator.moveTo_(this.findNodeById('input'));
+        const input = this.navigator.node_;
+        assertEquals(
+            'input', input.automationNode.htmlAttributes.id,
+            'Current node is not input');
+        input.performAction(SwitchAccessMenuAction.KEYBOARD);
+
+        const keyboard = await this.untilFocusIs(
+            {role: chrome.automation.RoleType.KEYBOARD});
+        keyboard.performAction('select');
+
+        const key = await this.untilFocusIs({instance: KeyboardNode});
+
+        key.performAction('select');
+
+        if (input.automationNode.value !== 'q') {
+          // Wait for the potential value change.
+          await new Promise(resolve => {
+            input.automationNode.addEventListener(
+                chrome.automation.EventType.VALUE_CHANGED, (event) => {
+                  if (event.target.value === 'q') {
+                    resolve();
+                  }
+                });
+          });
+        }
+      });
+    });
+
+TEST_F('SwitchAccessItemScanManagerTest', 'DismissVirtualKeyboard', function() {
+  const website = `<input type="text" id="input"></input><button>ok</button>`;
+  this.runWithLoadedTree(website, async (root) => {
+    // SA initially focuses this node; wait for it first.
+    await this.untilFocusIs({className: 'BrowserNonClientFrameViewChromeOS'});
+
+    // Move to the text field.
+    Navigator.byItem.moveTo_(this.findNodeById('input'));
+    const input = Navigator.byItem.node_;
+    assertEquals(
+        'input', input.automationNode.htmlAttributes.id,
+        'Current node is not input');
+    input.performAction(SwitchAccessMenuAction.KEYBOARD);
+
+    const keyboard =
+        await this.untilFocusIs({role: chrome.automation.RoleType.KEYBOARD});
+    keyboard.performAction('select');
+
+    // Grab the key.
+    const key = await this.untilFocusIs({instance: KeyboardNode});
+
+    // Simulate a page focusing the ok button.
+    const okButton = root.find({attributes: {name: 'ok'}});
+    okButton.focus();
+
+    // Wait for the keyboard to become invisible and the ok button to be focused
+    // by automation.
+    await new Promise(resolve => {
+      okButton.addEventListener(chrome.automation.EventType.FOCUS, resolve);
+    });
+    await new Promise(resolve => {
+      keyboard.automationNode.addEventListener(
+          chrome.automation.EventType.STATE_CHANGED, (event) => {
+            if (event.target.role === chrome.automation.RoleType.KEYBOARD &&
+                event.target.state.invisible) {
+              resolve();
+            }
+          });
+    });
+
+    // We should end up back on the focused button in SA.
+    const button =
+        await this.untilFocusIs({role: chrome.automation.RoleType.BUTTON});
+    assertEquals('ok', button.automationNode.name);
+  });
+});

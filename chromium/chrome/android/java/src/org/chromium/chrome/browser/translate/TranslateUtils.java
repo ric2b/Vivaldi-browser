@@ -30,10 +30,6 @@ public class TranslateUtils {
      * @param menuLogging Whether logging should be performed in this check.
      */
     public static boolean canTranslateCurrentTab(Tab tab, boolean menuLogging) {
-        // Vivaldi - TODO(jarle): remove this when translation service goes live !!
-        if (BuildConfig.IS_FINAL_BUILD)
-            return false;
-
         return tab.getWebContents() != null
                 && TranslateBridge.canManuallyTranslate(tab, menuLogging);
     }

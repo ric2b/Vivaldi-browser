@@ -14,11 +14,11 @@ ServiceImpl::ServiceImpl(content::BrowserContext* browser_context)
     : browser_context_(browser_context) {}
 ServiceImpl::~ServiceImpl() = default;
 
-base::Optional<int> ServiceImpl::RegisterWorldForJSInjection(
+absl::optional<int> ServiceImpl::RegisterWorldForJSInjection(
     mojom::JavascriptWorldInfoPtr world_info) {
   static int g_next_world_id = ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION;
   if (g_next_world_id == ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END)
-    return base::nullopt;
+    return absl::nullopt;
 
   const int world_id = g_next_world_id++;
 

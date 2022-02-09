@@ -636,7 +636,7 @@ class circular_deque {
   void resize(size_type count) {
     // SEE BELOW VERSION if you change this. The code is mostly the same.
     if (count > size()) {
-      // This could be slighly more efficient but expanding a queue with
+      // This could be slightly more efficient but expanding a queue with
       // identical elements is unusual and the extra computations of emplacing
       // one-by-one will typically be small relative to calling the constructor
       // for every item.
@@ -677,7 +677,7 @@ class circular_deque {
   // The implementation of insert isn't optimized as much as it could be. If
   // the insertion requires that the buffer be grown, it will first be grown
   // and everything moved, and then the items will be inserted, potentially
-  // moving some items twice. This simplifies the implemntation substantially
+  // moving some items twice. This simplifies the implementation substantially
   // and means less generated templatized code. Since this is an uncommon
   // operation for deques, and already relatively slow, it doesn't seem worth
   // the benefit to optimize this.
@@ -1041,7 +1041,7 @@ class circular_deque {
   }
 
 #if DCHECK_IS_ON()
-  // Asserts the given index is dereferencable. The index is an index into the
+  // Asserts the given index is dereferenceable. The index is an index into the
   // buffer, not an index used by operator[] or at() which will be offsets from
   // begin.
   void CheckValidIndex(size_t i) const {
@@ -1051,7 +1051,7 @@ class circular_deque {
       DCHECK((i >= begin_ && i < buffer_.capacity()) || i < end_);
   }
 
-  // Asserts the given index is either dereferencable or points to end().
+  // Asserts the given index is either dereferenceable or points to end().
   void CheckValidIndexOrEnd(size_t i) const {
     if (i != end_)
       CheckValidIndex(i);

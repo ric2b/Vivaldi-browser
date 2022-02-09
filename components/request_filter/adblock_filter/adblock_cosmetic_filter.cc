@@ -85,7 +85,8 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
     activations.in_allow_rules |=
         rules_index_manager_->rules_index()
             ->GetActivationsForFrame(
-                base::Bind(&IsOriginWanted, service, group), frame->GetParent())
+                base::BindRepeating(&IsOriginWanted, service, group),
+                frame->GetParent())
             .in_allow_rules;
 
     if ((activations.in_allow_rules & flat::ActivationType_DOCUMENT) != 0) {

@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/no_destructor.h"
+#include "base/strings/stringprintf.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -59,9 +60,9 @@ class ShutdownNotifierFactory
 
 void ForwardOnBeforeSendHeadersCallback(
     network::mojom::TrustedHeaderClient::OnBeforeSendHeadersCallback callback,
-    const base::Optional<::net::HttpRequestHeaders>& initial_headers,
+    const absl::optional<::net::HttpRequestHeaders>& initial_headers,
     int32_t error_code,
-    const base::Optional<::net::HttpRequestHeaders>& headers) {
+    const absl::optional<::net::HttpRequestHeaders>& headers) {
   if (headers)
     std::move(callback).Run(error_code, headers);
   else
@@ -70,11 +71,11 @@ void ForwardOnBeforeSendHeadersCallback(
 
 void ForwardOnHeaderReceivedCallback(
     network::mojom::TrustedHeaderClient::OnHeadersReceivedCallback callback,
-    const base::Optional<std::string>& initial_headers,
-    const base::Optional<GURL>& initial_preserve_fragment_on_redirect_url,
+    const absl::optional<std::string>& initial_headers,
+    const absl::optional<GURL>& initial_preserve_fragment_on_redirect_url,
     int32_t error_code,
-    const base::Optional<std::string>& headers,
-    const base::Optional<GURL>& preserve_fragment_on_redirect_url) {
+    const absl::optional<std::string>& headers,
+    const absl::optional<GURL>& preserve_fragment_on_redirect_url) {
   std::move(callback).Run(error_code, headers ? headers : initial_headers,
                           preserve_fragment_on_redirect_url
                               ? preserve_fragment_on_redirect_url
@@ -87,7 +88,7 @@ net::RedirectInfo CreateRedirectInfo(
     const network::ResourceRequest& original_request,
     const GURL& new_url,
     int response_code,
-    const base::Optional<std::string>& referrer_policy_header) {
+    const absl::optional<std::string>& referrer_policy_header) {
   return net::RedirectInfo::ComputeRedirectInfo(
       original_request.method, original_request.url,
       original_request.site_for_cookies,
@@ -170,11 +171,11 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::~InProgressRequest() {
   }
   if (on_before_send_headers_callback_) {
     std::move(on_before_send_headers_callback_)
-        .Run(net::ERR_ABORTED, base::nullopt);
+        .Run(net::ERR_ABORTED, absl::nullopt);
   }
   if (on_headers_received_callback_) {
     std::move(on_headers_received_callback_)
-        .Run(net::ERR_ABORTED, base::nullopt, base::nullopt);
+        .Run(net::ERR_ABORTED, absl::nullopt, absl::nullopt);
   }
 }
 
@@ -266,7 +267,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers,
-    const base::Optional<GURL>& new_url) {
+    const absl::optional<GURL>& new_url) {
   if (new_url)
     request_.url = new_url.value();
 
@@ -450,7 +451,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       forwarding_header_client_->OnBeforeSendHeaders(headers,
                                                      std::move(callback));
     } else {
-      std::move(callback).Run(net::OK, base::nullopt);
+      std::move(callback).Run(net::OK, absl::nullopt);
     }
     return;
   }
@@ -471,7 +472,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     } else {
       // Make sure the callback is run, otherwise XHRs would fail when
       // webrequest listeners was set.
-      std::move(callback).Run(net::OK, base::nullopt, base::nullopt);
+      std::move(callback).Run(net::OK, absl::nullopt, absl::nullopt);
     }
     if (for_cors_preflight_) {
       // CORS preflight is supported only when "ExtraHeaders" are requested.
@@ -513,7 +514,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   net::RedirectInfo redirect_info =
       CreateRedirectInfo(request_, redirect_url_, kInternalRedirectStatusCode,
-                         base::nullopt /* referrer_policy_header */);
+                         absl::nullopt /* referrer_policy_header */);
 
   auto head = network::mojom::URLResponseHead::New();
   std::string headers = base::StringPrintf(
@@ -751,7 +752,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   }
 
   DCHECK(on_headers_received_callback_);
-  base::Optional<std::string> headers;
+  absl::optional<std::string> headers;
   if (override_headers_) {
     headers = override_headers_->raw_headers();
     if (current_request_uses_header_client_) {
@@ -1027,7 +1028,7 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
     int view_routing_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
-    base::Optional<int64_t> navigation_id,
+    absl::optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
@@ -1077,7 +1078,7 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
     int view_routing_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
-    base::Optional<int64_t> navigation_id,
+    absl::optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>

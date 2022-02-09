@@ -24,7 +24,6 @@
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/devtools/devtools_eye_dropper.h"
 #include "chrome/browser/file_select_helper.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -42,6 +41,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/javascript_dialogs/app_modal_dialog_manager.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -131,7 +131,7 @@ bool FindInspectedBrowserAndTabIndex(
 }
 
 void SetPreferencesFromJson(Profile* profile, const std::string& json) {
-  base::Optional<base::Value> parsed = base::JSONReader::Read(json);
+  absl::optional<base::Value> parsed = base::JSONReader::Read(json);
   if (!parsed || !parsed->is_dict())
     return;
   DictionaryPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
@@ -282,7 +282,7 @@ class DevToolsEventForwarder {
 
 void DevToolsEventForwarder::SetWhitelistedShortcuts(
     const std::string& message) {
-  base::Optional<base::Value> parsed_message = base::JSONReader::Read(message);
+  absl::optional<base::Value> parsed_message = base::JSONReader::Read(message);
   if (!parsed_message || !parsed_message->is_list())
     return;
   for (const auto& list_item : parsed_message->GetList()) {
@@ -411,8 +411,7 @@ class DevToolsWindow::OwnedMainWebContents {
       : keep_alive_(KeepAliveOrigin::DEVTOOLS_WINDOW,
                     KeepAliveRestartOption::DISABLED),
         web_contents_(std::move(web_contents)) {
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+    Profile* profile = GetProfileForDevToolsWindow(web_contents_.get());
     DCHECK(profile);
     if (!profile->IsOffTheRecord()) {
       // ScopedProfileKeepAlive does not support OTR profiles.
@@ -726,6 +725,17 @@ DevToolsWindow* DevToolsWindow::OpenNodeFrontendWindow(Profile* profile) {
 }
 
 // static
+Profile* DevToolsWindow::GetProfileForDevToolsWindow(
+    content::WebContents* web_contents) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  if (profile->IsPrimaryOTRProfile()) {
+    return profile;
+  }
+  return profile->GetOriginalProfile();
+}
+
+// static
 void DevToolsWindow::ToggleDevToolsWindow(
     content::WebContents* inspected_web_contents,
     bool force_open,
@@ -737,8 +747,7 @@ void DevToolsWindow::ToggleDevToolsWindow(
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
   bool do_open = force_open;
   if (!window) {
-    Profile* profile = Profile::FromBrowserContext(
-        inspected_web_contents->GetBrowserContext());
+    Profile* profile = GetProfileForDevToolsWindow(inspected_web_contents);
     base::RecordAction(base::UserMetricsAction("DevTools_InspectRenderer"));
     std::string panel;
     switch (action.type()) {
@@ -1643,13 +1652,14 @@ void DevToolsWindow::InspectedContentsClosing() {
   main_web_contents_->ClosePage();
 }
 
-InfoBarService* DevToolsWindow::GetInfoBarService() {
+infobars::ContentInfoBarManager* DevToolsWindow::GetInfoBarManager() {
   if (vivaldi::IsVivaldiRunning()) {
-    return InfoBarService::FromWebContents(GetInspectedWebContents());
+    return infobars::ContentInfoBarManager::FromWebContents(GetInspectedWebContents());
   } else
-  return is_docked_ ?
-      InfoBarService::FromWebContents(GetInspectedWebContents()) :
-      InfoBarService::FromWebContents(main_web_contents_);
+  return is_docked_ ? infobars::ContentInfoBarManager::FromWebContents(
+                          GetInspectedWebContents())
+                    : infobars::ContentInfoBarManager::FromWebContents(
+                          main_web_contents_);
 }
 
 void DevToolsWindow::RenderProcessGone(bool crashed) {
@@ -1664,7 +1674,7 @@ void DevToolsWindow::RenderProcessGone(bool crashed) {
 }
 
 void DevToolsWindow::ShowCertificateViewer(const std::string& cert_chain) {
-  base::Optional<base::Value> value = base::JSONReader::Read(cert_chain);
+  absl::optional<base::Value> value = base::JSONReader::Read(cert_chain);
   CHECK(value && value->is_list());
   std::vector<std::string> decoded;
   for (const auto& item : value->GetList()) {

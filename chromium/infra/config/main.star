@@ -10,7 +10,7 @@ load("//lib/branches.star", "branches")
 load("//project.star", "settings")
 
 lucicfg.check_version(
-    min = "1.22.1",
+    min = "1.27.0",
     message = "Update depot_tools",
 )
 
@@ -115,8 +115,31 @@ luci.realm(
     ],
 )
 
+luci.realm(
+    name = "ci",
+    bindings = [
+        # Allow CI builders to create invocations in their own builds.
+        luci.binding(
+            roles = "role/resultdb.invocationCreator",
+            groups = "project-chromium-ci-task-accounts",
+        ),
+    ],
+)
+
+luci.realm(
+    name = "try",
+    bindings = [
+        # Allow try builders to create invocations in their own builds.
+        luci.binding(
+            roles = "role/resultdb.invocationCreator",
+            groups = "project-chromium-try-task-accounts",
+        ),
+    ],
+)
+
 # Launch Swarming tasks in "realms-aware mode", crbug.com/1136313.
 luci.builder.defaults.experiments.set({"luci.use_realms": 100})
+luci.builder.defaults.test_presentation.set(resultdb.test_presentation(grouping_keys = ["status", "v.test_suite"]))
 
 exec("//swarming.star")
 
@@ -128,6 +151,7 @@ exec("//subprojects/chromium/subproject.star")
 branches.exec("//subprojects/codesearch/subproject.star")
 branches.exec("//subprojects/findit/subproject.star")
 branches.exec("//subprojects/goma/subproject.star")
+branches.exec("//subprojects/reclient/subproject.star")
 branches.exec("//subprojects/webrtc/subproject.star")
 
 branches.exec("//generators/cq-builders-md.star")

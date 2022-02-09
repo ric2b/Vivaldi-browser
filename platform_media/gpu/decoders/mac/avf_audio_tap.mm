@@ -50,7 +50,7 @@ class Context {
     scoped_refptr<base::SingleThreadTaskRunner> task_runner;
   };
 
-  explicit Context(const InitParams& params);
+  Context();
   ~Context();
 
   static void Destroy(Context* context);
@@ -61,15 +61,16 @@ class Context {
 
   scoped_refptr<DataBuffer> GetDataBuffer(int buffer_size);
 
-  void BufferFilled(const scoped_refptr<DataBuffer>& buffer);
+  void BufferFilled(scoped_refptr<DataBuffer> buffer);
 
   const AudioStreamBasicDescription& stream_format() const {
     return stream_format_;
   }
 
  private:
+  friend AVFAudioTap;
   void PreallocateBuffers(int size);
-  void BufferFilledInternal(const scoped_refptr<DataBuffer>& buffer);
+  void BufferFilledInternal(scoped_refptr<DataBuffer> buffer);
 
   AVFAudioTap::FormatKnownCB format_known_cb_;
   AVFAudioTap::SamplesReadyCB samples_ready_cb_;
@@ -78,31 +79,21 @@ class Context {
   base::Lock buffer_lock_;
   std::deque<scoped_refptr<DataBuffer>> buffers_;
 
-  base::Callback<void(const scoped_refptr<DataBuffer>&)>
-      buffer_filled_cb_;
-
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-
-  AudioStreamBasicDescription stream_format_;
-
-  base::WeakPtrFactory<Context> weak_ptr_factory_;
+  AudioStreamBasicDescription stream_format_{0};
 
   DISALLOW_COPY_AND_ASSIGN(Context);
 };
 
-Context::Context(const InitParams& params)
-    : format_known_cb_(params.format_known_cb),
-      samples_ready_cb_(params.samples_ready_cb),
-      task_runner_(params.task_runner),
-      weak_ptr_factory_(this) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  buffer_filled_cb_ = base::Bind(&Context::BufferFilledInternal,
-                                 weak_ptr_factory_.GetWeakPtr());
-}
+Context::Context() = default;
 
 Context::~Context() {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
+  if (format_known_cb_) {
+    // Error case - the context was destructed before the format bacame known.
+    std::move(format_known_cb_).Run(stream_format_);
+  }
 }
 
 // static
@@ -111,10 +102,8 @@ void Context::Destroy(Context* context) {
 }
 
 // static
-inline Context* Context::FromTap(
-    MTAudioProcessingTapRef tap) {
-  return reinterpret_cast<Context*>(
-      MTAudioProcessingTapGetStorage(tap));
+inline Context* Context::FromTap(MTAudioProcessingTapRef tap) {
+  return reinterpret_cast<Context*>(MTAudioProcessingTapGetStorage(tap));
 }
 
 void Context::FormatKnown(const AudioStreamBasicDescription& processing_format,
@@ -122,9 +111,9 @@ void Context::FormatKnown(const AudioStreamBasicDescription& processing_format,
   stream_format_ = processing_format;
   DCHECK_NE(stream_format_.mFormatFlags & kAudioFormatFlagIsNonInterleaved, 0u);
 
-  if (!format_known_cb_.is_null()) {
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(format_known_cb_, stream_format_));
+  if (format_known_cb_) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(std::move(format_known_cb_), stream_format_));
   }
 
   const int buffer_size = max_frame_count * stream_format_.mBytesPerFrame *
@@ -149,44 +138,50 @@ scoped_refptr<DataBuffer> Context::GetDataBuffer(int buffer_size) {
   if (!buffer) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Ran out of pre-allocated buffers";
-    buffer = new DataBuffer(buffer_size);
+    buffer = base::MakeRefCounted<DataBuffer>(buffer_size);
     buffer->set_data_size(buffer_size);
   }
 
   return buffer;
 }
 
-void Context::BufferFilled(const scoped_refptr<DataBuffer>& buffer) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(buffer_filled_cb_, buffer));
+void Context::BufferFilled(scoped_refptr<DataBuffer> buffer) {
+  // Unretained is safe as this instance will be deleted via posting to the
+  // task_runner_ after posting the callback there.
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&Context::BufferFilledInternal,
+                                base::Unretained(this), std::move(buffer)));
 }
 
 void Context::PreallocateBuffers(int size) {
   base::AutoLock auto_lock(buffer_lock_);
   while (buffers_.size() < kMaxPreallocatedBufferCount) {
-    buffers_.push_back(new DataBuffer(size));
+    buffers_.push_back(base::MakeRefCounted<DataBuffer>(size));
     buffers_.back()->set_data_size(size);
   }
 }
 
-void Context::BufferFilledInternal(
-    const scoped_refptr<DataBuffer>& buffer) {
+void Context::BufferFilledInternal(scoped_refptr<DataBuffer> buffer) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  samples_ready_cb_.Run(buffer);
+  int data_size = buffer->data_size();
+  samples_ready_cb_.Run(std::move(buffer));
 
-  PreallocateBuffers(buffer->data_size());
+  PreallocateBuffers(data_size);
 }
 
 void Init(MTAudioProcessingTapRef tap,
           void* client_info,
           void** tap_storage_out) {
-  DCHECK(client_info != NULL);
+  DCHECK(client_info);
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Initialising the Audio Tap Processor";
 
-  const Context::InitParams& params =
-      *reinterpret_cast<Context::InitParams*>(client_info);
-  *tap_storage_out = new Context(params);
+  // See comments in GetAudioMix why the client_info is a pointer to unique_ptr.
+  std::unique_ptr<Context>* context =
+      reinterpret_cast<std::unique_ptr<Context>*>(client_info);
+  DCHECK(context->get());
+  *tap_storage_out = context->release();
 }
 
 void Finalize(MTAudioProcessingTapRef tap) {
@@ -220,12 +215,8 @@ void Process(MTAudioProcessingTapRef tap,
 
   CMTimeRange time_range;
   const OSStatus status = MTAudioProcessingTapGetSourceAudio(
-      tap,
-      frame_count,
-      buffer_list,
-      flags_out,
-      reinterpret_cast<CMTimeRange*>(&time_range),
-      frame_count_out);
+      tap, frame_count, buffer_list, flags_out,
+      reinterpret_cast<CMTimeRange*>(&time_range), frame_count_out);
 
   if (status != 0) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -234,18 +225,13 @@ void Process(MTAudioProcessingTapRef tap,
   }
   DCHECK_EQ(frame_count, *frame_count_out);
   // TODO(wdzierzanowski): How to handle this?  This is set for some movies.
-  VLOG_IF(
-      1,
-      (((flags | *flags_out) &
-        kMTAudioProcessingTapFlag_StartOfStream) != 0))
-      << " PROPMEDIA(GPU) : " << __FUNCTION__
-      << " StartOfStream flag set";
-  DCHECK(((flags | *flags_out) &
-          kMTAudioProcessingTapFlag_EndOfStream) == 0);
+  VLOG_IF(1, (((flags | *flags_out) &
+               kMTAudioProcessingTapFlag_StartOfStream) != 0))
+      << " PROPMEDIA(GPU) : " << __FUNCTION__ << " StartOfStream flag set";
+  DCHECK(((flags | *flags_out) & kMTAudioProcessingTapFlag_EndOfStream) == 0);
 
   const base::TimeDelta timestamp = CMTimeToTimeDelta(time_range.start);
-  const base::TimeDelta duration =
-      CMTimeToTimeDelta(time_range.duration);
+  const base::TimeDelta duration = CMTimeToTimeDelta(time_range.duration);
 
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Timestamp: " << timestamp.InMicroseconds() << ", duration "
@@ -278,7 +264,7 @@ void Process(MTAudioProcessingTapRef tap,
   buffer->set_timestamp(timestamp);
   buffer->set_duration(duration);
 
-  context->BufferFilled(buffer);
+  context->BufferFilled(std::move(buffer));
 }
 
 void Unprepare(MTAudioProcessingTapRef tap) {
@@ -288,67 +274,56 @@ void Unprepare(MTAudioProcessingTapRef tap) {
 
 }  // audio_tap
 
-AVFAudioTap::AVFAudioTap(
+// static
+base::scoped_nsobject<AVAudioMix> AVFAudioTap::GetAudioMix(
     AVAssetTrack* audio_track,
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const FormatKnownCB& format_known_cb,
-    const SamplesReadyCB& samples_ready_cb)
-    : audio_track_(audio_track),
-      task_runner_(task_runner),
-      format_known_cb_(format_known_cb),
-      samples_ready_cb_(samples_ready_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-}
-
-AVFAudioTap::~AVFAudioTap() {
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-}
-
-base::scoped_nsobject<AVAudioMix> AVFAudioTap::GetAudioMix() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    FormatKnownCB format_known_cb,
+    SamplesReadyCB samples_ready_cb) {
+  DCHECK(task_runner->BelongsToCurrentThread());
+  DCHECK(samples_ready_cb);
 
   TRACE_EVENT0("IPC_MEDIA", __FUNCTION__);
 
-  audio_tap::Context::InitParams params;
-  params.task_runner = task_runner_;
-  params.format_known_cb = std::move(format_known_cb_);
-  params.samples_ready_cb = samples_ready_cb_;
+  auto context = std::make_unique<audio_tap::Context>();
+  context->task_runner_ = std::move(task_runner);
+  context->format_known_cb_ = std::move(format_known_cb);
+  context->samples_ready_cb_ = std::move(samples_ready_cb);
 
   MTAudioProcessingTapCallbacks tap_callbacks;
-  tap_callbacks.version =
-      kMTAudioProcessingTapCallbacksVersion_0;
-  tap_callbacks.clientInfo = &params;
+  tap_callbacks.version = kMTAudioProcessingTapCallbacksVersion_0;
+
+  // Pass the address of context, not context.release() as clientInfo. This way
+  // we transfer the context ownership to the tap only when the Init callback
+  // will be called. In turn on any error during the tap creation when returning
+  // from this method we delete the context and call the known format method.
+  tap_callbacks.clientInfo = &context;
   tap_callbacks.init = audio_tap::Init;
   tap_callbacks.prepare = audio_tap::Prepare;
   tap_callbacks.process = audio_tap::Process;
   tap_callbacks.unprepare = audio_tap::Unprepare;
   tap_callbacks.finalize = audio_tap::Finalize;
 
-  MTAudioProcessingTapRef tap = NULL;
+  MTAudioProcessingTapRef tap = nullptr;
   const OSStatus status = MTAudioProcessingTapCreate(
-      kCFAllocatorDefault,
-      reinterpret_cast<MTAudioProcessingTapCallbacks*>
-          (&tap_callbacks),
-      kMTAudioProcessingTapCreationFlag_PreEffects,
-      &tap);
-  if (status != 0 || tap == NULL) {
+      kCFAllocatorDefault, &tap_callbacks,
+      kMTAudioProcessingTapCreationFlag_PreEffects, &tap);
+  if (status != 0 || !tap) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Unable to create the audio processing tap";
     return base::scoped_nsobject<AVAudioMix>();
   }
-  DCHECK(tap != NULL);
-  base::ScopedCFTypeRef<MTAudioProcessingTapRef> scoped_tap(
-      tap);
+  DCHECK(tap);
+  base::ScopedCFTypeRef<MTAudioProcessingTapRef> scoped_tap(tap);
 
   AVMutableAudioMixInputParameters* input_parameters =
-      reinterpret_cast<AVMutableAudioMixInputParameters*>
-          ([AVMutableAudioMixInputParameters
-              audioMixInputParametersWithTrack:audio_track_]);
+      reinterpret_cast<AVMutableAudioMixInputParameters*>(
+          [AVMutableAudioMixInputParameters
+              audioMixInputParametersWithTrack:audio_track]);
   [input_parameters setAudioTapProcessor:tap];
 
-  AVMutableAudioMix* audio_mix =
-      [AVMutableAudioMix audioMix];
-  [audio_mix setInputParameters:@[input_parameters]];
+  AVMutableAudioMix* audio_mix = [AVMutableAudioMix audioMix];
+  [audio_mix setInputParameters:@[ input_parameters ]];
 
   return base::scoped_nsobject<AVAudioMix>([audio_mix retain]);
 }

@@ -3,14 +3,15 @@
 #ifndef EXTENSIONS_API_ACCESS_KEYS_H_
 #define EXTENSIONS_API_ACCESS_KEYS_H_
 
-#include "renderer/vivaldi_render_messages.h"
 #include "extensions/browser/extension_function.h"
+#include "renderer/mojo/vivaldi_tabs_private.mojom.h"
 
 #include <string>
 
 namespace extensions {
 
-class AccessKeysGetAccessKeysForPageFunction : public ExtensionFunction {
+class AccessKeysGetAccessKeysForPageFunction
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("accessKeys.getAccessKeysForPage",
                              ACCESSKEYS_GETACCESSKEYSFORPAGE)
@@ -22,7 +23,7 @@ class AccessKeysGetAccessKeysForPageFunction : public ExtensionFunction {
 
   ResponseAction Run() override;
 
-  void AccessKeysReceived(std::vector<VivaldiViewMsg_AccessKeyDefinition>);
+  void AccessKeysReceived(std::vector<::vivaldi::mojom::AccessKeyPtr>);
 
   DISALLOW_COPY_AND_ASSIGN(AccessKeysGetAccessKeysForPageFunction);
 };

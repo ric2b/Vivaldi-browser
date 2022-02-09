@@ -25,14 +25,14 @@ def getMessage(msg):
     if isinstance(part, tclib.Placeholder):
       # Skip this since translators look at msgid to see the pattern for msgstr
       #if isMsgId:
-      #  bits.append('<ph name="'+part.presentation+'">'+part.original+'<ex>'+part.example+'</ex></ph>');
+      #  bits.append('<ph name="'+part.presentation+'">'+part.original+'<ex>'+part.example+'</ex></ph>')
       #else:
-      bits.append('<ph name="'+part.presentation+'" />');
+      bits.append('<ph name="'+part.presentation+'" />')
     else:
       bits.append(part)
-  r = ''.join(bits).replace('"', '\\"') # escape quotes
+  r = ''.join(bits).replace('"', r'\"') # escape quotes
   r = '\\n'.join(r.splitlines())        # escape newlines
-  return r.encode("utf8")
+  return r
 
 generated_translation = set()
 
@@ -58,7 +58,7 @@ def write_message(f, options, node, locale=None, have_variants=False):
     return
   generated_translation.add(unique)
 
-  print("#. Description:", node.attrs["desc"].encode("utf8"), file=f)
+  print("#. Description:", node.attrs["desc"], file=f)
   print("#. TranslationId:", tid, file=f)
   print("#. vivaldi-file:", options.vivaldi_file, file=f)
 
@@ -73,7 +73,7 @@ def write_message(f, options, node, locale=None, have_variants=False):
 
 def main():
 
-  argparser = argparse.ArgumentParser();
+  argparser = argparse.ArgumentParser()
   argparser.add_argument("--vivaldi-file")
   argparser.add_argument("--locale")
   argparser.add_argument("--messages")

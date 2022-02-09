@@ -73,7 +73,8 @@ void PassThroughDecoderImpl<StreamType>::Decode(
                    << " decoding error";
 
     if (output) {
-      task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
+      task_runner_->PostTask(FROM_HERE,
+                             base::BindRepeating(output_cb_, output));
     } else {
       LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                    << " Detected " << DecoderTraits::ToString()

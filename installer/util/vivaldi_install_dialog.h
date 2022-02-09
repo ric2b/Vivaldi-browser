@@ -10,7 +10,6 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/optional.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/util_constants.h"
 

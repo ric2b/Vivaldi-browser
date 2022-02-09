@@ -17,7 +17,7 @@ public class TabModelFilterProvider implements TabModelSelectorObserver {
     private List<TabModelFilter> mTabModelFilterList = Collections.emptyList();
     private final List<TabModelObserver> mPendingTabModelObserver = new ArrayList<>();
 
-    TabModelFilterProvider() {}
+    public TabModelFilterProvider() {}
 
     public void init(TabModelFilterFactory tabModelFilterFactory, List<TabModel> tabModels) {
         assert mTabModelFilterList.isEmpty();
@@ -118,5 +118,15 @@ public class TabModelFilterProvider implements TabModelSelectorObserver {
     @Override
     public void onTabStateInitialized() {
         markTabStateInitialized();
+    }
+
+    /** Vivaldi: Wrapper which can specifically receive a |TabGroupModelFilter|. */
+    public TabModelFilter getTabModelFilter(boolean isIncognito, boolean asGroupFilter) {
+        return getTabModelFilter(isIncognito);
+    }
+
+    //** Vivaldi: Wrapper which can specifically receive a |TabGroupModelFilter|. */
+    public TabModelFilter getCurrentTabModelFilter(boolean asGroupFilter) {
+        return getCurrentTabModelFilter();
     }
 }

@@ -20,9 +20,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.view.View;
 
 import androidx.annotation.Nullable;
@@ -130,11 +132,11 @@ public class TabGroupUiMediatorUnitTest {
     @Mock
     Context mContext;
     @Mock
-    SnackbarManager.SnackbarManageable mSnackbarManageable;
-    @Mock
     SnackbarManager mSnackbarManager;
     @Mock
     ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
+    @Mock
+    private Resources mResources;
     @Captor
     ArgumentCaptor<TabModelObserver> mTabModelObserverArgumentCaptor;
     @Captor
@@ -208,10 +210,11 @@ public class TabGroupUiMediatorUnitTest {
         }
 
         TabGridDialogMediator.DialogController controller =
-                TabUiFeatureUtilities.isTabGroupsAndroidEnabled() ? mTabGridDialogController : null;
+                TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext) ? mTabGridDialogController
+                                                                          : null;
         mTabGroupUiMediator = new TabGroupUiMediator(mContext, mVisibilityController, mResetHandler,
                 mModel, mTabModelSelector, mTabCreatorManager, mOverviewModeBehaviorSupplier,
-                mThemeColorProvider, controller, mActivityLifecycleDispatcher, mSnackbarManageable,
+                mThemeColorProvider, controller, mActivityLifecycleDispatcher, mSnackbarManager,
                 mOmniboxFocusStateSupplier);
 
         if (currentTab == null) {
@@ -250,6 +253,10 @@ public class TabGroupUiMediatorUnitTest {
         // initAndAssertProperties(selectedTab) first, with selectedTab being the currently selected
         // tab when the TabGroupUiMediator is created.
         MockitoAnnotations.initMocks(this);
+
+        when(mContext.getResources()).thenReturn(mResources);
+        when(mResources.getInteger(org.chromium.ui.R.integer.min_screen_width_bucket))
+                .thenReturn(1);
 
         // Set up Tabs
         mTab1 = prepareTab(TAB1_ID, TAB1_ROOT_ID);
@@ -349,9 +356,6 @@ public class TabGroupUiMediatorUnitTest {
         // Set up TabCreatorManager
         doReturn(mTabCreator).when(mTabCreatorManager).getTabCreator(anyBoolean());
         doReturn(null).when(mTabCreator).createNewTab(any(), anyInt(), any());
-
-        // Set up SnackbarManageable.
-        doReturn(mSnackbarManager).when(mSnackbarManageable).getSnackbarManager();
 
         // Set up omnibox focus state observer.
         doReturn(nullValue())

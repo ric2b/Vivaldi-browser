@@ -28,7 +28,7 @@ The media decoding is split into two groups
 
 ## The Rest of the Module Interface
 
-* Ipc Mechanism : [**ProprietaryMediaGpuChannelManager**][1]
+* Ipc Mechanism : [**PropmediaGpuChannel**][1]
 * [**Protocol Sniffer**][12] : Do some content sniffing to determine mime type
 * Sandbox Warmup : How to allow the decoding inside the sandbx
 * Feature Toggle : Simple file to hold ifdefs to turn on or off features

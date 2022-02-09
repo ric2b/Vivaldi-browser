@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">이 링크를 메일로 보내기</translation>
 <translation id="1454726940098520109">다시 확인을 보여주지 않기</translation>
 <translation id="1462666970065907900">정말로 이 창을 닫으실건가요?</translation>
+<translation id="1480046233931937785">크레딧</translation>
 <translation id="1526344461589023948">다운로드한 업데이트를 저장하던 중 오류가 발생했습니다. 컴퓨터에 저장 공간이 충분한지 확인 후 다시 시도해주세요.</translation>
 <translation id="1657174850639146440">괴물 9</translation>
 <translation id="1676595396635191120">새 사생활 보호 창</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">새 탭에서 열기</translation>
 <translation id="3027988479108856431">죄송하게도, Yandex가 실행 중인 상태에서는 설정을 가져올 수 없습니다. Vivaldi로 설정을 가져오려면 현재 작업을 저장하고 모든 Yandex 창을 닫은 후 계속을 클릭하세요.</translation>
 <translation id="3084011186245865060">경관 6</translation>
+<translation id="3093931836425623631">Vivaldi는 Chromium 오픈소스 프로젝트를 비롯한 여러 오픈소스 소프트웨어에 기초해 만들어진 브라우저입니다.</translation>
 <translation id="3127383884976966729">동물 7</translation>
 <translation id="3156398087075132709">새 북마크</translation>
 <translation id="3255747772218936245">업데이트 설치</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">경관 7</translation>
 <translation id="7111492742514999492">경관 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi는 <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> 오픈 소스 프로젝트를 비롯한 여러 <ph name="BEGIN_LINK_OSS" />오픈 소스 소프트웨어<ph name="END_LINK_OSS" />에 기초해 만들어진 브라우저입니다.</translation>
 <translation id="7581266044164103589">설치 관리자를 실행할 수 없습니다. 컴퓨터에 충분한 메모리 또는 저장 공간이 있는지 확인 후 다시 시도해주세요.</translation>
 <translation id="7658239707568436148">취소</translation>
 <translation id="7715497554424665066">업데이트 무시 (&amp;I)</translation>

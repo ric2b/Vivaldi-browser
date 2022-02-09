@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "base/optional.h"
 #include "base/time/time.h"
 #include "base/token.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -23,6 +22,7 @@
 #include "components/sessions/core/sessions_export.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
@@ -123,16 +123,16 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
     SerializedUserAgentOverride user_agent_override;
 
     // The group the tab belonged to, if any.
-    base::Optional<tab_groups::TabGroupId> group;
+    absl::optional<tab_groups::TabGroupId> group;
 
     // The group metadata for the tab, if any.
-    base::Optional<tab_groups::TabGroupVisualData> group_visual_data;
+    absl::optional<tab_groups::TabGroupVisualData> group_visual_data;
 
     // If non-empty external data stored on the tab.
     std::string ext_data;
 
     std::map<std::string, bool> page_action_overrides;
-};
+  };
 
   // Represents a previously open window.
   // If you add a new field that can allocate memory, please also add
@@ -204,7 +204,7 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
   // Creates a Tab to represent |live_tab| and notifies observers the list of
   // entries has changed. If successful, returns the unique SessionID associated
   // with the Tab.
-  virtual base::Optional<SessionID> CreateHistoricalTab(LiveTab* live_tab,
+  virtual absl::optional<SessionID> CreateHistoricalTab(LiveTab* live_tab,
                                                         int index) = 0;
 
   // Creates a Group to represent a tab group with ID |id|, containing group

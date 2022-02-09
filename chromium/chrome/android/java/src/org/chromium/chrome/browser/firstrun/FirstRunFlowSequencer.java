@@ -20,13 +20,14 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.childaccounts.ChildAccountService;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
@@ -71,13 +72,6 @@ public abstract class FirstRunFlowSequencer  {
      * Once finished, calls onFlowIsKnown().
      */
     public void start() {
-        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
-                || ApiCompatibilityUtils.isDemoUser()
-                || ApiCompatibilityUtils.isRunningInUserTestHarness()) {
-            onFlowIsKnown(null);
-            return;
-        }
-
         long childAccountStatusStart = SystemClock.elapsedRealtime();
         ChildAccountService.checkChildAccountStatus(status -> {
             RecordHistogram.recordTimesHistogram("MobileFre.ChildAccountStatusDuration",
@@ -132,10 +126,10 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected boolean shouldShowSearchEnginePage() {
-        @LocaleManager.SearchEnginePromoType
-        int searchPromoType = LocaleManager.getInstance().getSearchEnginePromoShowType();
-        return searchPromoType == LocaleManager.SearchEnginePromoType.SHOW_NEW
-                || searchPromoType == LocaleManager.SearchEnginePromoType.SHOW_EXISTING;
+        @SearchEnginePromoType
+        int searchPromoType = AppHooks.get().getLocaleManager().getSearchEnginePromoShowType();
+        return searchPromoType == SearchEnginePromoType.SHOW_NEW
+                || searchPromoType == SearchEnginePromoType.SHOW_EXISTING;
     }
 
     @VisibleForTesting
@@ -152,13 +146,6 @@ public abstract class FirstRunFlowSequencer  {
     }
 
     void processFreEnvironmentPreNative() {
-        if (isFirstRunFlowComplete()) {
-            assert isFirstRunEulaAccepted();
-            // We do not need any interactive FRE.
-            onFlowIsKnown(null);
-            return;
-        }
-
         Bundle freProperties = new Bundle();
         freProperties.putInt(SyncConsentFirstRunFragment.CHILD_ACCOUNT_STATUS, mChildAccountStatus);
 

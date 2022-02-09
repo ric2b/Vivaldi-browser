@@ -69,7 +69,6 @@
 <translation id="215753907730220065">全画面表示を終了</translation>
 <translation id="2177950615300672361">プライベートタブ: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">ネイティブクライアントモジュール: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">ボタンを隠す</translation>
 <translation id="2218515861914035131">プレーンテキストとして貼り付ける</translation>
 <translation id="2249605167705922988">例 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">保護されたコンテンツへの識別子を許可する（コンピューターの再起動が必要になる場合があります）</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">事前レンダリング: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">マイク</translation>
 <translation id="3241680850019875542">パッケージ化する拡張機能のルートフォルダーを選択します。拡張機能を更新するには、再使用する秘密鍵ファイルも選択してください。</translation>
-<translation id="3266179261140759675">閉じたサイトがデータを送受信できないようにする</translation>
 <translation id="3280237271814976245">名前を付けて保存... (&amp;A)</translation>
 <translation id="3285322247471302225">新しいタブ (&amp;T)</translation>
 <translation id="3288047731229977326">デベロッパーモードで実行される拡張機能はパソコンにダメージを与える恐れがあります。デベロッパーでない場合は、安全のため、デベロッパーモードで実行されているこれらの拡張機能を無効にしてください。</translation>
@@ -145,7 +143,7 @@
 <translation id="33022249435934718">GDIハンドル</translation>
 <translation id="3303818374450886607">部数</translation>
 <translation id="3305661444342691068">PDFを既定アプリで開く</translation>
-<translation id="3308134619352333507">ボタンを非表示にする</translation>
+<translation id="3308134619352333507">ボタンを隠す</translation>
 <translation id="3317459757438853210">両面印刷</translation>
 <translation id="3341703758641437857">ファイルのURLへのアクセスを許可</translation>
 <translation id="3347086966102161372">画像のアドレスをコピー (&amp;O)</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">サイトデータの読み取りと変更を行います</translation>
 <translation id="3560034655160545939">スペルチェック (&amp;S)</translation>
 <translation id="3574917942258583917">プライベートモードを終了してもよろしいですか？</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;さんがあなたのグループ&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;と&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;プリンターの共有を希望しています。共有を許可すると、グループのメンバー全員がこのプリンターに印刷できるようになります。</translation>
 <translation id="3587482841069643663">すべて</translation>
 <translation id="3627588569887975815">プライベートウィンドウでリンクを開く (&amp;G)</translation>
 <translation id="3627879631695760395">「<ph name="APP" />」をインストール...</translation>
 <translation id="3668823961463113931">ハンドラー</translation>
 <translation id="3678156199662914018">拡張機能: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 画面共有リクエスト</translation>
+<translation id="3708684582558000260">閉じたサイトにデータの送受信の完了を許可しない</translation>
 <translation id="3711931198657368127">貼り付けて <ph name="URL" /> に移動 (&amp;S)</translation>
 <translation id="3727187387656390258">ポップアップを検証する</translation>
 <translation id="3744111561329211289">バックグラウンド同期</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">拡張機能を作成しました:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">グループへの共有を許可</translation>
 <translation id="4096508467498758490">デベロッパーモードの拡張機能を無効にする</translation>
 <translation id="4100839878934973028">パソコン上の別のプログラムにより、Vivaldiの動作方法を変更する可能性のあるアプリが追加されました。</translation>
 <translation id="4109898769411476438">インポートする前にブラウザを終了してください</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">詳細を表示</translation>
 <translation id="4907306957610201395">権限のカテゴリー</translation>
 <translation id="4912643508233590958">アイドル状態からの復帰</translation>
-<translation id="4918086044614829423">許可</translation>
 <translation id="4927753642311223124">エラーは特にありませんでした。</translation>
 <translation id="4930714375720679147">オンにする</translation>
 <translation id="4988526792673242964">ページ</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">サイトデータの削除</translation>
 <translation id="6042308850641462728">もっと見る</translation>
 <translation id="6059925163896151826">USB デバイス</translation>
-<translation id="6082651258230788217">ツールバーに表示</translation>
 <translation id="6086846494333236931">管理者によりインストールされました</translation>
 <translation id="6101226222197207147">新しいアプリが追加されました (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">インターネット接続が制限されています</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">ブラウザ再起動のシミュレート</translation>
 <translation id="6445450263907939268">この変更を受け入れない場合は、以前の設定を復元できます。</translation>
 <translation id="6447842834002726250">Cookie</translation>
-<translation id="6452181791372256707">拒否</translation>
 <translation id="6498249116389603658">選択したすべての言語 (&amp;A)</translation>
 <translation id="6503077044568424649">よくアクセスするページ</translation>
 <translation id="6508261954199872201">アプリ: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">サイトデータの読み取りと変更を行います</translation>
 <translation id="708060913198414444">音声のアドレスをコピー (&amp;O)</translation>
 <translation id="7175353351958621980">ロード元:</translation>
-<translation id="7186088072322679094">ツールバーに残す</translation>
+<translation id="7186088072322679094">ツールバーに留める</translation>
 <translation id="7270858098575133036">サイトがシステム エクスクルーシブ メッセージを使用してMIDIデバイスにアクセスする際に確認する</translation>
 <translation id="7287143125007575591">アクセスが拒否されました。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">これを新しいタブで開くページにしてもよろしいですか？</translation>
 <translation id="786073089922909430">サービス: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">最近使用した送信先</translation>
-<translation id="7898627924844766532">ツールバーに残す</translation>
 <translation id="7903925330883316394">ユーティリティ: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">現在オフライン</translation>
 <translation id="7947962633355574091">動画アドレスをコピー (&amp;C)</translation>
@@ -451,7 +444,6 @@
 <translation id="8725066075913043281">再試行</translation>
 <translation id="8757090071857742562">デスクトップをキャストできません。画面共有の開始を確認するメッセージで同意したかどうかを確認してください。</translation>
 <translation id="8774934320277480003">上部の余白</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;さんがあなたと&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;プリンターの共有を希望しています。</translation>
 <translation id="8798099450830957504">既定</translation>
 <translation id="8800004011501252845">次のアカウントの送信先を表示しています:</translation>
 <translation id="8808478386290700967">ウェブストア</translation>

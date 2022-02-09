@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/location.h"
-#include "base/optional.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -24,6 +23,7 @@
 #include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "services/audio/public/cpp/device_factory.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/image/image_skia_operations.h"
 
 namespace recording {
@@ -368,8 +368,10 @@ void RecordingService::Capture(const media::AudioBus* audio_source,
                                 std::move(audio_data), audio_capture_time));
 }
 
-void RecordingService::OnCaptureError(const std::string& message) {
-  LOG(ERROR) << message;
+void RecordingService::OnCaptureError(
+    media::AudioCapturerSource::ErrorCode code,
+    const std::string& message) {
+  LOG(ERROR) << static_cast<uint32_t>(code) << ", " << message;
 }
 
 void RecordingService::OnCaptureMuted(bool is_muted) {}

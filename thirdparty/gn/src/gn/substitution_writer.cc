@@ -436,6 +436,8 @@ bool SubstitutionWriter::GetTargetSubstitution(const Target* target,
         target->label().GetUserVisibleName(!target->settings()->is_default());
   } else if (type == &SubstitutionLabelName) {
     *result = target->label().name();
+  } else if (type == &SubstitutionLabelNoToolchain) {
+    *result = target->label().GetUserVisibleName(false);
   } else if (type == &SubstitutionRootGenDir) {
     SetDirOrDotWithNoSlash(
         GetBuildDirAsOutputFile(BuildDirContext(target), BuildDirType::GEN)

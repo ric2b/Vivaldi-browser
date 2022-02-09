@@ -502,7 +502,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
 
           // Compute and store frame properties. |image_size| gets filled in
           // later, since it comes from the decoder configuration.
-          base::Optional<int32_t> pic_order_cnt =
+          absl::optional<int32_t> pic_order_cnt =
               poc_.ComputePicOrderCnt(sps, slice_hdr);
           if (!pic_order_cnt.has_value()) {
             NotifyError("UNREADABLE_INPUT, SFT_INVALID_STREAM");
@@ -850,7 +850,8 @@ bool VivVideoDecoder::SendFrame(const Frame& frame) {
       Y_data, U_data, V_data,
       frame.timestamp);
 
-  output->AddDestructionObserver(base::Bind(&BufferHolder, frame.image));
+  output->AddDestructionObserver(
+      base::BindRepeating(&BufferHolder, frame.image));
 
   // Unlock the returned image data.
   CVPixelBufferUnlockBaseAddress(image, kCVPixelBufferLock_ReadOnly);

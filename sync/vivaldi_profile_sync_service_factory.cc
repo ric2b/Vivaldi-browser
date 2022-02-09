@@ -60,9 +60,10 @@ void UpdateNetworkTimeOnUIThread(base::Time network_time,
 void UpdateNetworkTime(const base::Time& network_time,
                        const base::TimeDelta& resolution,
                        const base::TimeDelta& latency) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::Bind(&UpdateNetworkTimeOnUIThread, network_time,
-                            resolution, latency, base::TimeTicks::Now()));
+  base::PostTask(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindRepeating(&UpdateNetworkTimeOnUIThread, network_time,
+                          resolution, latency, base::TimeTicks::Now()));
 }
 
 }  // anonymous namespace
@@ -124,10 +125,10 @@ KeyedService* VivaldiProfileSyncServiceFactory::BuildServiceInstanceFor(
 
   ProfileSyncService::InitParams init_params;
   init_params.sync_client = std::make_unique<VivaldiSyncClient>(profile);
-  init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
-  init_params.url_loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetURLLoaderFactoryForBrowserProcess();
+  init_params.network_time_update_callback =
+      base::BindRepeating(&UpdateNetworkTime);
+  init_params.url_loader_factory = profile->GetDefaultStoragePartition()
+                                       ->GetURLLoaderFactoryForBrowserProcess();
   init_params.network_connection_tracker =
       content::GetNetworkConnectionTracker();
   init_params.channel = chrome::GetChannel();

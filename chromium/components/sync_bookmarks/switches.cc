@@ -11,9 +11,13 @@ const base::Feature kSyncReuploadBookmarkFullTitles{
     "SyncReuploadBookmarkFullTitles", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSyncUseClientTagForBookmarkCommits{
-    "SyncUseClientTagForBookmarkCommits", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SyncUseClientTagForBookmarkCommits", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSyncReuploadBookmarksUponMatchingData{
     "SyncReuploadBookmarksUponMatchingData", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kSyncBookmarksEnforceLateMaxEntriesToCommit{
+    "SyncBookmarksEnforceLateMaxEntriesToCommit",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace switches

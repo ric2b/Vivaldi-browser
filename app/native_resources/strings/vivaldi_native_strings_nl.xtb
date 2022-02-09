@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Koppeling e-&amp;mailen</translation>
 <translation id="1454726940098520109">Niet meer vragen</translation>
 <translation id="1462666970065907900">Weet je zeker dat je dit venster wilt sluiten?</translation>
+<translation id="1480046233931937785">Met dank aan</translation>
 <translation id="1526344461589023948">Er is iets misgegaan bij het opslaan van een binnengehaalde update. Controleer dat de computer genoeg schijfruimte heeft en probeer het opnieuw.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nieuw privévenster</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Openen in nieuwe tab</translation>
 <translation id="3027988479108856431">Helaas zijn instellingen van Yandex niet te benaderen als die browser open staat. Om Yandex-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Yandex. Klik daarna op Opnieuw proberen.</translation>
 <translation id="3084011186245865060">Landschap 6</translation>
+<translation id="3093931836425623631">Vivaldi wordt mogelijk gemaakt door het open source project Chromium en andere open source programmatuur.</translation>
 <translation id="3127383884976966729">Dier 7</translation>
 <translation id="3156398087075132709">Nieuwe bladwijzer</translation>
 <translation id="3255747772218936245">Update installeren</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Landschap 7</translation>
 <translation id="7111492742514999492">Landschap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi wordt mogelijk gemaakt door het <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> opensourceproject en andere <ph name="BEGIN_LINK_OSS" />opensourceprogrammatuur<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Kan het installatieprogramma van de update niet starten. Controleer dat de computer genoeg geheugen en schijfruimte heeft en probeer het opnieuw.</translation>
 <translation id="7658239707568436148">Annuleren</translation>
 <translation id="7715497554424665066">Nieuwe versie negeren</translation>

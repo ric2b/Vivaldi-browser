@@ -29,8 +29,8 @@ std::string DirWithNoTrailingSlash(const SourceDir& dir) {
 // used. The value is used only for generating error messages.
 bool ComputeBuildLocationFromDep(const Value& input_value,
                                  const SourceDir& current_dir,
-                                 const std::string_view& source_root,
-                                 const std::string_view& input,
+                                 std::string_view source_root,
+                                 std::string_view input,
                                  SourceDir* result,
                                  Err* err) {
   // No rule, use the current location.
@@ -50,7 +50,7 @@ bool ComputeBuildLocationFromDep(const Value& input_value,
 // error messages.
 bool ComputeTargetNameFromDep(const Value& input_value,
                               const SourceDir& computed_location,
-                              const std::string_view& input,
+                              std::string_view input,
                               StringAtom* result,
                               Err* err) {
   if (!input.empty()) {
@@ -88,10 +88,10 @@ bool ComputeTargetNameFromDep(const Value& input_value,
 // Returns true on success. On failure, the out* variables might be written to
 // but shouldn't be used.
 bool Resolve(const SourceDir& current_dir,
-             const std::string_view& source_root,
+             std::string_view source_root,
              const Label& current_toolchain,
              const Value& original_value,
-             const std::string_view& input,
+             std::string_view input,
              SourceDir* out_dir,
              StringAtom* out_name,
              SourceDir* out_toolchain_dir,
@@ -256,22 +256,21 @@ Implicit names
 Label::Label() : hash_(ComputeHash()) {}
 
 Label::Label(const SourceDir& dir,
-             const std::string_view& name,
+             std::string_view name,
              const SourceDir& toolchain_dir,
-             const std::string_view& toolchain_name)
+             std::string_view toolchain_name)
     : dir_(dir),
       name_(StringAtom(name)),
       toolchain_dir_(toolchain_dir),
       toolchain_name_(StringAtom(toolchain_name)),
       hash_(ComputeHash()) {}
 
-Label::Label(const SourceDir& dir, const std::string_view& name)
-    : dir_(dir), name_(StringAtom(name)),
-      hash_(ComputeHash()) {}
+Label::Label(const SourceDir& dir, std::string_view name)
+    : dir_(dir), name_(StringAtom(name)), hash_(ComputeHash()) {}
 
 // static
 Label Label::Resolve(const SourceDir& current_dir,
-                     const std::string_view& source_root,
+                     std::string_view source_root,
                      const Label& current_toolchain,
                      const Value& input,
                      Err* err) {

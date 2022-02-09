@@ -156,7 +156,7 @@ std::vector<Token> Tokenizer::Run() {
 }
 
 // static
-size_t Tokenizer::ByteOffsetOfNthLine(const std::string_view& buf, int n) {
+size_t Tokenizer::ByteOffsetOfNthLine(std::string_view buf, int n) {
   DCHECK_GT(n, 0);
 
   if (n == 1)
@@ -176,7 +176,7 @@ size_t Tokenizer::ByteOffsetOfNthLine(const std::string_view& buf, int n) {
 }
 
 // static
-bool Tokenizer::IsNewline(const std::string_view& buffer, size_t offset) {
+bool Tokenizer::IsNewline(std::string_view buffer, size_t offset) {
   DCHECK(offset < buffer.size());
   // We may need more logic here to handle different line ending styles.
   return buffer[offset] == '\n';
@@ -198,9 +198,8 @@ void Tokenizer::AdvanceToNextToken() {
     Advance();
 }
 
-Token::Type Tokenizer::ClassifyCurrent() const {
-  DCHECK(!at_end());
-  char next_char = cur_char();
+// static
+Token::Type Tokenizer::ClassifyToken(char next_char, char following_char) {
   if (base::IsAsciiDigit(next_char))
     return Token::INTEGER;
   if (next_char == '"')
@@ -237,16 +236,22 @@ Token::Type Tokenizer::ClassifyCurrent() const {
   // For the case of '-' differentiate between a negative number and anything
   // else.
   if (next_char == '-') {
-    if (!CanIncrement())
+    if (following_char == '\0')
       return Token::UNCLASSIFIED_OPERATOR;  // Just the minus before end of
                                             // file.
-    char following_char = input_[cur_ + 1];
     if (base::IsAsciiDigit(following_char))
       return Token::INTEGER;
     return Token::UNCLASSIFIED_OPERATOR;
   }
 
   return Token::INVALID;
+}
+
+Token::Type Tokenizer::ClassifyCurrent() const {
+  DCHECK(!at_end());
+  char next_char = cur_char();
+  char following_char = CanIncrement() ? input_[cur_ + 1] : '\0';
+  return ClassifyToken(next_char, following_char);
 }
 
 void Tokenizer::AdvanceToEndOfToken(const Location& location,

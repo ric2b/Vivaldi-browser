@@ -123,9 +123,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   viz::GpuHostImpl* gpu_host() { return gpu_host_.get(); }
 
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  CONTENT_EXPORT static void SetForceAllowAccessToGpu(bool enable);
-
  private:
   enum class GpuTerminationOrigin {
     kUnknownOrigin = 0,
@@ -159,8 +156,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void DidInitialize(
       const gpu::GPUInfo& gpu_info,
       const gpu::GpuFeatureInfo& gpu_feature_info,
-      const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
-      const base::Optional<gpu::GpuFeatureInfo>&
+      const absl::optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
+      const absl::optional<gpu::GpuFeatureInfo>&
           gpu_feature_info_for_hardware_gpu,
       const gfx::GpuExtraInfo& gpu_extra_info) override;
   void DidFailInitialize() override;
@@ -241,9 +238,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   static bool crashed_before_;
   static int recent_crash_count_;
   static gpu::GpuMode last_crash_mode_;
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  static bool force_allow_access_to_gpu_;
 
   // Here the bottom-up destruction order matters:
   // The GPU thread depends on its host so stop the host last.

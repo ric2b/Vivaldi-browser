@@ -94,6 +94,11 @@ extern const char kRefs_HelpShort[];
 extern const char kRefs_Help[];
 int RunRefs(const std::vector<std::string>& args);
 
+extern const char kCleanStale[];
+extern const char kCleanStale_HelpShort[];
+extern const char kCleanStale_Help[];
+int RunCleanStale(const std::vector<std::string>& args);
+
 // -----------------------------------------------------------------------------
 
 struct CommandInfo {

@@ -96,7 +96,7 @@ class Settings {
   mutable ImportManager import_manager_;
 
   // The subdirectory inside the build output for this toolchain. For the
-  // default toolchain, this will be empty (since the deafult toolchain's
+  // default toolchain, this will be empty (since the default toolchain's
   // output directory is the same as the build directory). When nonempty, this
   // is guaranteed to end in a slash.
   OutputFile toolchain_output_subdir_;

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Jatka</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Diagnosoidaan verkkoa<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Ilmoitukset</translation>
+<translation id="2491414235131909199">Laajennus on estänyt tämän sivun</translation>
 <translation id="2501278716633472235">Palaa takaisin</translation>
 <translation id="2539524384386349900">Tunnista</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> lähetti virheellisen vastauksen.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Älä anna sivustolle salasanoja, luottokorttinumeroita tai muita arkaluonteisia tietoja, sillä hyökkääjät saattavat varastaa ne.</translation>
 <translation id="5869405914158311789">Sivustoon ei saada yhteyttä</translation>
 <translation id="5932224571077948991">Sivustolla on häiritseviä tai harhaanjohtavia mainoksia</translation>
-<translation id="5990559369517809815">Laajennus esti palvelinpyynnöt.</translation>
 <translation id="6051221802930200923"><ph name="SITE" /> ei juuri nyt ole käytettävissä, koska se käyttää varmenteiden kiinnittämistä. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
 <translation id="6146055958333702838">Tarkista kaikki kaapelit ja käynnistä uudelleen reitittimet, modeemit ja muut
     käytössä olevat verkkolaitteet.</translation>

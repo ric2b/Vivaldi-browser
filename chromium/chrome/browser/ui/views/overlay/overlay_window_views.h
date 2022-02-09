@@ -7,9 +7,9 @@
 
 #include "content/public/browser/overlay_window.h"
 
-#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "build/chromeos_buildflags.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget.h"
 
@@ -29,6 +29,10 @@ class TrackImageButton;
 
 class Button;
 }  // namespace views
+
+namespace viz {
+class FrameSinkId;
+}  // namespace viz
 
 class BackToTabLabelButton;
 class HangUpButton;
@@ -289,7 +293,7 @@ class OverlayWindowViews : public content::OverlayWindow,
   // If set, controls will always either be shown or hidden, instead of showing
   // and hiding automatically. Only used for testing via
   // ForceControlsVisibleForTesting().
-  base::Optional<bool> force_controls_visible_;
+  absl::optional<bool> force_controls_visible_;
 
   // Vivaldi
   vivaldi::VideoProgress* progress_view_ = nullptr;

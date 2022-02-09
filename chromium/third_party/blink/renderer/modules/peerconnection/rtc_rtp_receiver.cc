@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_capability.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_parameters.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
@@ -78,11 +79,11 @@ RTCDtlsTransport* RTCRtpReceiver::rtcpTransport() {
   return nullptr;
 }
 
-base::Optional<double> RTCRtpReceiver::playoutDelayHint() const {
+absl::optional<double> RTCRtpReceiver::playoutDelayHint() const {
   return playout_delay_hint_;
 }
 
-void RTCRtpReceiver::setPlayoutDelayHint(base::Optional<double> hint,
+void RTCRtpReceiver::setPlayoutDelayHint(absl::optional<double> hint,
                                          ExceptionState& exception_state) {
   if (hint.has_value() && hint.value() < 0.0) {
     exception_state.ThrowTypeError("playoutDelayHint can't be negative");
@@ -125,6 +126,10 @@ RTCRtpReceiver::getSynchronizationSources(ScriptState* script_state,
       synchronization_source->setCaptureTimestamp(
           web_source->CaptureTimestamp().value());
     }
+    if (web_source->SenderCaptureTimeOffset().has_value()) {
+      synchronization_source->setSenderCaptureTimeOffset(
+          web_source->SenderCaptureTimeOffset().value());
+    }
     synchronization_source->setRtpTimestamp(web_source->RtpTimestamp());
     synchronization_sources.push_back(synchronization_source);
   }
@@ -162,6 +167,10 @@ RTCRtpReceiver::getContributingSources(ScriptState* script_state,
     if (web_source->CaptureTimestamp().has_value()) {
       contributing_source->setCaptureTimestamp(
           web_source->CaptureTimestamp().value());
+    }
+    if (web_source->SenderCaptureTimeOffset().has_value()) {
+      contributing_source->setSenderCaptureTimeOffset(
+          web_source->SenderCaptureTimeOffset().value());
     }
     contributing_source->setRtpTimestamp(web_source->RtpTimestamp());
     contributing_sources.push_back(contributing_source);
@@ -290,8 +299,8 @@ RTCRtpCapabilities* RTCRtpReceiver::getCapabilities(ScriptState* state,
       HeapVector<Member<RTCRtpHeaderExtensionCapability>>());
 
   std::unique_ptr<webrtc::RtpCapabilities> rtc_capabilities =
-      PeerConnectionDependencyFactory::GetInstance()->GetReceiverCapabilities(
-          kind);
+      PeerConnectionDependencyFactory::From(*ExecutionContext::From(state))
+          .GetReceiverCapabilities(kind);
 
   HeapVector<Member<RTCRtpCodecCapability>> codecs;
   codecs.ReserveInitialCapacity(

@@ -24,9 +24,9 @@ BASE_EXPORT base::CallbackListSubscription AddExtDataUpdatedCallback(
 BASE_EXPORT base::RepeatingCallbackList<void(content::WebContents*)>&
 GetExtDataUpdatedCallbackList();
 
-bool IsVivaldiApp(base::StringPiece extension_id);
+bool BASE_EXPORT IsVivaldiApp(base::StringPiece extension_id);
 
-bool IsVivaldiExtraLocale(base::StringPiece locale);
+bool BASE_EXPORT IsVivaldiExtraLocale(base::StringPiece locale);
 
 bool BASE_EXPORT IsVivaldiRunning();
 bool BASE_EXPORT IsDebuggingVivaldi();
@@ -47,6 +47,9 @@ CommandLineAppendSwitchNoDup(base::CommandLine& cmd_line,
 }
 
 GURL GetVivaldiNewTabURL();
+
+// Windows-specific flag to inform UI about cancelled drag.
+extern bool BASE_EXPORT g_cancelled_drag;
 
 }  // namespace vivaldi
 

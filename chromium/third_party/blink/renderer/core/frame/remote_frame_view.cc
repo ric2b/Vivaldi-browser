@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 
+#include "base/numerics/ranges.h"
 #include "components/paint_preview/common/paint_preview_tracker.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
@@ -217,13 +218,16 @@ void RemoteFrameView::UpdateCompositingScaleFactor() {
   compositing_scale_factor_ =
       widget->GetCompositingScaleFactor() * frame_to_local_root_scale_factor;
 
-  // Force compositing scale factor to be at least a reasonable minimum value to
-  // prevent dependent values such as scroll deltas in the compositor going to
-  // zero.  It's possible for the calculated scale factor to go to zero since
-  // it depends on intermediate CSS transforms which could have zero scale.
+  // Force compositing scale factor to be within reasonable minimum and maximum
+  // values to prevent dependent values such as scroll deltas in the compositor
+  // going to zero or extremely high memory usage due to large raster scales.
+  // It's possible for the calculated scale factor to become very large or very
+  // small since it depends on arbitrary intermediate CSS transforms.
   constexpr float kMinCompositingScaleFactor = 0.25f;
+  constexpr float kMaxCompositingScaleFactor = 5.0f;
   compositing_scale_factor_ =
-      std::max(compositing_scale_factor_, kMinCompositingScaleFactor);
+      base::ClampToRange(compositing_scale_factor_, kMinCompositingScaleFactor,
+                         kMaxCompositingScaleFactor);
 
   if (compositing_scale_factor_ != previous_scale_factor)
     remote_frame_->SynchronizeVisualProperties();
@@ -236,17 +240,6 @@ void RemoteFrameView::Dispose() {
   if (owner_element && owner_element->OwnedEmbeddedContentView() == this)
     owner_element->SetEmbeddedContentView(nullptr);
   SetNeedsOcclusionTracking(false);
-}
-
-void RemoteFrameView::InvalidateRect(const IntRect& rect) {
-  auto* object = remote_frame_->OwnerLayoutObject();
-  if (!object)
-    return;
-
-  PhysicalRect repaint_rect(rect);
-  repaint_rect.Move(PhysicalOffset(object->BorderLeft() + object->PaddingLeft(),
-                                   object->BorderTop() + object->PaddingTop()));
-  object->InvalidatePaintRectangle(repaint_rect);
 }
 
 void RemoteFrameView::SetFrameRect(const IntRect& rect) {
@@ -292,7 +285,8 @@ void RemoteFrameView::Paint(GraphicsContext& context,
       // Inform the remote frame to print.
       content_id = Print(FrameRect(), context.Canvas());
     } else {
-      DCHECK(owner_layout_object.GetDocument().IsPaintingPreview());
+      DCHECK_NE(Document::kNotPaintingPreview,
+                owner_layout_object.GetDocument().GetPaintPreviewState());
       // Inform the remote frame to capture a paint preview.
       content_id = CapturePaintPreview(FrameRect(), context.Canvas());
     }
@@ -409,7 +403,7 @@ uint32_t RemoteFrameView::CapturePaintPreview(const IntRect& rect,
   // to this HTMLFrameOwnerElement yet (over IPC). If the token is null the
   // failure can be handled gracefully by simply ignoring the subframe in the
   // result.
-  base::Optional<base::UnguessableToken> maybe_embedding_token =
+  absl::optional<base::UnguessableToken> maybe_embedding_token =
       remote_frame_->GetEmbeddingToken();
   if (!maybe_embedding_token.has_value())
     return 0;

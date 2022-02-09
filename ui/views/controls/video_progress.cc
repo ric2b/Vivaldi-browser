@@ -7,6 +7,8 @@
 #include "ui/views/controls/video_progress.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
 #include "ui/views/controls/label.h"
@@ -14,7 +16,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
-#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 namespace vivaldi {
@@ -40,7 +41,7 @@ VideoProgress::VideoProgress() {
   gfx::FontList font_list(font);
 
   auto progress_time =
-      std::make_unique<views::Label>(base::UTF8ToUTF16("0:00:00"));
+      std::make_unique<views::Label>(u"0:00:00");
   progress_time->SetFontList(font_list);
   progress_time->SetEnabledColor(kTimeColor);
   progress_time->SetAutoColorReadabilityEnabled(false);
@@ -67,7 +68,7 @@ VideoProgress::VideoProgress() {
   progress_bar->SetProperty(views::kMarginsKey, gfx::Insets(0, 4, 0, 4));
   progress_bar_ = AddChildView(std::move(progress_bar));
 
-  auto duration = std::make_unique<views::Label>(base::UTF8ToUTF16("0:00:00"));
+  auto duration = std::make_unique<views::Label>(u"0:00:00");
   duration->SetFontList(font_list);
   duration->SetEnabledColor(SK_ColorWHITE);
   duration->SetAutoColorReadabilityEnabled(false);
@@ -102,7 +103,7 @@ bool VideoProgress::GetStringFromPosition(base::DurationFormatWidth time_format,
 
 std::u16string VideoProgress::StripHour(std::u16string& time) const {
   base::ReplaceFirstSubstringAfterOffset(
-    &time, 0, base::ASCIIToUTF16("0:"), base::ASCIIToUTF16(""));
+    &time, 0, u"0:", u"");
 
   return time;
 }

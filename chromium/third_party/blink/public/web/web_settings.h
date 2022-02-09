@@ -298,4 +298,4 @@ class WebSettings {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_SETTINGS_H_

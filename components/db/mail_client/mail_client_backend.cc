@@ -198,4 +198,9 @@ void MailClientBackend::MatchMessage(SearchListID search_list_id,
   *results = found;
 }
 
+void MailClientBackend::RebuildDatabase(std::shared_ptr<bool> result) {
+  bool found = db_->RebuildDatabase();
+  *result = found;
+}
+
 }  // namespace mail_client

@@ -146,6 +146,13 @@ class OSCrypt {
   // For unit testing purposes, reset the state of OSCrypt so a new key can be
   // loaded via Init() or SetRawEncryptionkey().
   static COMPONENT_EXPORT(OS_CRYPT) void ResetStateForTesting();
+
+  // Vivaldi: used for importing on windows, when we need to import from
+  // other chromium based browsers
+  static COMPONENT_EXPORT(OS_CRYPT) bool DecryptImportedString16(
+      const std::string& ciphertext,
+      std::u16string* plaintext,
+      const std::string& import_encrytpion_key);
 #endif
 
  private:

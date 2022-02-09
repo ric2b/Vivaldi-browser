@@ -14,6 +14,8 @@
 
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
+#include "base/memory/scoped_refptr.h"
+#include "ui/base/cursor/platform_cursor.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -112,7 +114,9 @@ void ScenicWindow::Show(bool inactive) {
 
   visible_ = true;
 
-  view_.AddChild(node_);
+  if (!previous_view_is_zero_sized_) {
+    view_.AddChild(node_);
+  }
 
   // Call Present2() to ensure that the scenic session commands are processed,
   // which is necessary to receive metrics event from Scenic.
@@ -124,7 +128,9 @@ void ScenicWindow::Hide() {
     return;
 
   visible_ = false;
-  node_.Detach();
+  if (!previous_view_is_zero_sized_) {
+    node_.Detach();
+  }
 }
 
 void ScenicWindow::Close() {
@@ -190,7 +196,7 @@ bool ScenicWindow::ShouldUseNativeFrame() const {
   return false;
 }
 
-void ScenicWindow::SetCursor(PlatformCursor cursor) {
+void ScenicWindow::SetCursor(scoped_refptr<PlatformCursor> cursor) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
 
@@ -236,6 +242,26 @@ void ScenicWindow::UpdateSize() {
   ScenicScreen* screen = manager_->screen();
   if (screen)
     screen->OnWindowBoundsChanged(window_id_, bounds_);
+
+  // If the width or height of the window is zero, then we shouldn't render
+  // the node. Instead, we should detach it from its parent.
+  if (width == 0.f || height == 0.f) {
+    if (!previous_view_is_zero_sized_) {
+      if (visible_) {
+        node_.Detach();
+      }
+      previous_view_is_zero_sized_ = true;
+    }
+    return;
+  }
+
+  // Otherwise we add them back to the View.
+  if (previous_view_is_zero_sized_) {
+    if (visible_) {
+      view_.AddChild(node_);
+    }
+    previous_view_is_zero_sized_ = false;
+  }
 
   // Translate the node by half of the view dimensions to put it in the center
   // of the view.
@@ -309,10 +335,6 @@ void ScenicWindow::OnScenicEvents(
 
 void ScenicWindow::OnViewMetrics(const fuchsia::ui::gfx::Metrics& metrics) {
   device_pixel_ratio_ = std::max(metrics.scale_x, metrics.scale_y);
-
-  ScenicScreen* screen = manager_->screen();
-  if (screen)
-    screen->OnWindowMetrics(window_id_, device_pixel_ratio_);
 
   if (view_properties_)
     UpdateSize();

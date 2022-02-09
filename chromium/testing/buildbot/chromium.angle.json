@@ -16,7 +16,8 @@
         },
         "name": "angle_deqp_egl_gles_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -55,7 +56,8 @@
         },
         "name": "angle_deqp_gles2_gles_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -94,7 +96,8 @@
         },
         "name": "angle_deqp_gles3_gles_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -133,7 +136,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -170,7 +174,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -217,7 +222,8 @@
         },
         "name": "angle_perftests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -264,7 +270,8 @@
         },
         "name": "webgl_conformance_gles_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -311,7 +318,8 @@
         },
         "name": "angle_perftests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -358,7 +366,8 @@
         },
         "name": "angle_deqp_egl_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -398,7 +407,8 @@
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -438,7 +448,8 @@
         },
         "name": "angle_deqp_gles31_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -478,7 +489,8 @@
         },
         "name": "angle_deqp_gles3_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -518,7 +530,8 @@
         },
         "name": "angle_deqp_khr_gles2_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -557,7 +570,8 @@
         },
         "name": "angle_deqp_khr_gles31_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -597,7 +611,8 @@
         },
         "name": "angle_deqp_khr_gles32_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -636,7 +651,8 @@
         },
         "name": "angle_deqp_khr_gles3_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -676,7 +692,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -714,7 +731,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -762,7 +780,8 @@
         },
         "name": "angle_perftests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -807,7 +826,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -853,7 +873,8 @@
         },
         "name": "angle_deqp_egl_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -893,7 +914,8 @@
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -933,7 +955,8 @@
         },
         "name": "angle_deqp_gles31_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -973,7 +996,8 @@
         },
         "name": "angle_deqp_gles3_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1013,7 +1037,8 @@
         },
         "name": "angle_deqp_khr_gles2_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1052,7 +1077,8 @@
         },
         "name": "angle_deqp_khr_gles31_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1092,7 +1118,8 @@
         },
         "name": "angle_deqp_khr_gles32_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1131,7 +1158,8 @@
         },
         "name": "angle_deqp_khr_gles3_vulkan_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1171,7 +1199,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1209,7 +1238,8 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1257,7 +1287,8 @@
         },
         "name": "angle_perftests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1302,7 +1333,8 @@
           "--buildbucket-id=${buildbucket_build_id}"
         ],
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1360,7 +1392,8 @@
         },
         "name": "angle_end2end_tests_iPhone X 14.0",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1368,20 +1401,26 @@
             {
               "cipd_package": "infra/tools/mac_toolchain/${platform}",
               "location": ".",
-              "revision": "git_revision:8811b82233df02ee372cae1e19e379ca8c6a2776"
+              "revision": "git_revision:723fc1a6c8cdf2631a57851f5610e598db0c1de1"
             }
           ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "named_caches": [
             {
               "name": "xcode_ios_12d4e",
               "path": "Xcode.app"
+            },
+            {
+              "name": "runtime_ios_14_0",
+              "path": "Runtime-ios-14.0"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -1412,7 +1451,8 @@
         },
         "name": "angle_white_box_tests_iPhone X 14.0",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1420,20 +1460,26 @@
             {
               "cipd_package": "infra/tools/mac_toolchain/${platform}",
               "location": ".",
-              "revision": "git_revision:8811b82233df02ee372cae1e19e379ca8c6a2776"
+              "revision": "git_revision:723fc1a6c8cdf2631a57851f5610e598db0c1de1"
             }
           ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "named_caches": [
             {
               "name": "xcode_ios_12d4e",
               "path": "Xcode.app"
+            },
+            {
+              "name": "runtime_ios_14_0",
+              "path": "Runtime-ios-14.0"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1470,7 +1516,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -1521,7 +1568,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1555,7 +1603,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1591,7 +1640,8 @@
         },
         "name": "webgl2_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1627,7 +1677,8 @@
         },
         "name": "webgl_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1672,7 +1723,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -1723,7 +1775,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1757,7 +1810,8 @@
         },
         "name": "trace_test",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1793,7 +1847,8 @@
         },
         "name": "webgl2_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -1829,7 +1884,8 @@
         },
         "name": "webgl_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -2653,63 +2709,6 @@
       }
     ]
   },
-  "linux-ozone-angle-builder": {},
-  "linux-ozone-angle-intel": {
-    "gtest_tests": [
-      {
-        "args": [
-          "angle_end2end_tests",
-          "--gtest_filter=-*Vulkan_SwiftShader*",
-          "--bot-mode",
-          "--max-processes=4"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "8086:1912",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "angle_end2end_tests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_end2end_tests/",
-        "use_isolated_scripts_api": true
-      },
-      {
-        "args": [
-          "angle_unittests"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "8086:1912",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
-        "use_isolated_scripts_api": true
-      }
-    ]
-  },
   "mac-angle-amd": {
     "gtest_tests": [
       {
@@ -2728,6 +2727,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2755,6 +2756,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2782,6 +2785,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2809,6 +2814,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2836,6 +2843,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2864,6 +2873,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2892,6 +2903,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2918,6 +2931,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -2951,13 +2966,16 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -2975,6 +2993,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3008,7 +3028,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3016,6 +3037,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3045,7 +3068,8 @@
         },
         "name": "webgl2_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3053,6 +3077,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3082,7 +3108,8 @@
         },
         "name": "webgl_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3090,6 +3117,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3119,7 +3148,8 @@
         },
         "name": "webgl_conformance_metal_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3127,6 +3157,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3156,7 +3188,8 @@
         },
         "name": "webgl_conformance_swangle_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3164,6 +3197,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3192,7 +3227,8 @@
         },
         "name": "webgl_conformance_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3200,6 +3236,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3233,11 +3271,14 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -3255,8 +3296,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3286,7 +3329,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3294,8 +3338,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -3321,7 +3367,8 @@
         },
         "name": "webgl2_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3329,8 +3376,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -3356,7 +3405,8 @@
         },
         "name": "webgl_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3364,8 +3414,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -3391,7 +3443,8 @@
         },
         "name": "webgl_conformance_metal_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3399,8 +3452,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -3426,7 +3481,8 @@
         },
         "name": "webgl_conformance_swangle_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3434,8 +3490,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -3460,7 +3518,8 @@
         },
         "name": "webgl_conformance_validating_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3468,8 +3527,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "idempotent": false,
@@ -3498,8 +3559,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3523,8 +3586,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3548,8 +3613,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3573,8 +3640,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3598,8 +3667,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -3624,8 +3695,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -3650,8 +3723,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -3674,8 +3749,10 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "8086:0a2e",
-              "os": "Mac-10.15.5"
+              "os": "Mac-10.15.5|Mac-10.15.7"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3703,6 +3780,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "10de:0fe9",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3729,6 +3808,8 @@
           "containment_type": "AUTO",
           "dimension_sets": [
             {
+              "cpu": "x86-64",
+              "display_attached": "1",
               "gpu": "10de:0fe9",
               "hidpi": "1",
               "os": "Mac-10.14.6",
@@ -3771,7 +3852,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3807,7 +3889,8 @@
         },
         "name": "webgl2_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3843,7 +3926,8 @@
         },
         "name": "webgl_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3879,7 +3963,8 @@
         },
         "name": "webgl_conformance_d3d9_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3915,7 +4000,8 @@
         },
         "name": "webgl_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3950,7 +4036,8 @@
         },
         "name": "webgl_conformance_vulkan_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -3993,7 +4080,8 @@
         },
         "name": "info_collection_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4029,7 +4117,8 @@
         },
         "name": "webgl2_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4065,7 +4154,8 @@
         },
         "name": "webgl_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4101,7 +4191,8 @@
         },
         "name": "webgl_conformance_d3d9_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4137,7 +4228,8 @@
         },
         "name": "webgl_conformance_gl_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -4172,7 +4264,8 @@
         },
         "name": "webgl_conformance_vulkan_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -5173,7 +5266,8 @@
         },
         "name": "webgl_conformance_d3d11_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -5209,7 +5303,8 @@
         },
         "name": "webgl_conformance_d3d9_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {
@@ -5244,7 +5339,8 @@
         },
         "name": "webgl_conformance_vulkan_passthrough_tests",
         "resultdb": {
-          "enable": true
+          "enable": true,
+          "has_native_resultdb_integration": true
         },
         "should_retry_with_patch": false,
         "swarming": {

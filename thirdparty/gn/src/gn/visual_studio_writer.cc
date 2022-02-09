@@ -25,6 +25,7 @@
 #include "gn/parse_tree.h"
 #include "gn/path_output.h"
 #include "gn/standard_out.h"
+#include "gn/string_output_buffer.h"
 #include "gn/target.h"
 #include "gn/variables.h"
 #include "gn/visual_studio_utils.h"
@@ -81,7 +82,7 @@ const char kVersionStringVs2015[] = "Visual Studio 2015";  // Visual Studio 2015
 const char kVersionStringVs2017[] = "Visual Studio 2017";  // Visual Studio 2017
 const char kVersionStringVs2019[] = "Visual Studio 2019";  // Visual Studio 2019
 const char kWindowsKitsVersion[] = "10";                   // Windows 10 SDK
-const char kWindowsKitsDefaultVersion[] = "10.0.17134.0";  // Windows 10 SDK
+const char kWindowsKitsDefaultVersion[] = "10";            // Windows 10 SDK
 
 const char kGuidTypeProject[] = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
 const char kGuidTypeFolder[] = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -411,7 +412,8 @@ bool VisualStudioWriter::WriteProjectFiles(const Target* target,
       FilePathToUTF8(build_settings_->GetFullPath(target->label().dir())),
       project_config_platform));
 
-  std::stringstream vcxproj_string_out;
+  StringOutputBuffer vcxproj_storage;
+  std::ostream vcxproj_string_out(&vcxproj_storage);
   SourceFileCompileTypePairs source_types;
   if (!WriteProjectFileContents(vcxproj_string_out, *projects_.back(), target,
                                 ninja_extra_args, &source_types, err)) {
@@ -422,13 +424,15 @@ bool VisualStudioWriter::WriteProjectFiles(const Target* target,
   // Only write the content to the file if it's different. That is
   // both a performance optimization and more importantly, prevents
   // Visual Studio from reloading the projects.
-  if (!WriteFileIfChanged(vcxproj_path, vcxproj_string_out.str(), err))
+  if (!vcxproj_storage.WriteToFileIfChanged(vcxproj_path, err))
     return false;
 
   base::FilePath filters_path = UTF8ToFilePath(vcxproj_path_str + ".filters");
-  std::stringstream filters_string_out;
+
+  StringOutputBuffer filters_storage;
+  std::ostream filters_string_out(&filters_storage);
   WriteFiltersFileContents(filters_string_out, target, source_types);
-  return WriteFileIfChanged(filters_path, filters_string_out.str(), err);
+  return filters_storage.WriteToFileIfChanged(filters_path, err);
 }
 
 bool VisualStudioWriter::WriteProjectFileContents(
@@ -732,13 +736,14 @@ bool VisualStudioWriter::WriteSolutionFile(const std::string& sln_name,
 
   base::FilePath sln_path = build_settings_->GetFullPath(sln_file);
 
-  std::stringstream string_out;
+  StringOutputBuffer storage;
+  std::ostream string_out(&storage);
   WriteSolutionFileContents(string_out, sln_path.DirName());
 
   // Only write the content to the file if it's different. That is
   // both a performance optimization and more importantly, prevents
   // Visual Studio from reloading the projects.
-  return WriteFileIfChanged(sln_path, string_out.str(), err);
+  return storage.WriteToFileIfChanged(sln_path, err);
 }
 
 void VisualStudioWriter::WriteSolutionFileContents(

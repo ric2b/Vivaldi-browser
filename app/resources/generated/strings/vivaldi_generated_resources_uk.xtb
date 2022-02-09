@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Вийти з повноекранного режиму</translation>
 <translation id="2177950615300672361">Анонімна вкладка: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Сховати кнопку</translation>
 <translation id="2218515861914035131">Вставити як звичайний текст</translation>
 <translation id="2249605167705922988">напр., 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Дозволити ідентифікатори захищеного вмісту (може знадобитися перезавантаження комп'ютера)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Візуалізатор: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Мікрофон</translation>
 <translation id="3241680850019875542">Виберіть кореневий каталог для пакування розширення. Щоб оновити розширення, також виберіть файл секретного ключа для повторного використання.</translation>
-<translation id="3266179261140759675">Заборонити закритим сайтам надсилати й отримувати дані</translation>
 <translation id="3280237271814976245">Зберегти &amp;як...</translation>
 <translation id="3285322247471302225">Нова &amp;вкладка</translation>
 <translation id="3288047731229977326">Розширення, які працюють у режимі розробника, можуть пошкодити ваш комп’ютер. Якщо ви не розробник, вимкніть їх заради безпеки.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Може переглядати й змінювати дані сайту</translation>
 <translation id="3560034655160545939">&amp;Перевірка орфографії</translation>
 <translation id="3574917942258583917">Закрити приватне вікно?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоче надати доступ до принтера &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; вашій групі &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Якщо ви приймете запрошення, то всі учасники групи зможуть користуватися цим принтером.</translation>
 <translation id="3587482841069643663">Всі</translation>
 <translation id="3627588569887975815">Відкрити посилання в &amp;приватному вікні</translation>
 <translation id="3627879631695760395">Установити додаток <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Обробники</translation>
 <translation id="3678156199662914018">Розширення: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запит на спільний доступ до екрана від <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Заборонити закритим сайтам завершувати надсилання чи отримання даних</translation>
 <translation id="3711931198657368127">Вставити й перейти до <ph name="URL" /></translation>
 <translation id="3727187387656390258">Перевірити</translation>
 <translation id="3744111561329211289">Фонова синхронізація</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Створено таке розширення:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Прийняти для групи</translation>
 <translation id="4096508467498758490">Вимкнути розширення в режимі розробника</translation>
 <translation id="4100839878934973028">Інша програма на вашому комп’ютері додала програму, яка може змінити роботу Vivaldi.</translation>
 <translation id="4109898769411476438">Закрити браузер перед імпортуванням</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Показати деталі</translation>
 <translation id="4907306957610201395">Категорія дозволу</translation>
 <translation id="4912643508233590958">Вихід зі стану неактивності</translation>
-<translation id="4918086044614829423">Прийняти</translation>
 <translation id="4927753642311223124">Не на ярмарку, проходьте.</translation>
 <translation id="4930714375720679147">Увімкнути</translation>
 <translation id="4988526792673242964">Сторінки</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Зберегти</translation>
 <translation id="5334142896108694079">Кеш скрипта</translation>
 <translation id="5355926466126177564">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
-<translation id="5360150013186312835">Показати на панелі інструментів</translation>
+<translation id="5360150013186312835">Показати на панелі</translation>
 <translation id="5362741141255528695">Виберіть файл секретного ключа.</translation>
 <translation id="536638840841140142">Немає</translation>
 <translation id="5370819323174483825">&amp;Оновити</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Очистити дані сайту</translation>
 <translation id="6042308850641462728">Більше</translation>
 <translation id="6059925163896151826">Пристрої USB</translation>
-<translation id="6082651258230788217">Показати на панелі інструментів</translation>
 <translation id="6086846494333236931">Встановлено адміністратором</translation>
 <translation id="6101226222197207147">Додано нову програму (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ваше з’єднання з Інтернетом контролюється</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Імітувати перезапуск браузера</translation>
 <translation id="6445450263907939268">Якщо ви не хочете цих змін, можна відновити попередні налаштування.</translation>
 <translation id="6447842834002726250">Cookie-файли</translation>
-<translation id="6452181791372256707">Відхилити</translation>
 <translation id="6498249116389603658">&amp;Усі мови</translation>
 <translation id="6503077044568424649">Часто відвідувані</translation>
 <translation id="6508261954199872201">Додаток: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Може переглядати й змінювати дані сайту</translation>
 <translation id="708060913198414444">&amp;Копіювати адресу аудіо</translation>
 <translation id="7175353351958621980">Завантажено з:</translation>
-<translation id="7186088072322679094">Зберегти на панелі інструментів</translation>
+<translation id="7186088072322679094">Тримати на панелі</translation>
 <translation id="7270858098575133036">Запитувати, коли сайт хоче використовувати виключні повідомлення системи, щоб отримувати доступ до пристроїв MIDI</translation>
 <translation id="7287143125007575591">У доступі відмовлено.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Це сторінка нової вкладки, яку ви очікували?</translation>
 <translation id="786073089922909430">Сервіс: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Останні місця призначення</translation>
-<translation id="7898627924844766532">Тримати на панелі</translation>
 <translation id="7903925330883316394">Службовий додаток: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Зараз не в мережі</translation>
 <translation id="7947962633355574091">&amp;Копіювати адресу відео</translation>
@@ -452,7 +445,6 @@
 <translation id="8725066075913043281">Повторити</translation>
 <translation id="8757090071857742562">Не вдається транслювати робочий стіл. Перевірте, чи ви підтвердили запит на трансляцію екрана.</translation>
 <translation id="8774934320277480003">Верхнє поле</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоче надати вам доступ до принтера &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">За умовчанням</translation>
 <translation id="8800004011501252845">Місце призначення для</translation>
 <translation id="8808478386290700967">Веб-магазин</translation>

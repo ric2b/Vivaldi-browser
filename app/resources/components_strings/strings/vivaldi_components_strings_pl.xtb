@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Dalej</translation>
 <translation id="2467694685043708798">Spróbuj przeprowadzić <ph name="BEGIN_LINK" />diagnostykę sieci<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Powiadomienia</translation>
+<translation id="2491414235131909199">Ta strona została zablokowana przez rozszerzenie</translation>
 <translation id="2501278716633472235">Przejdź wstecz</translation>
 <translation id="2539524384386349900">Wykrywaj</translation>
 <translation id="255002559098805027">Serwer <ph name="HOST_NAME" /> wysłał nieprawidłową odpowiedź.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Nie podawaj żadnych informacji poufnych (takich jak hasła czy karty kredytowe) w tej witrynie, bo osoby atakujące będą mogły je wykraść.</translation>
 <translation id="5869405914158311789">Ta strona jest nieosiągalna</translation>
 <translation id="5932224571077948991">Na tej stronie wyświetlają się uciążliwe lub wprowadzające w błąd reklamy</translation>
-<translation id="5990559369517809815">Żądania do serwera zostały zablokowane przez rozszerzenie.</translation>
 <translation id="6051221802930200923">Nie możesz teraz otworzyć strony <ph name="SITE" />, ponieważ stosuje ona przypinanie certyfikatów. Błędy sieciowe i ataki są zazwyczaj tymczasowe, więc prawdopodobnie strona będzie dostępna później.</translation>
 <translation id="6146055958333702838">Sprawdź wszystkie kable i uruchom ponownie wszelkie używane routery, modemy
     i inne urządzenia sieciowe.</translation>

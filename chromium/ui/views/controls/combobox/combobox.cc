@@ -15,6 +15,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/base/ui_base_types.h"
@@ -39,7 +40,6 @@
 #include "ui/views/controls/prefix_selector.h"
 #include "ui/views/image_model_utils.h"
 #include "ui/views/layout/layout_provider.h"
-#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/mouse_constants.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/style/typography.h"
@@ -66,13 +66,26 @@ class TransparentButton : public Button {
     button_controller()->set_notify_action(
         ButtonController::NotifyAction::kOnPress);
 
-    SetInkDropMode(InkDropMode::ON);
+    ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
     SetHasInkDropActionOnClick(true);
+    InkDrop::UseInkDropForSquareRipple(ink_drop(),
+                                       /*highlight_on_hover=*/false);
+    ink_drop()->SetCreateRippleCallback(base::BindRepeating(
+        [](Button* host) -> std::unique_ptr<views::InkDropRipple> {
+          return std::make_unique<views::FloodFillInkDropRipple>(
+              host->size(),
+              host->ink_drop()->GetInkDropCenterBasedOnLastEvent(),
+              host->GetNativeTheme()->GetSystemColor(
+                  ui::NativeTheme::kColorId_LabelEnabledColor),
+              host->ink_drop()->GetVisibleOpacity());
+        },
+        this));
   }
+
   ~TransparentButton() override = default;
 
   bool OnMousePressed(const ui::MouseEvent& mouse_event) override {
-#if !defined(OS_APPLE)
+#if !defined(OS_MAC)
     // On Mac, comboboxes do not take focus on mouse click, but on other
     // platforms they do.
     parent()->RequestFocus();
@@ -84,27 +97,11 @@ class TransparentButton : public Button {
     return hover_animation().GetCurrentValue();
   }
 
-  // Overridden from InkDropHost:
-  std::unique_ptr<InkDrop> CreateInkDrop() override {
-    std::unique_ptr<views::InkDropImpl> ink_drop = CreateDefaultInkDropImpl();
-    ink_drop->SetShowHighlightOnHover(false);
-    return std::move(ink_drop);
-  }
-
-  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override {
-    return std::unique_ptr<views::InkDropRipple>(
-        new views::FloodFillInkDropRipple(
-            size(), GetInkDropCenterBasedOnLastEvent(),
-            GetNativeTheme()->GetSystemColor(
-                ui::NativeTheme::kColorId_LabelEnabledColor),
-            GetInkDropVisibleOpacity()));
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(TransparentButton);
 };
 
-#if !defined(OS_APPLE)
+#if !defined(OS_MAC)
 // Returns the next or previous valid index (depending on |increment|'s value).
 // Skips separator or disabled indices. Returns -1 if there is no valid adjacent
 // index.
@@ -240,7 +237,7 @@ Combobox::Combobox(ui::ComboboxModel* model, int text_context, int text_style)
           base::BindRepeating(&Combobox::ArrowButtonPressed,
                               base::Unretained(this)))) {
   SetModel(model);
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 #else
   SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -273,6 +270,7 @@ const gfx::FontList& Combobox::GetFontList() const {
 void Combobox::SetSelectedIndex(int index) {
   if (selected_index_ == index)
     return;
+  // TODO(pbos): Add (D)CHECKs to validate the selected index.
   selected_index_ = index;
   if (size_to_largest_label_) {
     OnPropertyChanged(&selected_index_, kPropertyEffectsPaint);
@@ -280,6 +278,11 @@ void Combobox::SetSelectedIndex(int index) {
     content_size_ = GetContentSize();
     OnPropertyChanged(&selected_index_, kPropertyEffectsPreferredSizeChanged);
   }
+}
+
+base::CallbackListSubscription Combobox::AddSelectedIndexChangedCallback(
+    views::PropertyChangedCallback callback) {
+  return AddPropertyChangedCallback(&selected_index_, std::move(callback));
 }
 
 bool Combobox::SelectValue(const std::u16string& value) {
@@ -422,15 +425,17 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   // TODO(oshima): handle IME.
   DCHECK_EQ(e.type(), ui::ET_KEY_PRESSED);
 
+  // TODO(pbos): Do we need to handle selected_index_ == -1 for unselected here?
+  // Ditto on handling an empty model?
   DCHECK_GE(selected_index_, 0);
   DCHECK_LT(selected_index_, GetModel()->GetItemCount());
-  if (selected_index_ < 0 || selected_index_ > GetModel()->GetItemCount())
+  if (selected_index_ < 0 || selected_index_ >= GetModel()->GetItemCount())
     SetSelectedIndex(0);
 
   bool show_menu = false;
   int new_index = kNoSelection;
   switch (e.key_code()) {
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
     case ui::VKEY_DOWN:
     case ui::VKEY_UP:
     case ui::VKEY_SPACE:
@@ -476,7 +481,7 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
     case ui::VKEY_SPACE:
       show_menu = true;
       break;
-#endif  // OS_APPLE
+#endif  // OS_MAC
     default:
       return false;
   }
@@ -610,10 +615,13 @@ void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
 
   // Draw the text.
   SkColor text_color = GetTextColorForEnableState(*this, GetEnabled());
-  if (selected_index_ < 0 || selected_index_ > GetModel()->GetItemCount()) {
-    NOTREACHED();
+  // TODO(pbos): Do we need to handle selected_index_ == -1 for unselected here?
+  // Ditto on handling an empty model?
+  DCHECK_GE(selected_index_, 0);
+  DCHECK_LT(selected_index_, GetModel()->GetItemCount());
+  if (selected_index_ < 0 || selected_index_ >= GetModel()->GetItemCount())
     SetSelectedIndex(0);
-  }
+
   std::u16string text = GetModel()->GetItemAt(selected_index_);
 
   int disclosure_arrow_offset = width() - kComboboxArrowContainerWidth;

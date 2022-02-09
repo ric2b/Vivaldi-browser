@@ -20,6 +20,7 @@
 #include "base/time/tick_clock.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/client_side_detection_service.h"
+#include "components/safe_browsing/content/browser/client_side_phishing_model.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom-shared.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "components/safe_browsing/core/browser/sync/sync_utils.h"
@@ -313,6 +314,7 @@ ClientSideDetectionHost::ClientSideDetectionHost(
       is_off_the_record_(is_off_the_record),
       account_signed_in_callback_(account_signed_in_callback) {
   DCHECK(tab);
+  DCHECK(pref_service);
   // Note: csd_service_ and sb_service will be nullptr here in testing.
   csd_service_ = delegate_->GetClientSideDetectionService();
 
@@ -367,6 +369,22 @@ void ClientSideDetectionHost::DidFinishNavigation(
   classification_request_->Start();
 }
 
+void ClientSideDetectionHost::SetPhishingModel() {
+  switch (csd_service_->GetModelType()) {
+    case CSDModelType::kNone:
+    case CSDModelType::kProtobuf:
+      phishing_detector_->SetPhishingModel(
+          csd_service_->GetModelStr(),
+          csd_service_->GetVisualTfLiteModel().Duplicate());
+      return;
+    case CSDModelType::kFlatbuffer:
+      phishing_detector_->SetPhishingFlatBufferModel(
+          csd_service_->GetModelSharedMemoryRegion(),
+          csd_service_->GetVisualTfLiteModel().Duplicate());
+      return;
+  }
+}
+
 void ClientSideDetectionHost::SendModelToRenderFrame() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!web_contents() || web_contents() != tab_ || !csd_service_)
@@ -379,7 +397,7 @@ void ClientSideDetectionHost::SendModelToRenderFrame() {
       phishing_detector_.reset();
     frame->GetRemoteInterfaces()->GetInterface(
         phishing_detector_.BindNewPipeAndPassReceiver());
-    phishing_detector_->SetPhishingModel(csd_service_->GetModelStr());
+    SetPhishingModel();
   }
 }
 
@@ -398,7 +416,7 @@ void ClientSideDetectionHost::RenderFrameCreated(
     phishing_detector_.reset();
   render_frame_host->GetRemoteInterfaces()->GetInterface(
       phishing_detector_.BindNewPipeAndPassReceiver());
-  phishing_detector_->SetPhishingModel(csd_service_->GetModelStr());
+  SetPhishingModel();
 }
 
 void ClientSideDetectionHost::OnPhishingPreClassificationDone(
@@ -432,8 +450,9 @@ void ClientSideDetectionHost::PhishingDetectionDone(
   base::UmaHistogramEnumeration("SBClientPhishing.PhishingDetectorResult",
                                 result);
   if (result == mojom::PhishingDetectorResult::CLASSIFIER_NOT_READY) {
-    base::UmaHistogramEnumeration("SBClientPhishing.ClassifierNotReadyReason",
-                                  csd_service_->GetLastModelStatus());
+    base::UmaHistogramBoolean(
+        "SBClientPhishing.BrowserReadyOnClassifierNotReady",
+        ClientSidePhishingModel::GetInstance()->IsEnabled());
   }
   if (result != mojom::PhishingDetectorResult::SUCCESS)
     return;
@@ -547,7 +566,8 @@ bool ClientSideDetectionHost::CanGetAccessToken() {
   // primary user account is signed in.
   return base::FeatureList::IsEnabled(kClientSideDetectionWithToken) &&
          IsEnhancedProtectionEnabled(*pref_service_) &&
-         std::move(account_signed_in_callback_).Run();
+         !account_signed_in_callback_.is_null() &&
+         account_signed_in_callback_.Run();
 }
 
 void ClientSideDetectionHost::SendRequest(

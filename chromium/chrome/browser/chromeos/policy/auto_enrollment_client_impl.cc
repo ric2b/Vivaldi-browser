@@ -13,7 +13,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
@@ -32,6 +31,7 @@
 #include "content/public/browser/network_service_instance.h"
 #include "crypto/sha2.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/private_membership/src/private_membership_rlwe_client.h"
 #include "url/gurl.h"
 
@@ -156,9 +156,9 @@ class AutoEnrollmentClientImpl::StateDownloadMessageProcessor {
   // Parsed fields of DeviceManagementResponse.
   struct ParsedResponse {
     std::string restore_mode;
-    base::Optional<std::string> management_domain;
-    base::Optional<std::string> disabled_message;
-    base::Optional<bool> is_license_packaged_with_device;
+    absl::optional<std::string> management_domain;
+    absl::optional<std::string> disabled_message;
+    absl::optional<bool> is_license_packaged_with_device;
   };
 
   // Returns the request job type. This must match the request filled in
@@ -172,7 +172,7 @@ class AutoEnrollmentClientImpl::StateDownloadMessageProcessor {
 
   // Parses the |response|. If it is valid, returns a ParsedResponse struct
   // instance. If it is invalid, returns nullopt.
-  virtual base::Optional<ParsedResponse> ParseResponse(
+  virtual absl::optional<ParsedResponse> ParseResponse(
       const enterprise_management::DeviceManagementResponse& response) = 0;
 };
 
@@ -209,6 +209,8 @@ class PsmHelper {
           << "PSM error: unexpected internal logic error during creating "
              "PSM RLWE client";
       has_psm_error_ = true;
+      base::UmaHistogramEnumeration(kUMAPsmResult + uma_suffix_,
+                                    PsmResult::kCreateRlweClientLibraryError);
       return;
     }
 
@@ -240,9 +242,6 @@ class PsmHelper {
       return;
     }
 
-    // Report the psm attempt and start the timer to measure successful private
-    // set membership requests.
-    base::UmaHistogramEnumeration(kUMAPsmRequestStatus, PsmStatus::kAttempt);
     time_start_ = base::TimeTicks::Now();
 
     on_completion_callback_ = std::move(callback);
@@ -250,7 +249,8 @@ class PsmHelper {
     // Start the protocol and its timeout timer.
     psm_timeout_.Start(
         FROM_HERE, kPsmTimeout,
-        base::BindOnce(&PsmHelper::OnTimeout, base::Unretained(this)));
+        base::BindOnce(&PsmHelper::StoreErrorAndStop, base::Unretained(this),
+                       PsmResult::kTimeout));
     SendPsmRlweOprfRequest();
   }
 
@@ -265,14 +265,14 @@ class PsmHelper {
   // Tries to load the result of a previous execution of the PSM protocol from
   // local state. Returns decision value if it has been made and is valid,
   // otherwise nullopt.
-  base::Optional<bool> GetPsmCachedDecision() const {
+  absl::optional<bool> GetPsmCachedDecision() const {
     const PrefService::Preference* has_psm_server_state_pref =
         local_state_->FindPreference(prefs::kShouldRetrieveDeviceState);
 
     if (!has_psm_server_state_pref ||
         has_psm_server_state_pref->IsDefaultValue() ||
         !has_psm_server_state_pref->GetValue()->is_bool()) {
-      return base::nullopt;
+      return absl::nullopt;
     }
 
     return has_psm_server_state_pref->GetValue()->GetBool();
@@ -292,14 +292,10 @@ class PsmHelper {
   }
 
  private:
-  void OnTimeout() {
-    base::UmaHistogramEnumeration(kUMAPsmRequestStatus, PsmStatus::kTimeout);
-    StoreErrorAndStop();
-  }
-
-  void StoreErrorAndStop() {
-    // Record the error. Note that a timeout is also recorded as error.
-    base::UmaHistogramEnumeration(kUMAPsmRequestStatus, PsmStatus::kError);
+  void StoreErrorAndStop(PsmResult psm_result) {
+    // Note that kUMAPsmResult histogram is only using initial enrollment as a
+    // suffix until PSM support FRE.
+    base::UmaHistogramEnumeration(kUMAPsmResult + uma_suffix_, psm_result);
 
     // Stop the PSM timer.
     psm_timeout_.Stop();
@@ -323,7 +319,7 @@ class PsmHelper {
       LOG(ERROR)
           << "PSM error: unexpected internal logic error during creating "
              "RLWE OPRF request";
-      StoreErrorAndStop();
+      StoreErrorAndStop(PsmResult::kCreateOprfRequestLibraryError);
       return;
     }
 
@@ -354,6 +350,9 @@ class PsmHelper {
       const em::DeviceManagementResponse& response) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+    base::UmaHistogramSparse(kUMAPsmDmServerRequestStatus + uma_suffix_,
+                             status);
+
     switch (status) {
       case DM_STATUS_SUCCESS: {
         // Check if the RLWE OPRF response is empty.
@@ -362,7 +361,7 @@ class PsmHelper {
                  .rlwe_response()
                  .has_oprf_response()) {
           LOG(ERROR) << "PSM error: empty OPRF RLWE response";
-          StoreErrorAndStop();
+          StoreErrorAndStop(PsmResult::kEmptyOprfResponseError);
           return;
         }
 
@@ -373,12 +372,14 @@ class PsmHelper {
       case DM_STATUS_REQUEST_FAILED: {
         LOG(ERROR)
             << "PSM error: RLWE OPRF request failed due to connection error";
-        StoreErrorAndStop();
+        base::UmaHistogramSparse(kUMAPsmNetworkErrorCode + uma_suffix_,
+                                 -net_error);
+        StoreErrorAndStop(PsmResult::kConnectionError);
         return;
       }
       default: {
         LOG(ERROR) << "PSM error: RLWE OPRF request failed due to server error";
-        StoreErrorAndStop();
+        StoreErrorAndStop(PsmResult::kServerError);
         return;
       }
     }
@@ -401,7 +402,7 @@ class PsmHelper {
       LOG(ERROR)
           << "PSM error: unexpected internal logic error during creating "
              "RLWE query request";
-      StoreErrorAndStop();
+      StoreErrorAndStop(PsmResult::kCreateQueryRequestLibraryError);
       return;
     }
 
@@ -433,6 +434,9 @@ class PsmHelper {
       const em::DeviceManagementResponse& response) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+    base::UmaHistogramSparse(kUMAPsmDmServerRequestStatus + uma_suffix_,
+                             status);
+
     switch (status) {
       case DM_STATUS_SUCCESS: {
         // Check if the RLWE query response is empty.
@@ -441,7 +445,7 @@ class PsmHelper {
                  .rlwe_response()
                  .has_query_response()) {
           LOG(ERROR) << "PSM error: empty query RLWE response";
-          StoreErrorAndStop();
+          StoreErrorAndStop(PsmResult::kEmptyQueryResponseError);
           return;
         }
 
@@ -459,14 +463,14 @@ class PsmHelper {
           LOG(ERROR) << "PSM error: unexpected internal logic error during "
                         "processing the "
                         "RLWE query response";
-          StoreErrorAndStop();
+          StoreErrorAndStop(PsmResult::kProcessingQueryResponseLibraryError);
           return;
         }
 
         LOG(WARNING) << "PSM query request completed successfully";
 
-        base::UmaHistogramEnumeration(kUMAPsmRequestStatus,
-                                      PsmStatus::kSuccessfulDetermination);
+        base::UmaHistogramEnumeration(kUMAPsmResult + uma_suffix_,
+                                      PsmResult::kSuccessfulDetermination);
         RecordPsmSuccessTimeHistogram();
 
         // The RLWE query response has been processed successfully. Extract
@@ -499,13 +503,15 @@ class PsmHelper {
       case DM_STATUS_REQUEST_FAILED: {
         LOG(ERROR)
             << "PSM error: RLWE query request failed due to connection error";
-        StoreErrorAndStop();
+        base::UmaHistogramSparse(kUMAPsmNetworkErrorCode + uma_suffix_,
+                                 -net_error);
+        StoreErrorAndStop(PsmResult::kConnectionError);
         return;
       }
       default: {
         LOG(ERROR)
             << "PSM error: RLWE query request failed due to server error";
-        StoreErrorAndStop();
+        StoreErrorAndStop(PsmResult::kServerError);
         return;
       }
     }
@@ -521,7 +527,7 @@ class PsmHelper {
             TYPE_PSM_HAS_DEVICE_STATE_REQUEST,
         random_device_id_,
         /*critical=*/true, DMAuth::NoAuth(),
-        /*oauth_token=*/base::nullopt, url_loader_factory_,
+        /*oauth_token=*/absl::nullopt, url_loader_factory_,
         std::move(callback));
   }
 
@@ -577,6 +583,10 @@ class PsmHelper {
 
   // The time when the PSM request started.
   base::TimeTicks time_start_;
+
+  // The UMA histogram suffix. It's set only to ".InitialEnrollment" for an
+  // |AutoEnrollmentClient| until PSM will support FRE.
+  const std::string uma_suffix_ = kUMAHashDanceSuffixInitialEnrollment;
 
   // A sequence checker to prevent the race condition of having the possibility
   // of the destructor being called and any of the callbacks.
@@ -664,18 +674,18 @@ class StateDownloadMessageProcessorInitialEnrollment
     inner_request->set_serial_number(device_serial_number_);
   }
 
-  base::Optional<ParsedResponse> ParseResponse(
+  absl::optional<ParsedResponse> ParseResponse(
       const em::DeviceManagementResponse& response) override {
     if (!response.has_device_initial_enrollment_state_response()) {
       LOG(ERROR) << "Server failed to provide initial enrollment response.";
-      return base::nullopt;
+      return absl::nullopt;
     }
 
     return ParseInitialEnrollmentStateResponse(
         response.device_initial_enrollment_state_response());
   }
 
-  static base::Optional<ParsedResponse> ParseInitialEnrollmentStateResponse(
+  static absl::optional<ParsedResponse> ParseInitialEnrollmentStateResponse(
       const em::DeviceInitialEnrollmentStateResponse& state_response) {
     StateDownloadMessageProcessor::ParsedResponse parsed_response;
 
@@ -738,11 +748,11 @@ class StateDownloadMessageProcessorFRE
         ->set_server_backed_state_key(server_backed_state_key_);
   }
 
-  base::Optional<ParsedResponse> ParseResponse(
+  absl::optional<ParsedResponse> ParseResponse(
       const em::DeviceManagementResponse& response) override {
     if (!response.has_device_state_retrieval_response()) {
       LOG(ERROR) << "Server failed to provide auto-enrollment response.";
-      return base::nullopt;
+      return absl::nullopt;
     }
 
     const em::DeviceStateRetrievalResponse& state_response =
@@ -809,7 +819,7 @@ AutoEnrollmentClientImpl::FactoryImpl::CreateForFRE(
       std::make_unique<StateDownloadMessageProcessorFRE>(
           server_backed_state_key),
       power_initial, power_limit,
-      /*power_outdated_server_detect=*/base::nullopt, kUMAHashDanceSuffixFRE,
+      /*power_outdated_server_detect=*/absl::nullopt, kUMAHashDanceSuffixFRE,
       /*private_set_membership_helper=*/nullptr));
 }
 
@@ -832,9 +842,9 @@ AutoEnrollmentClientImpl::FactoryImpl::CreateForInitialEnrollment(
       std::make_unique<StateDownloadMessageProcessorInitialEnrollment>(
           device_serial_number, device_brand_code),
       power_initial, power_limit,
-      base::make_optional(power_outdated_server_detect),
+      absl::make_optional(power_outdated_server_detect),
       kUMAHashDanceSuffixInitialEnrollment,
-      chromeos::AutoEnrollmentController::IsPsmEnabled()
+      ash::AutoEnrollmentController::IsPsmEnabled()
           ? std::make_unique<PsmHelper>(
                 device_management_service, url_loader_factory, local_state,
                 ConstructDeviceRlweId(device_serial_number, device_brand_code))
@@ -913,7 +923,7 @@ AutoEnrollmentClientImpl::AutoEnrollmentClientImpl(
         state_download_message_processor,
     int power_initial,
     int power_limit,
-    base::Optional<int> power_outdated_server_detect,
+    absl::optional<int> power_outdated_server_detect,
     std::string uma_suffix,
     std::unique_ptr<PsmHelper> private_set_membership_helper)
     : progress_callback_(callback),
@@ -943,13 +953,12 @@ bool AutoEnrollmentClientImpl::GetCachedDecision() {
       local_state_->FindPreference(prefs::kShouldAutoEnroll);
   const PrefService::Preference* previous_limit_pref =
       local_state_->FindPreference(prefs::kAutoEnrollmentPowerLimit);
-  int previous_limit = -1;
 
   if (!has_server_state_pref || has_server_state_pref->IsDefaultValue() ||
       !has_server_state_pref->GetValue()->is_bool() || !previous_limit_pref ||
       previous_limit_pref->IsDefaultValue() ||
-      !previous_limit_pref->GetValue()->GetAsInteger(&previous_limit) ||
-      power_limit_ > previous_limit) {
+      !previous_limit_pref->GetValue()->is_int() ||
+      power_limit_ > previous_limit_pref->GetValue()->GetInt()) {
     return false;
   }
 
@@ -996,7 +1005,7 @@ bool AutoEnrollmentClientImpl::PsmRetryStep() {
   if (psm_helper_->IsCheckMembershipInProgress())
     return true;
 
-  const base::Optional<bool> private_set_membership_server_state =
+  const absl::optional<bool> private_set_membership_server_state =
       psm_helper_->GetPsmCachedDecision();
 
   if (private_set_membership_server_state.has_value()) {
@@ -1098,7 +1107,7 @@ void AutoEnrollmentClientImpl::SendBucketDownloadRequest() {
       policy::DeviceManagementService::JobConfiguration::TYPE_AUTO_ENROLLMENT,
       device_id_,
       /*critical=*/false, DMAuth::NoAuth(),
-      /*oauth_token=*/base::nullopt, url_loader_factory_,
+      /*oauth_token=*/absl::nullopt, url_loader_factory_,
       base::BindOnce(
           &AutoEnrollmentClientImpl::HandleRequestCompletion,
           base::Unretained(this),
@@ -1122,7 +1131,7 @@ void AutoEnrollmentClientImpl::SendDeviceStateRequest() {
           device_management_service_,
           state_download_message_processor_->GetJobType(), device_id_,
           /*critical=*/false, DMAuth::NoAuth(),
-          /*oauth_token=*/base::nullopt, url_loader_factory_,
+          /*oauth_token=*/absl::nullopt, url_loader_factory_,
           base::BindRepeating(
               &AutoEnrollmentClientImpl::HandleRequestCompletion,
               base::Unretained(this),
@@ -1248,7 +1257,7 @@ bool AutoEnrollmentClientImpl::OnDeviceStateRequestCompletion(
     DeviceManagementStatus status,
     int net_error,
     const em::DeviceManagementResponse& response) {
-  base::Optional<StateDownloadMessageProcessor::ParsedResponse>
+  absl::optional<StateDownloadMessageProcessor::ParsedResponse>
       parsed_response_opt;
 
   parsed_response_opt =
@@ -1374,7 +1383,7 @@ void AutoEnrollmentClientImpl::RecordPsmHashDanceComparison() {
 
   auto comparison = PsmHashDanceComparison::kEqualResults;
   if (!hash_dance_error && !psm_error) {
-    base::Optional<bool> psm_decision = psm_helper_->GetPsmCachedDecision();
+    absl::optional<bool> psm_decision = psm_helper_->GetPsmCachedDecision();
 
     // There was no error and this function is only invoked after PSM has been
     // performed, so there must be a decision.

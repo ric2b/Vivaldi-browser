@@ -41,6 +41,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+
 /**
  * App menu properties delegate for {@link CustomTabActivity}.
  */
@@ -176,6 +178,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             }
 
             boolean isChromeScheme = url.getScheme().equals(UrlConstants.CHROME_SCHEME)
+                    || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_SCHEME)
+                    || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME)
                     || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
             if (isChromeScheme || url.isEmpty()) {
                 addToHomeScreenVisible = false;

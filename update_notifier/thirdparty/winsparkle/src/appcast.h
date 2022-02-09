@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 class Error;
 
@@ -104,6 +104,6 @@ struct Appcast {
   std::vector<Delta> Deltas;
 };
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_APPCAST_H_

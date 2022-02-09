@@ -805,7 +805,7 @@ void ArcSessionImpl::StopArcInstance(bool on_shutdown, bool should_backup_log) {
   client_->StopArcInstance(on_shutdown, should_backup_log);
 }
 
-void ArcSessionImpl::ArcInstanceStopped() {
+void ArcSessionImpl::ArcInstanceStopped(bool is_system_shutdown) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_NE(state_, State::STARTING_MINI_INSTANCE);
   VLOG(1) << "Notified that ARC instance is stopped";
@@ -815,9 +815,9 @@ void ArcSessionImpl::ArcInstanceStopped() {
   accept_cancel_pipe_.reset();
 
   ArcStopReason reason;
-  if (stop_requested_) {
-    // If the ARC instance is stopped after its explicit request,
-    // return SHUTDOWN.
+  if (stop_requested_ || is_system_shutdown) {
+    // If the ARC instance is stopped after its explicit request or as part of
+    // system shutdown, return SHUTDOWN.
     reason = ArcStopReason::SHUTDOWN;
   } else if (insufficient_disk_space_) {
     // ARC mini container is stopped because of upgarde failure due to low
@@ -893,6 +893,11 @@ void ArcSessionImpl::SetDemoModeDelegate(
     ArcClientAdapter::DemoModeDelegate* delegate) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   client_->SetDemoModeDelegate(delegate);
+}
+
+void ArcSessionImpl::TrimVmMemory(TrimVmMemoryCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  client_->TrimVmMemory(std::move(callback));
 }
 
 void ArcSessionImpl::OnConfigurationSet(bool success,

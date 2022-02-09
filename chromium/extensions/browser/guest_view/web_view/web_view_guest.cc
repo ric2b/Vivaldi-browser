@@ -533,16 +533,13 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
 
       // Set the owners blobregistry as fallback when accessing blob-urls.
       StoragePartition* partition =
-          content::BrowserContext::GetStoragePartition(
-              contentsimpl->GetBrowserContext(),
+          contentsimpl->GetBrowserContext()->GetStoragePartition(
               contentsimpl->GetSiteInstance());
 
       StoragePartition* owner_partition =
-          content::BrowserContext::GetStoragePartition(
-              Profile::FromBrowserContext(
-                  owner_web_contents()->GetBrowserContext())
-                  ->GetOriginalProfile(),
-              owner_web_contents()->GetSiteInstance());
+          Profile::FromBrowserContext(owner_web_contents()->GetBrowserContext())
+              ->GetOriginalProfile()
+              ->GetStoragePartition(owner_web_contents()->GetSiteInstance());
 
       static_cast<content::StoragePartitionImpl*>(partition)
           ->UpdateBlobRegistryWithParentAsFallback(
@@ -765,8 +762,7 @@ void WebViewGuest::ClearCodeCache(base::Time remove_since,
                                   uint32_t removal_mask,
                                   base::OnceClosure callback) {
   content::StoragePartition* partition =
-      content::BrowserContext::GetStoragePartition(
-          web_contents()->GetBrowserContext(),
+      web_contents()->GetBrowserContext()->GetStoragePartition(
           web_contents()->GetSiteInstance());
   DCHECK(partition);
   base::OnceClosure code_cache_removal_done_callback = base::BindOnce(
@@ -812,8 +808,7 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
   bool perform_cleanup = remove_since.is_null();
 
   content::StoragePartition* partition =
-      content::BrowserContext::GetStoragePartition(
-          web_contents()->GetBrowserContext(),
+      web_contents()->GetBrowserContext()->GetStoragePartition(
           web_contents()->GetSiteInstance());
   partition->ClearData(
       storage_partition_removal_mask,
@@ -1139,8 +1134,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
                              base::OnceClosure callback) {
   base::RecordAction(UserMetricsAction("WebView.Guest.ClearData"));
   content::StoragePartition* partition =
-      content::BrowserContext::GetStoragePartition(
-          web_contents()->GetBrowserContext(),
+      web_contents()->GetBrowserContext()->GetStoragePartition(
           web_contents()->GetSiteInstance());
 
   if (!partition)
@@ -1381,7 +1375,7 @@ void WebViewGuest::OnDidAddMessageToConsole(
     const std::u16string& message,
     int32_t line_no,
     const std::u16string& source_id,
-    const base::Optional<std::u16string>& untrusted_stack_trace) {
+    const absl::optional<std::u16string>& untrusted_stack_trace) {
   auto args = std::make_unique<base::DictionaryValue>();
   // Log levels are from base/logging.h: LogSeverity.
   args->SetInteger(webview::kLevel,

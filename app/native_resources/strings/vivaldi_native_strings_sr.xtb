@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Пошаљи везу поштом</translation>
 <translation id="1454726940098520109">Не приказуј поново потврду</translation>
 <translation id="1462666970065907900">Да ли заиста желите да затворите овај прозор?</translation>
+<translation id="1480046233931937785">Заслуге</translation>
 <translation id="1526344461589023948">Дошло је до грешке приликом покушаја чувања преузетог ажурирања. Проверите да ли рачунар има довољно простора на диску и покушајте поново касније.</translation>
 <translation id="1657174850639146440">Чудовиште 9</translation>
 <translation id="1676595396635191120">Нови приватни прозор</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Отвори у новој картици</translation>
 <translation id="3027988479108856431">На жалост, подешавања Yandex прегледача нису доступна док је прегледач покренут. За увоз тих подешавања у Vivaldi, сачувајте ваш рад и затворите све прозоре Yandex прегледача. Након тога кликните на Настави.</translation>
 <translation id="3084011186245865060">Пејзаж 6</translation>
+<translation id="3093931836425623631">Vivaldi су омогућили пројекат отвореног кода Chromium и други софтвер отвореног кода.</translation>
 <translation id="3127383884976966729">Животиња 7</translation>
 <translation id="3156398087075132709">Нови обележивач</translation>
 <translation id="3255747772218936245">Инсталирај ажурирање</translation>
@@ -127,14 +129,13 @@
 <translation id="7086554968911045110">Пејзаж 7</translation>
 <translation id="7111492742514999492">Пејзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi прегледач су омогућили пројекат отвореног кода <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и други <ph name="BEGIN_LINK_OSS" />софтвер отвореног кода<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Покретање програма за ажурирање није успело. Проверите да ли рачунар има довољно меморије или простора на диску и покушајте поново касније.</translation>
 <translation id="7658239707568436148">Откажи</translation>
 <translation id="7715497554424665066">&amp;Занемари ажурирање</translation>
 <translation id="7724603315864178912">Исеци</translation>
-<translation id="7727481996062361502">Потврђивање ажурирања...</translation>
+<translation id="7727481996062361502">Верификација ажурирања...</translation>
 <translation id="7793738202466490491">Додај као догађај календара</translation>
-<translation id="7848222781052558334">Потврда дигиталног потписа преузетих датотека није успела.</translation>
+<translation id="7848222781052558334">Верификација дигиталног потписа преузетих датотека није успела.</translation>
 <translation id="7865983598101744945">Потврда затварања прегледача</translation>
 <translation id="7957213167373139414">Мој календар</translation>
 <translation id="8027581147000338959">Отвори у новом прозору</translation>

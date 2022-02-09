@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/containers/contains.h"
-#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,6 +32,7 @@
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_builder.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/display/test/scoped_screen_override.h"
 #include "ui/display/test/test_screen.h"
 
@@ -166,6 +166,7 @@ TEST_F(TabsApiUnitTest, IsTabStripEditable) {
         function.get(), args, browser(), api_test_utils::NONE));
   }
 
+  // Start logical drag.
   browser_window()->SetIsTabStripEditable(false);
   ASSERT_FALSE(browser_window()->IsTabStripEditable());
 
@@ -182,6 +183,26 @@ TEST_F(TabsApiUnitTest, IsTabStripEditable) {
             function.get(), args, browser(), api_test_utils::NONE));
     EXPECT_TRUE(value && value->is_dict());
     EXPECT_EQ(*value->FindStringKey("pendingUrl"), url);
+  }
+
+  // Succeed while edit in progress and calling chrome.tabs.query.
+  {
+    const char* args = "[{}]";
+    scoped_refptr<TabsQueryFunction> function =
+        base::MakeRefCounted<TabsQueryFunction>();
+    function->set_extension(extension);
+    ASSERT_TRUE(extension_function_test_utils::RunFunction(
+        function.get(), args, browser(), api_test_utils::NONE));
+  }
+
+  // Succeed while edit in progress and calling chrome.tabs.get.
+  {
+    std::string args = base::StringPrintf("[%d]", tab_ids[0]);
+    scoped_refptr<TabsGetFunction> function =
+        base::MakeRefCounted<TabsGetFunction>();
+    function->set_extension(extension);
+    ASSERT_TRUE(extension_function_test_utils::RunFunction(
+        function.get(), args, browser(), api_test_utils::NONE));
   }
 
   // Bug fix for crbug.com/1198717. Error updating tabs while drag in progress.
@@ -219,21 +240,9 @@ TEST_F(TabsApiUnitTest, IsTabStripEditable) {
     EXPECT_EQ(tabs_constants::kTabStripNotEditableError, error);
   }
 
-  // Bug fix for crbug.com/1197888. Disable query during any tab drag to ensure
-  // that the result matches the eventual state of the tab strip.
-  {
-    const char* args = "[{}]";
-    scoped_refptr<TabsQueryFunction> function =
-        base::MakeRefCounted<TabsQueryFunction>();
-    function->set_extension(extension);
-    std::string error =
-        extension_function_test_utils::RunFunctionAndReturnError(
-            function.get(), args, browser());
-    EXPECT_EQ(tabs_constants::kTabStripNotEditableQueryError, error);
-  }
-
   // TODO(solomonkinard): Consider adding tests for drag cancellation.
 
+  // Clean up.
   while (!browser()->tab_strip_model()->empty())
     browser()->tab_strip_model()->DetachWebContentsAt(0);
 }
@@ -417,7 +426,6 @@ TEST_F(TabsApiUnitTest, PDFExtensionNavigation) {
 
   scoped_refptr<TabsUpdateFunction> function = new TabsUpdateFunction();
   function->set_extension(extension.get());
-  function->set_browser_context(profile());
   std::unique_ptr<base::ListValue> args(
       extension_function_test_utils::ParseList(
           base::StringPrintf(R"([%d, {"url":"http://example.com"}])", tab_id)));
@@ -690,7 +698,7 @@ TEST_F(TabsApiUnitTest, TabsGroupWithinWindow) {
   EXPECT_EQ(tab_strip_model->GetWebContentsAt(3), web_contentses[1]);
   EXPECT_EQ(tab_strip_model->GetWebContentsAt(4), web_contentses[3]);
 
-  base::Optional<tab_groups::TabGroupId> group =
+  absl::optional<tab_groups::TabGroupId> group =
       tab_strip_model->GetTabGroupForTab(0);
   EXPECT_TRUE(group.has_value());
   EXPECT_EQ(group, tab_strip_model->GetTabGroupForTab(1));
@@ -742,7 +750,7 @@ TEST_F(TabsApiUnitTest, TabsGroupMixedTabIds) {
   EXPECT_EQ(tab_strip_model->GetWebContentsAt(3), web_contentses[3]);
   EXPECT_EQ(tab_strip_model->GetWebContentsAt(4), web_contentses[4]);
 
-  base::Optional<tab_groups::TabGroupId> group =
+  absl::optional<tab_groups::TabGroupId> group =
       tab_strip_model->GetTabGroupForTab(1);
   EXPECT_TRUE(group.has_value());
   EXPECT_FALSE(tab_strip_model->GetTabGroupForTab(0));

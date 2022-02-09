@@ -11,7 +11,8 @@
 
 namespace media {
 
-IPCDecodingBuffer::Impl::Impl(PlatformMediaDataType type) : type(type) {}
+IPCDecodingBuffer::Impl::Impl(PlatformStreamType stream_type)
+    : stream_type(stream_type) {}
 
 IPCDecodingBuffer::Impl::~Impl() = default;
 
@@ -26,14 +27,14 @@ void IPCDecodingBuffer::Reply(IPCDecodingBuffer buffer) {
   reply_cb.Run(std::move(buffer));
 }
 
-void IPCDecodingBuffer::Init(PlatformMediaDataType type) {
+void IPCDecodingBuffer::Init(PlatformStreamType stream_type) {
   // Init should not be called twice.
   DCHECK(!impl_);
-  impl_ = std::make_unique<Impl>(type);
+  impl_ = std::make_unique<Impl>(stream_type);
 }
 
 PlatformAudioConfig& IPCDecodingBuffer::GetAudioConfig() {
-  DCHECK(impl_->type == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO);
+  DCHECK(impl_->stream_type == PlatformStreamType::kAudio);
   if (!impl_->audio_config) {
     impl_->audio_config = std::make_unique<PlatformAudioConfig>();
   }
@@ -41,7 +42,7 @@ PlatformAudioConfig& IPCDecodingBuffer::GetAudioConfig() {
 }
 
 PlatformVideoConfig& IPCDecodingBuffer::GetVideoConfig() {
-  DCHECK(impl_->type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO);
+  DCHECK(impl_->stream_type == PlatformStreamType::kVideo);
   if (!impl_->video_config) {
     impl_->video_config = std::make_unique<PlatformVideoConfig>();
   }

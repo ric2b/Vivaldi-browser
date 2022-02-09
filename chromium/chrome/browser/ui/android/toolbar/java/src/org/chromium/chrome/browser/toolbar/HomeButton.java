@@ -24,6 +24,7 @@ import org.chromium.ui.widget.ChromeImageButton;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+
 /**
  * The home button.
  * TODO(crbug.com/1056422): Fix the visibility bug on NTP.

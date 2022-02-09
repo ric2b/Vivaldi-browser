@@ -133,6 +133,15 @@ bool SwapNewChromeExeIfPresent() {
   if (!IsUpdatePendingRestart())
     return false;
 
+  std::wstring rename_cmd;
+  if (installer::kVivaldi) {
+    // TODO(igor@vivaldi): implement this properly for system installs, see
+    // VB-80760.
+    rename_cmd = vivaldi::GetNewUpdateFinalizeCommand();
+    if (rename_cmd.empty())
+      return true;
+  } else {
+    // clang-format off
   // If this is a system-level install, ask Google Update to launch an elevated
   // process to rename Chrome executables.
   if (install_static::IsSystemInstall())
@@ -150,13 +159,6 @@ bool SwapNewChromeExeIfPresent() {
     return false;
   }
 
-  std::wstring rename_cmd;
-  if (installer::kVivaldi) {
-    rename_cmd = vivaldi::GetNewUpdateFinalizeCommand();
-    if (rename_cmd.empty())
-      return true;
-  } else {
-    // clang-format off
   result = key.ReadValue(google_update::kRegRenameCmdField, &rename_cmd);
   if (result != ERROR_SUCCESS) {
     ::SetLastError(result);

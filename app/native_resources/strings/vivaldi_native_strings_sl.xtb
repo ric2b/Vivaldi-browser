@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Pošljite povezavo po e-pošti</translation>
 <translation id="1454726940098520109">Ne pokaži več potrditve</translation>
 <translation id="1462666970065907900">Ali zares želite zapreti to okno?</translation>
+<translation id="1480046233931937785">Zasluge</translation>
 <translation id="1526344461589023948">Med poskusom shranjevanja prenesene posodobitve je prišlo do napake. Preverite, ali ima računalnik dovolj prostora na disku, in poskusite znova pozneje.</translation>
 <translation id="1657174850639146440">Pošast 9</translation>
 <translation id="1676595396635191120">Novo zasebno okno</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Odpri v novem zavihku</translation>
 <translation id="3027988479108856431">Na žalost vaše nastavitve Yandex niso na voljo med delovanjem brskalnika. Če želite te nastavitve uvažati v Vivaldi, shranite svoje delo in zaprite vsa okna Yandex. Nato kliknite Nadaljuj.</translation>
 <translation id="3084011186245865060">Pokrajina 6</translation>
+<translation id="3093931836425623631">Vivaldi omogočajo odprtokodni projekt Chromium in druga odprtokodna programska oprema.</translation>
 <translation id="3127383884976966729">Žival 7</translation>
 <translation id="3156398087075132709">Nov zaznamek</translation>
 <translation id="3255747772218936245">Namesti posodobitev</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Pokrajina 7</translation>
 <translation id="7111492742514999492">Pokrajina 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi omogoča <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> odprtokodni projekt in druga <ph name="BEGIN_LINK_OSS" /> odprtokodna programska oprema<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Namestitve posodobitve ni uspelo zagnati. Preverite, ali ima računalnik dovolj pomnilnika ali prostora na disku, in poskusite znova pozneje.</translation>
 <translation id="7658239707568436148">Prekliči</translation>
 <translation id="7715497554424665066">&amp;Prezri posodobitev</translation>

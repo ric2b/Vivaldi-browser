@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">通過郵件傳送連結</translation>
 <translation id="1454726940098520109">不再顯示確認對話方塊</translation>
 <translation id="1462666970065907900">您確定要關閉這個視窗嗎？</translation>
+<translation id="1480046233931937785">製作群</translation>
 <translation id="1526344461589023948">嘗試儲存下載的更新檔時發生錯誤，請檢查電腦有足夠硬碟空間並稍後再試。</translation>
 <translation id="1657174850639146440">怪獸 9</translation>
 <translation id="1676595396635191120">新增無痕視窗</translation>
@@ -23,7 +24,7 @@
 <translation id="1924750141060565109">風景 15</translation>
 <translation id="19598411548897379">一般</translation>
 <translation id="1985669426322966465">軟體更新</translation>
-<translation id="2079036669923635404">點擊此處升級 Vivaldi 至 <ph name="VERSION" /> 版。</translation>
+<translation id="2079036669923635404">按這裡升級為Vivaldi <ph name="VERSION" /> 版。</translation>
 <translation id="2141974047387702305">下載檔案時發生錯誤，請檢查你的網路連線並稍後再試。</translation>
 <translation id="2339641773402824483">檢查更新中...</translation>
 <translation id="2441056087170876076">怪獸 2</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">在新分頁開啟</translation>
 <translation id="3027988479108856431">真遺憾，您的 Yandex 設定在瀏覽器運行時不可用。 要將這些設定導入 Vivaldi，請保存您的工作並關閉所有 Yandex 視窗， 然後點擊繼續。</translation>
 <translation id="3084011186245865060">風景 6</translation>
+<translation id="3093931836425623631">Chromium開放原始碼專案及其他開源軟體讓 Vivaldi成為可能。</translation>
 <translation id="3127383884976966729">動物 7</translation>
 <translation id="3156398087075132709">新增書籤</translation>
 <translation id="3255747772218936245">安裝更新</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">風景 7</translation>
 <translation id="7111492742514999492">風景 9</translation>
 <translation id="7337881442233988129">Chromium 瀏覽器</translation>
-<translation id="7496505986576158197">Vivaldi 的誕生離不開 <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> 開放原始碼項目以及其他 <ph name="BEGIN_LINK_OSS" />開放原始碼軟體<ph name="END_LINK_OSS" />。</translation>
 <translation id="7581266044164103589">啟動更新安裝程式失敗，請檢查電腦有足夠記憶體或硬碟空間並稍後再試。</translation>
 <translation id="7658239707568436148">取消</translation>
 <translation id="7715497554424665066">忽略更新(&amp;I)</translation>

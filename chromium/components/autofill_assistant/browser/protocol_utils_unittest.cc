@@ -5,11 +5,11 @@
 #include "components/autofill_assistant/browser/protocol_utils.h"
 
 #include "base/macros.h"
-#include "base/optional.h"
 #include "components/autofill_assistant/browser/selector.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace autofill_assistant {
@@ -17,7 +17,9 @@ namespace autofill_assistant {
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::IsEmpty;
+using ::testing::Ne;
 using ::testing::Not;
+using ::testing::Optional;
 using ::testing::Pair;
 using ::testing::Pointee;
 using ::testing::Property;
@@ -121,7 +123,7 @@ TEST_F(ProtocolUtilsTest, CreateInitialScriptActionsRequest) {
       request.ParseFromString(ProtocolUtils::CreateInitialScriptActionsRequest(
           "script_path", GURL("http://example.com/"), "global_payload",
           "script_payload", client_context_proto_, parameters,
-          base::Optional<ScriptStoreConfig>(config))));
+          absl::optional<ScriptStoreConfig>(config))));
 
   const InitialScriptActionsRequestProto& initial = request.initial_request();
   EXPECT_THAT(initial.query().script_path(), ElementsAre("script_path"));
@@ -324,10 +326,11 @@ TEST_F(ProtocolUtilsTest, ParseTriggerScriptsParseError) {
   std::vector<std::unique_ptr<TriggerScript>> trigger_scripts;
   std::vector<std::string> additional_allowed_domains;
   int interval_ms;
-  base::Optional<int> timeout_ms;
-  EXPECT_FALSE(ProtocolUtils::ParseTriggerScripts("invalid", &trigger_scripts,
-                                                  &additional_allowed_domains,
-                                                  &interval_ms, &timeout_ms));
+  absl::optional<int> timeout_ms;
+  absl::optional<std::unique_ptr<ScriptParameters>> script_parameters;
+  EXPECT_FALSE(ProtocolUtils::ParseTriggerScripts(
+      "invalid", &trigger_scripts, &additional_allowed_domains, &interval_ms,
+      &timeout_ms, &script_parameters));
   EXPECT_TRUE(trigger_scripts.empty());
 }
 
@@ -340,7 +343,7 @@ TEST_F(ProtocolUtilsTest, CreateGetTriggerScriptsRequest) {
           GURL("http://example.com/"), client_context_proto_, parameters)));
 
   AssertClientContext(request.client_context());
-  EXPECT_THAT(request.debug_script_parameters(),
+  EXPECT_THAT(request.script_parameters(),
               UnorderedElementsAreArray(
                   ScriptParameters(std::map<std::string, std::string>{
                                        {"DEBUG_BUNDLE_ID", "123"}})
@@ -356,6 +359,13 @@ TEST_F(ProtocolUtilsTest, ParseTriggerScriptsValid) {
   proto.set_trigger_condition_check_interval_ms(2000);
   proto.set_timeout_ms(500000);
 
+  auto* param_1 = proto.add_script_parameters();
+  param_1->set_name("param_1");
+  param_1->set_value("value_1");
+  auto* param_2 = proto.add_script_parameters();
+  param_2->set_name("param_2");
+  param_2->set_value("value_2");
+
   TriggerScriptProto trigger_script_1;
   *trigger_script_1.mutable_trigger_condition()->mutable_selector() =
       ToSelectorProto("fake_element_1");
@@ -370,10 +380,11 @@ TEST_F(ProtocolUtilsTest, ParseTriggerScriptsValid) {
   std::vector<std::unique_ptr<TriggerScript>> trigger_scripts;
   std::vector<std::string> additional_allowed_domains;
   int interval_ms;
-  base::Optional<int> timeout_ms;
-  EXPECT_TRUE(ProtocolUtils::ParseTriggerScripts(proto_str, &trigger_scripts,
-                                                 &additional_allowed_domains,
-                                                 &interval_ms, &timeout_ms));
+  absl::optional<int> timeout_ms;
+  absl::optional<std::unique_ptr<ScriptParameters>> script_parameters;
+  EXPECT_TRUE(ProtocolUtils::ParseTriggerScripts(
+      proto_str, &trigger_scripts, &additional_allowed_domains, &interval_ms,
+      &timeout_ms, &script_parameters));
   EXPECT_THAT(
       trigger_scripts,
       ElementsAre(
@@ -383,6 +394,12 @@ TEST_F(ProtocolUtilsTest, ParseTriggerScriptsValid) {
               ElementsAre("example.com", "other-example.com"));
   EXPECT_EQ(interval_ms, 2000);
   EXPECT_EQ(timeout_ms, 500000);
+  ASSERT_THAT(script_parameters, Ne(absl::nullopt));
+  EXPECT_THAT((*script_parameters)
+                  ->ToProto(
+                      /* only_trigger_script_allowlisted = */ false),
+              ElementsAre(std::make_pair("param_1", "value_1"),
+                          std::make_pair("param_2", "value_2")));
 }
 
 TEST_F(ProtocolUtilsTest, TurnOffResizeVisualViewport) {
@@ -401,11 +418,11 @@ TEST_F(ProtocolUtilsTest, TurnOffResizeVisualViewport) {
   std::vector<std::unique_ptr<TriggerScript>> trigger_scripts;
   std::vector<std::string> additional_allowed_domains;
   int interval_ms;
-  base::Optional<int> timeout_ms;
-
-  EXPECT_TRUE(ProtocolUtils::ParseTriggerScripts(proto_str, &trigger_scripts,
-                                                 &additional_allowed_domains,
-                                                 &interval_ms, &timeout_ms));
+  absl::optional<int> timeout_ms;
+  absl::optional<std::unique_ptr<ScriptParameters>> script_parameters;
+  EXPECT_TRUE(ProtocolUtils::ParseTriggerScripts(
+      proto_str, &trigger_scripts, &additional_allowed_domains, &interval_ms,
+      &timeout_ms, &script_parameters));
   ASSERT_THAT(trigger_scripts, SizeIs(2));
 
   EXPECT_TRUE(trigger_scripts[0]->AsProto().user_interface().scroll_to_hide());
@@ -434,11 +451,11 @@ TEST_F(ProtocolUtilsTest, ParseTriggerScriptsFailsOnInvalidConditions) {
   std::vector<std::unique_ptr<TriggerScript>> trigger_scripts;
   std::vector<std::string> additional_allowed_domains;
   int interval_ms;
-  base::Optional<int> timeout_ms;
-
-  EXPECT_FALSE(ProtocolUtils::ParseTriggerScripts(proto_str, &trigger_scripts,
-                                                  &additional_allowed_domains,
-                                                  &interval_ms, &timeout_ms));
+  absl::optional<int> timeout_ms;
+  absl::optional<std::unique_ptr<ScriptParameters>> script_parameters;
+  EXPECT_FALSE(ProtocolUtils::ParseTriggerScripts(
+      proto_str, &trigger_scripts, &additional_allowed_domains, &interval_ms,
+      &timeout_ms, &script_parameters));
   EXPECT_THAT(trigger_scripts, IsEmpty());
 }
 

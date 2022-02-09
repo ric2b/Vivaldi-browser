@@ -47,7 +47,7 @@ class FileEnumerator {
     bool IsDirectory() const;
 
     // The name of the file. This will not include any path information. This
-    // is in constrast to the value returned by FileEnumerator.Next() which
+    // is in contrast to the value returned by FileEnumerator.Next() which
     // includes the |root_path| passed into the FileEnumerator constructor.
     FilePath GetName() const;
 

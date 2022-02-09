@@ -9,9 +9,11 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/pickle.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -157,6 +159,12 @@ void ClipboardHostImpl::ReadAvailableTypes(
   std::vector<std::u16string> types;
   clipboard_->ReadAvailableTypes(clipboard_buffer, CreateDataEndpoint().get(),
                                  &types);
+  // If files are available, do not include other types such as text/plain
+  // which contain the full path on some platforms (http://crbug.com/1214108).
+  std::u16string filenames_type = base::UTF8ToUTF16(ui::kMimeTypeURIList);
+  if (base::Contains(types, filenames_type)) {
+    types = {filenames_type};
+  }
   std::move(callback).Run(types);
 }
 
@@ -194,6 +202,11 @@ void ClipboardHostImpl::IsFormatAvailable(blink::mojom::ClipboardFormat format,
 #else
       result = false;
 #endif
+      break;
+    case blink::mojom::ClipboardFormat::kRtf:
+      result =
+          clipboard_->IsFormatAvailable(ui::ClipboardFormatType::GetRtfType(),
+                                        clipboard_buffer, data_endpoint.get());
       break;
   }
   std::move(callback).Run(result);
@@ -311,6 +324,38 @@ void ClipboardHostImpl::ReadRtf(ui::ClipboardBuffer clipboard_buffer,
                            std::move(result), std::move(callback)));
 }
 
+void ClipboardHostImpl::ReadPng(ui::ClipboardBuffer clipboard_buffer,
+                                ReadPngCallback callback) {
+  if (!IsRendererPasteAllowed(render_frame_routing_id_)) {
+    std::move(callback).Run(mojo_base::BigBuffer());
+    return;
+  }
+  auto data_dst = CreateDataEndpoint();
+  clipboard_->ReadPng(clipboard_buffer, data_dst.get(),
+                      base::BindOnce(&ClipboardHostImpl::OnReadPng,
+                                     weak_ptr_factory_.GetWeakPtr(),
+                                     clipboard_buffer, std::move(callback)));
+}
+
+void ClipboardHostImpl::OnReadPng(ui::ClipboardBuffer clipboard_buffer,
+                                  ReadPngCallback callback,
+                                  const std::vector<uint8_t>& data) {
+  std::string string_data(
+      reinterpret_cast<const char*>(data.data(), data.data() + data.size()));
+  PasteIfPolicyAllowed(
+      clipboard_buffer, ui::ClipboardFormatType::GetPngType(),
+      std::move(string_data),
+      base::BindOnce(
+          [](std::vector<uint8_t> data, ReadPngCallback callback,
+             ClipboardPasteContentAllowed allowed) {
+            if (!allowed) {
+              std::move(callback).Run(mojo_base::BigBuffer());
+              return;
+            }
+            std::move(callback).Run(mojo_base::BigBuffer(data));
+          },
+          std::move(data), std::move(callback)));
+}
 void ClipboardHostImpl::ReadImage(ui::ClipboardBuffer clipboard_buffer,
                                   ReadImageCallback callback) {
   if (!IsRendererPasteAllowed(render_frame_routing_id_)) {

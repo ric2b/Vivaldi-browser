@@ -31,9 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-// Vivaldi
-import org.vivaldi.browser.common.VivaldiLocaleUtils;
-
 /**
  * Fragment with a {@link RecyclerView} containing a list of languages that users may add to their
  * accept languages. There is a {@link SearchView} on its Actionbar to make a quick lookup.
@@ -42,11 +39,7 @@ public class AddLanguageFragment extends Fragment {
     // Intent key to pass selected language code from AddLanguageFragment.
     static final String INTENT_SELECTED_LANGUAGE = "AddLanguageFragment.SelectedLanguages";
     // Intent key to receive type of languages to populate fragment with.
-    static final String INTENT_LANGUAGE_OPTIONS = "AddLanguageFragment.LanguageOptions";
-    // Intent keys to select language options to use.
-    static final int LANGUAGE_OPTIONS_ACCEPT_LANGUAGES = 0; // Default
-    static final int LANGUAGE_OPTIONS_UI_LANGUAGES = 1;
-    static final int LANGUAGE_OPTIONS_TRANSLATE_LANGUAGES = 2;
+    static final String INTENT_POTENTIAL_LANGUAGES = "AddLanguageFragment.PotentialLanguages";
 
     /**
      * A host to launch AddLanguageFragment and receive the result.
@@ -76,14 +69,14 @@ public class AddLanguageFragment extends Fragment {
          */
         private void search(String query) {
             if (TextUtils.isEmpty(query)) {
-                setDisplayedLanguages(mFullLanguageList);
+                setDisplayedLanguages(mFilteredLanguages);
                 return;
             }
 
             Locale locale = Locale.getDefault();
             query = query.trim().toLowerCase(locale);
             List<LanguageItem> results = new ArrayList<>();
-            for (LanguageItem item : mFullLanguageList) {
+            for (LanguageItem item : mFilteredLanguages) {
                 // TODO(crbug/783049): Consider searching in item's native display name and
                 // language code too.
                 if (item.getDisplayName().toLowerCase(locale).contains(query)) {
@@ -102,7 +95,7 @@ public class AddLanguageFragment extends Fragment {
 
     private RecyclerView mRecyclerView;
     private LanguageSearchListAdapter mAdapter;
-    private List<LanguageItem> mFullLanguageList;
+    private List<LanguageItem> mFilteredLanguages;
     private LanguageListBaseAdapter.ItemClickListener mItemClickListener;
 
     @Override
@@ -130,25 +123,10 @@ public class AddLanguageFragment extends Fragment {
         mRecyclerView.addItemDecoration(
                 new DividerItemDecoration(activity, layoutManager.getOrientation()));
 
+        @LanguagesManager.LanguageListType
         int languageOption = getActivity().getIntent().getIntExtra(
-                INTENT_LANGUAGE_OPTIONS, LANGUAGE_OPTIONS_ACCEPT_LANGUAGES);
-        if (languageOption == LANGUAGE_OPTIONS_UI_LANGUAGES) {
-            mFullLanguageList = LanguagesManager.getInstance().getAvailableUiLanguageItems();
-            // Vivaldi
-            // Note(nagamani@vivaldi.com): Include only the languages supported by Vivaldi
-            List<LanguageItem> vivaldiLanguageList = new ArrayList<>();
-            for (LanguageItem item : mFullLanguageList) {
-                if (VivaldiLocaleUtils.getVivaldiSupportedLanguages().containsKey(item.getCode()))
-                    vivaldiLanguageList.add(item);
-            }
-            mFullLanguageList.retainAll(vivaldiLanguageList);
-            mFullLanguageList.add(0, LanguageItem.makeSystemDefaultLanguageItem());
-        } else if (languageOption == LANGUAGE_OPTIONS_TRANSLATE_LANGUAGES) {
-            mFullLanguageList = LanguagesManager.getInstance().getTranslateLanguageItems();
-        } else {
-            mFullLanguageList =
-                    LanguagesManager.getInstance().getLanguageItemsExcludingUserAccept();
-        }
+                INTENT_POTENTIAL_LANGUAGES, LanguagesManager.LanguageListType.ACCEPT_LANGUAGES);
+        mFilteredLanguages = LanguagesManager.getInstance().getPotentialLanguages(languageOption);
         mItemClickListener = item -> {
             Intent intent = new Intent();
             intent.putExtra(INTENT_SELECTED_LANGUAGE, item.getCode());
@@ -158,7 +136,7 @@ public class AddLanguageFragment extends Fragment {
         mAdapter = new LanguageSearchListAdapter(activity);
 
         mRecyclerView.setAdapter(mAdapter);
-        mAdapter.setDisplayedLanguages(mFullLanguageList);
+        mAdapter.setDisplayedLanguages(mFilteredLanguages);
         mRecyclerView.getViewTreeObserver().addOnScrollChangedListener(
                 SettingsUtils.getShowShadowOnScrollListener(
                         mRecyclerView, view.findViewById(R.id.shadow)));
@@ -175,7 +153,7 @@ public class AddLanguageFragment extends Fragment {
 
         mSearchView.setOnCloseListener(() -> {
             mSearch = "";
-            mAdapter.setDisplayedLanguages(mFullLanguageList);
+            mAdapter.setDisplayedLanguages(mFilteredLanguages);
             return false;
         });
 

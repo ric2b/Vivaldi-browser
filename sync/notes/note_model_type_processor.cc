@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/memory_usage_estimator.h"
@@ -479,7 +480,8 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
   data.name = base::UTF16ToUTF8(node->GetTitle().empty() ? node->GetContent()
                                                          : node->GetTitle());
   data.is_folder = node->is_folder();
-  data.unique_position = metadata->unique_position();
+  data.unique_position =
+      syncer::UniquePosition::FromProto(metadata->unique_position());
   data.specifics = CreateSpecificsFromNoteNode(node, notes_model_);
   if (node->is_permanent_node()) {
     data.server_defined_unique_tag =

@@ -19,6 +19,7 @@
 #include "gn/filesystem_utils.h"
 #include "gn/label.h"
 #include "gn/loader.h"
+#include "gn/string_output_buffer.h"
 
 namespace {
 base::FilePath::CharType kProjectDirName[] =
@@ -270,10 +271,11 @@ void QtCreatorWriter::HandleTarget(const Target* target) {
 void QtCreatorWriter::GenerateFile(const base::FilePath::CharType* suffix,
                                    const std::set<std::string>& items) {
   const base::FilePath file_path = project_prefix_.AddExtension(suffix);
-  std::ostringstream output;
+  StringOutputBuffer storage;
+  std::ostream output(&storage);
   for (const std::string& item : items)
     output << item << std::endl;
-  WriteFileIfChanged(file_path, output.str(), &err_);
+  storage.WriteToFileIfChanged(file_path, &err_);
 }
 
 void QtCreatorWriter::Run() {

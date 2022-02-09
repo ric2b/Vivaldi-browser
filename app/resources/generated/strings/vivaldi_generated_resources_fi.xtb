@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Poistu koko näytön tilasta</translation>
 <translation id="2177950615300672361">Incognito-välilehti: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Asiakasmoduuli: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Piilota painike</translation>
 <translation id="2218515861914035131">Liitä muotoilemattomana tekstinä</translation>
 <translation id="2249605167705922988">esim. 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Salli suojatun sisällön tunnisteet (voi vaatia tietokoneen uudelleenkäynnistyksen)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Esihahmonna: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3241680850019875542">Voit pakata laajennuksen valitsemalla sen juurihakemiston. Jos haluat päivittää laajennuksen, valitse myös yksityinen avaintiedosto, jotta laajennusta voidaan käyttää uudelleen.</translation>
-<translation id="3266179261140759675">Estä suljettuja sivustoja lähettämästä ja vastaanottamasta tietoja</translation>
 <translation id="3280237271814976245">Tallenna &amp;nimellä…</translation>
 <translation id="3285322247471302225">Uusi &amp;välilehti</translation>
 <translation id="3288047731229977326">Kehittäjätilassa olevat laajennukset voivat vahingoittaa tietokonettasi. Jos et ole kehittäjä, poista kehittäjätilassa olevat laajennukset käytöstä varmuuden vuoksi.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Voi lukea ja muuttaa sivuston tietoja</translation>
 <translation id="3560034655160545939">&amp;Oikoluku</translation>
 <translation id="3574917942258583917">Haluatko silti poistua yksityistilasta?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; haluaa jakaa tulostimen &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; omistamasi ryhmän kanssa: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jos hyväksyt, kaikki ryhmän jäsenet voivat tulostaa tulostimeen.</translation>
 <translation id="3587482841069643663">Kaikki</translation>
 <translation id="3627588569887975815">Avaa linkki &amp;yksityisikkunaan</translation>
 <translation id="3627879631695760395">Asenna <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Käsittelypalvelut</translation>
 <translation id="3678156199662914018">Laajennus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ruudunjakopyyntö sovellukselta <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Älä salli suljettujen sivustojen viimeistellä tietojen lähettämistä tai vastaanottamista</translation>
 <translation id="3711931198657368127">Liitä ja &amp;siirry osoitteeseen <ph name="URL" /></translation>
 <translation id="3727187387656390258">Tutki ponnahdusikkunaa</translation>
 <translation id="3744111561329211289">Taustatahdistus</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Loi laajennuksen:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Hyväksy ryhmän puolesta</translation>
 <translation id="4096508467498758490">Poista kehittäjätilassa olevat laajennukset käytöstä</translation>
 <translation id="4100839878934973028">Toinen tietokoneellasi oleva ohjelma lisäsi sovelluksen, joka voi muuttaa Vivaldin toimintaa.</translation>
 <translation id="4109898769411476438">Sulje selain ennen tuontia</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Näytä tiedot</translation>
 <translation id="4907306957610201395">Käyttöoikeusluokka</translation>
 <translation id="4912643508233590958">Joutotilasta palautumiset</translation>
-<translation id="4918086044614829423">Hyväksy</translation>
 <translation id="4927753642311223124">Täällä ei mitään nähtävää, siirtykää.</translation>
 <translation id="4930714375720679147">Ota käyttöön</translation>
 <translation id="4988526792673242964">Sivut</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Tyhjennä sivustotiedot</translation>
 <translation id="6042308850641462728">Lisää</translation>
 <translation id="6059925163896151826">USB-laitteet</translation>
-<translation id="6082651258230788217">Näytä työkalurivillä</translation>
 <translation id="6086846494333236931">Ylläpitäjän asentama</translation>
 <translation id="6101226222197207147">Uusi sovellus lisätty (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetyhteyttäsi hallinnoidaan</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simuloi selaimen uudelleenkäynnistys</translation>
 <translation id="6445450263907939268">Jos et pidä muutoksista, voit palauttaa aiemmat asetuksesi.</translation>
 <translation id="6447842834002726250">Evästeet</translation>
-<translation id="6452181791372256707">Hylkää</translation>
 <translation id="6498249116389603658">K&amp;aikki valitsemasi kielet</translation>
 <translation id="6503077044568424649">Käydyimmät</translation>
 <translation id="6508261954199872201">Sovellus: <ph name="APP_NAME" /></translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Onko tämä haluamasi Uusi välilehti -sivu?</translation>
 <translation id="786073089922909430">Palvelu: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Viimeaikaiset kohteet</translation>
-<translation id="7898627924844766532">Pidä työkalurivillä</translation>
 <translation id="7903925330883316394">Apuohjelma: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Ei verkossa nyt</translation>
 <translation id="7947962633355574091">K&amp;opioi videon osoite</translation>
@@ -452,7 +445,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusve
 <translation id="8725066075913043281">Yritä uudelleen</translation>
 <translation id="8757090071857742562">Työpöydän suoratoisto ei onnistu. Tarkista, hyväksyitkö kehotteen näytön jakamisen aloittamisesta.</translation>
 <translation id="8774934320277480003">Yläreunus</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; haluaa jakaa tulostimen &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; kanssasi.</translation>
 <translation id="8798099450830957504">Oletus</translation>
 <translation id="8800004011501252845">Näytetään kohteet sähköpostiosoitteelle</translation>
 <translation id="8808478386290700967">Web Store</translation>

@@ -270,6 +270,10 @@ void LoaderImpl::BackgroundLoadFile(const Settings* settings,
   if (err.has_error()) {
     if (!origin.is_null())
       err.AppendSubErr(Err(origin, "which caused the file to be included."));
+
+    if (!settings->is_default())
+      err.set_toolchain_label(settings->toolchain_label());
+
     g_scheduler->FailWithError(err);
   }
 
@@ -331,8 +335,12 @@ void LoaderImpl::BackgroundLoadBuildConfig(
 
   trace.Done();
 
-  if (err.has_error())
+  if (err.has_error()) {
+    if (!settings->is_default())
+      err.set_toolchain_label(settings->toolchain_label());
+
     g_scheduler->FailWithError(err);
+  }
 
   base_config->ClearProcessingBuildConfig();
   if (settings->is_default()) {

@@ -58,38 +58,201 @@ TEST_F(JSONWriter, ActionWithResponseFile) {
   base::ReplaceSubstringsAfterOffset(&out, 0, "\r\n", "\n");
 #endif
   const char expected_json[] =
-      "{\n"
-      "   \"build_settings\": {\n"
-      "      \"build_dir\": \"//out/Debug/\",\n"
-      "      \"default_toolchain\": \"//toolchain:default\",\n"
-      "      \"gen_input_files\": [ \"//.gn\", \"//BUILD.gn\", "
-      "\"//build/BUILD.gn\" ],\n"
+      R"_({
+   "build_settings": {
+      "build_dir": "//out/Debug/",
+      "default_toolchain": "//toolchain:default",
+      "gen_input_files": [ "//.gn", "//BUILD.gn", "//build/BUILD.gn" ],
+)_"
 #if defined(OS_WIN)
       "      \"root_path\": \"c:/path/to/src\"\n"
 #else
       "      \"root_path\": \"/path/to/src\"\n"
 #endif
-      "   },\n"
-      "   \"targets\": {\n"
-      "      \"//foo:bar()\": {\n"
-      "         \"args\": [ \"{{response_file_name}}\" ],\n"
-      "         \"deps\": [  ],\n"
-      "         \"inputs\": [ \"//foo/input1.txt\" ],\n"
-      "         \"metadata\": {\n"
-      "\n"
-      "         },\n"
-      "         \"outputs\": [ \"//out/Debug/output1.out\" ],\n"
-      "         \"public\": \"*\",\n"
-      "         \"response_file_contents\": [ \"-j\", \"3\" ],\n"
-      "         \"script\": \"//foo/script.py\",\n"
-      "         \"sources\": [ \"//foo/source1.txt\" ],\n"
-      "         \"testonly\": false,\n"
-      "         \"toolchain\": \"\",\n"
-      "         \"type\": \"action\",\n"
-      "         \"visibility\": [  ]\n"
-      "      }\n"
-      "   }\n"
-      "}\n";
+      R"_(   },
+   "targets": {
+      "//foo:bar()": {
+         "args": [ "{{response_file_name}}" ],
+         "deps": [  ],
+         "inputs": [ "//foo/input1.txt" ],
+         "metadata": {
+
+         },
+         "outputs": [ "//out/Debug/output1.out" ],
+         "public": "*",
+         "response_file_contents": [ "-j", "3" ],
+         "script": "//foo/script.py",
+         "sources": [ "//foo/source1.txt" ],
+         "testonly": false,
+         "toolchain": "",
+         "type": "action",
+         "visibility": [  ]
+      }
+   },
+   "toolchains": {
+      "//toolchain:default": {
+         "alink": {
+            "command": "ar {{output}} {{source}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}.a" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "cc": {
+            "command": "cc {{source}} {{cflags}} {{cflags_c}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "compile_xcassets": {
+            "command": "touch {{output}}"
+         },
+         "copy": {
+            "command": "cp {{source}} {{output}}"
+         },
+         "copy_bundle_data": {
+            "command": "cp {{source}} {{output}}"
+         },
+         "cxx": {
+            "command": "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "command_launcher": "launcher",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "link": {
+            "command": "ld -o {{target_output_name}} {{source}} {{ldflags}} {{libs}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "objc": {
+            "command": "objcc {{source}} {{cflags}} {{cflags_objc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "objcxx": {
+            "command": "objcxx {{source}} {{cflags}} {{cflags_objcc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "rust_bin": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "outputs": [ "{{root_out_dir}}/{{crate_name}}{{output_extension}}" ]
+         },
+         "rust_cdylib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_dylib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_macro": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_rlib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".rlib",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_staticlib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".a",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "solink": {
+            "command": "ld -shared -o {{target_output_name}}.so {{inputs}} {{ldflags}} {{libs}}",
+            "default_output_extension": ".so",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "solink_module": {
+            "command": "ld -bundle -o {{target_output_name}}.so {{inputs}} {{ldflags}} {{libs}}",
+            "default_output_extension": ".so",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "stamp": {
+            "command": "touch {{output}}"
+         },
+         "swift": {
+            "command": "swiftc --module-name {{module_name}} {{module_dirs}} {{inputs}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
+            "partial_outputs": [ "{{target_out_dir}}/{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         }
+      }
+   }
+}
+)_";
   EXPECT_EQ(expected_json, out) << out;
 }
 
@@ -116,37 +279,200 @@ TEST_F(JSONWriter, RustTarget) {
   base::ReplaceSubstringsAfterOffset(&out, 0, "\r\n", "\n");
 #endif
   const char expected_json[] =
-      "{\n"
-      "   \"build_settings\": {\n"
-      "      \"build_dir\": \"//out/Debug/\",\n"
-      "      \"default_toolchain\": \"//toolchain:default\",\n"
-      "      \"gen_input_files\": [  ],\n"
-      "      \"root_path\": \"\"\n"
-      "   },\n"
-      "   \"targets\": {\n"
-      "      \"//foo:bar()\": {\n"
-      "         \"allow_circular_includes_from\": [  ],\n"
-      "         \"check_includes\": true,\n"
-      "         \"crate_name\": \"foo\",\n"
-      "         \"crate_root\": \"//foo/lib.rs\",\n"
-      "         \"deps\": [  ],\n"
-      "         \"externs\": {\n"
-      "\n"
-      "         },\n"
-      "         \"metadata\": {\n"
-      "\n"
-      "         },\n"
-      "         \"outputs\": [ \"//out/Debug/obj/foo/libbar.rlib\" ],\n"
-      "         \"public\": \"*\",\n"
-      "         \"sources\": [ \"//foo/lib.rs\" ],\n"
-      "         \"testonly\": false,\n"
-      "         \"toolchain\": \"\",\n"
-      "         \"type\": \"rust_library\",\n"
-      "         \"visibility\": [ \"*\" ]\n"
-      "      }\n"
-      "   }\n"
-      "}\n";
-  EXPECT_EQ(expected_json, out);
+      R"_({
+   "build_settings": {
+      "build_dir": "//out/Debug/",
+      "default_toolchain": "//toolchain:default",
+      "gen_input_files": [  ],
+      "root_path": ""
+   },
+   "targets": {
+      "//foo:bar()": {
+         "allow_circular_includes_from": [  ],
+         "check_includes": true,
+         "crate_name": "foo",
+         "crate_root": "//foo/lib.rs",
+         "deps": [  ],
+         "externs": {
+
+         },
+         "metadata": {
+
+         },
+         "outputs": [ "//out/Debug/obj/foo/libbar.rlib" ],
+         "public": "*",
+         "sources": [ "//foo/lib.rs" ],
+         "testonly": false,
+         "toolchain": "",
+         "type": "rust_library",
+         "visibility": [ "*" ]
+      }
+   },
+   "toolchains": {
+      "//toolchain:default": {
+         "alink": {
+            "command": "ar {{output}} {{source}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}.a" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "cc": {
+            "command": "cc {{source}} {{cflags}} {{cflags_c}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "compile_xcassets": {
+            "command": "touch {{output}}"
+         },
+         "copy": {
+            "command": "cp {{source}} {{output}}"
+         },
+         "copy_bundle_data": {
+            "command": "cp {{source}} {{output}}"
+         },
+         "cxx": {
+            "command": "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "command_launcher": "launcher",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "link": {
+            "command": "ld -o {{target_output_name}} {{source}} {{ldflags}} {{libs}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "objc": {
+            "command": "objcc {{source}} {{cflags}} {{cflags_objc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "objcxx": {
+            "command": "objcxx {{source}} {{cflags}} {{cflags_objcc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "rust_bin": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "outputs": [ "{{root_out_dir}}/{{crate_name}}{{output_extension}}" ]
+         },
+         "rust_cdylib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_dylib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_macro": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_rlib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".rlib",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_staticlib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".a",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "solink": {
+            "command": "ld -shared -o {{target_output_name}}.so {{inputs}} {{ldflags}} {{libs}}",
+            "default_output_extension": ".so",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "solink_module": {
+            "command": "ld -bundle -o {{target_output_name}}.so {{inputs}} {{ldflags}} {{libs}}",
+            "default_output_extension": ".so",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "stamp": {
+            "command": "touch {{output}}"
+         },
+         "swift": {
+            "command": "swiftc --module-name {{module_name}} {{module_dirs}} {{inputs}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
+            "partial_outputs": [ "{{target_out_dir}}/{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         }
+      }
+   }
+}
+)_";
+  EXPECT_EQ(expected_json, out) << out;
 }
 
 TEST_F(JSONWriter, ForEachWithResponseFile) {
@@ -191,42 +517,203 @@ TEST_F(JSONWriter, ForEachWithResponseFile) {
   base::ReplaceSubstringsAfterOffset(&out, 0, "\r\n", "\n");
 #endif
   const char expected_json[] =
-      "{\n"
-      "   \"build_settings\": {\n"
-      "      \"build_dir\": \"//out/Debug/\",\n"
-      "      \"default_toolchain\": \"//toolchain:default\",\n"
-      "      \"gen_input_files\": [ \"//.gn\", \"//BUILD.gn\" ],\n"
+      R"_({
+   "build_settings": {
+      "build_dir": "//out/Debug/",
+      "default_toolchain": "//toolchain:default",
+      "gen_input_files": [ "//.gn", "//BUILD.gn" ],
+)_"
 #if defined(OS_WIN)
       "      \"root_path\": \"c:/path/to/src\"\n"
 #else
       "      \"root_path\": \"/path/to/src\"\n"
 #endif
-      "   },\n"
-      "   \"targets\": {\n"
-      "      \"//foo:bar()\": {\n"
-      "         \"args\": [ \"{{source}}\", \"{{source_file_part}}\", "
-      "\"{{response_file_name}}\" ],\n"
-      "         \"deps\": [  ],\n"
-      "         \"metadata\": {\n"
-      "\n"
-      "         },\n"
-      "         \"output_patterns\": [ "
-      "\"//out/Debug/{{source_name_part}}.out\" ],\n"
-      "         \"outputs\": [ \"//out/Debug/input1.out\" ],\n"
-      "         \"public\": \"*\",\n"
-      "         \"response_file_contents\": [ \"-j\", \"{{source_name_part}}\" "
-      "],\n"
-      "         \"script\": \"//foo/script.py\",\n"
-      "         \"source_outputs\": {\n"
-      "            \"//foo/input1.txt\": [ \"input1.out\" ]\n"
-      "         },\n"
-      "         \"sources\": [ \"//foo/input1.txt\" ],\n"
-      "         \"testonly\": false,\n"
-      "         \"toolchain\": \"\",\n"
-      "         \"type\": \"action_foreach\",\n"
-      "         \"visibility\": [  ]\n"
-      "      }\n"
-      "   }\n"
-      "}\n";
-  EXPECT_EQ(expected_json, out);
+      R"_(   },
+   "targets": {
+      "//foo:bar()": {
+         "args": [ "{{source}}", "{{source_file_part}}", "{{response_file_name}}" ],
+         "deps": [  ],
+         "metadata": {
+
+         },
+         "output_patterns": [ "//out/Debug/{{source_name_part}}.out" ],
+         "outputs": [ "//out/Debug/input1.out" ],
+         "public": "*",
+         "response_file_contents": [ "-j", "{{source_name_part}}" ],
+         "script": "//foo/script.py",
+         "source_outputs": {
+            "//foo/input1.txt": [ "input1.out" ]
+         },
+         "sources": [ "//foo/input1.txt" ],
+         "testonly": false,
+         "toolchain": "",
+         "type": "action_foreach",
+         "visibility": [  ]
+      }
+   },
+   "toolchains": {
+      "//toolchain:default": {
+         "alink": {
+            "command": "ar {{output}} {{source}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}.a" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "cc": {
+            "command": "cc {{source}} {{cflags}} {{cflags_c}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "compile_xcassets": {
+            "command": "touch {{output}}"
+         },
+         "copy": {
+            "command": "cp {{source}} {{output}}"
+         },
+         "copy_bundle_data": {
+            "command": "cp {{source}} {{output}}"
+         },
+         "cxx": {
+            "command": "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "command_launcher": "launcher",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "link": {
+            "command": "ld -o {{target_output_name}} {{source}} {{ldflags}} {{libs}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "objc": {
+            "command": "objcc {{source}} {{cflags}} {{cflags_objc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "objcxx": {
+            "command": "objcxx {{source}} {{cflags}} {{cflags_objcc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "rust_bin": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "outputs": [ "{{root_out_dir}}/{{crate_name}}{{output_extension}}" ]
+         },
+         "rust_cdylib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_dylib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_macro": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".so",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_rlib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".rlib",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "rust_staticlib": {
+            "command": "{{rustenv}} rustc --crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}} -o {{output}} {{rustdeps}} {{externs}}",
+            "default_output_extension": ".a",
+            "framework_switch": "-lframework=",
+            "lib_dir_switch": "-Lnative=",
+            "lib_switch": "-l",
+            "linker_arg": "-Clink-arg=",
+            "output_prefix": "lib",
+            "outputs": [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+         },
+         "solink": {
+            "command": "ld -shared -o {{target_output_name}}.so {{inputs}} {{ldflags}} {{libs}}",
+            "default_output_extension": ".so",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "solink_module": {
+            "command": "ld -bundle -o {{target_output_name}}.so {{inputs}} {{ldflags}} {{libs}}",
+            "default_output_extension": ".so",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "output_prefix": "lib",
+            "outputs": [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "stamp": {
+            "command": "touch {{output}}"
+         },
+         "swift": {
+            "command": "swiftc --module-name {{module_name}} {{module_dirs}} {{inputs}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
+            "partial_outputs": [ "{{target_out_dir}}/{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         }
+      }
+   }
+}
+)_";
+  EXPECT_EQ(expected_json, out) << out;
 }

@@ -6,11 +6,11 @@
 
 #include "base/strings/string_util.h"
 #include "gn/deps_iterator.h"
-#include "gn/filesystem_utils.h"
 #include "gn/output_conversion.h"
 #include "gn/output_file.h"
 #include "gn/scheduler.h"
 #include "gn/settings.h"
+#include "gn/string_output_buffer.h"
 #include "gn/string_utils.h"
 #include "gn/target.h"
 #include "gn/trace.h"
@@ -30,10 +30,15 @@ void NinjaGeneratedFileTargetWriter::Run() {
   // on each of the deps and data_deps in the target. The actual collection is
   // done at gen time, and so ninja doesn't need to know about it.
   std::vector<OutputFile> output_files;
-  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED))
-    output_files.push_back(pair.ptr->dependency_output_file());
-
   std::vector<OutputFile> data_output_files;
+  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED)) {
+    if (pair.ptr->IsDataOnly()) {
+      data_output_files.push_back(pair.ptr->dependency_output_file());
+    } else {
+      output_files.push_back(pair.ptr->dependency_output_file());
+    }
+  }
+
   const LabelTargetVector& data_deps = target_->data_deps();
   for (const auto& pair : data_deps)
     data_output_files.push_back(pair.ptr->dependency_output_file());
@@ -74,7 +79,8 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
   ScopedTrace trace(TraceItem::TRACE_FILE_WRITE, outputs_as_sources[0].value());
 
   // Compute output.
-  std::ostringstream out;
+  StringOutputBuffer storage;
+  std::ostream out(&storage);
   ConvertValueToOutput(settings_, contents, target_->output_conversion(), out,
                        &err);
 
@@ -83,7 +89,7 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
     return;
   }
 
-  WriteFileIfChanged(output, out.str(), &err);
+  storage.WriteToFileIfChanged(output, &err);
 
   if (err.has_error()) {
     g_scheduler->FailWithError(err);

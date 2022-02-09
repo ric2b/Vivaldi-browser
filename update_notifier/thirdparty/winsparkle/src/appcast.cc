@@ -38,7 +38,7 @@
 
 #pragma comment(lib, "WebServices.lib")
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 /*--------------------------------------------------------------------------*
                                 XML parsing
@@ -331,7 +331,6 @@ base::Version GetAsVersion(const WS_XML_ATTRIBUTE* attr) {
   return base::Version(attr_value);
 }
 
-
 void OnStartElement(int depth,
                     const WS_XML_ELEMENT_NODE* node,
                     ContextData& ctxt) {
@@ -591,4 +590,4 @@ std::unique_ptr<Appcast> Appcast::Load(const std::string& xml, Error& error) {
   return nullptr;
 }
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier

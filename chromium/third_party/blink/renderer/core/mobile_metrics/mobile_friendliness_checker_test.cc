@@ -195,7 +195,7 @@ TEST_F(MobileFriendlinessCheckerTest, MostlySmallInSpan) {
   MobileFriendliness actual_mf = CalculateMetricsForHTMLString(R"(
 <div style="font-size: 12px">
   x
-  <span style="font-size:11px">
+  <span style="font-size:8px">
     This is the majority part of the document.
   </span>
   y
@@ -209,7 +209,7 @@ TEST_F(MobileFriendlinessCheckerTest, MultipleDivs) {
   MobileFriendliness actual_mf = CalculateMetricsForHTMLString(R"(
 <div style="font-size: 12px">
   x
-  <div style="font-size:11px">
+  <div style="font-size:8px">
     middle of div
     <div style="font-size:1px">
       inner of div
@@ -219,7 +219,7 @@ TEST_F(MobileFriendlinessCheckerTest, MultipleDivs) {
 </div>
 )");
   EXPECT_LT(actual_mf.small_text_ratio, 100);
-  EXPECT_GT(actual_mf.small_text_ratio, 80);
+  EXPECT_GT(actual_mf.small_text_ratio, 68);
 }
 
 TEST_F(MobileFriendlinessCheckerTest, DontCountInvisibleSmallFontArea) {
@@ -263,8 +263,8 @@ TEST_F(MobileFriendlinessCheckerTest, ViewportZoomedOutIllegibleFont) {
   <head>
     <meta name="viewport" content="width=480, initial-scale=0.5">
   </head>
-  <body style="font-size: 22px; width: 960px">
-    Illegible text in 11px.
+  <body style="font-size: 16px; width: 960px">
+    Illegible text in 8px.
   </body>
 </html>
 )");
@@ -329,7 +329,20 @@ TEST_F(MobileFriendlinessCheckerTest, TextTooWide) {
   EXPECT_NE(actual_mf.text_content_outside_viewport_percentage, 0);
 }
 
-TEST_F(MobileFriendlinessCheckerTest, TextTooWideInvisible) {
+TEST_F(MobileFriendlinessCheckerTest, TextTooWideOpacityZero) {
+  MobileFriendliness actual_mf = CalculateMetricsForHTMLString(
+      R"(
+<html>
+  <body>
+    <pre style="opacity:0">)" +
+      std::string(10000, 'a') + R"(</pre>
+  </body>
+</html>
+)");
+  EXPECT_EQ(actual_mf.text_content_outside_viewport_percentage, 0);
+}
+
+TEST_F(MobileFriendlinessCheckerTest, TextTooWideVisibilityHidden) {
   MobileFriendliness actual_mf = CalculateMetricsForHTMLString(
       R"(
 <html>
@@ -409,6 +422,17 @@ TEST_F(MobileFriendlinessCheckerTest, ImageTooWide) {
 </html>
 )");
   EXPECT_EQ(actual_mf.text_content_outside_viewport_percentage, 317);
+}
+
+TEST_F(MobileFriendlinessCheckerTest, ImageAbsolutePosition) {
+  MobileFriendliness actual_mf = CalculateMetricsForHTMLString(R"(
+<html>
+  <body>
+    <img style="width:100px; height:100px; position:absolute; left:2000px">
+  </body>
+</html>
+)");
+  EXPECT_EQ(actual_mf.text_content_outside_viewport_percentage, 338);
 }
 
 TEST_F(MobileFriendlinessCheckerTest, ImageTooWideDisplayNone) {

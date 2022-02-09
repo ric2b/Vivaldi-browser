@@ -33,7 +33,7 @@ bool ExecPython(const std::string& command,
   args.push_back(L"-c");
   args.push_back(base::UTF8ToUTF16(command));
 #else
-  args.push_back("python");
+  args.push_back("python3");
   args.push_back("-c");
   args.push_back(command);
 #endif

@@ -6,6 +6,7 @@
 #define TOOLS_GN_RUST_TOOL_H_
 
 #include <string>
+#include <string_view>
 
 #include "base/logging.h"
 #include "base/macros.h"

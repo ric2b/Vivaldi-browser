@@ -447,13 +447,13 @@ void FindMatchingRuleInMap(
   callback(rule_map->fallback_rules());
 }
 
-base::Optional<uint32_t> GetSubdomainNodeIndex(
+absl::optional<uint32_t> GetSubdomainNodeIndex(
     base::StringPiece domain_piece,
     const flatbuffers::Vector<
         flatbuffers::Offset<flat::ContentInjectionRulesNode>>* tree,
     const flat::ContentInjectionRulesNode* node) {
   if (!node->subdomains())
-    return base::nullopt;
+    return absl::nullopt;
 
   auto compare = [](const flatbuffers::String* lhs,
                     const base::StringPiece& rhs) {
@@ -466,12 +466,12 @@ base::Optional<uint32_t> GetSubdomainNodeIndex(
       std::lower_bound(node->subdomains()->begin(), node->subdomains()->end(),
                        domain_piece, compare);
   if (subdomain == node->subdomains()->end())
-    return base::nullopt;
+    return absl::nullopt;
 
   std::string subdomain_str = subdomain->str();
   if (!std::equal(subdomain_str.begin(), subdomain_str.end(),
                   domain_piece.begin(), domain_piece.end()))
-    return base::nullopt;
+    return absl::nullopt;
 
   DCHECK((subdomain - node->subdomains()->begin()) +
              node->first_child_node_index() <
@@ -520,7 +520,7 @@ void GetSelectorsForDomain(
   if (domain_piece == domain_end)
     return;
 
-  base::Optional<uint32_t> subdomain_node_index =
+  absl::optional<uint32_t> subdomain_node_index =
       GetSubdomainNodeIndex(*domain_piece++, tree, node);
 
   if (!subdomain_node_index)
@@ -785,7 +785,7 @@ RulesIndex::InjectionData RulesIndex::GetInjectionDataForOrigin(
   const auto domain_pieces = base::SplitStringPiece(
       origin.host(), ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-  base::Optional<uint32_t> subdomain_node_index = GetSubdomainNodeIndex(
+  absl::optional<uint32_t> subdomain_node_index = GetSubdomainNodeIndex(
       domain_pieces.back(), rules_index_->content_injection_rules_tree(), root);
 
   if (subdomain_node_index)

@@ -146,8 +146,7 @@ class SettingsTableViewControllerMICETest
   AuthenticationServiceFake* auth_service_ = nullptr;
   syncer::MockSyncService* sync_service_mock_ = nullptr;
   SyncSetupServiceMock* sync_setup_service_mock_ = nullptr;
-  scoped_refptr<password_manager::TestPasswordStore> password_store_mock_ =
-      nullptr;
+  scoped_refptr<password_manager::TestPasswordStore> password_store_mock_;
 
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<TestBrowser> browser_;
@@ -207,10 +206,9 @@ TEST_F(SettingsTableViewControllerMICETest, SyncPasswordError) {
   ASSERT_EQ(UILayoutConstraintAxisVertical, sync_item.textLayoutConstraintAxis);
 
   // Check that there is no sign-in promo when there is a sync error.
-  NSArray* identity_items = [controller().tableViewModel
-      itemsInSectionWithIdentifier:SettingsSectionIdentifier::
-                                       SettingsSectionIdentifierSignIn];
-  ASSERT_EQ(0U, identity_items.count);
+  ASSERT_FALSE([controller().tableViewModel
+      hasSectionForSectionIdentifier:SettingsSectionIdentifier::
+                                         SettingsSectionIdentifierSignIn]);
 }
 
 // Verifies that the Sync icon displays the off state when the user has
@@ -239,9 +237,10 @@ TEST_F(SettingsTableViewControllerMICETest, TurnsSyncOffAfterFirstSetup) {
               sync_item.detailText);
 }
 
-// Verifies that the Sync icon displays the off state when the user has
-// completed the sign-in and sync flow then explcitly turned off all data types
-// in the Sync settings.
+// Verifies that the Sync icon displays the off state (and no detail text) when
+// the user has completed the sign-in and sync flow then explcitly turned off
+// all data types in the Sync settings.
+// This case can only happen for pre-MICE users who migrated with MICE.
 TEST_F(SettingsTableViewControllerMICETest,
        DisablesAllSyncSettingsAfterFirstSetup) {
   ON_CALL(*sync_service_mock_->GetMockUserSettings(), GetSelectedTypes())
@@ -264,6 +263,5 @@ TEST_F(SettingsTableViewControllerMICETest,
       static_cast<TableViewDetailIconItem*>(account_items[1]);
   ASSERT_NSEQ(l10n_util::GetNSString(IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE),
               sync_item.text);
-  ASSERT_NSEQ(l10n_util::GetNSString(IDS_IOS_SETTING_OFF),
-              sync_item.detailText);
+  ASSERT_EQ(nil, sync_item.detailText);
 }

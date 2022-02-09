@@ -9,9 +9,15 @@
 #import <Foundation/Foundation.h>
 #import <XCTest/XCTest.h>
 #import "SUCodeSigningVerifier.h"
+#import "SUAdHocCodeSigning.h"
 #import "SUFileManager.h"
 
+#if defined(__MAC_10_15)
+// In macOS 10.15 and later, pre-installed apps are installed under the System folder
+#define CALCULATOR_PATH @"/System/Applications/Calculator.app"
+#else
 #define CALCULATOR_PATH @"/Applications/Calculator.app"
+#endif
 
 @interface SUCodeSigningVerifierTest : XCTestCase
 
@@ -169,21 +175,7 @@
 
 - (BOOL)codesignAppURL:(NSURL *)appURL
 {
-    BOOL success = NO;
-    @try
-    {
-        // ad-hoc signing with the dash
-        NSString *appPath = [appURL path];
-        NSArray<NSString *> *arguments = @[ @"--force", @"--deep", @"--sign", @"-", appPath ];
-        NSTask *task = [NSTask launchedTaskWithLaunchPath:@"/usr/bin/codesign" arguments:arguments];
-        [task waitUntilExit];
-        success = (task.terminationStatus == 0);
-    }
-    @catch (NSException *exception)
-    {
-        NSLog(@"exception: %@", exception);
-    }
-    return success;
+    return [SUAdHocCodeSigning codeSignApplicationAtPath:appURL.path];
 }
 
 - (void)testUnsignedApp

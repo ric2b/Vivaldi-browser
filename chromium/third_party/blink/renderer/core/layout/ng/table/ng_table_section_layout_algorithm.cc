@@ -31,7 +31,7 @@ scoped_refptr<const NGLayoutResult> NGTableSectionLayoutAlgorithm::Layout() {
   const NGTableConstraintSpaceData& table_data = *ConstraintSpace().TableData();
   wtf_size_t section_index = ConstraintSpace().TableSectionIndex();
 
-  base::Optional<LayoutUnit> section_baseline;
+  absl::optional<LayoutUnit> section_baseline;
 
   LogicalOffset offset;
   bool is_first_row = true;
@@ -66,7 +66,14 @@ scoped_refptr<const NGLayoutResult> NGTableSectionLayoutAlgorithm::Layout() {
     is_first_row = false;
     row_index++;
   }
-  container_builder_.SetFragmentBlockSize(offset.block_offset);
+  if (table_data.sections[section_index].rowspan == 0) {
+    // Sections without rows can get redistributed height from table.
+    DCHECK(ConstraintSpace().IsFixedBlockSize());
+    container_builder_.SetFragmentBlockSize(
+        ConstraintSpace().AvailableSize().block_size);
+  } else {
+    container_builder_.SetFragmentBlockSize(offset.block_offset);
+  }
   if (section_baseline)
     container_builder_.SetBaseline(*section_baseline);
   container_builder_.SetIsTableNGPart();

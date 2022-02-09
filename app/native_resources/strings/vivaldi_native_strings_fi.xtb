@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Lähetä linkki sähköpostitse</translation>
 <translation id="1454726940098520109">Älä kysy enää vahvistusta</translation>
 <translation id="1462666970065907900">Haluatko varmasti sulkea tämän ikkunan?</translation>
+<translation id="1480046233931937785">Kiitokset</translation>
 <translation id="1526344461589023948">Ladattua päivitystä tallennettaessa tapahtui virhe. Tarkista, että koneella on riittävästi levytilaa, ja yritä myöhemmin uudelleen.</translation>
 <translation id="1657174850639146440">Hirviö 9</translation>
 <translation id="1676595396635191120">Uusi yksityisikkuna</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Avaa uuteen välilehteen</translation>
 <translation id="3027988479108856431">Yandexin asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Yandex-ikkunat ja napsauta sitten Jatka.</translation>
 <translation id="3084011186245865060">Maisema 6</translation>
+<translation id="3093931836425623631">Vivaldin on tehnyt mahdolliseksi Chromium-projekti sekä muut avoimen lähdekoodin ohjelmat.</translation>
 <translation id="3127383884976966729">Eläin 7</translation>
 <translation id="3156398087075132709">Uusi kirjanmerkki</translation>
 <translation id="3255747772218936245">Asenna päivitys</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Maisema 7</translation>
 <translation id="7111492742514999492">Maisema 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldin on mahdollistanut avoin lähdekoodiprojekti <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> sekä muut <ph name="BEGIN_LINK_OSS" />avoimen koodin ohjelmat<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Päivitysasenninta ei saatu käyntiin. Tarkista, että koneen muisti ja levytila riittävät, ja yritä myöhemmin uudelleen.</translation>
 <translation id="7658239707568436148">Peru</translation>
 <translation id="7715497554424665066">&amp;Ohita päivitys</translation>

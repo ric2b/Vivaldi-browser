@@ -65,7 +65,7 @@ const char kRustCrateType_Help[] =
 
   Options for this field are "cdylib", "staticlib", "proc-macro", and "dylib".
   This field sets the `crate-type` attribute for the `rustc` tool on static
-  libraries, as well as the appropiate output extension in the
+  libraries, as well as the appropriate output extension in the
   `rust_output_extension` attribute. Since outputs must be explicit, the `lib`
   crate type (where the Rust compiler produces what it thinks is the
   appropriate library type) is not supported.

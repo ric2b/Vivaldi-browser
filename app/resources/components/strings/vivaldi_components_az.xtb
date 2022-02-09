@@ -1,4 +1,36 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
+<translation id="3830627370375585318">Vivaldiyə sizin şəbəkə təhlükəsizlik divarı və ya antivirus ayarlarına
+          girişə icazə verin.</translation>
+<translation id="4200102020577305737">İrəli,
+          Vivaldi menyusu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN Ayarları, üzrə hərəkət edərək
+          "LAN üçün proksi istifadə edin" seçimini ləğv edin.</translation>
+<translation id="4932161901409251843">İrəli,
+          Vivaldi menyusu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          ayarlarında "proksi yoxdur" və ya "birbaşa", seçimlərinin təyin olunduğuna əmin olun</translation>
+<translation id="5248344925342018662">Siz təhlükəsiz Vivaldi səhifəsinə baxırsınız</translation>
+<translation id="7023871570427738255">İrəli,
+          Vivaldi menyusu  &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          "<ph name="NO_PREFETCH_DESCRIPTION" />" seçimini ləğv edin.
+          Əgər bu problemi həll etmədisə, səhifənin daha tez yüklənə bilməsi
+          üçün bu seçimi bərpa edin.</translation>
+<translation id="8187289872471304532">silinİrəli,
+          Tətbiqlər &gt; Sistem ayarları &gt; Şəbəkə &gt; Əlavələr &gt; Proksilər
+          üzrə hərəkət edərək proksilərin önündəki işarələri silin.</translation>
 </translationbundle>

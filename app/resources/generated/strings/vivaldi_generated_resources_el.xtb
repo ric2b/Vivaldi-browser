@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Έξοδος από πλήρη οθόνη</translation>
 <translation id="2177950615300672361">Καρτέλα ανώνυμης περιήγησης: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Λειτουργική μονάδα Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Απόκρυψη κουμπιού</translation>
 <translation id="2218515861914035131">Επικόλληση ως απλό κείμενο</translation>
 <translation id="2249605167705922988">π.χ. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Να επιτρέπονται τα αναγνωριστικά για προστατευμένο περιεχόμενο (μπορεί να απαιτείται επανεκκίνηση του υπολογιστή)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Απόδοση λειτουργίας εκ των προτέρων: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Μικρόφωνο</translation>
 <translation id="3241680850019875542">Επιλέξτε τον κατάλογο ρίζας της επέκτασης που θέλετε να στοιβάξετε. Για να ενημερώσετε μια επέκταση, επιλέξτε επίσης το αρχείο ιδιωτικού κλειδιού που θα επαναχρησιμοποιηθεί.</translation>
-<translation id="3266179261140759675">Αποκλεισμός κλειστών ιστότοπων να κάνουν αποστολή και λήψη δεδομένων</translation>
 <translation id="3280237271814976245">Αποθήκευση &amp;ως...</translation>
 <translation id="3285322247471302225">Νέα &amp;Καρτέλα</translation>
 <translation id="3288047731229977326">Οι επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή μπορούν να βλάψουν τον υπολογιστή σας. Εάν δεν είστε προγραμματιστής, θα πρέπει να απενεργοποιήσετε αυτές τις επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή για να διατηρήσετε την ασφάλειά σας.</translation>
@@ -145,7 +143,7 @@
 <translation id="33022249435934718">Χειρισμοί GDI</translation>
 <translation id="3303818374450886607">Αντίγραφα</translation>
 <translation id="3305661444342691068">Άνοιγμα PDF σε Προεπισκόπηση</translation>
-<translation id="3308134619352333507">Απόκρυψη κουμπιού</translation>
+<translation id="3308134619352333507">Απόκρυψη Κουμπιού</translation>
 <translation id="3317459757438853210">Διπλής όψης</translation>
 <translation id="3341703758641437857">Να επιτρέπεται η πρόσβαση σε διευθύνσεις URL αρχείων</translation>
 <translation id="3347086966102161372">Α&amp;ντιγραφή της διεύθυνσης εικόνας</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Μπορεί να διαβάζει και να αλλάζει τα δεδομένα ιστοτόπου</translation>
 <translation id="3560034655160545939">&amp;Ορθογραφικός έλεγχος</translation>
 <translation id="3574917942258583917">Θέλετε να εξέλθετε από την κατάσταση ανώνυμης περιήγησης;</translation>
-<translation id="357886715122934472">Ο χρήστης &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; θέλει να μοιραστεί έναν εκτυπωτή &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; με μια ομάδα που σας ανήκει: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Εάν δεχτείτε, όλα τα μέλη της ομάδας θα έχουν τη δυνατότητα να χρησιμοποιούν τον εκτυπωτή.</translation>
 <translation id="3587482841069643663">Όλες</translation>
 <translation id="3627588569887975815">Άνοιγμα συνδέσμου σε παράθυρο inco&amp;gnito</translation>
 <translation id="3627879631695760395">Εγκατάσταση του <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Προγράμματα χειρισμού</translation>
 <translation id="3678156199662914018">Επέκταση: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Αίτημα κοινής χρήσης οθόνης από την εφαρμογή <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Να μην επιτρέπεται στους ιστοτόπους που έκλεισαν να ολοκληρώνουν την αποστολή ή τη λήψη δεδομένων</translation>
 <translation id="3711931198657368127">Επικόλληση και μετάβαση στη διεύθυνση <ph name="URL" /></translation>
 <translation id="3727187387656390258">Έλεγχος αναδυόμενου παραθύρου</translation>
 <translation id="3744111561329211289">Συγχρονισμός παρασκηνίου</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Δημιουργήθηκε η επέκταση:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Αποδοχή για την ομάδα</translation>
 <translation id="4096508467498758490">Απενεργοποίηση επεκτάσεων λειτουργίας προγραμματιστή</translation>
 <translation id="4100839878934973028">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε μια εφαρμογή, η οποία ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
 <translation id="4109898769411476438">Κλείσιμο Προγράμματος Περιήγησης Πριν από την Εισαγωγή</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Εμφάνιση λεπτομερειών</translation>
 <translation id="4907306957610201395">Κατηγορία Δικαιωμάτων</translation>
 <translation id="4912643508233590958">Έξοδος από την κατάσταση αδράνειας</translation>
-<translation id="4918086044614829423">Αποδοχή</translation>
 <translation id="4927753642311223124">Δεν υπάρχει τίποτα να δεις, φύγε από εδώ.</translation>
 <translation id="4930714375720679147">Ενεργοποίηση</translation>
 <translation id="4988526792673242964">Σελίδες</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Εκκαθάριση δεδομένων ιστότοπου</translation>
 <translation id="6042308850641462728">Περισσότερα</translation>
 <translation id="6059925163896151826">Συσκευές USB</translation>
-<translation id="6082651258230788217">Εμφάνιση στη γραμμή εργαλείων</translation>
 <translation id="6086846494333236931">Εγκαταστάθηκε από το διαχειριστή σας</translation>
 <translation id="6101226222197207147">Προστέθηκε νέα εφαρμογή (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Η σύνδεσή σας στο διαδίκτυο παρακολουθείται</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Προσομοίωση επανεκκίνησης προγράμματος περιήγησης</translation>
 <translation id="6445450263907939268">Αν δεν επιθυμείτε να γίνουν αυτές οι αλλαγές, μπορείτε να επαναφέρετε τις προηγούμενες ρυθμίσεις σας.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Απόρριψη</translation>
 <translation id="6498249116389603658">&amp;Όλες οι γλώσσες σας</translation>
 <translation id="6503077044568424649">Πιο δημοφιλή</translation>
 <translation id="6508261954199872201">Εφαρμογή: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Μπορεί να Διαβάζει και να Αλλάζει τα Δεδομένα Ιστοτόπου</translation>
 <translation id="708060913198414444">Α&amp;ντιγραφή διεύθυνσης ήχου</translation>
 <translation id="7175353351958621980">Φορτώθηκε από:</translation>
-<translation id="7186088072322679094">Διατήρηση στη γραμμή εργαλείων</translation>
+<translation id="7186088072322679094">Διατήρηση στη Γραμμή Εργαλείων</translation>
 <translation id="7270858098575133036">Να γίνεται ερώτηση όταν ένας ιστότοπος θέλει να χρησιμοποιήσει αποκλειστικά μηνύματα συστήματος για την πρόσβαση σε συσκευές MIDI</translation>
 <translation id="7287143125007575591">Δεν επιτρέπεται η πρόσβαση.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Είναι αυτή η σελίδα νέας καρτέλας που περιμένατε να δείτε;</translation>
 <translation id="786073089922909430">Υπηρεσία: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Πρόσφατοι προορισμοί</translation>
-<translation id="7898627924844766532">Διατήρηση στη γραμμή εργαλείων</translation>
 <translation id="7903925330883316394">Βοηθητικό πρόγραμμα: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Αυτήν τη στιγμή εκτός σύνδεσης</translation>
 <translation id="7947962633355574091">Α&amp;ντιγραφή διεύθυνσης βίντεο</translation>
@@ -452,7 +445,6 @@
 <translation id="8725066075913043281">Προσπαθήστε ξανά</translation>
 <translation id="8757090071857742562">Δεν είναι δυνατή η μετάδοση της επιφάνειας εργασίας. Ελέγξτε για να διαπιστώσετε εάν έχετε επιβεβαιώσει την εντολή έναρξης της κοινής χρήσης της οθόνης σας.</translation>
 <translation id="8774934320277480003">Επάνω περιθώριο</translation>
-<translation id="8783093612333542422">Ο χρήστης &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; θέλει να μοιραστεί έναν εκτυπωτή &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; μαζί σας.</translation>
 <translation id="8798099450830957504">Προεπιλογή</translation>
 <translation id="8800004011501252845">Εμφάνιση προορισμών για</translation>
 <translation id="8808478386290700967">Ηλεκτρονικό κατάστημα</translation>

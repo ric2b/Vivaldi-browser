@@ -19,11 +19,9 @@ class XmlAttributes
     : public std::vector<std::pair<std::string_view, std::string_view>> {
  public:
   XmlAttributes();
-  XmlAttributes(const std::string_view& attr_key,
-                const std::string_view& attr_value);
+  XmlAttributes(std::string_view attr_key, std::string_view attr_value);
 
-  XmlAttributes& add(const std::string_view& attr_key,
-                     const std::string_view& attr_value);
+  XmlAttributes& add(std::string_view attr_key, std::string_view attr_value);
 };
 
 // Helper class for writing XML elements. New XML element is started in
@@ -42,7 +40,7 @@ class XmlElementWriter {
                    const XmlAttributes& attributes,
                    int indent);
   // Starts new XML element with specified indentation. Specialized constructor
-  // that allows writting XML element with single attribute without copying
+  // that allows writing XML element with single attribute without copying
   // attribute value.
   template <class Writer>
   XmlElementWriter(std::ostream& out,
@@ -54,7 +52,7 @@ class XmlElementWriter {
   ~XmlElementWriter();
 
   // Writes arbitrary XML element text.
-  void Text(const std::string_view& content);
+  void Text(std::string_view content);
 
   // Starts new XML sub-element. Caller must ensure that parent element outlives
   // its children.

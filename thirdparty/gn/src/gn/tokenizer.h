@@ -40,15 +40,17 @@ class Tokenizer {
   //
   // This is a helper function for error output so that the tokenizer's
   // notion of lines can be used elsewhere.
-  static size_t ByteOffsetOfNthLine(const std::string_view& buf, int n);
+  static size_t ByteOffsetOfNthLine(std::string_view buf, int n);
 
   // Returns true if the given offset of the string piece counts as a newline.
   // The offset must be in the buffer.
-  static bool IsNewline(const std::string_view& buffer, size_t offset);
+  static bool IsNewline(std::string_view buffer, size_t offset);
 
   static bool IsIdentifierFirstChar(char c);
 
   static bool IsIdentifierContinuingChar(char c);
+
+  static Token::Type ClassifyToken(char next_char, char following_char);
 
  private:
   // InputFile must outlive the tokenizer and all generated tokens.

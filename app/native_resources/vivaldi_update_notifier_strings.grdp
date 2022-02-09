@@ -129,4 +129,8 @@
     desc="A message informing that the browser is up do date.">
     Vivaldi <ph name="VERSION">$1<ex>3.6.2171</ex></ph> is currently the newest version available.
   </message>
+  <message name="IDS_UPDATE_NOTIFICATION_PENDING_UPDATE_TEXT"
+    desc="A message informing that the latest update was already installed and will be activated after the user restarts the browser.">
+    Vivaldi <ph name="VERSION">$1<ex>3.6.2171</ex></ph> is already installed and will be activated after restarting the browser.
+  </message>
 </grit-part>

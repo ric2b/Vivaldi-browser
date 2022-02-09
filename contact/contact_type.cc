@@ -14,7 +14,7 @@
 
 namespace contact {
 
-Contact::Contact() : name(base::ASCIIToUTF16("")), updateFields(0) {}
+Contact::Contact() : name(u""), updateFields(0) {}
 
 Contact::Contact(const Contact& contact) = default;
 

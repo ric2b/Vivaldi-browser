@@ -147,15 +147,15 @@ JavaScriptFeature::GetDependentFeatures() const {
   return dependent_features_;
 }
 
-base::Optional<std::string> JavaScriptFeature::GetScriptMessageHandlerName()
+absl::optional<std::string> JavaScriptFeature::GetScriptMessageHandlerName()
     const {
-  return base::nullopt;
+  return absl::nullopt;
 }
 
-base::Optional<JavaScriptFeature::ScriptMessageHandler>
+absl::optional<JavaScriptFeature::ScriptMessageHandler>
 JavaScriptFeature::GetScriptMessageHandler() const {
   if (!GetScriptMessageHandlerName()) {
-    return base::nullopt;
+    return absl::nullopt;
   }
 
   return base::BindRepeating(&JavaScriptFeature::ScriptMessageReceived,
@@ -169,14 +169,15 @@ bool JavaScriptFeature::CallJavaScriptFunction(
     WebFrame* web_frame,
     const std::string& function_name,
     const std::vector<base::Value>& parameters) {
+  DCHECK(web_frame);
+
   JavaScriptFeatureManager* feature_manager =
       JavaScriptFeatureManager::FromBrowserState(web_frame->GetBrowserState());
   DCHECK(feature_manager);
 
-  // A feature can still ExecuteJavaScript even if there are no initial scripts,
-  // so a nil content_world here will execute JS in the main page content world.
   JavaScriptContentWorld* content_world =
       feature_manager->GetContentWorldForFeature(this);
+  DCHECK(content_world);
 
   return web_frame->GetWebFrameInternal()->CallJavaScriptFunctionInContentWorld(
       function_name, parameters, content_world);
@@ -188,14 +189,15 @@ bool JavaScriptFeature::CallJavaScriptFunction(
     const std::vector<base::Value>& parameters,
     base::OnceCallback<void(const base::Value*)> callback,
     base::TimeDelta timeout) {
+  DCHECK(web_frame);
+
   JavaScriptFeatureManager* feature_manager =
       JavaScriptFeatureManager::FromBrowserState(web_frame->GetBrowserState());
   DCHECK(feature_manager);
 
-  // A feature can still ExecuteJavaScript even if there are no initial scripts,
-  // so a nil content_world here will execute JS in the main page content world.
   JavaScriptContentWorld* content_world =
       feature_manager->GetContentWorldForFeature(this);
+  DCHECK(content_world);
 
   return web_frame->GetWebFrameInternal()->CallJavaScriptFunctionInContentWorld(
       function_name, parameters, content_world, std::move(callback), timeout);

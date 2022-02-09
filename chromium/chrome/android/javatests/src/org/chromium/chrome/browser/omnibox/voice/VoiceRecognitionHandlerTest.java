@@ -227,11 +227,6 @@ public class VoiceRecognitionHandlerTest {
             mVoiceConfidenceValue = value;
         }
 
-        @Override
-        protected boolean isRecognitionIntentPresent(boolean useCachedValue) {
-            return true;
-        }
-
         @VoiceInteractionSource
         public int getVoiceSearchStartEventSource() {
             return mStartSource;
@@ -413,8 +408,12 @@ public class VoiceRecognitionHandlerTest {
         public TestAutocompleteCoordinator(ViewGroup parent, AutocompleteDelegate delegate,
                 OmniboxSuggestionsDropdownEmbedder dropdownEmbedder,
                 UrlBarEditingTextStateProvider urlBarEditingTextProvider) {
+            // clang-format off
             super(parent, delegate, dropdownEmbedder, urlBarEditingTextProvider,
-                    mLifecycleDispatcher, () -> mModalDialogManager, null, null, mDataProvider);
+                    mLifecycleDispatcher, () -> mModalDialogManager, null, null, mDataProvider,
+                    mProfileSupplier, (tab) -> {}, null, (url) -> false,
+                    (pixelSize, callback) -> {});
+            // clang-format on
         }
 
         @Override
@@ -608,6 +607,7 @@ public class VoiceRecognitionHandlerTest {
 
         mDataProvider = new TestDataProvider();
         mDelegate = TestThreadUtils.runOnUiThreadBlocking(() -> new TestDelegate());
+        VoiceRecognitionHandler.setIsRecognitionIntentPresentForTesting(true);
         mHandler = new TestVoiceRecognitionHandler(mDelegate, mProfileSupplier);
         mHandler.addObserver(mObserver);
         mPermissionDelegate = new TestAndroidPermissionDelegate();
@@ -624,7 +624,7 @@ public class VoiceRecognitionHandlerTest {
         doReturn(DEFAULT_USER_EMAIL).when(mAssistantVoiceSearchService).getUserEmail();
 
         doReturn(true).when(mTranslateBridgeWrapper).canManuallyTranslate(notNull());
-        doReturn("fr").when(mTranslateBridgeWrapper).getOriginalLanguage(notNull());
+        doReturn("fr").when(mTranslateBridgeWrapper).getSourceLanguage(notNull());
         doReturn("de").when(mTranslateBridgeWrapper).getCurrentLanguage(notNull());
         doReturn("ja").when(mTranslateBridgeWrapper).getTargetLanguage();
         mHandler.setTranslateBridgeWrapper(mTranslateBridgeWrapper);
@@ -634,7 +634,10 @@ public class VoiceRecognitionHandlerTest {
     public void tearDown() {
         mHandler.removeObserver(mObserver);
         SysUtils.resetForTesting();
-        TestThreadUtils.runOnUiThreadBlocking(() -> { mWindowAndroid.destroy(); });
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            VoiceRecognitionHandler.setIsRecognitionIntentPresentForTesting(null);
+            mWindowAndroid.destroy();
+        });
     }
 
     /**
@@ -1056,7 +1059,7 @@ public class VoiceRecognitionHandlerTest {
     testStartVoiceRecognition_NoTranslateExtrasWhenLanguagesUndetected() {
         doReturn(true).when(mAssistantVoiceSearchService).canRequestAssistantVoiceSearch();
         doReturn(true).when(mAssistantVoiceSearchService).shouldRequestAssistantVoiceSearch();
-        doReturn(null).when(mTranslateBridgeWrapper).getOriginalLanguage(notNull());
+        doReturn(null).when(mTranslateBridgeWrapper).getSourceLanguage(notNull());
         startVoiceRecognition(VoiceInteractionSource.TOOLBAR);
 
         Assert.assertTrue(mWindowAndroid.wasCancelableIntentShown());

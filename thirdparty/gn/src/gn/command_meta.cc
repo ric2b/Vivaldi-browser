@@ -74,7 +74,7 @@ Examples
 
 int RunMeta(const std::vector<std::string>& args) {
   if (args.size() == 0) {
-    Err(Location(), "You're holding it wrong.",
+    Err(Location(), "Unknown command format. See \"gn help meta\"",
         "Usage: \"gn meta <out_dir> <target>* --data=<key>[,<key>*] "
         "[--walk=<key>[,<key>*]*] [--rebase=<dest dir>]\"")
         .PrintToStdout();

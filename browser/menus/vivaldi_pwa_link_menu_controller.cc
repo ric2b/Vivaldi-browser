@@ -36,7 +36,7 @@ void PWALinkMenuController::Populate(Browser* browser,
   if (!apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile_))
     return;
 
-  base::Optional<web_app::AppId> app_id =
+  absl::optional<web_app::AppId> app_id =
       web_app::FindInstalledAppWithUrlInScope(profile_,
                                               rv_context_menu_->GetLinkUrl());
   if (!app_id)

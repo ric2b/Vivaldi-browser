@@ -4,7 +4,6 @@
 
 #include "ash/wm/desks/desks_restore_util.h"
 
-#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -64,7 +63,31 @@ PrefService* GetPrimaryUserPrefService() {
 bool IsValidDeskIndex(int desk_index) {
   return desk_index >= 0 &&
          desk_index < int{DesksController::Get()->desks().size()} &&
-         desk_index < int{desks_util::GetMaxNumberOfDesks()};
+         desk_index < int{desks_util::kMaxNumberOfDesks};
+}
+
+base::Time GetTime(int year, int month, int day_of_month, int day_of_week) {
+  base::Time::Exploded time_exploded;
+  time_exploded.year = year;
+  time_exploded.month = month;
+  time_exploded.day_of_week = day_of_week;
+  time_exploded.day_of_month = day_of_month;
+  time_exploded.hour = 0;
+  time_exploded.minute = 0;
+  time_exploded.second = 0;
+  time_exploded.millisecond = 0;
+  base::Time time;
+  const bool result = base::Time::FromLocalExploded(time_exploded, &time);
+  DCHECK(result);
+  return time;
+}
+
+// Check if base::Time::Now() is during the time period 07/27/2021 to
+// 09/07/2021.
+bool IsNowInValidTimePeriod() {
+  const auto now = base::Time::Now();
+  return now <= GetTime(2021, 9, 7, /*Tuesday=*/2) &&
+         now >= GetTime(2021, 7, 27, /*Tuesday=*/2);
 }
 
 }  // namespace
@@ -74,10 +97,10 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(prefs::kDesksNamesList);
   registry->RegisterListPref(prefs::kDesksMetricsList);
   registry->RegisterDictionaryPref(prefs::kDesksWeeklyActiveDesksMetrics);
-  if (features::IsBentoEnabled()) {
-    registry->RegisterIntegerPref(prefs::kDesksActiveDesk,
-                                  kDefaultActiveDeskIndex);
-  }
+  registry->RegisterIntegerPref(prefs::kDesksActiveDesk,
+                                kDefaultActiveDeskIndex);
+  registry->RegisterBooleanPref(prefs::kUserHasUsedDesksRecently,
+                                /*default_value=*/false);
 }
 
 void RestorePrimaryUserDesks() {
@@ -99,7 +122,7 @@ void RestorePrimaryUserDesks() {
 
   // If we don't have any restore data, or the list is corrupt for some reason,
   // abort.
-  if (!restore_size || restore_size > desks_util::GetMaxNumberOfDesks())
+  if (!restore_size || restore_size > desks_util::kMaxNumberOfDesks)
     return;
 
   auto* desks_controller = DesksController::Get();
@@ -166,17 +189,15 @@ void RestorePrimaryUserDesks() {
   }
 
   // Restore an active desk for the primary user.
-  if (features::IsBentoEnabled()) {
-    const int active_desk_index =
-        primary_user_prefs->GetInteger(prefs::kDesksActiveDesk);
+  const int active_desk_index =
+      primary_user_prefs->GetInteger(prefs::kDesksActiveDesk);
 
-    // A crash in between prefs::kDesksNamesList and prefs::kDesksActiveDesk
-    // can cause an invalid active desk index.
-    if (!IsValidDeskIndex(active_desk_index))
-      return;
+  // A crash in between prefs::kDesksNamesList and prefs::kDesksActiveDesk
+  // can cause an invalid active desk index.
+  if (!IsValidDeskIndex(active_desk_index))
+    return;
 
-    desks_controller->RestorePrimaryUserActiveDeskIndex(active_desk_index);
-  }
+  desks_controller->RestorePrimaryUserActiveDeskIndex(active_desk_index);
 
   // Restore weekly active desks metrics.
   auto* weekly_active_desks_dict =
@@ -223,6 +244,11 @@ void UpdatePrimaryUserDeskNamesPrefs() {
   }
 
   DCHECK_EQ(name_pref_data->GetSize(), desks.size());
+
+  if (IsNowInValidTimePeriod() &&
+      !primary_user_prefs->GetBoolean(prefs::kUserHasUsedDesksRecently)) {
+    primary_user_prefs->SetBoolean(prefs::kUserHasUsedDesksRecently, true);
+  }
 }
 
 void UpdatePrimaryUserDeskMetricsPrefs() {
@@ -268,7 +294,6 @@ void UpdatePrimaryUserDeskMetricsPrefs() {
 }
 
 void UpdatePrimaryUserActiveDeskPrefs(int active_desk_index) {
-  DCHECK(features::IsBentoEnabled());
   DCHECK(IsValidDeskIndex(active_desk_index));
   if (g_pause_desks_prefs_updates)
     return;

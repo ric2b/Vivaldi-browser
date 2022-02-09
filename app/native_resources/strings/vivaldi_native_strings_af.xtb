@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Stuur Skakel per E-pos</translation>
 <translation id="1454726940098520109">Moenie Weer Bevestiging Toon Nie</translation>
 <translation id="1462666970065907900">Wil u regtig hierdie venster sluit?</translation>
+<translation id="1480046233931937785">Met dank aan</translation>
 <translation id="1526344461589023948">’n Fout het voorgekom toe ’n afgelaaide bywerking bewaar moes word. Maak seker u rekenaar het genoeg skyfspasie en probeer later weer.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nuwe Privaat Venster</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Open in Nuwe Oortjie</translation>
 <translation id="3027988479108856431">U Yandex-instellings is ongekullig onbeskikbaar terwyl daardie blaaier loop. Bewaar u werk en sluit alle Yandex-oortjies om daardie instellings na Vivaldi in te voer. Klik daarna op Gaan Voort.</translation>
 <translation id="3084011186245865060">Landskap 6</translation>
+<translation id="3093931836425623631">Vivaldi is moontlik gemaak deur die Chromium-oopbronprojek en ander oopbronprogrammatuur.</translation>
 <translation id="3127383884976966729">Dier 7</translation>
 <translation id="3156398087075132709">Nuwe Boekmerk</translation>
 <translation id="3255747772218936245">Installeer bywerking</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi word moontlik gemaak deur die <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />-oopbronprojek en ander <ph name="BEGIN_LINK_OSS" />oopbronprogrammatuur<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Kon nie die bywerkinstalleerder lanseer nie. Maak seker u rekenaar het genoeg geheue of skyfspasie en probeer later weer.</translation>
 <translation id="7658239707568436148">Kanselleer</translation>
 <translation id="7715497554424665066">&amp;Ignoreer Bywerking</translation>

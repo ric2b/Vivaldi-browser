@@ -23,23 +23,6 @@ VivaldiBrowserMainExtraParts::Create() {
   return std::make_unique<VivaldiBrowserMainExtraPartsMac>();
 }
 
-bool VivaldiBrowserMainExtraPartsMac::checkVersionPath(std::string location,
-                                                     std::string pepperPath,
-                                                     std::string* versionPath) {
-  if (base::PathExists(base::FilePath(location))) {
-    base::FileEnumerator path_enum(base::FilePath(location), false,
-                                   base::FileEnumerator::DIRECTORIES);
-    for (base::FilePath name = path_enum.Next(); !name.empty();
-         name = path_enum.Next()) {
-      if (base::PathExists(name.Append(pepperPath))) {
-        *versionPath = name.Append(pepperPath).MaybeAsASCII();
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraPartsMac::PostEarlyInitialization() {
   VivaldiBrowserMainExtraParts::PostEarlyInitialization();

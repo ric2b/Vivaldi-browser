@@ -34,7 +34,7 @@ class VivaldiTranslateAgent : public translate::TranslateAgent {
   bool HasTranslationFinished() override;
   bool HasTranslationFailed() override;
   int64_t GetErrorCode() override;
-  std::string GetOriginalPageLanguage() override;
+  std::string GetPageSourceLanguage() override;
   void ExecuteScript(const std::string& script) override;
   base::TimeDelta AdjustDelay(int delay_in_milliseconds) override;
 

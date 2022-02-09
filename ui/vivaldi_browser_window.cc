@@ -25,7 +25,6 @@
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/favicon/favicon_utils.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -51,6 +50,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/printing/browser/print_composite_client.h"
@@ -133,7 +133,15 @@ autofill::SaveUPIBubble* VivaldiAutofillBubbleHandler::ShowSaveUPIBubble(
 autofill::AutofillBubbleBase*
 VivaldiAutofillBubbleHandler::ShowSaveAddressProfileBubble(
     content::WebContents* web_contents,
-    autofill::SaveAddressProfileBubbleController* controller,
+    autofill::SaveUpdateAddressProfileBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
+autofill::AutofillBubbleBase*
+VivaldiAutofillBubbleHandler::ShowUpdateAddressProfileBubble(
+    content::WebContents* web_contents,
+    autofill::SaveUpdateAddressProfileBubbleController* controller,
     bool is_user_gesture) {
   return nullptr;
 }
@@ -142,6 +150,14 @@ autofill::AutofillBubbleBase*
 VivaldiAutofillBubbleHandler::ShowEditAddressProfileDialog(
     content::WebContents* web_contents,
     autofill::EditAddressProfileDialogController* controller) {
+  return nullptr;
+}
+
+autofill::AutofillBubbleBase*
+VivaldiAutofillBubbleHandler::ShowVirtualCardManualFallbackBubble(
+    content::WebContents* web_contents,
+    autofill::VirtualCardManualFallbackBubbleController* controller,
+    bool is_user_gesture) {
   return nullptr;
 }
 
@@ -986,8 +1002,8 @@ void VivaldiBrowserWindow::OnNativeClose() {
   // The missing profile will (very often) trigger a crash on Linux. VB-34358
   // TODO(all): There is missing cleanup in chromium code. See VB-34358.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&VivaldiBrowserWindow::DeleteThis, base::Unretained(this)));
+      FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
+                                     base::Unretained(this)));
 }
 
 void VivaldiBrowserWindow::DeleteThis() {
@@ -1029,8 +1045,8 @@ std::u16string VivaldiBrowserWindow::GetTitle() {
   } else {
     title = web_contents()->GetTitle();
   }
-  title += base::UTF8ToUTF16(" - Vivaldi");
-  base::RemoveChars(title, base::ASCIIToUTF16("\n"), &title);
+  title += u" - Vivaldi";
+  base::RemoveChars(title, u"\n", &title);
   return title;
 }
 
@@ -1042,7 +1058,7 @@ void VivaldiBrowserWindow::OnActiveTabChanged(
   UpdateTitleBar();
 
   infobar_container_->ChangeInfoBarManager(
-      InfoBarService::FromWebContents(new_contents));
+      infobars::ContentInfoBarManager::FromWebContents(new_contents));
 }
 
 void VivaldiBrowserWindow::SetWebContentsBlocked(
@@ -1200,6 +1216,13 @@ send_tab_to_self::SendTabToSelfBubbleView*
 VivaldiBrowserWindow::ShowSendTabToSelfBubble(
     content::WebContents* contents,
     send_tab_to_self::SendTabToSelfBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
+sharing_hub::SharingHubBubbleView* VivaldiBrowserWindow::ShowSharingHubBubble(
+    content::WebContents* contents,
+    sharing_hub::SharingHubBubbleController* controller,
     bool is_user_gesture) {
   return nullptr;
 }

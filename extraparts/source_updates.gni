@@ -24,7 +24,6 @@ foreach(_target, _main_dll_targets) {
     }
     deps += [
       "//vivaldi/components:adverse_adblocking",
-      "//vivaldi/components:content_adverse_adblocking",
       "//vivaldi/extensions:extensions_client"
     ]
   }
@@ -38,7 +37,6 @@ if (vivaldi_build_tests) {
     ]
     public_deps += [
       "//vivaldi/components:adverse_adblocking",
-      "//vivaldi/components:content_adverse_adblocking",
     ]
     if (!is_android) {
       public_deps += [ "//vivaldi/extensions:extensions_client" ]

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Vazhdoj</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Të diagnostikoni rrjetin kompjuterik<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Njoftimet</translation>
+<translation id="2491414235131909199">Faqja është bllokuar nga një shtesë</translation>
 <translation id="2501278716633472235">Kthehem</translation>
 <translation id="2539524384386349900">Diktoj</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ktheu përgjigje të pavlefshme.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Te faqja nuk duhen vendosur informacione konfidenciale (për shembull, fjalëkalimet ose kartat e kreditit), sepse mund të vidhen nga piratët e internetit.</translation>
 <translation id="5869405914158311789">Faqe e paarritshme</translation>
 <translation id="5932224571077948991">Faqja tregon reklama të padëshirueshme ose evazive</translation>
-<translation id="5990559369517809815">Një shtesë bllokoi kërkesat që po i paraqiten serverit.</translation>
 <translation id="6051221802930200923">Për momentin nuk mund ta vizitoni <ph name="SITE" />, sepse faqja përdor një certifikatë të lëshuar gabim. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="6146055958333702838">Kontrolloni kabllot dhe ndizni prapë ruterin, modemin apo çdo aparat tjetër
     që përdorni në rrjetin kompjuterik.</translation>
@@ -194,7 +194,7 @@
 <translation id="7716424297397655342">Nuk hapet faqja nga cache</translation>
 <translation id="7758069387465995638">Lidhja mund të jetë bllokuar nga programi mbrojtës i rrjetit ose antivirusi.</translation>
 <translation id="7800304661137206267">Lidhja mbrohet me shifrimin <ph name="CIPHER" />, duke përdorur <ph name="MAC" /> për vërtetimin e mesazhit dhe <ph name="KX" /> për shkëmbimin e algoritmeve kriptografike.</translation>
-<translation id="7834399512844817676"><ph name="SITE" /> normalisht përdor metodën e shifrimit për mbrojtjen e informacioneve tuaja. Këtë herë, kur Vivaldi tentoi lidhjen me <ph name="SITE" />, faqja e internetit ktheu kredenciale të pazakonta dhe të pasakta. Kjo ndodh kur piratët e internetit kamuflohen si <ph name="SITE" /> ose kur një dritare për qasjen me Wi-Fi e ndërpret lidhjen. Informacionet tuaja janë të sigurta sepse Vivaldi e ndali lidhjen para shkëmbimit të të dhënave.</translation>
+<translation id="7834399512844817676"><ph name="SITE" /> normalisht përdor metoda shifrimi për t'ju mbrojtur informacionet. Këtë herë, kur Vivaldi tentoi lidhjen me <ph name="SITE" />, faqja e internetit ktheu kredenciale të pazakonta dhe të pasakta. Kjo ndodh kur piratët e internetit kamuflohen si <ph name="SITE" /> ose kur një dritare për qasjen me Wi-Fi e ndërpret lidhjen. Informacionet tuaja janë të sigurta sepse Vivaldi e ndali lidhjen para shkëmbimit të të dhënave.</translation>
 <translation id="7878562273885520351">Ky fjalëkalim mund të jetë komprometuar</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Te kjo faqja, piratët e internetit mund t'ju mashtrojnë në mënyrë të rrezikshme që të instaloni programe ose të zbuloni informacionet personale (për shembull, fjalëkalimet, numrat e telefonit ose kartat e kreditit).</translation>

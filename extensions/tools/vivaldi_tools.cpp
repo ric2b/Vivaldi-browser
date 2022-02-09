@@ -6,7 +6,9 @@
 #include <string>
 #include <utility>
 
+#include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -176,7 +178,7 @@ Browser* FindVivaldiBrowser() {
 }
 
 void BroadcastEvent(const std::string& eventname,
-                    std::unique_ptr<base::ListValue> args,
+                    std::vector<base::Value> args,
                     content::BrowserContext* context) {
   auto event = std::make_unique<extensions::Event>(
       extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args));
@@ -187,20 +189,21 @@ void BroadcastEvent(const std::string& eventname,
 }
 
 void BroadcastEventToAllProfiles(const std::string& eventname,
-                                 std::unique_ptr<base::ListValue> args_list) {
-  if (!args_list) {
-    args_list = std::make_unique<base::ListValue>();
+                                 std::vector<base::Value> args_list) {
+  if (args_list.empty()) {
+    args_list = std::vector<base::Value>();
   }
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   std::vector<Profile*> active_profiles = profile_manager->GetLoadedProfiles();
   for (size_t i = 0; i < active_profiles.size(); ++i) {
     Profile* profile = active_profiles[i];
     DCHECK(profile);
-    std::unique_ptr<base::ListValue> args;
+    std::vector<base::Value> args;
     if (i + 1 == active_profiles.size()) {
       args = std::move(args_list);
     } else {
-      args = std::make_unique<base::ListValue>(args_list->GetList());
+      for (const auto& v : args_list)
+        args.emplace_back(v.Clone());
     }
     BroadcastEvent(eventname, std::move(args), profile);
   }

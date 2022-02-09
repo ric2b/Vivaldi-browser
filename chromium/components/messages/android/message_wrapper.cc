@@ -11,18 +11,20 @@
 
 namespace messages {
 
-MessageWrapper::MessageWrapper(base::OnceClosure action_callback,
+MessageWrapper::MessageWrapper(MessageIdentifier message_identifier,
+                               base::OnceClosure action_callback,
                                DismissCallback dismiss_callback)
     : action_callback_(std::move(action_callback)),
       dismiss_callback_(std::move(dismiss_callback)),
-      message_dismissed_(false) {
+      message_enqueued_(false) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_message_wrapper_ =
-      Java_MessageWrapper_create(env, reinterpret_cast<int64_t>(this));
+      Java_MessageWrapper_create(env, reinterpret_cast<int64_t>(this),
+                                 static_cast<int>(message_identifier));
 }
 
 MessageWrapper::~MessageWrapper() {
-  CHECK(message_dismissed_);
+  CHECK(!message_enqueued_);
 }
 
 std::u16string MessageWrapper::GetTitle() {
@@ -54,6 +56,17 @@ void MessageWrapper::SetDescription(const std::u16string& description) {
   base::android::ScopedJavaLocalRef<jstring> jdescription =
       base::android::ConvertUTF16ToJavaString(env, description);
   Java_MessageWrapper_setDescription(env, java_message_wrapper_, jdescription);
+}
+
+int MessageWrapper::GetDescriptionMaxLines() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_MessageWrapper_getDescriptionMaxLines(env, java_message_wrapper_);
+}
+
+void MessageWrapper::SetDescriptionMaxLines(int max_lines) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_MessageWrapper_setDescriptionMaxLines(env, java_message_wrapper_,
+                                             max_lines);
 }
 
 std::u16string MessageWrapper::GetPrimaryButtonText() {
@@ -105,6 +118,11 @@ void MessageWrapper::SetIconResourceId(int resource_id) {
                                         resource_id);
 }
 
+void MessageWrapper::DisableIconTint() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_MessageWrapper_disableIconTint(env, java_message_wrapper_);
+}
+
 int MessageWrapper::GetSecondaryIconResourceId() {
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_MessageWrapper_getSecondaryIconResourceId(env,
@@ -121,6 +139,11 @@ void MessageWrapper::SetSecondaryActionCallback(base::OnceClosure callback) {
   secondary_action_callback_ = std::move(callback);
 }
 
+void MessageWrapper::SetDuration(long customDuration) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_MessageWrapper_setDuration(env, java_message_wrapper_, customDuration);
+}
+
 void MessageWrapper::HandleActionClick(JNIEnv* env) {
   if (!action_callback_.is_null())
     std::move(action_callback_).Run();
@@ -133,8 +156,7 @@ void MessageWrapper::HandleSecondaryActionClick(JNIEnv* env) {
 
 void MessageWrapper::HandleDismissCallback(JNIEnv* env, int dismiss_reason) {
   // Make sure message dismissed callback is called exactly once.
-  CHECK(!message_dismissed_);
-  message_dismissed_ = true;
+  message_enqueued_ = false;
   Java_MessageWrapper_clearNativePtr(env, java_message_wrapper_);
   if (!dismiss_callback_.is_null())
     std::move(dismiss_callback_)
@@ -147,6 +169,10 @@ void MessageWrapper::HandleDismissCallback(JNIEnv* env, int dismiss_reason) {
 const base::android::JavaRef<jobject>& MessageWrapper::GetJavaMessageWrapper()
     const {
   return java_message_wrapper_;
+}
+
+void MessageWrapper::SetMessageEnqueued() {
+  message_enqueued_ = true;
 }
 
 }  // namespace messages

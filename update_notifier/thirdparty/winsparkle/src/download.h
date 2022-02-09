@@ -28,18 +28,13 @@
 
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 
+#include "base/strings/string_piece.h"
 #include "url/gurl.h"
 
 #include <string>
 #include <vector>
 
-namespace winsparkle {
-
-/// Flags for DownloadFile().
-enum DownloadFlag {
-  /// Don't get resources from cache, always contact the origin server
-  Download_NoCached = 1
-};
+namespace vivaldi_update_notifier {
 
 // Maximum size of the allowed download.
 constexpr int kMaxAllowedDownloadSize = 1024 * 1024 * 1024;
@@ -49,15 +44,21 @@ constexpr int kMaxAllowedDownloadSize = 1024 * 1024 * 1024;
  */
 class FileDownloader {
  public:
-  /**
-   * Initialize a new downloader and connect to the given url.
-   * @param url   URL of the resource to download.
-   * @param flags Or-combination of DownloadFlag values.
-   */
-  FileDownloader(const GURL& url, int flags, Error& error);
+  FileDownloader();
   FileDownloader(const FileDownloader&) = delete;
   FileDownloader& operator=(const FileDownloader&) = delete;
   ~FileDownloader();
+
+  // Don't get resources from cache, always contact the origin server
+  void DisableCaching() {
+    DCHECK(!inet_handle_);
+    disable_caching_ = true;
+  }
+
+  void SetHeader(base::StringPiece name, base::StringPiece value);
+
+  // Connect to the given URL.
+  void Connect(const GURL& url, Error& error);
 
   /**
    * Get reported length of data to download. Return 0 if unknown.
@@ -87,6 +88,8 @@ class FileDownloader {
   void* inet_handle_ = nullptr;
   void* connection_handle_ = nullptr;
   void* request_handle_ = nullptr;
+  std::string http_headers_;
+  bool disable_caching_ = false;
   int content_length_ = 0;
   int data_length_ = 0;
   int total_read_length_ = 0;
@@ -96,6 +99,6 @@ class FileDownloader {
 
 void ReportWindowsError(const char* api_function, Error& error);
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_DOWNLOAD_H_

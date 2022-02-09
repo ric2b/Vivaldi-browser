@@ -64,25 +64,26 @@ class ContactService::ContactBackendDelegate
 
   void DBLoaded() override {
     service_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&ContactService::OnDBLoaded, contact_service_));
+        FROM_HERE,
+        base::BindOnce(&ContactService::OnDBLoaded, contact_service_));
   }
 
   void NotifyContactCreated(const ContactRow& row) override {
     service_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&ContactService::OnContactCreated, contact_service_, row));
+        FROM_HERE, base::BindOnce(&ContactService::OnContactCreated,
+                                  contact_service_, row));
   }
 
   void NotifyContactModified(const ContactRow& row) override {
     service_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&ContactService::OnContactChanged, contact_service_, row));
+        FROM_HERE, base::BindOnce(&ContactService::OnContactChanged,
+                                  contact_service_, row));
   }
 
   void NotifyContactDeleted(const ContactRow& row) override {
     service_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&ContactService::OnContactDeleted, contact_service_, row));
+        FROM_HERE, base::BindOnce(&ContactService::OnContactDeleted,
+                                  contact_service_, row));
   }
 
  private:
@@ -136,8 +137,8 @@ bool ContactService::Init(
       backend_task_runner_));
   contact_backend_.swap(backend);
 
-  ScheduleTask(base::Bind(&ContactBackend::Init, contact_backend_, no_db,
-                          contact_database_params));
+  ScheduleTask(base::BindOnce(&ContactBackend::Init, contact_backend_, no_db,
+                              contact_database_params));
 
   return true;
 }
@@ -203,8 +204,8 @@ void ContactService::Cleanup() {
     // reference from the contact thread, ensuring everything works properly.
     //
     contact_backend_->AddRef();
-    base::Closure closing_task =
-        base::Bind(&ContactBackend::Closing, contact_backend_);
+    base::RepeatingClosure closing_task =
+        base::BindRepeating(&ContactBackend::Closing, contact_backend_);
     ScheduleTask(closing_task);
     closing_task.Reset();
     backend_task_runner_->ReleaseSoon(FROM_HERE, std::move(contact_backend_));
@@ -244,7 +245,7 @@ void ContactService::OnContactChanged(const ContactRow& row) {
 
 base::CancelableTaskTracker::TaskId ContactService::CreateContact(
     ContactRow ev,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -254,14 +255,14 @@ base::CancelableTaskTracker::TaskId ContactService::CreateContact(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::CreateContact, contact_backend_, ev,
-                 query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::CreateContact, contact_backend_, ev,
+                     query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::CreateContacts(
     std::vector<contact::ContactRow> contacts,
-    const CreateContactsCallback& callback,
+    CreateContactsCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -271,14 +272,14 @@ base::CancelableTaskTracker::TaskId ContactService::CreateContacts(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::CreateContacts, contact_backend_, contacts,
-                 create_results),
-      base::Bind(callback, create_results));
+      base::BindOnce(&ContactBackend::CreateContacts, contact_backend_,
+                     contacts, create_results),
+      base::BindOnce(std::move(callback), create_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::AddProperty(
     AddPropertyObject ev,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -288,14 +289,14 @@ base::CancelableTaskTracker::TaskId ContactService::AddProperty(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::AddProperty, contact_backend_, ev,
-                 query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::AddProperty, contact_backend_, ev,
+                     query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::AddEmailAddress(
     EmailAddressRow email,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -305,43 +306,43 @@ base::CancelableTaskTracker::TaskId ContactService::AddEmailAddress(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::AddEmailAddress, contact_backend_, email,
-                 query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::AddEmailAddress, contact_backend_, email,
+                     query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::UpdateEmailAddress(
     EmailAddressRow email,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::UpdateEmailAddress, contact_backend_, email,
-                 query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::UpdateEmailAddress, contact_backend_,
+                     email, query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::RemoveEmailAddress(
     ContactID contact_id,
     EmailAddressID email_id,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::RemoveEmailAddress, contact_backend_,
-                 contact_id, email_id, query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::RemoveEmailAddress, contact_backend_,
+                     contact_id, email_id, query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::UpdateProperty(
     UpdatePropertyObject update_property,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -351,14 +352,14 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateProperty(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::UpdateProperty, contact_backend_,
-                 update_property, query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::UpdateProperty, contact_backend_,
+                     update_property, query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::RemoveProperty(
     RemovePropertyObject ev,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -368,13 +369,13 @@ base::CancelableTaskTracker::TaskId ContactService::RemoveProperty(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::RemoveProperty, contact_backend_, ev,
-                 query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::RemoveProperty, contact_backend_, ev,
+                     query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::GetAllContacts(
-    const QueryContactCallback& callback,
+    QueryContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -382,14 +383,15 @@ base::CancelableTaskTracker::TaskId ContactService::GetAllContacts(
   std::shared_ptr<ContactQueryResults> query_results =
       std::shared_ptr<ContactQueryResults>(new ContactQueryResults());
 
-  return tracker->PostTaskAndReply(backend_task_runner_.get(), FROM_HERE,
-                                   base::Bind(&ContactBackend::GetAllContacts,
-                                              contact_backend_, query_results),
-                                   base::Bind(callback, query_results));
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&ContactBackend::GetAllContacts, contact_backend_,
+                     query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::GetAllEmailAddresses(
-    const QueryEmailAddressesCallback& callback,
+    QueryEmailAddressesCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -399,15 +401,15 @@ base::CancelableTaskTracker::TaskId ContactService::GetAllEmailAddresses(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::GetAllEmailAddresses, contact_backend_,
-                 query_results),
-      base::Bind(callback, query_results));
+      base::BindOnce(&ContactBackend::GetAllEmailAddresses, contact_backend_,
+                     query_results),
+      base::BindOnce(std::move(callback), query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::UpdateContact(
     ContactID contact_id,
     Contact contact,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
 
@@ -418,14 +420,14 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateContact(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::UpdateContact, contact_backend_, contact_id,
-                 contact, update_results),
-      base::Bind(callback, update_results));
+      base::BindOnce(&ContactBackend::UpdateContact, contact_backend_,
+                     contact_id, contact, update_results),
+      base::BindOnce(std::move(callback), update_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::DeleteContact(
     ContactID contact_id,
-    const ContactCallback& callback,
+    ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
 
@@ -436,9 +438,9 @@ base::CancelableTaskTracker::TaskId ContactService::DeleteContact(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::Bind(&ContactBackend::DeleteContact, contact_backend_, contact_id,
-                 delete_results),
-      base::Bind(callback, delete_results));
+      base::BindOnce(&ContactBackend::DeleteContact, contact_backend_,
+                     contact_id, delete_results),
+      base::BindOnce(std::move(callback), delete_results));
 }
 
 }  // namespace contact

@@ -4,6 +4,8 @@
 
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "renderer/mojo/vivaldi_tabs_private.mojom.h"
+#include "renderer/tabs_private_service.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "renderer/vivaldi_snapshot_page.h"
 #include "renderer/vivaldi_spatial_navigation.h"
@@ -34,7 +36,11 @@ namespace vivaldi {
 
 VivaldiRenderFrameObserver::VivaldiRenderFrameObserver(
     content::RenderFrame* render_frame)
-    : content::RenderFrameObserver(render_frame) {}
+    : content::RenderFrameObserver(render_frame) {
+  DCHECK(render_frame);
+  tabs_private_service_ =
+      std::make_unique<VivaldiTabsPrivateService>(render_frame);
+}
 
 VivaldiRenderFrameObserver::~VivaldiRenderFrameObserver() {}
 
@@ -48,14 +54,8 @@ bool VivaldiRenderFrameObserver::OnMessageReceived(
     IPC_MESSAGE_HANDLER(VivaldiMsg_InsertText, OnInsertText)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_RequestThumbnailForFrame,
       OnRequestThumbnailForFrame)
-    IPC_MESSAGE_HANDLER(VivaldiViewMsg_GetAccessKeysForPage,
-      OnGetAccessKeysForPage)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_AccessKeyAction, OnAccessKeyAction)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_ScrollPage, OnScrollPage)
-    IPC_MESSAGE_HANDLER(VivaldiViewMsg_GetSpatialNavigationRects,
-      OnGetSpatialNavigationRects)
-    IPC_MESSAGE_HANDLER(VivaldiViewMsg_GetScrollPosition,
-      OnGetScrollPosition)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_ActivateElementFromPoint,
       OnActivateElementFromPoint);
 
@@ -107,76 +107,6 @@ void VivaldiRenderFrameObserver::OnInsertText(const std::u16string& text) {
     blink::WebRange(), 0);
 }
 
-void VivaldiRenderFrameObserver::OnGetSpatialNavigationRects() {
-  WebLocalFrame* frame = render_frame()->GetWebFrame();
-  if (!frame) {
-    return;
-  }
-
-  float scale = render_frame()->GetRenderView()->GetWebView()->ZoomFactorForDeviceScaleFactor();
-  if (scale == 0) {
-    scale = 1.0;
-  }
-
-  blink::Document* document =
-    static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
-  blink::LocalDOMWindow* window = document->domWindow();
-
-  std::vector<blink::WebElement> spatnav_elements;
-  blink::WebElementCollection all_elements = frame->GetDocument().All();
-  for (blink::WebElement element = all_elements.FirstItem(); !element.IsNull();
-    element = all_elements.NextItem()) {
-    gfx::Rect rect =
-      RevertDeviceScaling(element.BoundsInViewport(), scale);
-    if (IsInViewport(document, rect, window->innerHeight()) &&
-      IsNavigableElement(element) && IsVisible(element) &&
-      !IsTooSmall(rect) && !IsCovered(document, rect)) {
-      spatnav_elements.push_back(element);
-    }
-  }
-
-  std::vector<VivaldiViewMsg_NavigationRect> navigation_rects;
-  for (auto& element : spatnav_elements) {
-    gfx::Rect rect = element.BoundsInViewport();
-    if (element.IsLink()) {
-      blink::IntRect r = FindImageElementRect(element);
-      if (!r.IsEmpty()) {
-        rect.SetRect(r.X(), r.Y(), r.Width(), r.Height());
-      }
-    }
-    rect = RevertDeviceScaling(rect, scale);
-    std::string href = "";
-    if (element.IsLink()) {
-      href = element.GetAttribute("href").Utf8();
-    }
-    VivaldiViewMsg_NavigationRect navigation_rect;
-    navigation_rect.x = rect.x();
-    navigation_rect.y = rect.y();
-    navigation_rect.width = rect.width();
-    navigation_rect.height = rect.height();
-    navigation_rect.href = href;
-    navigation_rect.path = ElementPath(element);
-    navigation_rects.push_back(navigation_rect);
-  }
-
-  render_frame()->Send(new VivaldiViewHostMsg_GetSpatialNavigationRects_ACK(
-    render_frame()->GetRoutingID(), navigation_rects));
-}
-
-void VivaldiRenderFrameObserver::OnGetScrollPosition() {
-  WebLocalFrame* frame = render_frame()->GetRenderView()->GetWebView()->FocusedFrame();
-  if (!frame) {
-    return;
-  }
-  blink::Document* document =
-    static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
-  blink::LocalDOMWindow* window = document->domWindow();
-  int x = window->scrollX();
-  int y = window->scrollY();
-  render_frame()->Send(new VivaldiViewHostMsg_GetScrollPosition_ACK(
-    render_frame()->GetRoutingID(), x, y));
-}
-
 void VivaldiRenderFrameObserver::OnActivateElementFromPoint(int x,
   int y,
   int modifiers) {
@@ -199,40 +129,6 @@ void VivaldiRenderFrameObserver::OnActivateElementFromPoint(int x,
     blink::FocusParams params;
     elm->focus(params);
   }
-}
-
-void VivaldiRenderFrameObserver::OnGetAccessKeysForPage() {
-  std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys;
-
-  WebLocalFrame* frame = render_frame()->GetRenderView()->GetWebView()->FocusedFrame();
-  if (!frame) {
-    return;
-  }
-
-  blink::WebElementCollection elements = frame->GetDocument().All();
-  for (blink::WebElement element = elements.FirstItem(); !element.IsNull();
-    element = elements.NextItem()) {
-    if (element.HasAttribute("accesskey")) {
-      VivaldiViewMsg_AccessKeyDefinition entry;
-
-      entry.access_key = element.GetAttribute("accesskey").Utf8();
-      entry.title = element.GetAttribute("title").Utf8();
-      entry.href = element.GetAttribute("href").Utf8();
-      entry.value = element.GetAttribute("value").Utf8();
-      entry.id = element.GetAttribute("id").Utf8();
-      entry.tagname = element.TagName().Utf8();
-      entry.textContent = element.TextContent().Utf8();
-
-      access_keys.push_back(entry);
-    }
-  }
-
-//  focused_frame->Send(new FrameMsg_CustomContextMenuAction(
-//    focused_frame->GetRoutingID(), context, action));
-
-
-  render_frame()->GetRenderView()->Send(new VivaldiViewHostMsg_GetAccessKeysForPage_ACK(render_frame()->GetRoutingID(),
-    access_keys));
 }
 
 void VivaldiRenderFrameObserver::OnAccessKeyAction(std::string access_key) {

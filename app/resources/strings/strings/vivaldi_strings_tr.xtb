@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
-<translation id="1089894737218087497">Standalone olarak yükle</translation>
+<translation id="1089894737218087497">Taşınabilir olarak yükle</translation>
 <translation id="1682285232070778125">Vivaldi'yi varsayılan tarayıcı olarak ayarla</translation>
 <translation id="1974060860693918893">Gelişmiş</translation>
 <translation id="2134216661302048561">Vivaldi Yükleyicisi, Vivaldi Tarayıcısını yükleme işlemini bitiremedi. Şimdi çıkmak istediğinize emin misiniz?</translation>
@@ -9,6 +9,7 @@
 <translation id="237789874664518125">Telif Hakkı <ph name="YEAR" /> Vivaldi Technologies AS. Tüm hakları saklıdır. &lt;a&gt;Gizlilik Politikası&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Telif hakkı <ph name="YEAR" /> Vivaldi Technologies AS. Tüm hakları saklıdır.</translation>
 <translation id="2611953850925269349">Yine de Vivaldi'den çıkılsın mı?</translation>
+<translation id="2885378588091291677">Görev Yöneticisi</translation>
 <translation id="3004507951429848293">'Kabul Et ve Güncelle' düğmesine tıklayarak Vivaldi'nin &lt;a&gt;Kullanım Şartları&lt;/a&gt;nı kabul etmiş olursunuz</translation>
 <translation id="335985608243443814">Göz at...</translation>
 <translation id="3485073444286678268">Hedef klasör geçersiz. Lütfen başka bir klasör seçin.</translation>
@@ -21,11 +22,14 @@
 <translation id="4234678621326711327">Tek kullanıcı için yükle</translation>
 <translation id="4322221081772213228">'Kabul Et ve Yükle' düğmesine tıklayarak Vivaldi'nin &lt;a&gt;Kullanım Şartları&lt;/a&gt;nı kabul etmiş olursunuz</translation>
 <translation id="4380252528729894811">Hedef Klasör</translation>
+<translation id="460304900852424163">Otomatik güncellemeleri kapat (önerilmez)</translation>
 <translation id="4619978527973181021">Kabul Et ve Yükle</translation>
 <translation id="479976146866774527">Vivaldi Yükleniyor</translation>
+<translation id="5051728323101947360">Taşınabilir Vivaldi kurulumunu varsayılan uygulama yap</translation>
 <translation id="5247376421371319618">Kabul Et ve Güncelle</translation>
 <translation id="5288672417093782294">Vivaldi bildirim ayarlarına git</translation>
 <translation id="5302048478445481009">Dil</translation>
+<translation id="5743878272102782872">Görev Yöneticisi - Vivaldi</translation>
 <translation id="6213772951145281007">Vivaldi'den çıktığımda çerezleri ve site verilerini temizle</translation>
 <translation id="6569282126279967574">Of! Vivaldi çöktü. Şimdi yeniden başlatılsın mı?</translation>
 <translation id="694714344624446243">Vivaldi Yükleyicisi</translation>

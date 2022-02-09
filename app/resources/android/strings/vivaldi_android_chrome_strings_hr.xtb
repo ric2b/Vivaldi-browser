@@ -9,6 +9,9 @@
 <translation id="2038563949887743358">Uključivanje zahtjeva za prikaz klasične web-lokacije</translation>
 <translation id="2433507940547922241">Izgled</translation>
 <translation id="2633278372998075009">Privatne kartice</translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> oznaka}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> oznake}}</translation>
 <translation id="3076631378407175873">Autorska prava <ph name="YEAR" /> Vivaldi Technologies AS. Sva prava pridržana.</translation>
 <translation id="3234355010754616171">Nova privatna kartica</translation>
 <translation id="3518985090088779359">Prihvati i nastavi</translation>

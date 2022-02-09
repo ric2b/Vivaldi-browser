@@ -5,6 +5,8 @@
 #include "chrome/browser/chromeos/policy/auto_enrollment_client_impl.h"
 
 #include <stdint.h>
+
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -14,7 +16,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -39,6 +40,7 @@
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/private_membership/src/internal/testing/regression_test_data/regression_test_data.pb.h"
 #include "third_party/private_membership/src/private_membership_rlwe_client.h"
 #include "third_party/shell-encryption/src/testing/status_testing.h"
@@ -139,7 +141,7 @@ class AutoEnrollmentClientImplTest
     if (GetPsmState() == PsmState::kDisabled) {
       command_line->AppendSwitchASCII(
           chromeos::switches::kEnterpriseEnablePsm,
-          chromeos::AutoEnrollmentController::kEnablePsmNever);
+          ash::AutoEnrollmentController::kEnablePsmNever);
     }
   }
 
@@ -172,7 +174,7 @@ class AutoEnrollmentClientImplTest
 
   void CreateClient(int power_initial, int power_limit) {
     state_ = AUTO_ENROLLMENT_STATE_PENDING;
-    service_.reset(new MockDeviceManagementService());
+    service_ = std::make_unique<MockDeviceManagementService>();
     service_->ScheduleInitialization(0);
     base::RunLoop().RunUntilIdle();
 
@@ -284,7 +286,7 @@ class AutoEnrollmentClientImplTest
       bool is_license_packaged_with_device) {
     if (GetAutoEnrollmentProtocol() == AutoEnrollmentProtocol::kFRE) {
       ServerWillSendStateForFRE(management_domain, restore_mode,
-                                device_disabled_message, base::nullopt);
+                                device_disabled_message, absl::nullopt);
     } else {
       ServerWillSendStateForInitialEnrollment(
           management_domain, is_license_packaged_with_device,
@@ -305,7 +307,7 @@ class AutoEnrollmentClientImplTest
       const std::string& management_domain,
       em::DeviceStateRetrievalResponse::RestoreMode restore_mode,
       const std::string& device_disabled_message,
-      base::Optional<em::DeviceInitialEnrollmentStateResponse>
+      absl::optional<em::DeviceInitialEnrollmentStateResponse>
           initial_state_response) {
     em::DeviceManagementResponse response;
     em::DeviceStateRetrievalResponse* state_response =
@@ -471,7 +473,7 @@ class AutoEnrollmentClientImplTest
     EXPECT_FALSE(state_dict->GetString(kDeviceStateDisabledMessage,
                                        &actual_disabled_message));
 
-    base::Optional<bool> actual_is_license_packaged_with_device;
+    absl::optional<bool> actual_is_license_packaged_with_device;
     actual_is_license_packaged_with_device =
         state_dict->FindBoolPath(kDeviceStatePackagedLicense);
     if (actual_is_license_packaged_with_device) {
@@ -1280,7 +1282,7 @@ TEST_P(AutoEnrollmentClientImplFREToInitialEnrollmentTest,
   ServerWillSendStateForFRE(
       std::string(), em::DeviceStateRetrievalResponse::RESTORE_MODE_NONE,
       std::string(),
-      base::Optional<em::DeviceInitialEnrollmentStateResponse>(
+      absl::optional<em::DeviceInitialEnrollmentStateResponse>(
           initial_state_response));
   client()->Start();
   base::RunLoop().RunUntilIdle();
@@ -1313,7 +1315,7 @@ TEST_P(AutoEnrollmentClientImplFREToInitialEnrollmentTest,
   ServerWillSendStateForFRE(
       std::string(), em::DeviceStateRetrievalResponse::RESTORE_MODE_NONE,
       std::string(),
-      base::Optional<em::DeviceInitialEnrollmentStateResponse>(
+      absl::optional<em::DeviceInitialEnrollmentStateResponse>(
           initial_state_response));
   client()->Start();
   base::RunLoop().RunUntilIdle();
@@ -1347,7 +1349,7 @@ TEST_P(AutoEnrollmentClientImplFREToInitialEnrollmentTest,
   ServerWillSendStateForFRE(
       std::string(), em::DeviceStateRetrievalResponse::RESTORE_MODE_NONE,
       std::string(),
-      base::Optional<em::DeviceInitialEnrollmentStateResponse>(
+      absl::optional<em::DeviceInitialEnrollmentStateResponse>(
           initial_state_response));
   client()->Start();
   base::RunLoop().RunUntilIdle();
@@ -1408,7 +1410,7 @@ class PsmHelperTest : public AutoEnrollmentClientImplTest {
     ASSERT_EQ(GetPsmState(), PsmState::kEnabled);
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         chromeos::switches::kEnterpriseEnablePsm,
-        chromeos::AutoEnrollmentController::kEnablePsmAlways);
+        ash::AutoEnrollmentController::kEnablePsmAlways);
 
     // Verify that PSM state pref has not been set before.
     ASSERT_EQ(local_state_->GetUserPref(prefs::kShouldRetrieveDeviceState),
@@ -1425,7 +1427,7 @@ class PsmHelperTest : public AutoEnrollmentClientImplTest {
 
   void CreatePsmTestCase() {
     // Verify that PSM is enabled, and the test case index is valid.
-    EXPECT_TRUE(chromeos::AutoEnrollmentController::IsPsmEnabled());
+    EXPECT_TRUE(ash::AutoEnrollmentController::IsPsmEnabled());
     ASSERT_GE(GetPsmTestCaseIndex(), 0);
 
     // Retrieve the PSM test case.
@@ -1562,19 +1564,35 @@ class PsmHelperTest : public AutoEnrollmentClientImplTest {
     return psm_test_case_.is_positive_membership_expected();
   }
 
-  // Expects list of samples |status_list| for kUMAPsmRequestStatus and each one
-  // of them to be recorded once.
-  // If |success_time_recorded| is true it expects one sample for
-  // kUMAPsmSuccessTime. Otherwise, expects no sample to be recorded for
+  // Expects a sample for kUMAPsmResult to be recorded once with value
+  // |protocol_result|.
+  // If |success_time_recorded| is true it expects one sample
+  // for kUMAPsmSuccessTime. Otherwise, expects no sample to be recorded for
   // kUMAPsmSuccessTime.
-  void ExpectPsmHistograms(const std::vector<PsmStatus> status_list,
+  void ExpectPsmHistograms(PsmResult protocol_result,
                            bool success_time_recorded) const {
-    for (PsmStatus status : status_list) {
-      histogram_tester_.ExpectBucketCount(kUMAPsmRequestStatus, status,
-                                          /*expected_count=*/1);
-    }
+    histogram_tester_.ExpectBucketCount(
+        kUMAPsmResult + GetAutoEnrollmentProtocolUmaSuffix(), protocol_result,
+        /*expected_count=*/1);
     histogram_tester_.ExpectTotalCount(kUMAPsmSuccessTime,
                                        success_time_recorded ? 1 : 0);
+  }
+
+  // Expects a sample |dm_status| for kUMAPsmDmServerRequestStatus with count
+  // |dm_status_count|.
+  void ExpectPsmRequestStatusHistogram(DeviceManagementStatus dm_status,
+                                       int dm_status_count) const {
+    histogram_tester_.ExpectBucketCount(
+        kUMAPsmDmServerRequestStatus + GetAutoEnrollmentProtocolUmaSuffix(),
+        dm_status, dm_status_count);
+  }
+
+  // Expects one sample for |kUMAPsmNetworkErrorCode| which has value of
+  // |network_error|.
+  void ExpectPsmNetworkErrorHistogram(int network_error) const {
+    histogram_tester_.ExpectBucketCount(
+        kUMAPsmNetworkErrorCode + GetAutoEnrollmentProtocolUmaSuffix(),
+        network_error, /*expected_count=*/1);
   }
 
   // Expects a sample for kUMAPsmHashDanceComparison to be recorded once with
@@ -1662,9 +1680,10 @@ TEST_P(PsmHelperTest, MembershipRetrievedSuccessfully) {
             GetExpectedMembershipResult()
                 ? StateDiscoveryResult::kSuccessHasServerSideState
                 : StateDiscoveryResult::kSuccessNoServerSideState);
-  ExpectPsmHistograms(
-      {PsmStatus::kAttempt, PsmStatus::kSuccessfulDetermination},
-      /*success_time_recorded=*/true);
+  ExpectPsmHistograms(PsmResult::kSuccessfulDetermination,
+                      /*success_time_recorded=*/true);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1680,8 +1699,10 @@ TEST_P(PsmHelperTest, EmptyRlweQueryResponse) {
   client()->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kEmptyQueryResponseError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1696,8 +1717,10 @@ TEST_P(PsmHelperTest, EmptyRlweOprfResponse) {
   client()->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kEmptyOprfResponseError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/1);
   VerifyPsmRlweOprfRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1713,8 +1736,13 @@ TEST_P(PsmHelperTest, ConnectionErrorForRlweQueryResponse) {
   client()->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kConnectionError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/1);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_REQUEST_FAILED,
+                                  /*dm_status_count=*/1);
+  ExpectPsmNetworkErrorHistogram(-net::ERR_FAILED);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1729,15 +1757,18 @@ TEST_P(PsmHelperTest, ConnectionErrorForRlweOprfResponse) {
   client()->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kConnectionError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_REQUEST_FAILED,
+                                  /*dm_status_count=*/1);
+  ExpectPsmNetworkErrorHistogram(-net::ERR_FAILED);
   VerifyPsmRlweOprfRequest();
   VerifyPsmLastRequestJobType();
 }
 
 TEST_P(PsmHelperTest, NetworkFailureForRlweOprfResponse) {
   InSequence sequence;
-  ServerWillFailForPsm(net::OK, DeviceManagementService::kServiceUnavailable);
+  ServerWillFailForPsm(net::OK, net::ERR_CONNECTION_CLOSED);
 
   // Fail for DeviceAutoEnrollmentRequest i.e. hash dance request.
   ServerWillFail(net::OK, DeviceManagementService::kServiceUnavailable);
@@ -1745,8 +1776,10 @@ TEST_P(PsmHelperTest, NetworkFailureForRlweOprfResponse) {
   client()->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_HTTP_STATUS_ERROR,
+                                  /*dm_status_count=*/1);
   VerifyPsmLastRequestJobType();
 }
 
@@ -1761,8 +1794,12 @@ TEST_P(PsmHelperTest, NetworkFailureForRlweQueryResponse) {
   client()->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/1);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_HTTP_STATUS_ERROR,
+                                  /*dm_status_count=*/1);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1794,9 +1831,10 @@ TEST_P(PsmHelperTest, RetryLogicAfterMembershipSuccessfullyRetrieved) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(GetStateDiscoveryResult(), expected_state_result);
-  ExpectPsmHistograms(
-      {PsmStatus::kAttempt, PsmStatus::kSuccessfulDetermination},
-      /*success_time_recorded=*/true);
+  ExpectPsmHistograms(PsmResult::kSuccessfulDetermination,
+                      /*success_time_recorded=*/true);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1826,8 +1864,12 @@ TEST_P(PsmHelperTest, RetryLogicAfterNetworkFailureForRlweQueryResponse) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(GetStateDiscoveryResult(), expected_state_result);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/1);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_HTTP_STATUS_ERROR,
+                                  /*dm_status_count=*/1);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 }
@@ -1863,8 +1905,12 @@ TEST_P(PsmHelperAndHashDanceTest, PsmRlweQueryFailedAndHashDanceSucceeded) {
 
   // Verify failure of PSM protocol.
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/1);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_HTTP_STATUS_ERROR,
+                                  /*dm_status_count=*/1);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 
@@ -1911,8 +1957,10 @@ TEST_P(PsmHelperAndHashDanceTest, PsmRlweOprfFailedAndHashDanceSucceeded) {
 
   // Verify failure of PSM protocol.
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_TEMPORARY_UNAVAILABLE,
+                                  /*dm_status_count=*/1);
   VerifyPsmLastRequestJobType();
 
   // Verify Hash dance result.
@@ -1964,9 +2012,10 @@ TEST_P(PsmHelperAndHashDanceTest, PsmSucceedAndHashDanceSucceed) {
             GetExpectedMembershipResult()
                 ? StateDiscoveryResult::kSuccessHasServerSideState
                 : StateDiscoveryResult::kSuccessNoServerSideState);
-  ExpectPsmHistograms(
-      {PsmStatus::kAttempt, PsmStatus::kSuccessfulDetermination},
-      /*success_time_recorded=*/true);
+  ExpectPsmHistograms(PsmResult::kSuccessfulDetermination,
+                      /*success_time_recorded=*/true);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 
@@ -2023,9 +2072,10 @@ TEST_P(PsmHelperAndHashDanceTest,
             GetExpectedMembershipResult()
                 ? StateDiscoveryResult::kSuccessHasServerSideState
                 : StateDiscoveryResult::kSuccessNoServerSideState);
-  ExpectPsmHistograms(
-      {PsmStatus::kAttempt, PsmStatus::kSuccessfulDetermination},
-      /*success_time_recorded=*/true);
+  ExpectPsmHistograms(PsmResult::kSuccessfulDetermination,
+                      /*success_time_recorded=*/true);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 
@@ -2071,8 +2121,10 @@ TEST_P(PsmHelperAndHashDanceTest, PsmRlweOprfFailedAndHashDanceFailed) {
 
   // Verify failure of PSM protocol.
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_TEMPORARY_UNAVAILABLE,
+                                  /*dm_status_count=*/1);
   VerifyPsmLastRequestJobType();
 
   // Verify failure of Hash dance by inexistence of its cached decision.
@@ -2136,9 +2188,10 @@ TEST_P(PsmHelperAndHashDanceTest,
   // Verify that PSM cached decision hasn't changed, and no new requests have
   // been sent.
   EXPECT_EQ(GetStateDiscoveryResult(), expected_psm_state_result);
-  ExpectPsmHistograms(
-      {PsmStatus::kAttempt, PsmStatus::kSuccessfulDetermination},
-      /*success_time_recorded=*/true);
+  ExpectPsmHistograms(PsmResult::kSuccessfulDetermination,
+                      /*success_time_recorded=*/true);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
   VerifyPsmRlweQueryRequest();
   VerifyPsmLastRequestJobType();
 
@@ -2204,8 +2257,10 @@ TEST_P(PsmHelperAndHashDanceTest,
   // Verify that PSM cached decision hasn't changed, and no
   // new requests have been sent.
   EXPECT_EQ(GetStateDiscoveryResult(), expected_psm_state_result);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_TEMPORARY_UNAVAILABLE,
+                                  /*dm_status_count=*/1);
   VerifyPsmRlweOprfRequest();
   VerifyPsmLastRequestJobType();
 
@@ -2265,8 +2320,10 @@ TEST_P(PsmHelperAndHashDanceTest,
 
   // Verify failure of PSM protocol.
   EXPECT_EQ(GetStateDiscoveryResult(), StateDiscoveryResult::kFailure);
-  ExpectPsmHistograms({PsmStatus::kAttempt, PsmStatus::kError},
+  ExpectPsmHistograms(PsmResult::kServerError,
                       /*success_time_recorded=*/false);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_TEMPORARY_UNAVAILABLE,
+                                  /*dm_status_count=*/1);
 
   // Verify hash dance job has been captured.
   ASSERT_TRUE(hash_dance_job);
@@ -2358,9 +2415,10 @@ TEST_P(PsmHelperAndHashDanceTest,
             GetExpectedMembershipResult()
                 ? StateDiscoveryResult::kSuccessHasServerSideState
                 : StateDiscoveryResult::kSuccessNoServerSideState);
-  ExpectPsmHistograms(
-      {PsmStatus::kAttempt, PsmStatus::kSuccessfulDetermination},
-      /*success_time_recorded=*/true);
+  ExpectPsmHistograms(PsmResult::kSuccessfulDetermination,
+                      /*success_time_recorded=*/true);
+  ExpectPsmRequestStatusHistogram(DM_STATUS_SUCCESS,
+                                  /*dm_status_count=*/2);
 
   // Verify hash dance job has been captured.
   ASSERT_TRUE(hash_dance_job);

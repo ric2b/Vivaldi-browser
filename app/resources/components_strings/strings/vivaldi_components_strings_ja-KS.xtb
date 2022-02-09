@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">続ける</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断使う<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">通知</translation>
+<translation id="2491414235131909199">このページは拡張機能がブロックしたわ</translation>
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2539524384386349900">検出</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />から無効な応答送られてきよったわ。</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">このサイトに大事な情報（パスワード、クレジット カードとか）を入れたらあかんで。悪さしよるユーザーに情報盗まれるかもしれへんし。</translation>
 <translation id="5869405914158311789">このサイト、アクセスできへん</translation>
 <translation id="5932224571077948991">このサイト、けったいな広告とか誤解招くような広告出してきよるわ</translation>
-<translation id="5990559369517809815">サーバーへのリクエストが拡張機能にブロックされとるわ。</translation>
 <translation id="6051221802930200923"><ph name="SITE" />では証明書ピンニングが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="6146055958333702838">ケーブル見てな、使ってる可能性があるネットワークデバイス（ルーターとかモデムとか）
     再起動してみて。</translation>

@@ -43,6 +43,7 @@ def RunGitCommand(directory, command):
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             cwd=directory,
+                            text=True,
                             shell=(sys.platform=='win32'))
     return proc
   except OSError as e:
@@ -201,7 +202,7 @@ def main(argv=None):
     revision_string = version_info.revision_id
 
   if args.print_only:
-    print revision_string
+    print (revision_string)
   else:
     contents = "LASTCHANGE%s=%s\n" % (args.name_suffix or "", revision_string)
     if not out_file and not args.header:

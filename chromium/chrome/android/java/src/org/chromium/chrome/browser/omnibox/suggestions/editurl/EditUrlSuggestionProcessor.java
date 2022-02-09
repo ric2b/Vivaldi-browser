@@ -10,6 +10,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.history_clusters.HistoryClustersTabHelper;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
@@ -20,7 +21,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableSt
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionSpannable;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties;
 import org.chromium.chrome.browser.share.ShareDelegate;
-import org.chromium.chrome.browser.share.ShareDelegateImpl.ShareOrigin;
+import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.favicon.LargeIconBridge;
@@ -29,6 +30,9 @@ import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.Arrays;
+
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * This class controls the interaction of the "edit url" suggestion item with the rest of the
@@ -92,6 +96,9 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
 
         if (!mHasClearedOmniboxForFocus) {
             mHasClearedOmniboxForFocus = true;
+            if (ChromeApplicationImpl.isVivaldi())
+                mUrlBarDelegate.setOmniboxEditingText(suggestion.getUrl().getSpec());
+            else
             mUrlBarDelegate.setOmniboxEditingText("");
         }
         return true;
@@ -169,13 +176,13 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
         RecordUserAction.record("Omnibox.EditUrlSuggestion.Share");
         mUrlBarDelegate.clearOmniboxFocus();
         // TODO(mdjones): This should only share the displayed URL instead of the background tab.
-        Tab activityTab = mTabSupplier.get();
-        mShareDelegateSupplier.get().share(activityTab, false, ShareOrigin.EDIT_URL);
+        mShareDelegateSupplier.get().share(mTabSupplier.get(), false, ShareOrigin.EDIT_URL);
     }
 
     /** Invoked when user interacts with Copy action button. */
     private void onCopyLink(AutocompleteMatch suggestion) {
         RecordUserAction.record("Omnibox.EditUrlSuggestion.Copy");
+        HistoryClustersTabHelper.onCurrentTabUrlCopied(mTabSupplier.get().getWebContents());
         Clipboard.getInstance().copyUrlToClipboard(suggestion.getUrl());
     }
 

@@ -15,7 +15,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/signals/device_info_fetcher.h"
+#include "chrome/browser/enterprise/util/managed_browser_utils.h"
+#include "components/content_settings/core/common/pref_names.h"
 #include "components/enterprise/browser/controller/browser_dm_token_storage.h"
+#include "net/cert/x509_util.h"
 
 namespace extensions {
 
@@ -39,23 +42,6 @@ api::enterprise_reporting_private::SettingValue ToInfoSettingValue(
     case SettingValue::ENABLED:
       return api::enterprise_reporting_private::SETTING_VALUE_ENABLED;
   }
-}
-
-api::enterprise_reporting_private::DeviceInfo ToDeviceInfo(
-    const enterprise_signals::DeviceInfo& device_signals) {
-  api::enterprise_reporting_private::DeviceInfo device_info;
-
-  device_info.os_name = device_signals.os_name;
-  device_info.os_version = device_signals.os_version;
-  device_info.device_host_name = device_signals.device_host_name;
-  device_info.device_model = device_signals.device_model;
-  device_info.serial_number = device_signals.serial_number;
-  device_info.screen_lock_secured =
-      ToInfoSettingValue(device_signals.screen_lock_secured);
-  device_info.disk_encrypted =
-      ToInfoSettingValue(device_signals.disk_encrypted);
-
-  return device_info;
 }
 #endif  // !defined(OS_CHROMEOS)
 
@@ -268,6 +254,26 @@ EnterpriseReportingPrivateGetDeviceInfoFunction::
 EnterpriseReportingPrivateGetDeviceInfoFunction::
     ~EnterpriseReportingPrivateGetDeviceInfoFunction() = default;
 
+// static
+api::enterprise_reporting_private::DeviceInfo
+EnterpriseReportingPrivateGetDeviceInfoFunction::ToDeviceInfo(
+    enterprise_signals::DeviceInfo device_signals) {
+  api::enterprise_reporting_private::DeviceInfo device_info;
+
+  device_info.os_name = device_signals.os_name;
+  device_info.os_version = device_signals.os_version;
+  device_info.device_host_name = device_signals.device_host_name;
+  device_info.device_model = device_signals.device_model;
+  device_info.serial_number = device_signals.serial_number;
+  device_info.screen_lock_secured =
+      ToInfoSettingValue(device_signals.screen_lock_secured);
+  device_info.disk_encrypted =
+      ToInfoSettingValue(device_signals.disk_encrypted);
+  device_info.mac_addresses = device_signals.mac_addresses;
+
+  return device_info;
+}
+
 ExtensionFunction::ResponseAction
 EnterpriseReportingPrivateGetDeviceInfoFunction::Run() {
 #if defined(OS_WIN)
@@ -292,9 +298,9 @@ EnterpriseReportingPrivateGetDeviceInfoFunction::Run() {
 }
 
 void EnterpriseReportingPrivateGetDeviceInfoFunction::OnDeviceInfoRetrieved(
-    const enterprise_signals::DeviceInfo& device_signals) {
-  Respond(OneArgument(
-      base::Value::FromUniquePtrValue(ToDeviceInfo(device_signals).ToValue())));
+    enterprise_signals::DeviceInfo device_signals) {
+  Respond(OneArgument(base::Value::FromUniquePtrValue(
+      ToDeviceInfo(std::move(device_signals)).ToValue())));
 }
 
 #endif  // !defined(OS_CHROMEOS)
@@ -327,6 +333,61 @@ void EnterpriseReportingPrivateGetContextInfoFunction::OnContextInfoRetrieved(
     enterprise_signals::ContextInfo context_info) {
   Respond(OneArgument(
       base::Value::FromUniquePtrValue(ToContextInfo(context_info).ToValue())));
+}
+
+// getCertificate
+
+EnterpriseReportingPrivateGetCertificateFunction::
+    EnterpriseReportingPrivateGetCertificateFunction() = default;
+EnterpriseReportingPrivateGetCertificateFunction::
+    ~EnterpriseReportingPrivateGetCertificateFunction() = default;
+
+ExtensionFunction::ResponseAction
+EnterpriseReportingPrivateGetCertificateFunction::Run() {
+  std::unique_ptr<api::enterprise_reporting_private::GetCertificate::Params>
+      params(api::enterprise_reporting_private::GetCertificate::Params::Create(
+          *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  // If AutoSelectCertificateForUrl is not set at the machine level, this
+  // operation is not supported and should return immediately with the
+  // appropriate status field value.
+  if (!chrome::enterprise_util::IsMachinePolicyPref(
+          prefs::kManagedAutoSelectCertificateForUrls)) {
+    api::enterprise_reporting_private::Certificate ret;
+    ret.status = extensions::api::enterprise_reporting_private::
+        CERTIFICATE_STATUS_POLICY_UNSET;
+    return RespondNow(
+        OneArgument(base::Value::FromUniquePtrValue(ret.ToValue())));
+  }
+
+  client_cert_fetcher_ =
+      enterprise_signals::ClientCertificateFetcher::Create(browser_context());
+  client_cert_fetcher_->FetchAutoSelectedCertificateForUrl(
+      GURL(params->url),
+      base::BindOnce(&EnterpriseReportingPrivateGetCertificateFunction::
+                         OnClientCertFetched,
+                     this));
+
+  return RespondLater();
+}
+
+void EnterpriseReportingPrivateGetCertificateFunction::OnClientCertFetched(
+    std::unique_ptr<net::ClientCertIdentity> cert) {
+  api::enterprise_reporting_private::Certificate ret;
+
+  // Getting here means the status is always OK, but the |encoded_certificate|
+  // field is only set if there actually was a certificate selected.
+  ret.status =
+      extensions::api::enterprise_reporting_private::CERTIFICATE_STATUS_OK;
+  if (cert) {
+    base::StringPiece der_cert = net::x509_util::CryptoBufferAsStringPiece(
+        cert->certificate()->cert_buffer());
+    ret.encoded_certificate = std::make_unique<std::vector<uint8_t>>(
+        der_cert.begin(), der_cert.end());
+  }
+
+  Respond(OneArgument(base::Value::FromUniquePtrValue(ret.ToValue())));
 }
 
 }  // namespace extensions

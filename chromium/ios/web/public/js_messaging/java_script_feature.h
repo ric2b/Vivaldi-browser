@@ -12,7 +12,7 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class Value;
@@ -152,24 +152,32 @@ class JavaScriptFeature {
 
   // Returns the script message handler name which this feature will receive
   // messages from JavaScript. Returning null will not register any handler.
-  virtual base::Optional<std::string> GetScriptMessageHandlerName() const;
+  virtual absl::optional<std::string> GetScriptMessageHandlerName() const;
 
   using ScriptMessageHandler =
       base::RepeatingCallback<void(WebState* web_state,
                                    const ScriptMessage& message)>;
   // Returns the script message handler callback if
   // |GetScriptMessageHandlerName()| returns a handler name.
-  base::Optional<ScriptMessageHandler> GetScriptMessageHandler() const;
+  absl::optional<ScriptMessageHandler> GetScriptMessageHandler() const;
 
   JavaScriptFeature(const JavaScriptFeature&) = delete;
 
  protected:
   explicit JavaScriptFeature(ContentWorld supported_world);
 
+  // Calls |function_name| with |parameters| in |web_frame| within the content
+  // world that this feature has been configured. |web_frame| must not be null.
+  // See WebFrame::CallJavaScriptFunction for more details.
   bool CallJavaScriptFunction(WebFrame* web_frame,
                               const std::string& function_name,
                               const std::vector<base::Value>& parameters);
 
+  // Calls |function_name| with |parameters| in |web_frame| within the content
+  // world that this feature has been configured. |callback| will be called with
+  // the return value of the function if it completes within |timeout|.
+  // |web_frame| must not be null.
+  // See WebFrame::CallJavaScriptFunction for more details.
   bool CallJavaScriptFunction(
       WebFrame* web_frame,
       const std::string& function_name,
@@ -178,7 +186,8 @@ class JavaScriptFeature {
       base::TimeDelta timeout);
 
   // Callback for script messages registered through |GetScriptMessageHandler|.
-  // Called when a WebState sent |message|.
+  // |ScriptMessageReceived| is called when |web_state| receives a |message|.
+  // |web_state| will always be non-null.
   virtual void ScriptMessageReceived(WebState* web_state,
                                      const ScriptMessage& message);
 

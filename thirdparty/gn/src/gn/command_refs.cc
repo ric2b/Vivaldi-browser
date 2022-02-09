@@ -237,8 +237,8 @@ const char kRefs_HelpShort[] = "refs: Find stuff referencing a target or file.";
 const char kRefs_Help[] =
     R"(gn refs
 
-  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*
-          [--all] [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
+  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)* [--all]
+          [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
 
   Finds reverse dependencies (which targets reference something). The input is
   a list containing:
@@ -344,7 +344,7 @@ Examples (file input)
 
 int RunRefs(const std::vector<std::string>& args) {
   if (args.size() <= 1) {
-    Err(Location(), "You're holding it wrong.",
+    Err(Location(), "Unknown command format. See \"gn help refs\"",
         "Usage: \"gn refs <out_dir> (<label_pattern>|<file>)*\"")
         .PrintToStdout();
     return 1;

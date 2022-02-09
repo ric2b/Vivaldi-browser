@@ -268,7 +268,7 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
   ParseBookmarkList(0, bookmark_list, &tree.top_items, false);
 }
 
-base::Optional<base::Value> ReadDefaultBookmarks(std::string locale) {
+absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
   vivaldi_partners::AssetReader reader;
   return reader.ReadJson(locale + ".json");
 }
@@ -495,7 +495,7 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   } else {
     VLOG(2) << "Adding url " << item.title << " guid=" << item.guid;
     node = model_->AddURL(parent_node, index, title, item.url,
-                          custom_meta.map(), base::nullopt,
+                          custom_meta.map(), absl::nullopt,
                           item.guid);
     stats_.added_urls++;
   }
@@ -564,7 +564,7 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
 
 void UpdatePartnersInModel(Profile* profile,
                            const std::string& locale,
-                           base::Optional<base::Value> default_bookmarks_value,
+                           absl::optional<base::Value> default_bookmarks_value,
                            UpdateCallback callback,
                            BookmarkModel* model) {
   bool ok = false;
@@ -655,7 +655,7 @@ void UpdatePartnersFromDefaults(
     Profile* profile,
     const std::string& locale,
     UpdateCallback callback,
-    base::Optional<base::Value> default_bookmarks_value) {
+    absl::optional<base::Value> default_bookmarks_value) {
   // Unretained is safe as recording profiles are never removed.
   vivaldi_bookmark_kit::RunAfterModelLoad(
       profile ? BookmarkModelFactory::GetForBrowserContext(profile) : nullptr,

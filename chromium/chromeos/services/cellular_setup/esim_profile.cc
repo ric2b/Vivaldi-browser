@@ -14,6 +14,7 @@
 #include "chromeos/network/cellular_esim_profile.h"
 #include "chromeos/network/cellular_esim_uninstall_handler.h"
 #include "chromeos/network/cellular_inhibitor.h"
+#include "chromeos/network/hermes_metrics_util.h"
 #include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_handler.h"
@@ -24,12 +25,18 @@
 #include "chromeos/services/cellular_setup/public/mojom/esim_manager.mojom-shared.h"
 #include "chromeos/services/cellular_setup/public/mojom/esim_manager.mojom.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/user_manager/user_manager.h"
 #include "dbus/object_path.h"
 
 namespace chromeos {
 namespace cellular_setup {
 
 namespace {
+
+bool IsGuestModeActive() {
+  return user_manager::UserManager::Get()->IsLoggedInAsGuest() ||
+         user_manager::UserManager::Get()->IsLoggedInAsPublicAccount();
+}
 
 bool IsESimProfilePropertiesEqualToState(
     const mojom::ESimProfilePropertiesPtr& properties,
@@ -117,6 +124,12 @@ void ESimProfile::InstallProfile(const std::string& confirmation_code,
 }
 
 void ESimProfile::UninstallProfile(UninstallProfileCallback callback) {
+  if (IsGuestModeActive()) {
+    NET_LOG(ERROR) << "Cannot uninstall profile in guest mode.";
+    std::move(callback).Run(mojom::ESimOperationResult::kFailure);
+    return;
+  }
+
   if (!IsProfileInstalled()) {
     NET_LOG(ERROR) << "Profile uninstall failed: Profile is not installed.";
     std::move(callback).Run(mojom::ESimOperationResult::kFailure);
@@ -174,6 +187,12 @@ void ESimProfile::DisableProfile(DisableProfileCallback callback) {
 
 void ESimProfile::SetProfileNickname(const std::u16string& nickname,
                                      SetProfileNicknameCallback callback) {
+  if (IsGuestModeActive()) {
+    NET_LOG(ERROR) << "Cannot rename profile in guest mode.";
+    std::move(callback).Run(mojom::ESimOperationResult::kFailure);
+    return;
+  }
+
   if (set_profile_nickname_callback_) {
     NET_LOG(ERROR) << "Set Profile Nickname already in progress.";
     std::move(callback).Run(mojom::ESimOperationResult::kFailure);
@@ -223,6 +242,7 @@ void ESimProfile::UpdateProperties(
   properties_->activation_code = esim_profile_state.activation_code();
   if (notify) {
     esim_manager_->NotifyESimProfileChanged(this);
+    esim_manager_->NotifyESimProfileListChanged(euicc_);
   }
 }
 
@@ -369,6 +389,8 @@ void ESimProfile::PerformSetProfileNickname(
 void ESimProfile::OnPendingProfileInstallResult(
     std::unique_ptr<CellularInhibitor::InhibitLock> inhibit_lock,
     HermesResponseStatus status) {
+  hermes_metrics::LogInstallPendingProfileResult(status);
+
   if (status != HermesResponseStatus::kSuccess) {
     NET_LOG(ERROR) << "Error Installing pending profile status="
                    << static_cast<int>(status);

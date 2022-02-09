@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Avslutt fullskjermmodus</translation>
 <translation id="2177950615300672361">Privatmodus-fane: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Skjul knappen</translation>
 <translation id="2218515861914035131">Lim inn som ren tekst</translation>
 <translation id="2249605167705922988">f.eks 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillat indentifisering for visning av beskyttet innhold (systemoppstart kan være nødvendig)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Forhåndsrendring: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Velg rotmappen til utvidelsen som skal pakkes. For å oppdatere en utvidelse må du også velge den private nøkkelen som skal brukes.</translation>
-<translation id="3266179261140759675">Blokker lukkede nettsteder fra å sende og motta data</translation>
 <translation id="3280237271814976245">L&amp;agre som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Utvidelser i utviklermodus kan skade datamaskinen din. Hvis du ikke er en utvikler, bør du av hensyn til sikkerheten deaktivere utvidelsene som kjører i utviklermodus.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Kan lese og endre nettstedsdata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
 <translation id="3574917942258583917">Vil du avslutte privatmodus likevel?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ønsker å dele printeren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med en gruppe du eier: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Hvis du godtar, vil alle gruppemedlemmer kunne skrive ut fra denne skriveren.</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Åpne lenken i inko&amp;gnitovindu</translation>
 <translation id="3627879631695760395">Installer <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Håndteringer</translation>
 <translation id="3678156199662914018">Utvidelse: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> spør om å dele skjermen</translation>
+<translation id="3708684582558000260">Ikke la lukkede nettsteder fullføre sending eller mottak av data</translation>
 <translation id="3711931198657368127">Lim inn og gå til <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspiser oppsprett</translation>
 <translation id="3744111561329211289">Synkroniser i bakgrunnen</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Opprettet utvidelsen:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Godta for gruppe</translation>
 <translation id="4096508467498758490">Deaktiver utvidelser i utviklermodus</translation>
 <translation id="4100839878934973028">Et annet program på datamaskinen la til et program som kan endre hvordan Vivaldi virker.</translation>
 <translation id="4109898769411476438">Lukk nettleser før du importerer</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4907306957610201395">Tilgangskategori</translation>
 <translation id="4912643508233590958">Oppvåkninger fra inaktiv</translation>
-<translation id="4918086044614829423">Godta</translation>
 <translation id="4927753642311223124">Ingenting å se her, gå videre.</translation>
 <translation id="4930714375720679147">Slå på</translation>
 <translation id="4988526792673242964">Sider</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Lagre</translation>
 <translation id="5334142896108694079">Skriptbuffer</translation>
 <translation id="5355926466126177564">Utvidelsen "<ph name="EXTENSION_NAME" />" har endret hvilken side som vises når du søker fra adressefeltet.</translation>
-<translation id="5360150013186312835">Vis i verktøyraden</translation>
+<translation id="5360150013186312835">Vis i verktøylinjen</translation>
 <translation id="5362741141255528695">Velg fil med privat nøkkel.</translation>
 <translation id="536638840841140142">Ingen</translation>
 <translation id="5370819323174483825">&amp;Oppdater</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Fjern sidedata</translation>
 <translation id="6042308850641462728">Mer</translation>
 <translation id="6059925163896151826">USB-enheter</translation>
-<translation id="6082651258230788217">Vis i verktøyraden</translation>
 <translation id="6086846494333236931">Installert av administratoren din</translation>
 <translation id="6101226222197207147">Ntt program lagt til (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Din internettilkobling blir kontrollert</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simuler omstart av nettleseren</translation>
 <translation id="6445450263907939268">Hvis du ikke ønsker disse endringene kan du gjenopprette de gamle innstillingene.</translation>
 <translation id="6447842834002726250">Infokapsler</translation>
-<translation id="6452181791372256707">Avslå</translation>
 <translation id="6498249116389603658">&amp;Alle dine språk</translation>
 <translation id="6503077044568424649">Mest besøkt</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Kan lese og endre nettstedsdata</translation>
 <translation id="708060913198414444">K&amp;opier lydadressen</translation>
 <translation id="7175353351958621980">Lastet fra:</translation>
-<translation id="7186088072322679094">Behold i verktøyraden</translation>
+<translation id="7186088072322679094">Behold i verktøylinjen</translation>
 <translation id="7270858098575133036">Spør når en side ønsker å sende systemeksklusive meldinger for tilgang til MIDI-enheter</translation>
 <translation id="7287143125007575591">Ingen tilgang.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Er dette ny fane-siden du forventet?</translation>
 <translation id="786073089922909430">Tjeneste: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Nylige mål</translation>
-<translation id="7898627924844766532">Behold i verktøyraden</translation>
 <translation id="7903925330883316394">Verktøy: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">For øyeblikket offline</translation>
 <translation id="7947962633355574091">K&amp;opier videoadressen</translation>
@@ -452,7 +445,6 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8725066075913043281">Prøv igjen</translation>
 <translation id="8757090071857742562">Kunne ikke caste skrivebord.  Sjekk om du godtok forespørselen om å starte skjermdeling.</translation>
 <translation id="8774934320277480003">Toppmarg</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vi dele skriveren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med deg.</translation>
 <translation id="8798099450830957504">Forvalg</translation>
 <translation id="8800004011501252845">Viser mål for</translation>
 <translation id="8808478386290700967">Nettmarked</translation>

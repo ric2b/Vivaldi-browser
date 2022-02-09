@@ -108,7 +108,7 @@ Value ParseList(const std::string& input, const ParseNode* origin, Err* err) {
   return ret;
 }
 
-bool IsIdentifier(const std::string_view& buffer) {
+bool IsIdentifier(std::string_view buffer) {
   DCHECK(buffer.size() > 0);
   if (!Tokenizer::IsIdentifierFirstChar(buffer[0]))
     return false;

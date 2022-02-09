@@ -48,6 +48,7 @@ import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.ui.base.AndroidPermissionDelegate;
 import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
@@ -97,7 +98,7 @@ public class VoiceRecognitionHandler {
     @VisibleForTesting
     static final String EXTRA_PAGE_URL = "com.android.chrome.voice.PAGE_URL";
     /**
-     * Extra containing the original language code of the current page.
+     * Extra containing the source language code of the current page.
      *
      * This is only populated for pages that are translatable and only for intents initiated via the
      * toolbar button.
@@ -151,6 +152,7 @@ public class VoiceRecognitionHandler {
     @VisibleForTesting
     static final String EXTRA_VOICE_ENTRYPOINT = "com.android.chrome.voice.VOICE_ENTRYPOINT";
 
+    private static Boolean sIsRecognitionIntentPresentForTesting;
     private final Delegate mDelegate;
     private Long mQueryStartTimeMs;
     private WebContentsObserver mVoiceSearchWebContentsObserver;
@@ -296,11 +298,11 @@ public class VoiceRecognitionHandler {
         }
 
         /**
-         * Returns the original language code of the given tab. Empty string if no language was
+         * Returns the source language code of the given tab. Empty string if no language was
          * detected yet.
          */
-        public String getOriginalLanguage(Tab tab) {
-            return TranslateBridge.getOriginalLanguage(tab);
+        public String getSourceLanguage(Tab tab) {
+            return TranslateBridge.getSourceLanguage(tab);
         }
 
         /**
@@ -692,7 +694,7 @@ public class VoiceRecognitionHandler {
     }
 
     /** Returns the PrefService for the active Profile, or null if no profile has been loaded. */
-    private @Nullable PrefService getPrefService() {
+    private static @Nullable PrefService getPrefService() {
         if (!ProfileManager.isInitialized()) {
             return null;
         }
@@ -947,16 +949,16 @@ public class VoiceRecognitionHandler {
 
         // The page's URL is used to ensure the Translate intent doesn't translate the wrong page.
         String url = getUrl();
-        // The presence of original and current language fields are used to indicate whether the
+        // The presence of source and current language fields are used to indicate whether the
         // page is translated and/or is translatable. Only include them if they are both available.
-        String originalLanguageCode = mTranslateBridgeWrapper.getOriginalLanguage(currentTab);
+        String sourceLanguageCode = mTranslateBridgeWrapper.getSourceLanguage(currentTab);
         String currentLanguageCode = mTranslateBridgeWrapper.getCurrentLanguage(currentTab);
-        if (TextUtils.isEmpty(url) || TextUtils.isEmpty(originalLanguageCode)
+        if (TextUtils.isEmpty(url) || TextUtils.isEmpty(sourceLanguageCode)
                 || TextUtils.isEmpty(currentLanguageCode)) {
             return false;
         }
 
-        intent.putExtra(EXTRA_TRANSLATE_ORIGINAL_LANGUAGE, originalLanguageCode);
+        intent.putExtra(EXTRA_TRANSLATE_ORIGINAL_LANGUAGE, sourceLanguageCode);
         intent.putExtra(EXTRA_TRANSLATE_CURRENT_LANGUAGE, currentLanguageCode);
 
         // If ASSISTANT_INTENT_PAGE_URL is enabled, the URL may have already been added.
@@ -994,19 +996,25 @@ public class VoiceRecognitionHandler {
                 >= 0;
     }
 
-    /**
-     * @return Whether or not voice search is enabled.
-     */
+    /** Returns whether voice search is enabled on the current tab. */
     public boolean isVoiceSearchEnabled() {
         LocationBarDataProvider locationBarDataProvider = mDelegate.getLocationBarDataProvider();
         if (locationBarDataProvider == null) return false;
-
-        boolean isIncognito = locationBarDataProvider.isIncognito();
+        if (locationBarDataProvider.isIncognito()) return false;
         WindowAndroid windowAndroid = mDelegate.getWindowAndroid();
-        if (windowAndroid == null || isIncognito) return false;
+        if (windowAndroid == null) return false;
+        if (windowAndroid.getActivity().get() == null) return false;
+        if (!isVoiceSearchEnabled(windowAndroid)) return false;
+        return true;
+    }
 
-        if (!windowAndroid.hasPermission(Manifest.permission.RECORD_AUDIO)
-                && !windowAndroid.canRequestPermission(Manifest.permission.RECORD_AUDIO)) {
+    /** Returns whether voice search is enabled. */
+    public static boolean isVoiceSearchEnabled(
+            AndroidPermissionDelegate androidPermissionDelegate) {
+        if (androidPermissionDelegate == null) return false;
+        if (!androidPermissionDelegate.hasPermission(Manifest.permission.RECORD_AUDIO)
+                && !androidPermissionDelegate.canRequestPermission(
+                        Manifest.permission.RECORD_AUDIO)) {
             return false;
         }
 
@@ -1022,9 +1030,7 @@ public class VoiceRecognitionHandler {
                 return false;
             }
         }
-
-        Activity activity = windowAndroid.getActivity().get();
-        return activity != null && isRecognitionIntentPresent(true);
+        return isRecognitionIntentPresent(true);
     }
 
     /** Start tracking query duration by capturing when it started */
@@ -1255,8 +1261,17 @@ public class VoiceRecognitionHandler {
      * @return {@code true} if recognition is supported.  {@code false} otherwise.
      */
     @VisibleForTesting
-    protected boolean isRecognitionIntentPresent(boolean useCachedValue) {
+    protected static boolean isRecognitionIntentPresent(boolean useCachedValue) {
+        if (sIsRecognitionIntentPresentForTesting != null) {
+            return sIsRecognitionIntentPresentForTesting;
+        }
         return VoiceRecognitionUtil.isRecognitionIntentPresent(useCachedValue);
+    }
+
+    @VisibleForTesting
+    /*package*/ static void setIsRecognitionIntentPresentForTesting(
+            Boolean isRecognitionIntentPresent) {
+        sIsRecognitionIntentPresentForTesting = isRecognitionIntentPresent;
     }
 
     /** Sets the start time for testing. */

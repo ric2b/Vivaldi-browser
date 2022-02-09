@@ -10,7 +10,36 @@
 
 #include "installer/util/vivaldi_install_util.h"
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
+
+enum class UpdateMode {
+  kNone,
+
+  // Manual update check with full UI.
+  kManualCheck,
+
+  // Notify the user about an available update without downloading it.
+  kNotify,
+
+  // Notify the user that an update was downloaded and is ready to be installed.
+  kSilentDownload,
+
+  // Fully silent update check without any user interaction.
+  kSilentUpdate,
+
+  // Network installation mode.
+  kNetworkInstall,
+};
+
+constexpr bool WithVersionCheckUI(UpdateMode mode) {
+  return mode == UpdateMode::kManualCheck ||
+         mode == UpdateMode::kNetworkInstall;
+}
+
+constexpr bool WithDownloadUI(UpdateMode mode) {
+  return mode != UpdateMode::kSilentDownload &&
+         mode != UpdateMode::kSilentUpdate;
+}
 
 enum class RegistryItem {
   kDeltaPatchFailed,
@@ -28,18 +57,13 @@ base::FilePath GetSetupExePath();
 
 bool IsUsingTaskScheduler();
 
+// Return true if update checks are run as a system service.
+bool DoesRunAsSystemService();
+
 extern vivaldi::InstallType g_install_type;
 
-// True if using a network installer mode.
-extern bool g_install_mode;
-
-// True when running a manual update check. The flag must be accessed only from
-// the main thread as it can change if the user requested a manual check when
-// the automated check already runs.
-extern bool g_manual_check;
-
-// True in the silent update mode.
-extern bool g_silent_update;
+// The update notifier mode.
+extern UpdateMode g_mode;
 
 // The directory containing Vivaldi installation. When running updates this is
 // deduced from the path of the curren executable.
@@ -52,6 +76,6 @@ extern base::FilePath g_build_dir;
 
 extern base::Version g_app_version;
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_CONFIG_H_

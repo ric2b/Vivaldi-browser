@@ -5,15 +5,22 @@
 // https://github.com/WICG/web-codecs
 
 dictionary VideoFramePlaneInit {
-  required unsigned long long timestamp;  // microseconds
-  unsigned long long duration;  // microseconds
+  required VideoPixelFormat format;
 
-  [EnforceRange] unsigned long codedWidth;
-  [EnforceRange] unsigned long codedHeight;
+  required long long timestamp;  // microseconds
+  unsigned long long duration;   // microseconds
+
+  required [EnforceRange] unsigned long codedWidth;
+  required [EnforceRange] unsigned long codedHeight;
+
+  VideoFrameRegion visibleRegion;
+
+  [EnforceRange] unsigned long displayWidth;
+  [EnforceRange] unsigned long displayHeight;
+
+  // DEPRECATED: Use visibleRegion.
   [EnforceRange] unsigned long cropLeft;
   [EnforceRange] unsigned long cropTop;
   [EnforceRange] unsigned long cropWidth;
   [EnforceRange] unsigned long cropHeight;
-  [EnforceRange] unsigned long displayWidth;
-  [EnforceRange] unsigned long displayHeight;
 };

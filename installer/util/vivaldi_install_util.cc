@@ -35,6 +35,8 @@ bool DoesPathExist(const base::FilePath& path) {
   return (::GetFileAttributes(path.value().c_str()) != INVALID_FILE_ATTRIBUTES);
 }
 
+}  // namespace
+
 InstallType GetBrowserInstallType() {
   // Cache the value on the first call.
   static InstallType browser_install_type =
@@ -42,8 +44,6 @@ InstallType GetBrowserInstallType() {
           .value_or(InstallType::kForCurrentUser);
   return browser_install_type;
 }
-
-}  // namespace
 
 bool IsVivaldiInstalled(const base::FilePath& install_top_dir) {
   base::FilePath install_binary_dir =
@@ -55,10 +55,10 @@ bool IsVivaldiInstalled(const base::FilePath& install_top_dir) {
   return is_installed;
 }
 
-base::Optional<InstallType> FindInstallType(
+absl::optional<InstallType> FindInstallType(
     const base::FilePath& install_top_dir) {
   if (!IsVivaldiInstalled(install_top_dir))
-    return base::nullopt;
+    return absl::nullopt;
 
   base::FilePath install_binary_dir =
       install_top_dir.Append(installer::kInstallBinaryDir);
@@ -190,7 +190,11 @@ base::Version ReadExeVersion(const base::FilePath& exe_path) {
 
 }  // namespace
 
-base::Version GetInstallVersion(const base::FilePath& install_binary_dir) {
+base::Version GetInstallVersion(base::FilePath install_binary_dir) {
+  if (install_binary_dir.empty()) {
+    install_binary_dir = GetInstallBinaryDir();
+  }
+
   // If kChromeNewExe is present, read the version from it to reflect the state
   // after a successfull installation that just waits for the user to approve
   // renaming of executables.
@@ -207,6 +211,18 @@ base::Version GetInstallVersion(const base::FilePath& install_binary_dir) {
     }
   }
   return base::Version();
+}
+
+absl::optional<base::Version> GetPendingUpdateVersion(
+    base::FilePath install_binary_dir) {
+  if (install_binary_dir.empty()) {
+    install_binary_dir = GetInstallBinaryDir();
+  }
+  base::FilePath new_exe_path =
+      install_binary_dir.Append(installer::kChromeNewExe);
+  if (!DoesPathExist(new_exe_path))
+    return absl::nullopt;
+  return ReadExeVersion(new_exe_path);
 }
 
 std::wstring GetNewUpdateFinalizeCommand() {
@@ -282,11 +298,12 @@ base::CommandLine GetCommonUpdateNotifierCommand(
         switches::kVivaldiUpdateURL,
         vivaldi_cmd_line->GetSwitchValueNative(switches::kVivaldiUpdateURL));
   }
+
+  // Make logging verbose if invoked from a browser with enabled logging or
+  // from the installer with the verbose logging.
   if (vivaldi_cmd_line->HasSwitch(installer::switches::kEnableLogging) ||
       vivaldi_cmd_line->HasSwitch(installer::switches::kVerboseLogging)) {
-    // We do not copy the value here as we do not want to log to the browser log
-    // file but rather always to the separated install log.
-    command.AppendSwitch(installer::switches::kEnableLogging);
+    command.AppendSwitch(installer::switches::kVerboseLogging);
   }
   if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiSilentUpdate)) {
     command.AppendSwitch(switches::kVivaldiSilentUpdate);
@@ -451,10 +468,10 @@ std::wstring ReadRegistryString(const wchar_t* name,
   return value;
 }
 
-base::Optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
+absl::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
                                             const base::win::RegKey& key) {
   if (!key.Valid())
-    return base::nullopt;
+    return absl::nullopt;
   DWORD value = 0;
   LSTATUS status = key.ReadValueDW(name, &value);
   if (status != ERROR_SUCCESS) {
@@ -462,20 +479,20 @@ base::Optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
       LOG(ERROR) << base::StringPrintf(
           "Failed to read registry name %ls status==0x%lx", name, status);
     }
-    return base::nullopt;
+    return absl::nullopt;
   }
   return value;
 }
 
-base::Optional<bool> ReadRegistryBool(const wchar_t* name,
+absl::optional<bool> ReadRegistryBool(const wchar_t* name,
                                       const base::win::RegKey& key) {
-  base::Optional<uint32_t> value_word = ReadRegistryUint32(name, key);
+  absl::optional<uint32_t> value_word = ReadRegistryUint32(name, key);
   if (!value_word)
-    return base::nullopt;
+    return absl::nullopt;
   if (*value_word > 1) {
     LOG(ERROR) << "Invalid boolean registry value in " << name << ": "
                << *value_word;
-    return base::nullopt;
+    return absl::nullopt;
   }
   return *value_word != 0;
 }

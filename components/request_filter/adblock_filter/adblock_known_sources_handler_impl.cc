@@ -253,26 +253,26 @@ const std::set<std::string>& KnownRuleSourcesHandlerImpl::GetDeletedPresets(
   return deleted_presets_[static_cast<size_t>(group)];
 }
 
-base::Optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSourceFromUrl(
+absl::optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSourceFromUrl(
     RuleGroup group,
     const GURL& url) {
   if (!url.is_valid())
-    return base::nullopt;
+    return absl::nullopt;
 
   return AddSource(KnownRuleSource(url, group), true);
 }
 
-base::Optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSourceFromFile(
+absl::optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSourceFromFile(
     RuleGroup group,
     const base::FilePath& file) {
   if (file.empty() || !file.IsAbsolute() || file.ReferencesParent() ||
       file.EndsWithSeparator())
-    return base::nullopt;
+    return absl::nullopt;
 
   return AddSource(KnownRuleSource(file, group), true);
 }
 
-base::Optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSource(
+absl::optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSource(
     const KnownRuleSource& known_source,
     bool enable) {
   KnownRuleSources& known_sources = GetSourceMap(known_source.group);
@@ -280,7 +280,7 @@ base::Optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSource(
   // since the id is just a hash of the file path, if a source with the same id
   // exist, we have a source with the exact same path already.
   if (known_sources.find(known_source.id) != known_sources.end())
-    return base::nullopt;
+    return absl::nullopt;
 
   known_sources.insert({known_source.id, known_source});
   schedule_save_.Run();
@@ -294,13 +294,13 @@ base::Optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSource(
   return known_source.id;
 }
 
-base::Optional<KnownRuleSource> KnownRuleSourcesHandlerImpl::GetSource(
+absl::optional<KnownRuleSource> KnownRuleSourcesHandlerImpl::GetSource(
     RuleGroup group,
     uint32_t source_id) {
   KnownRuleSources& known_sources = GetSourceMap(group);
   const auto known_source = known_sources.find(source_id);
   if (known_source == known_sources.end())
-    return base::nullopt;
+    return absl::nullopt;
   return known_source->second;
 }
 

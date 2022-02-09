@@ -3,5 +3,31 @@
 <translationbundle lang="tr">
 <translation id="3830627370375585318">Güvenlik duvarınızdan ya da anti-virüs ayarlarından,
         Vivaldi'nin ağa erişmesine izin verin.</translation>
-<translation id="5248344925342018662">Güvenli bir Vivaldi sayfasını görüntülüyorsunuz.</translation>
+<translation id="4200102020577305737">Vivaldi menüsü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN Ayarları
+          öğesine gidin ve "LAN için vekil sunucusu kullan" seçeneğinin işaretini kaldırın.</translation>
+<translation id="4932161901409251843">Git
+          Vivaldi menüsü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          ögesine gidin ve yapılandırmanızın "vekil yok" veya "doğrudan" olarak ayarlandığından emin olun.</translation>
+<translation id="5248344925342018662">Güvenli bir Vivaldi sayfasını görüntülüyorsunuz</translation>
+<translation id="7023871570427738255">Vivaldi menüsü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" /> öğesine gidin
+          ve "<ph name="NO_PREFETCH_DESCRIPTION" />" seçeneğinin işaretini kaldırın.
+          Bu işlem sorunu çözmezse performansın iyileşmesi için bu seçeneği tekrar işaretlemenizi öneririz.</translation>
+<translation id="8187289872471304532">Uygulamalar &gt; Sistem Tercihleri &gt; Ağ &gt; Gelişmiş &gt; Vekiller
+          ögesine gidin ve
+          seçilmiş olabilecek proxy'lerin seçimini kaldırın.</translation>
 </translationbundle>

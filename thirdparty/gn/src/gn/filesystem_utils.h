@@ -20,7 +20,9 @@ std::string FilePathToUTF8(const base::FilePath::StringType& str);
 inline std::string FilePathToUTF8(const base::FilePath& path) {
   return FilePathToUTF8(path.value());
 }
-base::FilePath UTF8ToFilePath(const std::string_view& sp);
+base::FilePath UTF8ToFilePath(std::string_view sp);
+
+std::string MaybeQuotePath(const std::string_view path);
 
 // Extensions -----------------------------------------------------------------
 
@@ -60,7 +62,7 @@ inline bool IsSlash(const char ch) {
 }
 
 // Returns true if the given path ends with a slash.
-bool EndsWithSlash(const std::string_view s);
+bool EndsWithSlash(std::string_view s);
 
 // Path parts -----------------------------------------------------------------
 
@@ -96,12 +98,12 @@ bool EnsureStringIsInOutputDir(const SourceDir& output_dir,
 // Returns true if the input string is absolute. Double-slashes at the
 // beginning are treated as source-relative paths. On Windows, this handles
 // paths of both the native format: "C:/foo" and ours "/C:/foo"
-bool IsPathAbsolute(const std::string_view& path);
+bool IsPathAbsolute(std::string_view path);
 
 // Returns true if the input string is source-absolute. Source-absolute
 // paths begin with two forward slashes and resolve as if they are
 // relative to the source root.
-bool IsPathSourceAbsolute(const std::string_view& path);
+bool IsPathSourceAbsolute(std::string_view path);
 
 // Given an absolute path, checks to see if is it is inside the source root.
 // If it is, fills a source-absolute path into the given output and returns
@@ -112,8 +114,8 @@ bool IsPathSourceAbsolute(const std::string_view& path);
 // ("/C:/"). The source root can end with a slash or not.
 //
 // Note that this does not attempt to normalize slashes in the output.
-bool MakeAbsolutePathRelativeIfPossible(const std::string_view& source_root,
-                                        const std::string_view& path,
+bool MakeAbsolutePathRelativeIfPossible(std::string_view source_root,
+                                        std::string_view path,
                                         std::string* dest);
 
 // Given two absolute paths |base| and |target|, returns a relative path to
@@ -134,7 +136,7 @@ base::FilePath MakeAbsoluteFilePathRelativeIfPossible(
 // a leading slash. Otherwise, |path| will retain its relativity. |source_root|
 // must not end with a slash.
 void NormalizePath(std::string* path,
-                   const std::string_view& source_root = std::string_view());
+                   std::string_view source_root = std::string_view());
 
 // Converts slashes to backslashes for Windows. Keeps the string unchanged
 // for other systems.
@@ -147,10 +149,9 @@ void ConvertPathToSystem(std::string* path);
 // If supplied, the |source_root| parameter is the absolute path to
 // the source root and not end in a slash. Unless you know that the
 // inputs are always source relative, this should be supplied.
-std::string RebasePath(
-    const std::string& input,
-    const SourceDir& dest_dir,
-    const std::string_view& source_root = std::string_view());
+std::string RebasePath(const std::string& input,
+                       const SourceDir& dest_dir,
+                       std::string_view source_root = std::string_view());
 
 // Resolves a file or dir name (parameter input) relative to
 // value directory. Will return an empty SourceDir/File on error
@@ -165,12 +166,11 @@ std::string RebasePath(
 // If source_root is supplied, these functions will additionally handle the
 // case where the input is a system-absolute but still inside the source
 // tree. This is the case for some external tools.
-template <typename StringType>
-std::string ResolveRelative(const StringType& input,
+std::string ResolveRelative(std::string_view input,
                             const std::string& value,
                             bool as_file,
-                            const std::string_view& source_root,
-                            const std::string_view& actual_path_in = NULL,
+                            std::string_view source_root,
+                            std::string_view actual_path_in = {},
                             StringAtom* actual_path_out = NULL);
 
 // Resolves source file or directory relative to some given source root. Returns
@@ -206,14 +206,6 @@ std::string GetOutputSubdirName(const Label& toolchain_label, bool is_default);
 // Returns true if the contents of the file and stream given are equal, false
 // otherwise.
 bool ContentsEqual(const base::FilePath& file_path, const std::string& data);
-
-// Writes given stream contents to the given file if it differs from existing
-// file contents. Returns true if new contents was successfully written or
-// existing file contents doesn't need updating, false on write error. |err| is
-// set on write error if not nullptr.
-bool WriteFileIfChanged(const base::FilePath& file_path,
-                        const std::string& data,
-                        Err* err);
 
 // Writes given stream contents to the given file. Returns true if data was
 // successfully written, false otherwise. |err| is set on error if not nullptr.

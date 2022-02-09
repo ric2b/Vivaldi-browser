@@ -22,8 +22,8 @@
 namespace vivaldi {
 
 namespace {
-static const char kNotes[] = "Notes";
-static const char kOtherNotes[] = "Other Notes";
+static const char16_t kNotes[] = u"Notes";
+static const char16_t kOtherNotes[] = u"Other Notes";
 
 bool IsPermanentType(NoteNode::Type type) {
   return type == NoteNode::MAIN || type == NoteNode::OTHER ||
@@ -54,7 +54,7 @@ NoteNode::NoteNode(int64_t id,
       is_permanent_node_(is_permanent_node) {
   if (type_ == SEPARATOR) {
     // Make it easier for sync to match separators
-    SetTitle(base::UTF8ToUTF16("--- SEPARATOR ") +
+    SetTitle(u"--- SEPARATOR " +
              base::NumberToString16(creation_time_.ToInternalValue()));
   }
   DCHECK(guid.is_valid());
@@ -67,17 +67,15 @@ PermanentNoteNode::~PermanentNoteNode() = default;
 // static
 std::unique_ptr<PermanentNoteNode> PermanentNoteNode::CreateMainNotes(
     int64_t id) {
-  return base::WrapUnique(
-      new PermanentNoteNode(id, MAIN, base::GUID::ParseLowercase(kMainNodeGuid),
-                            base::UTF8ToUTF16(kNotes)));
+  return base::WrapUnique(new PermanentNoteNode(
+      id, MAIN, base::GUID::ParseLowercase(kMainNodeGuid), kNotes));
 }
 
 // static
 std::unique_ptr<PermanentNoteNode> PermanentNoteNode::CreateOtherNotes(
     int64_t id) {
   return base::WrapUnique(new PermanentNoteNode(
-      id, OTHER, base::GUID::ParseLowercase(kOtherNotesNodeGuid),
-      base::UTF8ToUTF16(kOtherNotes)));
+      id, OTHER, base::GUID::ParseLowercase(kOtherNotesNodeGuid), kOtherNotes));
 }
 
 // static

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Weiter</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Eine Netzwerkdiagnose durchführen<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
+<translation id="2491414235131909199">Diese Seite wurde von einer Erweiterung blockiert</translation>
 <translation id="2501278716633472235">Gehe zurück</translation>
 <translation id="2539524384386349900">Erkennen</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> hat eine ungültige Antwort gesendet.</translation>
@@ -143,7 +144,6 @@
 <translation id="5838278095973806738">Sie sollten keine vertraulichen Informationen wie Passwörter oder Kreditkartendaten auf dieser Website eingeben, da sie von Angreifern gestohlen werden könnten.</translation>
 <translation id="5869405914158311789">Diese Website ist nicht erreichbar</translation>
 <translation id="5932224571077948991">Website zeigt aufdringliche oder irreführende Werbung an</translation>
-<translation id="5990559369517809815">Anfragen an den Server wurden durch eine Erweiterung blockiert.</translation>
 <translation id="6051221802930200923">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da die Website Zertifikats-Pinning verwendet. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
 <translation id="6146055958333702838">Überprüfen Sie alle Kabel und starten Sie alle verwendeten Router, Modems oder
     andere Netzwerkgeräte neu.</translation>

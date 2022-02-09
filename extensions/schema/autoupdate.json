@@ -1,14 +1,45 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
-
 [
   {
     "namespace": "autoUpdate",
     "compiler_options": {
       "implemented_in": "extensions/api/auto_update/auto_update_api.h"
     },
-    "platforms": ["win", "mac"],
-    "description": "Use the <code>chrome.autoupdate</code> API to interact with (Win)Sparkle.",
+    "platforms": [
+      "win",
+      "mac"
+    ],
+    "description": "Use the <code>vivaldi.autoupdate</code> API to interact with (Win)Sparkle.",
     "types": [
+      {
+        "id": "UpdateOperationStatusEnum",
+        "type": "string",
+        "enum": [
+          "noUpdate",
+          "didAbortWithError",
+          "didFindValidUpdate",
+          "willDownloadUpdate",
+          "didDownloadUpdate",
+          "willInstallUpdateOnQuit",
+          "updaterDidRelaunchApplication"
+        ]
+      },
+      {
+        "id": "UpdateOperationStatus",
+        "type": "object",
+        "description": "A structure describing the status of an update operation if any.",
+        "properties": {
+          "status": {
+            "$ref": "UpdateOperationStatusEnum"
+          },
+          "version": {
+            "type": "string"
+          },
+          "releaseNotesUrl": {
+            "type": "string"
+          }
+        }
+      }
     ],
     "functions": [
       {
@@ -100,6 +131,37 @@
             "description": "Indicates whether we want to automatically install updates."
           }
         ]
+      },
+      {
+        "name": "getUpdateStatus",
+        "type": "function",
+        "description": "Get a status of an update operation if any",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "$ref": "UpdateOperationStatus",
+              "description": "status of an update operation. Return null on errors.",
+              "name": "result"
+            }
+          ]
+        }
+      },
+      {
+        "name": "hasAutoUpdates",
+        "type": "function",
+        "description": "Return true if automatic updates are supported.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result"
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -149,26 +211,24 @@
         "type": "function",
         "description": "Fired when an update will be installed on restart or quit.",
         "parameters": [
-            {
-              "type": "string",
-              "name": "version",
-              "description": "The version that will be installed on quit or an empty string if not known"
-            }
+          {
+            "type": "string",
+            "name": "version",
+            "description": "The version that will be installed on quit or an empty string if not known"
+          }
         ]
       },
       {
         "name": "onUpdaterWillRelaunchApplication",
         "type": "function",
         "description": "Fired just before the updater restarts the application.",
-        "parameters": [
-        ]
+        "parameters": []
       },
       {
         "name": "onUpdaterDidRelaunchApplication",
         "type": "function",
         "description": "Fired when an application has been restarted due to an update.",
-        "parameters": [
-        ]
+        "parameters": []
       },
       {
         "name": "onDidAbortWithError",

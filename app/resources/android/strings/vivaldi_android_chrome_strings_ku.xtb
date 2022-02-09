@@ -2,47 +2,50 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ku">
 <translation id="1397811292916898096">Lêgerîn bi<ph name="PRODUCT_NAME" /></translation>
-<translation id="1598449788754183301">Bişkojkên normal / teqeyên taybet</translation>
+<translation id="1598449788754183301">Bişkokên asayî/Hilpekînên taybet</translation>
 <translation id="1644574205037202324">Dîrok</translation>
-<translation id="17513872634828108">Teqayan veke</translation>
+<translation id="17513872634828108">Hilpekînan veke</translation>
 <translation id="1829244130665387512">Di rûpelê de bibîne</translation>
 <translation id="2038563949887743358">Daxwaza Malpera Sermaseyê Vêxine</translation>
 <translation id="2306442503286132111">Cihnîşan hat tomar kirin <ph name="FOLDER_NAME" />" peldank</translation>
 <translation id="2433507940547922241">Xuyang</translation>
 <translation id="2501278716633472235">Vegere</translation>
-<translation id="2633278372998075009">Teqeyên Taybet</translation>
+<translation id="2633278372998075009">Hilpekînên Taybet</translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> cihnîşan}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> cihnîşan}}</translation>
 <translation id="3076631378407175873">Mafên kopîkirinê<ph name="YEAR" />Vivaldi Technologies AS. Hemû maf parastî ne.</translation>
 <translation id="3234355010754616171">Tabek taybetî ya nû</translation>
-<translation id="3377025655491224618">Teqeyên Taybet</translation>
-<translation id="3518985090088779359">Pejirandin &amp; berdewamkirin</translation>
+<translation id="3377025655491224618">Hilpekînên Taybet</translation>
+<translation id="3518985090088779359">Bipejirîne &amp; Berdewamke</translation>
 <translation id="3700829948786686853">Bi xêr hatî Vivaldi</translation>
 <translation id="3719826155360621982">Serrûpel</translation>
 <translation id="385051799172605136">Veger</translation>
 <translation id="4121750346708795461">Bi karanîna vê sepanê, tu ji Vivaldi <ph name = "BEGIN_LINK1" /> Peymana Lîsansa Dawî ya Bikarhêner <ph name = "END_LINK1" /> û <ph name = "BEGIN_LINK2" /> Polîtika Veşartiyê <ph name = "END_LINK2" />. re dibêjî erê.</translation>
-<translation id="4243710787042215766">Di teqayek taybet de veke</translation>
-<translation id="4526803704855831732">Teqeyên Taybet</translation>
+<translation id="4243710787042215766">Di hilpekînek taybet de veke</translation>
+<translation id="4526803704855831732">Hilpekînên Taybet</translation>
 <translation id="4759238208242260848">Daxisitnan</translation>
-<translation id="4865987431642283918">Zimanê amûrê yê jiberxwe</translation>
+<translation id="4865987431642283918">Zimanê amûrê yê berdest</translation>
 <translation id="4883379392681899581">Dev ji moda taybet berde</translation>
 <translation id="4943872375798546930">Encam tune</translation>
 <translation id="49576331685473090">Astengkerê naverokê</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> bîrgeh</translation>
 <translation id="5186185447130319458">Taybet</translation>
 <translation id="5233638681132016545">Tabek nû</translation>
-<translation id="572328651809341494">Teqeyên nû</translation>
-<translation id="5840488417521835756">Bêyî derketina ji rûpelê li ser malperên li ser mijaran fêr bibe. Bo lêgerîn bitikîne taybetmendiyek e ku tenê dema ku Google li Vivaldi wekî motora lêgerînê ya xwerû tê saz kirin heye. Ew peyvekê û dorhêla wê ji Lêgerîna Google re dişîne, danasînan, wêneyan, encamên lêgerînê, û hûrguliyên din vedigire.
+<translation id="572328651809341494">Hilpekînên nû</translation>
+<translation id="5840488417521835756">Bêyî derketina ji rûpelê li ser malperên li ser mijaran fêr bibe. Bo lêgerîn bitikîne taybetmendiyek e ku tenê dema ku Google li Vivaldi wekî motora lêgerînê ya berdest tê saz kirin heye. Ew peyvekê û dorhêla wê ji Lêgerîna Google re dişîne, danasînan, wêneyan, encamên lêgerînê, û hûrguliyên din vedigire.
 
 Ji bo ku termê lêgerîna xwe sererast bikî, dirêj bikî ku hilbijêrî Ji bo safîkirina lêgerîna xwe, panelê tev de hilkişînin jor û qutîka lêgerînê bitikînîî.</translation>
 <translation id="6150320133806434356">Cihnîşan hat tomar kirin</translation>
 <translation id="6336451774241870485">Tabek taybetî ya nû</translation>
 <translation id="6585139692466700358">Pêşniyar bike ku rûpelên bi zimanên din werin wergerandin bikaranîna karûbarê wergerandinê Vivaldi</translation>
 <translation id="6593061639179217415">Malpera sermaseyê</translation>
-<translation id="6610147964972079463">Teqeyên taybet bigire</translation>
+<translation id="6610147964972079463">Hilpekînên taybet bigire</translation>
 <translation id="706339621163631076">Polîtika Taybetîtiyê ya Gerokê</translation>
 <translation id="732145680195464316">Cihnîşan hat tomar kirin <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Derbarê Vivaldi</translation>
-<translation id="7465104139234185284">Hemî teqeyên taybet bigire</translation>
-<translation id="7519434535192513364">Pêlê kirin bo lêgerîn taybetmendiyek e ku tenê dema ku Google li Vivaldi wekî motora lêgerînê ya xwerû tê saz kirin heye. Ew peyva bijartî û rûpela heyî wekî kontekst ji Lêgerîna Google re dişîne. tu dikarî wê di <ph name="BEGIN_LINK" />Sazkariyên <ph name="END_LINK" /> de vemirînî.</translation>
+<translation id="7465104139234185284">Hemî hilpekînên taybet bigire</translation>
+<translation id="7519434535192513364">Pêlê kirin bo lêgerîn taybetmendiyek e ku tenê dema ku Google li Vivaldi wekî motora lêgerînê ya berdest tê saz kirin heye. Ew peyva bijartî û rûpela heyî wekî kontekst ji Lêgerîna Google re dişîne. tu dikarî wê di <ph name="BEGIN_LINK" />Sazkariyên <ph name="END_LINK" /> de vemirînî.</translation>
 <translation id="804786196054284061">Peymana Lîsansa Bikaranîna Dawîn</translation>
 <translation id="85991616550051997">Vegere serrûpelê</translation>
 <translation id="8820817407110198400">Cihnîşan</translation>

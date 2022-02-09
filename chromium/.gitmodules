@@ -40,9 +40,6 @@
 [submodule "third_party/crc32c/src"]
 	path = third_party/crc32c/src
 	url = ../../external/github.com/google/crc32c.git
-[submodule "chrome/browser/resources/media_router/extension/src"]
-	path = chrome/browser/resources/media_router/extension/src
-	url = ../../media_router.git
 [submodule "chrome/test/data/perf/canvas_bench"]
 	path = chrome/test/data/perf/canvas_bench
 	url = ../canvas_bench.git
@@ -67,9 +64,6 @@
 [submodule "third_party/wayland-protocols/src"]
 	path = third_party/wayland-protocols/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland-protocols.git
-[submodule "third_party/tint/src"]
-	path = third_party/tint/src
-	url = ../../dawn/tint.git
 [submodule "third_party/freetype-testing/src"]
 	path = third_party/freetype-testing/src
 	url = ../../external/github.com/freetype/freetype2-testing.git
@@ -112,9 +106,9 @@
 [submodule "third_party/libgifcodec"]
 	path = third_party/libgifcodec
 	url = ../../skia/libgifcodec.git
-[submodule "third_party/openh264/src"]
-	path = third_party/openh264/src
-	url = ../../external/github.com/cisco/openh264.git
+[submodule "third_party/libgav1/src"]
+	path = third_party/libgav1/src
+	url = ../../codecs/libgav1.git
 [submodule "third_party/pefile"]
 	path = third_party/pefile
 	url = ../../external/pefile.git
@@ -277,9 +271,9 @@
 [submodule "third_party/highway/src"]
 	path = third_party/highway/src
 	url = ../../external/github.com/google/highway.git
-[submodule "third_party/libgav1/src"]
-	path = third_party/libgav1/src
-	url = ../../codecs/libgav1.git
+[submodule "third_party/openh264/src"]
+	path = third_party/openh264/src
+	url = ../../external/github.com/cisco/openh264.git
 [submodule "third_party/jsoncpp/source"]
 	path = third_party/jsoncpp/source
 	url = ../../external/github.com/open-source-parsers/jsoncpp.git

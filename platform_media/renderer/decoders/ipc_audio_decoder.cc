@@ -273,8 +273,8 @@ void IPCAudioDecoder::ReadInternal() {
   // Unretained(this) is safe as the decoder must be waiting in
   // IPCAudioDecoder::Read for the signal.
   ipc_media_pipeline_host_->ReadDecodedData(
-      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
-      base::Bind(&IPCAudioDecoder::DataReady, base::Unretained(this)));
+      PlatformStreamType::kAudio,
+      base::BindRepeating(&IPCAudioDecoder::DataReady, base::Unretained(this)));
 }
 
 void IPCAudioDecoder::DataReady(DemuxerStream::Status status,

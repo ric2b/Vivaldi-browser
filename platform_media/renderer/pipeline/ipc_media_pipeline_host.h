@@ -65,7 +65,7 @@ class IPCMediaPipelineHost {
                     PipelineStatusCallback status_cb) = 0;
 
   // Starts an asynchronous read of decoded media data over the IPC.
-  virtual void ReadDecodedData(PlatformMediaDataType type,
+  virtual void ReadDecodedData(PlatformStreamType stream_type,
                                DemuxerStream::ReadCB read_cb) = 0;
 
  protected:

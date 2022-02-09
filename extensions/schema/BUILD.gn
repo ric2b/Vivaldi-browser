@@ -34,7 +34,9 @@ function_registration("generated_api_registration") {
     "//components/paint_preview/buildflags:buildflags",
     "//components/translate/content/common",
     "//content/public/browser",
+    "//extensions/common",
     "//skia",
+    "//vivaldi/renderer/mojo",
   ]
   deps += schema_dependencies
 }

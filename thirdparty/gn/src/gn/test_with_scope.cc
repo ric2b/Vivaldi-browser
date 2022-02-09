@@ -254,7 +254,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain, bool use_toc) {
   cdylib_tool->set_output_prefix("lib");
   cdylib_tool->set_default_output_extension(".so");
   cdylib_tool->set_outputs(SubstitutionList::MakeForTest(
-      "{{root_output_dir}}/{{target_output_name}}{{output_extension}}"));
+      "{{target_out_dir}}/{{target_output_name}}{{output_extension}}"));
   toolchain->SetTool(std::move(cdylib_tool));
 
   // DYLIB
@@ -267,7 +267,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain, bool use_toc) {
   dylib_tool->set_output_prefix("lib");
   dylib_tool->set_default_output_extension(".so");
   dylib_tool->set_outputs(SubstitutionList::MakeForTest(
-      "{{root_output_dir}}/{{target_output_name}}{{output_extension}}"));
+      "{{target_out_dir}}/{{target_output_name}}{{output_extension}}"));
   toolchain->SetTool(std::move(dylib_tool));
 
   // RUST_PROC_MACRO

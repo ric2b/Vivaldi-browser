@@ -3,9 +3,13 @@
 // found in the LICENSE file.
 
 import {assertInstanceof} from '../../../chrome_util.js';
+import * as error from '../../../error.js';
 // eslint-disable-next-line no-unused-vars
 import {DeviceOperator} from '../../../mojo/device_operator.js';
 import {
+  CanceledError,
+  ErrorLevel,
+  ErrorType,
   Facing,      // eslint-disable-line no-unused-vars
   Resolution,  // eslint-disable-line no-unused-vars
 } from '../../../type.js';
@@ -18,10 +22,8 @@ export class ModeBase {
   /**
    * @param {!MediaStream} stream
    * @param {!Facing} facing
-   * @param {?Resolution} captureResolution Capturing resolution width and
-   *     height.
    */
-  constructor(stream, facing, captureResolution) {
+  constructor(stream, facing) {
     /**
      * Stream of current mode.
      * @type {!MediaStream}
@@ -35,14 +37,6 @@ export class ModeBase {
      * @protected
      */
     this.facing_ = facing;
-
-    /**
-     * Capture resolution. May be null on device not support of setting
-     * resolution.
-     * @type {?Resolution}
-     * @protected
-     */
-    this.captureResolution_ = captureResolution;
 
     /**
      * Promise for ongoing capture operation.
@@ -69,7 +63,16 @@ export class ModeBase {
    */
   async stopCapture() {
     this.stop_();
-    return await this.capture_;
+    try {
+      await this.capture_;
+    } catch (e) {
+      if (e instanceof CanceledError) {
+        return;
+      }
+      error.reportError(
+          ErrorType.STOP_CAPTURE_FAILURE, ErrorLevel.ERROR,
+          assertInstanceof(e, Error));
+    }
   }
 
   /**
@@ -79,10 +82,18 @@ export class ModeBase {
   async addMetadataObserver() {}
 
   /**
-   * Remove the observer that saves metadata.
+   * Removes the observer that saves metadata.
    * @return {!Promise} Promise for the operation.
    */
   async removeMetadataObserver() {}
+
+  /**
+   * Clears everything when mode is not needed anymore.
+   * @return {!Promise}
+   */
+  async clear() {
+    await this.stopCapture();
+  }
 
   /**
    * Initiates video/photo capture operation under this mode.
@@ -138,13 +149,6 @@ export class ModeFactory {
   }
 
   /**
-   * @param {!Resolution} resolution
-   */
-  setCaptureResolution(resolution) {
-    this.captureResolution_ = resolution;
-  }
-
-  /**
    * @param {!Facing} facing
    */
   setFacing(facing) {
@@ -160,14 +164,13 @@ export class ModeFactory {
 
   /**
    * Makes video capture device prepared for capturing in this mode.
-   * @param {!DeviceOperator} deviceOperator Used to communicate with video
-   *     capture device.
    * @param {!MediaStreamConstraints} constraints Constraints for preview
    *     stream.
+   * @param {?Resolution} resolution Capture resolution
    * @return {!Promise}
    * @abstract
    */
-  prepareDevice(deviceOperator, constraints) {}
+  async prepareDevice(constraints, resolution) {}
 
   /**
    * @return {!ModeBase}

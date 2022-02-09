@@ -234,8 +234,6 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   }
 }
 
-// TODO(crbug.com/1005219): Replace this function to move children between
-// parent nodes more efficiently.
 const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
                                              const base::GUID& guid,
                                              vivaldi::NotesModel* model) {
@@ -311,6 +309,14 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
   DCHECK(base::GUID::ParseLowercase(specifics.guid()).is_valid());
 
   // If the client tag hash matches, that should already be good enough.
+  if (syncer::ClientTagHash::FromUnhashed(
+          syncer::NOTES, specifics.guid()) == client_tag_hash) {
+    return true;
+  }
+
+  // Earlier vivaldi versions were mistakenly using the BOOKMARKS type here,
+  // so we temporarily produce tags using the BOOKMARKS type and allow it.
+  // Remove this in a few version. 07-2021
   if (syncer::ClientTagHash::FromUnhashed(
           syncer::BOOKMARKS, specifics.guid()) == client_tag_hash) {
     return true;

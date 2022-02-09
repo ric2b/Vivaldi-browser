@@ -192,6 +192,15 @@ FormData SimplifiedFormDataFromFormStructure(
   return form_data;
 }
 
+bool HasMutedCredentials(base::span<const InsecureCredential> credentials,
+                         const std::u16string& username) {
+  return base::ranges::any_of(credentials, [&username](const auto& credential) {
+    return credential.username == username && credential.is_muted &&
+           (credential.insecure_type == InsecureType::kLeaked ||
+            credential.insecure_type == InsecureType::kPhished);
+  });
+}
+
 }  // namespace
 
 // static
@@ -642,8 +651,7 @@ PasswordFormManager* PasswordManager::ProvisionallySaveForm(
   }
   if (!client_->IsSavingAndFillingEnabled(submitted_form.url)) {
     RecordProvisionalSaveFailure(
-        PasswordManagerMetricsRecorder::SAVING_DISABLED, submitted_form.url,
-        logger.get());
+        PasswordManagerMetricsRecorder::SAVING_DISABLED, submitted_form.url);
     return nullptr;
   }
 
@@ -654,7 +662,7 @@ PasswordFormManager* PasswordManager::ProvisionallySaveForm(
   if (ShouldBlockPasswordForSameOriginButDifferentScheme(submitted_url)) {
     RecordProvisionalSaveFailure(
         PasswordManagerMetricsRecorder::SAVING_ON_HTTP_AFTER_HTTPS,
-        submitted_url, logger.get());
+        submitted_url);
     return nullptr;
   }
 
@@ -671,8 +679,7 @@ PasswordFormManager* PasswordManager::ProvisionallySaveForm(
 
   if (!matched_manager) {
     RecordProvisionalSaveFailure(
-        PasswordManagerMetricsRecorder::NO_MATCHING_FORM, submitted_form.url,
-        logger.get());
+        PasswordManagerMetricsRecorder::NO_MATCHING_FORM, submitted_form.url);
     matched_manager = CreateFormManager(driver, submitted_form);
   }
 
@@ -802,6 +809,11 @@ void PasswordManager::PropagateFieldDataManagerInfo(
     const FieldDataManager& field_data_manager,
     const PasswordManagerDriver* driver) {
   for (auto& manager : form_managers_) {
+    if (!client_->IsSavingAndFillingEnabled(manager->GetURL())) {
+      RecordProvisionalSaveFailure(
+          PasswordManagerMetricsRecorder::SAVING_DISABLED, manager->GetURL());
+      continue;
+    }
     manager->ProvisionallySaveFieldDataManagerInfo(field_data_manager, driver);
   }
 }
@@ -830,7 +842,7 @@ bool PasswordManager::IsAutomaticSavePromptAvailable() {
     // We just give up.
     RecordProvisionalSaveFailure(
         PasswordManagerMetricsRecorder::MATCHING_NOT_COMPLETE,
-        submitted_manager->GetURL(), logger.get());
+        submitted_manager->GetURL());
     return false;
   }
 
@@ -947,10 +959,19 @@ void PasswordManager::OnLoginSuccessful() {
 
   PasswordFormManager* submitted_manager = GetSubmittedManager();
   DCHECK(submitted_manager);
-  DCHECK(submitted_manager->GetSubmittedForm());
+  const PasswordForm* submitted_form = submitted_manager->GetSubmittedForm();
+  DCHECK(submitted_form);
+  if (!client_->IsSavingAndFillingEnabled(submitted_form->url))
+    return;
 
   client_->GetStoreResultFilter()->ReportFormLoginSuccess(*submitted_manager);
-  leak_delegate_.StartLeakCheck(submitted_manager->GetPendingCredentials());
+  // Check for leaks only if there are no muted credentials.
+  if (!HasMutedCredentials(
+          submitted_manager->GetInsecureCredentials(),
+          submitted_manager->GetSubmittedForm()->username_value) ||
+      !base::FeatureList::IsEnabled(features::kMutingCompromisedCredentials)) {
+    leak_delegate_.StartLeakCheck(submitted_manager->GetPendingCredentials());
+  }
 
   auto submission_event =
       submitted_manager->GetSubmittedForm()->submission_event;
@@ -978,7 +999,7 @@ void PasswordManager::OnLoginSuccessful() {
           *submitted_manager->GetSubmittedForm())) {
     RecordProvisionalSaveFailure(
         PasswordManagerMetricsRecorder::SYNC_CREDENTIAL,
-        submitted_manager->GetURL(), logger.get());
+        submitted_manager->GetURL());
     ResetSubmittedManager();
     return;
   }
@@ -1176,11 +1197,15 @@ PasswordManager::MoveOwnedSubmittedManager() {
 
 void PasswordManager::RecordProvisionalSaveFailure(
     PasswordManagerMetricsRecorder::ProvisionalSaveFailure failure,
-    const GURL& form_origin,
-    BrowserSavePasswordProgressLogger* logger) {
+    const GURL& form_origin) {
+  std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger = std::make_unique<BrowserSavePasswordProgressLogger>(
+        client_->GetLogManager());
+  }
   if (client_ && client_->GetMetricsRecorder()) {
     client_->GetMetricsRecorder()->RecordProvisionalSaveFailure(
-        failure, submitted_form_url_, form_origin, logger);
+        failure, submitted_form_url_, form_origin, logger.get());
   }
 }
 
@@ -1300,6 +1325,14 @@ bool PasswordManager::DetectPotentialSubmission(
     PasswordFormManager* form_manager,
     const FieldDataManager& field_data_manager,
     PasswordManagerDriver* driver) {
+  // Do not attempt to detect submission if saving is disabled.
+  if (!client_->IsSavingAndFillingEnabled(form_manager->GetURL())) {
+    RecordProvisionalSaveFailure(
+        PasswordManagerMetricsRecorder::SAVING_DISABLED,
+        form_manager->GetURL());
+    return false;
+  }
+
   // If the manager is not submitted, it still can have autofilled data.
   if (!form_manager->is_submitted()) {
     form_manager->ProvisionallySaveFieldDataManagerInfo(field_data_manager,

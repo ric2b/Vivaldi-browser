@@ -58,22 +58,18 @@
           },
           "url": {
             "type": "string",
-            "optional": true,
             "description": "The URL navigated to by a user."
           },
           "protocol": {
             "type": "string",
-            "optional": true,
             "description": "The protocol of the page navigated to by a user."
           },
           "address": {
             "type": "string",
-            "optional": true,
             "description": "The address of the page navigated to by a user."
           },
           "title": {
             "type": "string",
-            "optional": true,
             "description": "The title of the page when it was last loaded."
           },
           "lastVisitTime": {
@@ -83,12 +79,10 @@
           },
           "visitTime": {
             "type": "number",
-            "optional": true,
             "description": "When this page was visited, represented in milliseconds since the epoch."
           },
           "visitCount": {
             "type": "integer",
-            "optional": true,
             "description": "The number of times the user has navigated to this page."
           },
           "typedCount": {
@@ -102,17 +96,14 @@
           },
           "transition_type": {
             "$ref": "TransitionType",
-            "optional": true,
             "description": "The transition type for this visit from its referrer."
           },
           "dateKey": {
             "type": "string",
-            "optional": true,
             "description": "Date string of the visit. Format: YYYY-MM-DD"
           },
           "hour": {
             "type": "integer",
-            "optional": true,
             "description": "Hour of day when this url was visited."
           }
         }

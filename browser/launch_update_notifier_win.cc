@@ -21,6 +21,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -41,7 +42,13 @@ namespace {
 constexpr base::TimeDelta kLaunchUpdateCheckDelay =
     base::TimeDelta::FromSeconds(15);
 
-constexpr base::TimeDelta kStandaloneCheckPeriod = base::TimeDelta::FromDays(1);
+constexpr base::TimeDelta kStandaloneCheckPeriod =
+#ifdef OFFICIAL_BUILD
+    base::TimeDelta::FromDays(1)
+#else
+    base::TimeDelta::FromHours(1)
+#endif
+    ;
 
 void StartUpdateNotifierIfEnabled(bool force_enable) {
   if (force_enable) {
@@ -55,8 +62,8 @@ void StartUpdateNotifierIfEnabled(bool force_enable) {
   }
 
   // We want to run the notifier with the current flags even if those are
-  // different from the autostart registry. This way one can kill the notifier
-  // and try with a new value of --vuu.
+  // different from the command line in the task scheduler entry. This way one
+  // can kill the notifier and try with a new value of --vuu.
   base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
   cmdline.AppendSwitch(vivaldi_update_notifier::kLaunchIfEnabled);
   LaunchNotifierProcess(cmdline);
@@ -189,7 +196,7 @@ bool IsStandaloneAutoUpdateEnabled() {
     base::win::RegKey key(HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey,
                           KEY_QUERY_VALUE);
     if (key.Valid()) {
-      if (base::Optional<bool> bool_value = ReadRegistryBool(
+      if (absl::optional<bool> bool_value = ReadRegistryBool(
               vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate,
               key)) {
         // The meaning in the registry is reversed.

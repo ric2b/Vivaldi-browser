@@ -8,7 +8,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
@@ -508,9 +507,9 @@ void UIBindingsDelegate::ReadyForTest() {
   }
 }
 
-InfoBarService* UIBindingsDelegate::GetInfoBarService() {
+infobars::ContentInfoBarManager* UIBindingsDelegate::GetInfoBarManager() {
   if (ui_bindings_delegate_) {
-    return ui_bindings_delegate_->GetInfoBarService();
+    return ui_bindings_delegate_->GetInfoBarManager();
   }
   return nullptr;
 }

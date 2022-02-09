@@ -59,20 +59,20 @@ constexpr char kPictureUrlKey[] = "picture";
 
 constexpr char kErrorDescriptionKey[] = "error_description";
 
-const std::u16string kVivaldiDomain = base::UTF8ToUTF16("vivaldi.net");
+const std::u16string kVivaldiDomain = u"vivaldi.net";
 
-base::Optional<base::DictionaryValue> ParseServerResponse(
+absl::optional<base::DictionaryValue> ParseServerResponse(
     std::unique_ptr<std::string> data) {
   if (!data)
-    return base::nullopt;
+    return absl::nullopt;
 
-  base::Optional<base::Value> value = base::JSONReader::Read(*data);
+  absl::optional<base::Value> value = base::JSONReader::Read(*data);
   if (!value || value->type() != base::Value::Type::DICTIONARY)
-    return base::nullopt;
+    return absl::nullopt;
 
   base::DictionaryValue* dict_value = nullptr;
   if (!value.value().GetAsDictionary(&dict_value))
-    return base::nullopt;
+    return absl::nullopt;
 
   return std::move(*dict_value);
 }
@@ -84,7 +84,7 @@ bool ParseGetAccessTokenSuccessResponse(
     std::string* refresh_token) {
   CHECK(access_token);
   CHECK(refresh_token);
-  base::Optional<base::DictionaryValue> value =
+  absl::optional<base::DictionaryValue> value =
       ParseServerResponse(std::move(response_body));
   if (!value)
     return false;
@@ -97,7 +97,7 @@ bool ParseGetAccountInfoSuccessResponse(
     std::unique_ptr<std::string> response_body,
     std::string* account_id,
     std::string* picture_url) {
-  base::Optional<base::DictionaryValue> value =
+  absl::optional<base::DictionaryValue> value =
       ParseServerResponse(std::move(response_body));
   if (!value)
     return false;
@@ -109,7 +109,7 @@ bool ParseGetAccountInfoSuccessResponse(
 bool ParseFailureResponse(std::unique_ptr<std::string> response_body,
                           std::string* server_message) {
   CHECK(server_message);
-  base::Optional<base::DictionaryValue> value =
+  absl::optional<base::DictionaryValue> value =
       ParseServerResponse(std::move(response_body));
   return value ? value->GetString(kErrorDescriptionKey, server_message) : false;
 }
@@ -153,8 +153,8 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     if (OSCrypt::DecryptString(encrypted_refresh_token, &refresh_token)) {
       refresh_token_ = refresh_token;
       base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                     base::Bind(&VivaldiAccountManager::RequestNewToken,
-                                base::Unretained(this)));
+                     base::BindOnce(&VivaldiAccountManager::RequestNewToken,
+                                    base::Unretained(this)));
       return;
     } else {
       has_encrypted_refresh_token_ = true;
@@ -346,8 +346,8 @@ void VivaldiAccountManager::OnTokenRequestDone(
     if (!using_password && !password_handler_.password().empty()) {
       base::PostTask(
           FROM_HERE, {content::BrowserThread::UI},
-          base::Bind(&VivaldiAccountManager::Login, base::Unretained(this),
-                     account_info_.username, std::string(), false));
+          base::BindOnce(&VivaldiAccountManager::Login, base::Unretained(this),
+                         account_info_.username, std::string(), false));
     } else {
       NotifyTokenFetchFailed(INVALID_CREDENTIALS, server_message,
                              response_code);

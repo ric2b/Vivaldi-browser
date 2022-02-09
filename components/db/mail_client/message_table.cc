@@ -177,4 +177,9 @@ bool MessageTable::DeleteMessages(std::vector<SearchListID> search_list_ids) {
   return true;
 }
 
+bool MessageTable::RebuildDatabase() {
+  return GetDB().Execute(
+      "INSERT INTO messages_fts(messages_fts) VALUES('rebuild');");
+}
+
 }  // namespace mail_client

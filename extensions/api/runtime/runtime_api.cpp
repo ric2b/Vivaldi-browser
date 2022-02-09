@@ -10,8 +10,10 @@
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/files/file_path.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -565,7 +567,7 @@ RuntimePrivateCreateProfileFunction::Run() {
   bool create_shortcut = params->create_desktop_icon;
 
   ProfileManager::CreateMultiProfileAsync(
-      name, index,
+      name, index, false,
       base::BindRepeating(
           &RuntimePrivateCreateProfileFunction::OnProfileCreated, this,
           create_shortcut));
@@ -623,7 +625,7 @@ void RuntimePrivateCreateProfileFunction::OpenNewWindowForProfile(
     Profile* profile,
     Profile::CreateStatus status) {
   profiles::OpenBrowserWindowForProfile(
-      base::BindRepeating(
+      base::BindOnce(
           &RuntimePrivateCreateProfileFunction::OnBrowserReadyCallback, this),
       false,  // Don't create a window if one already exists.
       true,   // Create a first run window.
@@ -666,7 +668,7 @@ RuntimePrivateGetProfileStatisticsFunction::Run() {
   } else {
     g_browser_process->profile_manager()->LoadProfileByPath(
         profile_path, false,
-        base::Bind(
+        base::BindOnce(
             &RuntimePrivateGetProfileStatisticsFunction::GatherStatistics,
             this));
   }
@@ -755,10 +757,10 @@ RuntimePrivateHasDesktopShortcutFunction::Run() {
     DCHECK(shortcut_manager);
     Profile* profile = Profile::FromBrowserContext(browser_context());
     shortcut_manager->HasProfileShortcuts(
-      profile->GetPath(),
-      base::Bind(
-        &RuntimePrivateHasDesktopShortcutFunction::OnHasProfileShortcuts,
-        this));
+        profile->GetPath(),
+        base::BindOnce(
+            &RuntimePrivateHasDesktopShortcutFunction::OnHasProfileShortcuts,
+            this));
     return RespondLater();
   } else {
     return RespondNow(ArgumentList(Results::Create(false, false)));

@@ -53,7 +53,7 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
       views::LayoutProvider::Get()->GetDialogInsetsForContentType(
-          views::TEXT, views::TEXT)));
+          views::DialogContentType::kText, views::DialogContentType::kText)));
 
   label_ = new views::Label;
   label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);

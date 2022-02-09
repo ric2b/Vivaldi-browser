@@ -26,6 +26,6 @@ class DetachedThread {
   virtual void Run() = 0;
 };
 
-}  // namespace winsparkle
+}  // namespace vivaldi
 
 #endif  // INSTALLER_WIN_DETACHED_THREAD_H_

@@ -148,6 +148,10 @@ class CellularESimProfileHandlerImplTest : public testing::Test {
     return handler_->GetESimProfiles();
   }
 
+  bool HasAutoRefreshedEuicc(int euicc_num) {
+    return handler_->HasRefreshedProfilesForEuicc(CreateTestEid(euicc_num));
+  }
+
   size_t NumObserverEvents() const { return observer_.num_updates(); }
 
   std::unique_ptr<CellularInhibitor::InhibitLock> InhibitCellularScanning() {
@@ -199,8 +203,15 @@ class CellularESimProfileHandlerImplTest : public testing::Test {
                                              /*notify_changed=*/true);
   }
 
+  void FastForwardProfileRefreshDelay() {
+    const base::TimeDelta kProfileRefreshCallbackDelay =
+        base::TimeDelta::FromMilliseconds(150);
+    task_environment_.FastForwardBy(kProfileRefreshCallbackDelay);
+  }
+
  private:
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   NetworkStateTestHelper helper_;
   TestingPrefServiceSimple device_prefs_;
   FakeObserver observer_;
@@ -450,12 +461,22 @@ TEST_F(CellularESimProfileHandlerImplTest,
   EXPECT_TRUE(euicc_paths_from_prefs.is_list());
   EXPECT_TRUE(euicc_paths_from_prefs.GetList().empty());
 
+  // Set device prefs; a new auto-refresh should have started but not yet
+  // completed.
   SetDevicePrefs();
+  euicc_paths_from_prefs = GetEuiccListFromPrefs();
+  EXPECT_TRUE(euicc_paths_from_prefs.is_list());
+  EXPECT_TRUE(euicc_paths_from_prefs.GetList().empty());
+  EXPECT_FALSE(HasAutoRefreshedEuicc(/*euicc_num=*/1));
+
+  FastForwardProfileRefreshDelay();
+  base::RunLoop().RunUntilIdle();
   euicc_paths_from_prefs = GetEuiccListFromPrefs();
   EXPECT_TRUE(euicc_paths_from_prefs.is_list());
   EXPECT_EQ(1u, euicc_paths_from_prefs.GetList().size());
   EXPECT_EQ(CreateTestEuiccPath(/*euicc_num=*/1),
             euicc_paths_from_prefs.GetList()[0].GetString());
+  EXPECT_TRUE(HasAutoRefreshedEuicc(/*euicc_num=*/1));
 }
 
 TEST_F(CellularESimProfileHandlerImplTest, IgnoresESimProfilesWithNoIccid) {
@@ -502,6 +523,7 @@ TEST_F(CellularESimProfileHandlerImplTest,
 
   // Verify that EUICCs are refreshed after the cellular device is added.
   AddCellularDevice();
+  FastForwardProfileRefreshDelay();
   euicc_paths_from_prefs = GetEuiccListFromPrefs();
   EXPECT_TRUE(euicc_paths_from_prefs.is_list());
   EXPECT_EQ(1u, euicc_paths_from_prefs.GetList().size());

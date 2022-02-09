@@ -30,7 +30,7 @@ class ExtensionsMenuController {
       const extensions::Extension* extension,
       content::WebContents* source_web_contents,
       std::u16string printable_selection_text,
-      const base::Callback<bool(const extensions::MenuItem*)>& filter);
+      base::RepeatingCallback<bool(const extensions::MenuItem*)> filter);
   extensions::ContextMenuMatcher* get_extension_items() const {
     return extension_items_.get();
   }

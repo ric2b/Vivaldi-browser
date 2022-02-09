@@ -11,7 +11,7 @@
 #include "util/build_config.h"
 
 PathOutput::PathOutput(const SourceDir& current_dir,
-                       const std::string_view& source_root,
+                       std::string_view source_root,
                        EscapingMode escaping)
     : current_dir_(current_dir) {
   inverse_current_dir_ = RebasePath(
@@ -132,7 +132,7 @@ void PathOutput::WriteFile(std::ostream& out,
 }
 
 void PathOutput::WriteSourceRelativeString(std::ostream& out,
-                                           const std::string_view& str) const {
+                                           std::string_view str) const {
   if (options_.mode == ESCAPE_NINJA_COMMAND) {
     // Shell escaping needs an intermediate string since it may end up
     // quoting the whole thing.
@@ -153,8 +153,7 @@ void PathOutput::WriteSourceRelativeString(std::ostream& out,
   }
 }
 
-void PathOutput::WritePathStr(std::ostream& out,
-                              const std::string_view& str) const {
+void PathOutput::WritePathStr(std::ostream& out, std::string_view str) const {
   DCHECK(str.size() > 0 && str[0] == '/');
 
   if (str.substr(0, current_dir_.actual_path().size()) ==

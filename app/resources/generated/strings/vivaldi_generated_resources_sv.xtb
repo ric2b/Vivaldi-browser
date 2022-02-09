@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Avsluta helskärmsläge</translation>
 <translation id="2177950615300672361">Privat flik: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Dölj knapp</translation>
 <translation id="2218515861914035131">Klistra in som oformaterad text</translation>
 <translation id="2249605167705922988">till exempel 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillåt identifierare för skyddat innehåll (omstart av datorn kan vara nödvändig)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">För-renderare <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Välj rotkatalogen för tillägget som ska packas. Om du vill uppdatera ett tillägg väljer du också den privata nyckel som ska återanvändas.</translation>
-<translation id="3266179261140759675">Förhindra att en webbplats skickar eller tar emot data efter att den stängts</translation>
 <translation id="3280237271814976245">Spara so&amp;m...</translation>
 <translation id="3285322247471302225">&amp;Ny flik</translation>
 <translation id="3288047731229977326">Tillägg som körs i utvecklarläge kan skada datorn. Om du inte är en utvecklare bör du inaktivera tillägg som körs i utvecklarläge för att skydda dig.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Kan läsa och ändra webbplatsdata</translation>
 <translation id="3560034655160545939">&amp;Stavningskontroll</translation>
 <translation id="3574917942258583917">Vill du avsluta privatläget ändå?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vill dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med en grupp som du äger: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Om du godtar kan alla medlemmar i gruppen skriva ut till skrivaren.</translation>
 <translation id="3587482841069643663">Alla</translation>
 <translation id="3627588569887975815">Öppna länk i &amp;privat fönster</translation>
 <translation id="3627879631695760395">Installera <ph name="APP" /> …</translation>
 <translation id="3668823961463113931">Hanterare</translation>
 <translation id="3678156199662914018">Tillägg: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Förfrågan från <ph name="APP_NAME" /> om skärmdelning</translation>
+<translation id="3708684582558000260">Tillåt inte stängda webbplatser att slutföra sändning eller mottagning av data</translation>
 <translation id="3711931198657368127">Klistra in och &amp;gå till <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspektera popup-fönster</translation>
 <translation id="3744111561329211289">Synkronisera i bakgrunden</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Skapade tillägget:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Godta för grupp</translation>
 <translation id="4096508467498758490">Inaktivera tillägg i utvecklarläge</translation>
 <translation id="4100839878934973028">Ett annat program i datorn har lagt till en app som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="4109898769411476438">Stäng webbläsare innan import</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Visa detaljer</translation>
 <translation id="4907306957610201395">Behörighetskategori</translation>
 <translation id="4912643508233590958">Uppvakningar ur vila</translation>
-<translation id="4918086044614829423">Godta</translation>
 <translation id="4927753642311223124">Inget att se här, cirkulera.</translation>
 <translation id="4930714375720679147">Aktivera</translation>
 <translation id="4988526792673242964">Sidor</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Spara</translation>
 <translation id="5334142896108694079">Cacheminne för skript</translation>
 <translation id="5355926466126177564">Tillägget <ph name="EXTENSION_NAME" /> har ändrat vilken sida som visas när du söker i adressfältet.</translation>
-<translation id="5360150013186312835">Visa i verktygsfältet</translation>
+<translation id="5360150013186312835">Visa i verktygsrad</translation>
 <translation id="5362741141255528695">Välj privat nyckelfil.</translation>
 <translation id="536638840841140142">Inga</translation>
 <translation id="5370819323174483825">&amp;Läs in igen</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Töm webbplatsdata</translation>
 <translation id="6042308850641462728">Mer</translation>
 <translation id="6059925163896151826">USB-enheter</translation>
-<translation id="6082651258230788217">Visa i verktygsfältet</translation>
 <translation id="6086846494333236931">Installerades av din administratör</translation>
 <translation id="6101226222197207147">En ny app har lagts till (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Din internetanslutning kontrolleras</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simulera omstart av webbläsaren</translation>
 <translation id="6445450263907939268">Om du inte vill ha dessa ändringar kan du återställa dina tidigare inställningar.</translation>
 <translation id="6447842834002726250">Kakor</translation>
-<translation id="6452181791372256707">Avvisa</translation>
 <translation id="6498249116389603658">&amp;Alla dina språk</translation>
 <translation id="6503077044568424649">Mest besökta</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Kan läsa och ändra webbplatsdata</translation>
 <translation id="708060913198414444">K&amp;opiera ljudadress</translation>
 <translation id="7175353351958621980">Hämtad från:</translation>
-<translation id="7186088072322679094">Ha kvar i verktygsfältet</translation>
+<translation id="7186088072322679094">Behåll i verktygsrad</translation>
 <translation id="7270858098575133036">Fråga när en webbplats vill använda systemexklusiva meddelanden för att komma åt MIDI-enheter</translation>
 <translation id="7287143125007575591">Åtkomst nekad.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Var det den här nya fliksidan du väntade dig?</translation>
 <translation id="786073089922909430">Tjänst: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Senaste destinationerna</translation>
-<translation id="7898627924844766532">Ha kvar i verktygsfältet</translation>
 <translation id="7903925330883316394">Verktyg: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Offline just nu</translation>
 <translation id="7947962633355574091">K&amp;opiera videoadress</translation>
@@ -452,7 +445,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8725066075913043281">Försök igen</translation>
 <translation id="8757090071857742562">Det gick inte att casta skrivbordet. Kontrollera att du har svarat på frågan om att dela skärmen.</translation>
 <translation id="8774934320277480003">Övre marginal</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vill dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med dig.</translation>
 <translation id="8798099450830957504">Förval</translation>
 <translation id="8800004011501252845">Visar destinationer för</translation>
 <translation id="8808478386290700967">Web Store</translation>

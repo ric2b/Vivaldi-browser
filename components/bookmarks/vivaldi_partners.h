@@ -25,7 +25,7 @@ class AssetReader {
 
   // Read bookmark-related json asset. Return nullopt on errors or when the file
   // was not found. Use is_not_found() to distinguish these cases.
-  base::Optional<base::Value> ReadJson(base::StringPiece name);
+  absl::optional<base::Value> ReadJson(base::StringPiece name);
 
   // Get full path of the file that ReadJson() tried to read.
   std::string GetPath() const;

@@ -52,11 +52,11 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "extensions/api/access_keys/access_keys_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
@@ -68,6 +68,7 @@
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_tab_zoom_pref.h"
+#include "renderer/tabs_private_service.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -102,8 +103,8 @@ namespace tabs_private = vivaldi::tabs_private;
 bool IsTabMuted(const WebContents* web_contents) {
   std::string extdata = web_contents->GetExtData();
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  base::Optional<base::Value> json = base::JSONReader::Read(extdata, options);
-  base::Optional<bool> mute = base::nullopt;
+  absl::optional<base::Value> json = base::JSONReader::Read(extdata, options);
+  absl::optional<bool> mute = absl::nullopt;
   if (json && json->is_dict()) {
     mute = json->FindBoolKey(kVivaldiTabMuted);
   }
@@ -362,6 +363,10 @@ void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents) {
   std::vector<tabs_private::TabAlertState> states =
       ConvertTabAlertState(chrome::GetTabAlertStatesForContents(web_contents));
 
+  if (web_contents->IsBeingCaptured()) {
+    states.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_CAPTURING);
+  }
+
   int tabId = extensions::ExtensionTabUtil::GetTabId(web_contents);
   int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents);
 
@@ -381,7 +386,8 @@ void TabsPrivateAPI::Init() {
 
 VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     content::WebContents* web_contents)
-    : WebContentsObserver(web_contents), weak_ptr_factory_(this) {
+    : WebContentsObserver(web_contents),
+      weak_ptr_factory_(this) {
   auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
   if (zoom_controller) {
     zoom_controller->AddObserver(this);
@@ -391,11 +397,12 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
           ->GetPrefs());
 
   prefs_registrar_.Add(vivaldiprefs::kWebpagesFocusTrap,
-                       base::Bind(&VivaldiPrivateTabObserver::OnPrefsChanged,
+      base::BindRepeating(&VivaldiPrivateTabObserver::OnPrefsChanged,
                                   weak_ptr_factory_.GetWeakPtr()));
-  prefs_registrar_.Add(vivaldiprefs::kWebpagesAccessKeys,
-                       base::Bind(&VivaldiPrivateTabObserver::OnPrefsChanged,
-                                  weak_ptr_factory_.GetWeakPtr()));
+  prefs_registrar_.Add(
+      vivaldiprefs::kWebpagesAccessKeys,
+      base::BindRepeating(&VivaldiPrivateTabObserver::OnPrefsChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
 
   VivaldiTranslateClient* translate_client =
       VivaldiTranslateClient::FromWebContents(web_contents);
@@ -439,7 +446,7 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo(
 const int kThemeColorBufferSize = 8;
 
 void VivaldiPrivateTabObserver::DidChangeThemeColor() {
-  base::Optional<SkColor> theme_color = web_contents()->GetThemeColor();
+  absl::optional<SkColor> theme_color = web_contents()->GetThemeColor();
   if (!theme_color)
     return;
 
@@ -459,22 +466,22 @@ bool ValueToJSONString(const base::Value& value, std::string& json_string) {
   return serializer.Serialize(value);
 }
 
-base::Optional<base::Value> GetDictValueFromExtData(std::string& extdata) {
+absl::optional<base::Value> GetDictValueFromExtData(std::string& extdata) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  base::Optional<base::Value> value = base::JSONReader::Read(extdata, options);
+  absl::optional<base::Value> value = base::JSONReader::Read(extdata, options);
   if (value && value->is_dict()) {
     return value;
   }
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 void VivaldiPrivateTabObserver::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
   std::string ext = web_contents()->GetExtData();
-  base::Optional<base::Value> json = GetDictValueFromExtData(ext);
+  absl::optional<base::Value> json = GetDictValueFromExtData(ext);
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
-    base::Optional<double> zoom =
-        json ? json->FindDoubleKey(kVivaldiTabZoom) : base::nullopt;
+    absl::optional<double> zoom =
+        json ? json->FindDoubleKey(kVivaldiTabZoom) : absl::nullopt;
     if (zoom) {
       tab_zoom_level_ = *zoom;
     } else {
@@ -505,11 +512,17 @@ void VivaldiPrivateTabObserver::RenderFrameCreated(
     security_policy->GrantRequestScheme(process_id, url::kFileScheme);
     security_policy->GrantRequestScheme(process_id, content::kViewSourceScheme);
   }
+
+  // Reset the service instance from the previous frame if any before asking for
+  // the new interface.
+  tabs_private_service_.reset();
+  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
+      &tabs_private_service_);
 }
 
 void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
   std::string ext = web_contents()->GetExtData();
-  base::Optional<base::Value> json = GetDictValueFromExtData(ext);
+  absl::optional<base::Value> json = GetDictValueFromExtData(ext);
   if (json) {
     json->SetDoubleKey(kVivaldiTabZoom, zoom_level);
     std::string json_string;
@@ -592,9 +605,9 @@ void VivaldiPrivateTabObserver::SetEnablePlugins(bool enable_plugins) {
 void VivaldiPrivateTabObserver::SetMuted(bool mute) {
   mute_ = mute;
   std::string ext = web_contents()->GetExtData();
-  base::Optional<base::Value> json = GetDictValueFromExtData(ext);
+  absl::optional<base::Value> json = GetDictValueFromExtData(ext);
   if (json) {
-    base::Optional<bool> existing = json->FindBoolKey(kVivaldiTabMuted);
+    absl::optional<bool> existing = json->FindBoolKey(kVivaldiTabMuted);
     if ((existing && *existing != mute) || (!existing && mute)) {
       json->SetBoolKey(kVivaldiTabMuted, mute);
       std::string json_string;
@@ -637,16 +650,15 @@ void VivaldiPrivateTabObserver::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
   content::WebContents* web_contents = data.web_contents;
   content::StoragePartition* current_partition =
-      content::BrowserContext::GetStoragePartition(
-          web_contents->GetBrowserContext(), web_contents->GetSiteInstance(),
-          false);
+      web_contents->GetBrowserContext()->GetStoragePartition(
+          web_contents->GetSiteInstance(), false);
   if (!::vivaldi::IsTabZoomEnabled(web_contents) || tab_zoom_level_ == -1) {
     return;
   }
 
   if (current_partition &&
-      current_partition == content::BrowserContext::GetDefaultStoragePartition(
-                               web_contents->GetBrowserContext()))
+      current_partition ==
+          web_contents->GetBrowserContext()->GetDefaultStoragePartition())
     SetZoomLevelForTab(data.new_zoom_level, data.old_zoom_level);
 }
 
@@ -673,22 +685,6 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
   }
 }
 
-bool VivaldiPrivateTabObserver::OnMessageReceived(
-    const IPC::Message& message,
-    content::RenderFrameHost* render_frame_host) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(VivaldiPrivateTabObserver, message)
-    IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_GetAccessKeysForPage_ACK,
-                        OnGetAccessKeysForPageResponse)
-    IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_GetSpatialNavigationRects_ACK,
-                        OnGetSpatialNavigationRectsResponse)
-    IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_GetScrollPosition_ACK,
-                        OnGetScrollPositionResponse)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-}
-
 void VivaldiPrivateTabObserver::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
@@ -698,30 +694,33 @@ void VivaldiPrivateTabObserver::DidFinishLoad(
   BroadcastTabInfo(info);
 }
 
-void VivaldiPrivateTabObserver::GetAccessKeys(AccessKeysCallback callback) {
-  access_keys_callback_ = std::move(callback);
-  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
-  rfh->Send(new VivaldiViewMsg_GetAccessKeysForPage(rfh->GetRoutingID()));
+void VivaldiPrivateTabObserver::GetAccessKeys(
+    JSAccessKeysCallback callback) {
+  DCHECK(callback);
+  tabs_private_service_->GetAccessKeysForPage(
+      base::BindOnce(&VivaldiPrivateTabObserver::AccessKeysReceived,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void VivaldiPrivateTabObserver::OnGetAccessKeysForPageResponse(
-    std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys) {
-  if (!access_keys_callback_.is_null()) {
-    std::move(access_keys_callback_).Run(std::move(access_keys));
-  }
+void VivaldiPrivateTabObserver::AccessKeysReceived(
+    JSAccessKeysCallback callback,
+    std::vector<::vivaldi::mojom::AccessKeyPtr> access_keys) {
+  std::move(callback).Run(std::move(access_keys));
 }
 
 void VivaldiPrivateTabObserver::GetScrollPosition(
-    GetScrollPositionCallback callback) {
-  scroll_position_callback_ = std::move(callback);
-  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
-  rfh->Send(new VivaldiViewMsg_GetScrollPosition(rfh->GetRoutingID()));
+    JSScrollPositionCallback callback) {
+  DCHECK(callback);
+  tabs_private_service_->GetScrollPosition(
+      base::BindOnce(&VivaldiPrivateTabObserver::ScrollPositionReceived,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void VivaldiPrivateTabObserver::OnGetScrollPositionResponse(int x, int y) {
-  if (!scroll_position_callback_.is_null()) {
-    std::move(scroll_position_callback_).Run(x, y);
-  }
+void VivaldiPrivateTabObserver::ScrollPositionReceived(
+    JSScrollPositionCallback callback,
+    int64_t x,
+    int64_t y) {
+  std::move(callback).Run(x, y);
 }
 
 void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
@@ -731,17 +730,17 @@ void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
 }
 
 void VivaldiPrivateTabObserver::GetSpatialNavigationRects(
-    GetSpatialNavigationRectsCallback callback) {
-  spatnav_callback_ = std::move(callback);
-  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
-  rfh->Send(new VivaldiViewMsg_GetSpatialNavigationRects(rfh->GetRoutingID()));
+    JSSpatialNavigationRectsCallback callback) {
+  DCHECK(callback);
+  tabs_private_service_->GetSpatialNavigationRects(
+      base::BindOnce(&VivaldiPrivateTabObserver::SpatialNavigationRectsReceived,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void VivaldiPrivateTabObserver::OnGetSpatialNavigationRectsResponse(
-    std::vector<VivaldiViewMsg_NavigationRect> rects) {
-  if (!spatnav_callback_.is_null()) {
-    std::move(spatnav_callback_).Run(std::move(rects));
-  }
+void VivaldiPrivateTabObserver::SpatialNavigationRectsReceived(
+    JSSpatialNavigationRectsCallback callback,
+    std::vector<::vivaldi::mojom::SpatnavRectPtr> rects) {
+  std::move(callback).Run(std::move(rects));
 }
 
 void VivaldiPrivateTabObserver::OnPermissionAccessed(
@@ -866,6 +865,19 @@ void VivaldiPrivateTabObserver::OnLanguageDetermined(
   }
 }
 
+void VivaldiPrivateTabObserver::ActivateTab(content::WebContents* contents) {
+  Browser* browser = ::vivaldi::FindBrowserWithWebContents(contents);
+  if (!browser) {
+    return;
+  }
+  int index = browser->tab_strip_model()->GetIndexOfWebContents(contents);
+  if (index == TabStripModel::kNoTab) {
+    return;
+  }
+  browser->tab_strip_model()->ActivateTabAt(index);
+  browser->window()->Activate();
+}
+
 void VivaldiPrivateTabObserver::OnPageTranslated(
     const std::string& original_lang,
     const std::string& translated_lang,
@@ -898,6 +910,25 @@ void VivaldiPrivateTabObserver::OnIsPageTranslatedChanged(
       extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::Create(
           tab_id, isTranslated),
       web_contents()->GetBrowserContext());
+}
+
+void VivaldiPrivateTabObserver::CaptureStarted() {
+  TabsPrivateAPI::FromBrowserContext(web_contents()->GetBrowserContext())
+      ->NotifyTabChange(web_contents());
+}
+
+void VivaldiPrivateTabObserver::CaptureFinished() {
+  TabsPrivateAPI::FromBrowserContext(web_contents()->GetBrowserContext())
+      ->NotifyTabChange(web_contents());
+}
+
+void VivaldiPrivateTabObserver::MediaPictureInPictureChanged(
+    bool is_picture_in_picture) {
+  content::PictureInPictureWindowController* pip_controller =
+    content::PictureInPictureWindowController::GetOrCreateForWebContents(
+        web_contents());
+  DCHECK(pip_controller);
+  pip_controller->SetVivaldiDelegate(weak_ptr_factory_.GetWeakPtr());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1140,21 +1171,21 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
 }
 
 void TabsPrivateGetSpatialNavigationRectsFunction::
-    GetSpatialNavigationRectsResponse(
-        std::vector<VivaldiViewMsg_NavigationRect> navigation_rects) {
+    SpatialNavigationRectsReceived(
+        std::vector<::vivaldi::mojom::SpatnavRectPtr> spatnav_rects) {
   namespace Results = tabs_private::GetSpatialNavigationRects::Results;
   std::vector<tabs_private::NavigationRect> results;
 
-  for (auto& nav_rect : navigation_rects) {
+  for (auto& nav_rect : spatnav_rects) {
     tabs_private::NavigationRect rect;
-    rect.left = nav_rect.x;
-    rect.top = nav_rect.y;
-    rect.width = nav_rect.width;
-    rect.height = nav_rect.height;
-    rect.right = nav_rect.x + nav_rect.width;
-    rect.bottom = nav_rect.y + nav_rect.height;
-    rect.href = nav_rect.href;
-    rect.path = nav_rect.path;
+    rect.left = nav_rect->x;
+    rect.top = nav_rect->y;
+    rect.width = nav_rect->width;
+    rect.height = nav_rect->height;
+    rect.right = nav_rect->x + nav_rect->width;
+    rect.bottom = nav_rect->y + nav_rect->height;
+    rect.href = nav_rect->href;
+    rect.path = nav_rect->path;
     results.push_back(std::move(rect));
   }
 
@@ -1175,14 +1206,15 @@ TabsPrivateGetSpatialNavigationRectsFunction::Run() {
     return RespondNow(Error(error));
   tab_api->GetSpatialNavigationRects(
       base::BindOnce(&TabsPrivateGetSpatialNavigationRectsFunction::
-                         GetSpatialNavigationRectsResponse,
+                         SpatialNavigationRectsReceived,
                      this));
 
   return RespondLater();
 }
 
-void TabsPrivateGetScrollPositionFunction::GetScrollPositionResponse(int x,
-                                                                     int y) {
+void TabsPrivateGetScrollPositionFunction::GetScrollPositionResponse(
+    int64_t x,
+    int64_t y) {
   namespace Results = tabs_private::GetScrollPosition::Results;
 
   Respond(ArgumentList(Results::Create(x, y)));

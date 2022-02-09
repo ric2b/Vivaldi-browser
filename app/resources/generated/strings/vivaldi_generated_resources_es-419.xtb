@@ -67,7 +67,6 @@
 <translation id="215753907730220065">Salir de pantalla completa</translation>
 <translation id="2177950615300672361">Pestaña de incógnito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Módulo Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Ocultar botón</translation>
 <translation id="2218515861914035131">Pegar como texto sencillo</translation>
 <translation id="2249605167705922988">p. ej. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir los identificadores para contenido protegido (precisa reiniciar el ordenador)</translation>
@@ -155,7 +154,6 @@
 <translation id="354068948465830244">Esta extensión puede leer y cambiar los datos del sitio</translation>
 <translation id="3560034655160545939">&amp;Corrección ortográfica</translation>
 <translation id="3574917942258583917">¿Deseas salir del modo de navegación incógnito de todas formas?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir la impresora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un grupo del cual eres propietario: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si aceptas, todos los miembros del grupo podrán usar esa impresora para imprimir.</translation>
 <translation id="3587482841069643663">Todos</translation>
 <translation id="3627588569887975815">Abrir el enlace en una ventana de incó&amp;gnito</translation>
 <translation id="3668823961463113931">Manejadores</translation>
@@ -188,7 +186,6 @@
 <translation id="4087089424473531098">Se creó la extensión:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Aceptar por el grupo</translation>
 <translation id="4096508467498758490">Inhabilitar extensiones en modo de programador</translation>
 <translation id="4100839878934973028">Otro programa en tu computadora agregó una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
@@ -224,7 +221,6 @@
 <translation id="488785315393301722">Mostrar detalles</translation>
 <translation id="4907306957610201395">Categoría de permiso</translation>
 <translation id="4912643508233590958">Wake Ups inactivos</translation>
-<translation id="4918086044614829423">Aceptar</translation>
 <translation id="4927753642311223124">Circule, nada que ver aquí.</translation>
 <translation id="4930714375720679147">Activar</translation>
 <translation id="4988526792673242964">Páginas</translation>
@@ -253,7 +249,7 @@
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5334142896108694079">Caché de la secuencia de comandos</translation>
 <translation id="5355926466126177564">La extensión "<ph name="EXTENSION_NAME" />" cambió la página que se muestra al llevar a cabo búsquedas desde el cuadro multifunción.</translation>
-<translation id="5360150013186312835">Mostrar en la barra de herramientas</translation>
+<translation id="5360150013186312835">Mostrar en la barra</translation>
 <translation id="5362741141255528695">Seleccionar archivo de clave privada.</translation>
 <translation id="536638840841140142">Ninguno</translation>
 <translation id="5370819323174483825">&amp;Volver a cargar</translation>
@@ -299,7 +295,6 @@
 <translation id="6011449291337289699">Borrar los datos del sitio</translation>
 <translation id="6042308850641462728">Más</translation>
 <translation id="6059925163896151826">Dispositivos USB</translation>
-<translation id="6082651258230788217">Mostrar en barra de herramientas</translation>
 <translation id="6086846494333236931">Instalada por tu administrador</translation>
 <translation id="6101226222197207147">Nueva aplicación añadida (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Se está controlando tu conexión a Internet</translation>
@@ -325,7 +320,6 @@
 <translation id="6406303162637086258">Simular reinicio de navegador</translation>
 <translation id="6445450263907939268">Si no querías realizar estos cambios, puedes restablecer la configuración previa.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6452181791372256707">Rechazar</translation>
 <translation id="6498249116389603658">&amp;Todos tus idiomas</translation>
 <translation id="6503077044568424649">Más visitados</translation>
 <translation id="6508261954199872201">Aplicación: <ph name="APP_NAME" /></translation>
@@ -356,7 +350,7 @@
 <translation id="7070484045139057854">Esta extensión puede leer y cambiar los datos del sitio</translation>
 <translation id="708060913198414444">C&amp;opiar dirección del audio</translation>
 <translation id="7175353351958621980">Cargada desde:</translation>
-<translation id="7186088072322679094">Mantener en la barra de herramientas</translation>
+<translation id="7186088072322679094">Mantener en la barra</translation>
 <translation id="7270858098575133036">Preguntarme cuando un sitio quiera utilizar los mensajes exclusivos del sistema para acceder a dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
@@ -395,7 +389,6 @@
 <translation id="7857949311770343000">¿Esta es la página Nueva pestaña que esperabas ver?</translation>
 <translation id="786073089922909430">Servicio: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Destinos recientes</translation>
-<translation id="7898627924844766532">Mantener en barra de herramientas</translation>
 <translation id="7903925330883316394">Utilidad: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Actualmente sin conexión</translation>
 <translation id="7947962633355574091">C&amp;opiar dirección del vídeo</translation>
@@ -444,7 +437,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8725066075913043281">Volver a intentarlo</translation>
 <translation id="8757090071857742562">No se puede transmitir el escritorio. Verifique que ha si confirmado el aviso para comenzar a compartir su pantalla.</translation>
 <translation id="8774934320277480003">Margen superior</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir la impresora (&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;) contigo.</translation>
 <translation id="8798099450830957504">Predeterminado</translation>
 <translation id="8800004011501252845">Mostrando destinos para</translation>
 <translation id="8808478386290700967">Tienda virtual</translation>

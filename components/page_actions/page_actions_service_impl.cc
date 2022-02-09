@@ -43,6 +43,11 @@ void ChangeStaticInjectionForFrame(content::WebContents* tab_contents,
                                    content::RenderFrameHost* frame,
                                    base::FilePath script_path,
                                    bool enable) {
+  if (!frame->IsRenderFrameCreated()) {
+    // Will happen when restoring a tab. Current injections will be kept in
+    // TabHelper.
+    return;
+  }
   mojo::Remote<content_injection::mojom::FrameHandler> frame_handler;
   frame->GetRemoteInterfaces()->GetInterface(
       frame_handler.BindNewPipeAndPassReceiver());
@@ -82,9 +87,10 @@ void ServiceImpl::Load() {
 #endif
 
   // Can't use make_unique here, because of the custom deleter
-  directory_watcher_.reset(new DirectoryWatcher(
-      base::Bind(&ServiceImpl::OnFilesUpdated, weak_factory_.GetWeakPtr()),
-      assets_path));
+  directory_watcher_.reset(
+      new DirectoryWatcher(base::BindRepeating(&ServiceImpl::OnFilesUpdated,
+                                               weak_factory_.GetWeakPtr()),
+                           assets_path));
 
 #ifndef OS_ANDROID
   base::FilePath built_in_path;

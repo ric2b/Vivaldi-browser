@@ -17,6 +17,7 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Bir web sayfasının kaynak kodunu görüntülüyorsunuz</translation>
 <translation id="1734878702283171397">Sistem yöneticisiyle iletişime geçmeyi deneyin.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows Ağ Tanılama'yı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Bu site zararlı programlar içeriyor</translation>
 <translation id="1916770123977586577">Güncellenen ayarlarınızı bu siteye uygulamak için sayfayı yeniden yükleyin</translation>
 <translation id="1919345977826869612">Reklamlar</translation>
@@ -36,7 +37,10 @@
 <translation id="2355395290879513365">Saldırganlar bu sitede baktığınız resimleri görebilir ve bu resimler üzerinde değişiklik yaparak sizi kandırabilirler.</translation>
 <translation id="2356070529366658676">Sor</translation>
 <translation id="2359808026110333948">Devam et</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları Çalıştırmak<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Bildirimler</translation>
+<translation id="2491414235131909199">Bu sayfa bir eklenti tarafından engellendi</translation>
+<translation id="2501278716633472235">Geri dön</translation>
 <translation id="2539524384386349900">Algıla</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> geçersiz bir yanıt gönderdi.</translation>
 <translation id="2586657967955657006">Pano</translation>
@@ -45,6 +49,7 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Dosyaya erişim reddedildi</translation>
 <translation id="2705137772291741111">Bu sitenin kaydedilen (önbelleğe alınan) kopyası okunamadı.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Bağlantı Teşhislerini Çalıştır<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Bağlantı sıfırlandı.</translation>
 <translation id="2826760142808435982">Bağlantı, anahtar değişim mekanizması olarak <ph name="KX" /> kullanılarak <ph name="CIPHER" /> ile şifrelenip kimliği doğrulanmıştır.</translation>
 <translation id="2856444702002559011">Saldırganlar <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> üzerinden bilgilerinizi çalmaya çalışıyor olabilir (örneğin, parolalar, iletiler veya kredi kartları). <ph name="BEGIN_LEARN_MORE_LINK" />Daha fazlasını öğrenin<ph name="END_LEARN_MORE_LINK" /></translation>
@@ -55,6 +60,7 @@
 <translation id="301521992641321250">Otomatik olarak engellendi</translation>
 <translation id="3041612393474885105">Sertifika Bilgisi</translation>
 <translation id="3109728660330352905">Bu sayfayı görüntüleme yetkiniz yok.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Bağlantı Teşhislerini çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Bu sayfada güvenli şekilde gönderilemeyecek bir form bulunmaktadır. Gönderdiğiniz veriler, aktarım sırasında başkaları tarafından görüntülenebilir veya bir saldırgan tarafından sunucunun alacağı verileri değiştirmek amacıyla kullanılabilir.</translation>
 <translation id="3176929007561373547">Proxy sunucunun çalışıyor olduğundan emin olmak için
     proxy ayarlarınızı kontrol edin veya ağ yöneticinize danışın. Proxy sunucu
@@ -63,6 +69,7 @@
 <translation id="3226128629678568754">Sayfayı yüklemek üzere gereken verileri tekrar göndermek için yeniden yükle düğmesine basın.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Bu sitedeki önemli içeriği her zaman algıla</translation>
+<translation id="3308738399950580893">reklamlar</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ana makinesine şu anda ulaşılamıyor.</translation>
 <translation id="3427092606871434483">İzin ver (varsayılan)</translation>
 <translation id="3447661539832366887">Bu cihazın sahibi dinozor oyununu kapattı.</translation>
@@ -78,6 +85,7 @@
 <translation id="3681007416295224113">Sertifika bilgisi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Proxy, güvenlik duvarı ve DNS yapılandırmasını kontrol edin<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Proxy sunucu kullanıyorsanız...</translation>
+<translation id="3894751534882749287">Eğer sayfayı yine de görmek istiyorsanız, İzleme-engelleme açılır peneresınden ya da İzin ver düğmesine tıklayarak sayfanın izleme koruma düzeyini değiştirebilirsiniz</translation>
 <translation id="3950820424414687140">Giriş yap</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> engellendi</translation>
 <translation id="3987940399970879459">1 MB'tan az</translation>
@@ -87,9 +95,11 @@
 <translation id="4151403195736952345">Genel varsayılanı kullan (Algıla)</translation>
 <translation id="4165986682804962316">Site ayarları</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Güvenlik duvarı ve antivirüs yapılandırmalarını kontrol edin<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları'nı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Geçerli</translation>
 <translation id="4250431568374086873">Bu siteye bağlantınız tam olarak güvenli değil</translation>
 <translation id="4265872034478892965">Yöneticiniz tarafından izin verildi</translation>
+<translation id="4305666528087210886">Dosyanıza erişilemedi</translation>
 <translation id="4312866146174492540">Engelle (varsayılan)</translation>
 <translation id="4356973930735388585">Bu sitedeki saldırganlar bilgilerinizi (örneğin fotoğraflar, parolalar, mesajlar ve kredi kartları) çalacak veya silecek tehlikeli programları bilgisayarınıza yüklemeyi deneyebilir.</translation>
 <translation id="4408413947728134509">Çerezler <ph name="NUM_COOKIES" /></translation>
@@ -101,6 +111,7 @@
 <translation id="4690462567478992370">Geçersiz bir sertifika kullanmayı bırak</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Ağ Tanılamayı Çalıştırmak<ph name="END_LINK" /></translation>
 <translation id="4736016046474602958">İzleyici Engelleyici</translation>
 <translation id="4744603770635761495">Çalıştırılabilir Yol</translation>
 <translation id="4750917950439032686">Bilgileriniz (örneğin, parolalar veya kredi kartı numaraları) bu siteye gönderilirken gizli olur.</translation>
@@ -134,7 +145,6 @@
 <translation id="5838278095973806738">Bu sitede hiçbir hassas bilginizi (örneğin parolalarınızı veya kredi kartı bilgilerinizi) girmemelisiniz; çünkü bu bilgiler saldırganlar tarafından çalınabilir.</translation>
 <translation id="5869405914158311789">Bu siteye ulaşılamıyor</translation>
 <translation id="5932224571077948991">Site, rahatsız edici veya yanıltıcı reklamlar gösteriyor</translation>
-<translation id="5990559369517809815">Sunucuya gönderilen istekler bir eklenti tarafından engellendi.</translation>
 <translation id="6051221802930200923"><ph name="SITE" /> sitesi sertifika sabitleme yöntemi kullandığından siteyi şu anda ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
 <translation id="6146055958333702838">Kabloları kontrol edin ve kullandığınız yönlendiricileri, modemleri
     veya diğer ağ cihazlarını yeniden başlatın.</translation>
@@ -142,6 +152,7 @@
 <translation id="6165508094623778733">Daha fazla bilgi edinin</translation>
 <translation id="6177128806592000436">Bu siteye bağlantınız güvenli değil</translation>
 <translation id="6203231073485539293">İnternet bağlantınızı kontrol edin</translation>
+<translation id="6225522625585012689">Engellenen adreslerin listesini ve sistem yöneticinizin zorunlu tuttuğu diğer politikaları görmek için &lt;strong&gt;vivaldi://policy&lt;/strong&gt; adresini ziyaret edin.</translation>
 <translation id="625755898061068298">Bu site için güvenlik uyarılarını devre dışı bırakmayı seçtiniz.</translation>
 <translation id="6264485186158353794">Güvenliğe geri dön</translation>
 <translation id="6305205051461490394"><ph name="URL" /> adresine ulaşılamıyor.</translation>
@@ -162,10 +173,12 @@
 <translation id="7079718277001814089">Bu site kötü amaçlı yazılım içeriyor</translation>
 <translation id="7108819624672055576">Bir eklenti tarafından izin verildi</translation>
 <translation id="7111012039238467737">(Geçerli)</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" /> adresinden <ph name="BLOCKED_TYPE" /> içeriğine izin ver</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> güvenlik standartlarına uymuyor.</translation>
 <translation id="7219179957768738017">Bağlantı <ph name="SSL_VERSION" /> kullanıyor.</translation>
 <translation id="7260504762447901703">Erişimi iptal et</translation>
 <translation id="7353601530677266744">Komut Satırı</translation>
+<translation id="7364115444476960850">Ulaşmaya çalıştığınız sayda Vivaldi'nin <ph name="BLOCKER_NAME" /> engelleyicisi tarafından engellendi</translation>
 <translation id="7419106976560586862">Profil Yolu</translation>
 <translation id="7445762425076701745">Bağlı olduğunuz sunucunun kimliği tam olarak doğrulanamıyor. Sunucuya yalnızca ağınızın içinde geçerli olan ve dış sertifika yetkilisi tarafından hiçbir şekilde sahipliği doğrulanamayacak bir isim kullanarak bağlandınız. Bazı sertifika yetkilileri bu adlar için sertifikalar yayınlasa da, bir saldırgana değil, hedeflenen web sitesine bağlandığınızdan emin olmanın herhangi bir yolu yoktur.</translation>
 <translation id="7455133967321480974">Genel varsayılanı kullan (Engelle)</translation>
@@ -188,6 +201,7 @@
 <translation id="8037357227543935929">Sor (varsayılan)</translation>
 <translation id="8041940743680923270">Genel varsayılanı kullan (Sor)</translation>
 <translation id="808894953321890993">Parolayı değiştir</translation>
+<translation id="8119307142152921512">izleyiciler ve reklamlar</translation>
 <translation id="8149426793427495338">Bilgisayarınız uyku moduna geçti.</translation>
 <translation id="8150722005171944719"><ph name="URL" /> konumundaki dosya okunamıyor. Kaldırılmış ya da taşınmış olabilir veya dosya izinleri erişimi önlüyordur.</translation>
 <translation id="8184538546369750125">Genel varsayılanı kullan (İzin ver)</translation>
@@ -204,12 +218,15 @@
 <translation id="8703575177326907206"><ph name="DOMAIN" /> alan adına bağlantınız şifrelenmedi.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> ana makinesinin &lt;abbr id="dnsDefinition"&gt;DNS adresi&lt;/abbr&gt; bulunamadı. Sorun teşhis ediliyor.</translation>
 <translation id="8820817407110198400">Yer imleri</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tarafından engellendi</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> proxy'si için kullanıcı adı ve parola gerekiyor.</translation>
 <translation id="9008201768610948239">Yoksay</translation>
 <translation id="9011424611726486705">Site ayarlarını aç</translation>
 <translation id="9025348182339809926">(Geçersiz)</translation>
 <translation id="9039213469156557790">Ayrıca, bu sayfa güvenli olmayan başka kaynaklar içeriyor. Bu kaynaklar, aktarım sırasında başkaları tarafından görülebilir ve bir saldırgan tarafından sayfanın davranışını değiştirmek üzere kullanılabilir.</translation>
+<translation id="9062620674789239642">Taşınmış, dizenlenmiş veya silinmiş olabilir.</translation>
 <translation id="9069693763241529744">Bir eklenti tarafından engellendi</translation>
+<translation id="910924428752220542">Vivaldi Parolaları</translation>
 <translation id="9169664750068251925">Bu sitede her zaman engelle</translation>
 <translation id="9180553614777056266">Reklam Engelleyici</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> desteklenmeyen bir protokol kullanıyor.</translation>

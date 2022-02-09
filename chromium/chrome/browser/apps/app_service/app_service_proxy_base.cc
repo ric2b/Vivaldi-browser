@@ -23,6 +23,7 @@
 #include "components/services/app_service/app_service_impl.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
+#include "components/services/app_service/public/cpp/types_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/url_data_source.h"
 #include "ui/display/types/display_constants.h"
@@ -190,6 +191,9 @@ void AppServiceProxyBase::Launch(const std::string& app_id,
           }
 
           RecordAppLaunch(update.AppId(), launch_source);
+          RecordAppPlatformMetrics(
+              profile_, update, launch_source,
+              apps::mojom::LaunchContainer::kLaunchContainerNone);
 
           app_service_->Launch(update.AppType(), update.AppId(), event_flags,
                                launch_source, std::move(window_info));
@@ -210,6 +214,8 @@ void AppServiceProxyBase::LaunchAppWithFiles(
           if (MaybeShowLaunchPreventionDialog(update)) {
             return;
           }
+
+          RecordAppPlatformMetrics(profile_, update, launch_source, container);
 
           // TODO(crbug/1117655): Presently, app launch metrics are recorded in
           // the caller. We should record them here, with the same SWA logic as
@@ -250,6 +256,9 @@ void AppServiceProxyBase::LaunchAppWithIntent(
           }
 
           RecordAppLaunch(update.AppId(), launch_source);
+          RecordAppPlatformMetrics(
+              profile_, update, launch_source,
+              apps::mojom::LaunchContainer::kLaunchContainerNone);
 
           app_service_->LaunchAppWithIntent(
               update.AppType(), update.AppId(), event_flags, std::move(intent),
@@ -367,7 +376,7 @@ std::vector<IntentLaunchInfo> AppServiceProxyBase::GetAppsForIntent(
     app_registry_cache_.ForEachApp([&intent_launch_info, &intent,
                                     &exclude_browsers](
                                        const apps::AppUpdate& update) {
-      if (update.Readiness() == apps::mojom::Readiness::kUninstalledByUser) {
+      if (!apps_util::IsInstalled(update.Readiness())) {
         return;
       }
       std::set<std::string> existing_activities;
@@ -442,6 +451,14 @@ void AppServiceProxyBase::AddAppIconSource(Profile* profile) {
 void AppServiceProxyBase::OnApps(std::vector<apps::mojom::AppPtr> deltas,
                                  apps::mojom::AppType app_type,
                                  bool should_notify_initialized) {
+  if (app_service_.is_connected()) {
+    for (const auto& delta : deltas) {
+      if (!apps_util::IsInstalled(delta->readiness)) {
+        app_service_->RemovePreferredApp(delta->app_type, delta->app_id);
+      }
+    }
+  }
+
   app_registry_cache_.OnApps(std::move(deltas), app_type,
                              should_notify_initialized);
 }
@@ -475,7 +492,7 @@ void AppServiceProxyBase::InitializePreferredApps(
 
 void AppServiceProxyBase::OnAppUpdate(const apps::AppUpdate& update) {
   if (!update.ReadinessChanged() ||
-      update.Readiness() != apps::mojom::Readiness::kUninstalledByUser) {
+      !apps_util::IsInstalled(update.Readiness())) {
     return;
   }
   preferred_apps_.DeleteAppId(update.AppId());
@@ -511,5 +528,11 @@ apps::mojom::IntentFilterPtr AppServiceProxyBase::FindBestMatchingFilter(
       });
   return best_matching_intent_filter;
 }
+
+void AppServiceProxyBase::RecordAppPlatformMetrics(
+    Profile* profile,
+    const apps::AppUpdate& update,
+    apps::mojom::LaunchSource launch_source,
+    apps::mojom::LaunchContainer container) {}
 
 }  // namespace apps

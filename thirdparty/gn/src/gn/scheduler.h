@@ -56,7 +56,7 @@ class Scheduler {
   //
   // TODO(brettw) this is global rather than per-BuildSettings. If we
   // start using >1 build settings, then we probably want this to take a
-  // BuildSettings object so we know the depdency on a per-build basis.
+  // BuildSettings object so we know the dependency on a per-build basis.
   // If moved, most of the Add/Get functions below should move as well.
   void AddGenDependency(const base::FilePath& file);
   std::vector<base::FilePath> GetGenDependencies() const;

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -39,7 +40,8 @@
 #include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
-#include "chrome/browser/ui/autofill/save_address_profile_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/payments/virtual_card_manual_fallback_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller_impl.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
@@ -47,11 +49,13 @@
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_live_tab_context.h"
+#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/commander/commander.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
@@ -61,12 +65,14 @@
 #include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
+#include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/user_education/feature_promo_controller.h"
 #include "chrome/browser/ui/user_education/reopen_tab_in_product_help.h"
 #include "chrome/browser/ui/user_education/reopen_tab_in_product_help_factory.h"
@@ -157,6 +163,11 @@
 #include "components/rlz/rlz_tracker.h"  // nogncheck
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/mojom/task_manager.mojom.h"
+#include "chromeos/lacros/lacros_service.h"
+#endif
+
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -230,8 +241,7 @@ bool GetTabURLAndTitleToSave(content::WebContents* web_contents,
   // but the browser wasn't closed yet. https://crbug.com/799668
   if (!web_contents)
     return false;
-  chrome::GetURLAndTitleToBookmark(web_contents, url, title);
-  return true;
+  return chrome::GetURLAndTitleToBookmark(web_contents, url, title);
 }
 
 ReadingListModel* GetReadingListModel(Browser* browser) {
@@ -452,7 +462,7 @@ void NewEmptyWindow(Profile* profile) {
       base::RecordAction(UserMetricsAction("NewGuestWindow"));
     else
       base::RecordAction(UserMetricsAction("NewIncognitoWindow2"));
-    OpenEmptyWindow(profile->GetPrimaryOTRProfile());
+    OpenEmptyWindow(profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
   } else if (profile->IsEphemeralGuestProfile()) {
     base::RecordAction(UserMetricsAction("NewGuestWindow"));
     OpenEmptyWindow(profile);
@@ -489,7 +499,8 @@ void OpenWindowWithRestoredTabs(Profile* profile) {
 }
 
 void OpenURLOffTheRecord(Profile* profile, const GURL& url) {
-  ScopedTabbedBrowserDisplayer displayer(profile->GetPrimaryOTRProfile());
+  ScopedTabbedBrowserDisplayer displayer(
+      profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
   AddSelectedTabWithURL(displayer.browser(), url, ui::PAGE_TRANSITION_LINK);
 }
 
@@ -684,7 +695,7 @@ void NewWindow(Browser* browser) {
 }
 
 void NewIncognitoWindow(Profile* profile) {
-  NewEmptyWindow(profile->GetPrimaryOTRProfile());
+  NewEmptyWindow(profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 }
 
 void CloseWindow(Browser* browser) {
@@ -838,7 +849,7 @@ bool CanMoveTabsToNewWindow(Browser* browser,
 
 void MoveTabsToNewWindow(Browser* browser,
                          const std::vector<int>& tab_indices,
-                         base::Optional<tab_groups::TabGroupId> group) {
+                         absl::optional<tab_groups::TabGroupId> group) {
   if (tab_indices.empty())
     return;
 
@@ -1065,7 +1076,8 @@ void BookmarkCurrentTab(Browser* browser) {
   // but the browser wasn't closed yet. https://crbug.com/799668
   if (!web_contents)
     return;
-  GetURLAndTitleToBookmark(web_contents, &url, &title);
+  if (!GetURLAndTitleToBookmark(web_contents, &url, &title))
+    return;
   bool is_bookmarked_by_any = model->IsBookmarked(url);
   if (!is_bookmarked_by_any &&
       web_contents->GetBrowserContext()->IsOffTheRecord()) {
@@ -1175,6 +1187,8 @@ bool IsCurrentTabUnreadInReadLater(Browser* browser) {
 
 void MaybeShowBookmarkBarForReadLater(Browser* browser) {
 #if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kSidePanel))
+    return;
   PrefService* pref_service = browser->profile()->GetPrefs();
   if (pref_service &&
       !pref_service->GetBoolean(
@@ -1184,6 +1198,7 @@ void MaybeShowBookmarkBarForReadLater(Browser* browser) {
     base::UmaHistogramEnumeration(
         "ReadingList.BookmarkBarState.OnFirstAddToReadingList",
         browser->bookmark_bar_state());
+
     if (browser->bookmark_bar_state() == BookmarkBar::HIDDEN)
       ToggleBookmarkBar(browser);
   }
@@ -1220,10 +1235,20 @@ void MigrateLocalCards(Browser* browser) {
 void SaveAutofillAddress(Browser* browser) {
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-  autofill::SaveAddressProfileBubbleControllerImpl* controller =
-      autofill::SaveAddressProfileBubbleControllerImpl::FromWebContents(
+  autofill::SaveUpdateAddressProfileBubbleControllerImpl* controller =
+      autofill::SaveUpdateAddressProfileBubbleControllerImpl::FromWebContents(
           web_contents);
   controller->OnPageActionIconClicked();
+}
+
+void ShowVirtualCardManualFallbackBubble(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  auto* controller =
+      autofill::VirtualCardManualFallbackBubbleControllerImpl::FromWebContents(
+          web_contents);
+  if (controller)
+    controller->ReshowBubble();
 }
 
 void Translate(Browser* browser) {
@@ -1282,6 +1307,15 @@ void GenerateQRCodeFromPageAction(Browser* browser) {
   content::NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
   controller->ShowBubble(entry->GetURL());
+}
+
+void SharingHubFromPageAction(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  sharing_hub::SharingHubBubbleController* controller =
+      sharing_hub::SharingHubBubbleController::CreateOrGetFromWebContents(
+          web_contents);
+  controller->ShowBubble();
 }
 
 void SavePage(Browser* browser) {
@@ -1483,7 +1517,22 @@ bool CanOpenTaskManager() {
 }
 
 void OpenTaskManager(Browser* browser) {
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Open linux version of task manager UI if ash TaskManager
+  // interface is in an old version.
+  if (chromeos::LacrosService::Get()->GetInterfaceVersion(
+          crosapi::mojom::TaskManager::Uuid_) < 1) {
+    base::RecordAction(UserMetricsAction("TaskManager"));
+    chrome::ShowTaskManager(browser);
+    return;
+  }
+  // Invoke task manager UI in ash, which will call chrome::OpenTaskManager()
+  // in ash to run through the code path in the next section
+  // (!defined(OS_ANDROID)).
+  chromeos::LacrosService::Get()
+      ->GetRemote<crosapi::mojom::TaskManager>()
+      ->ShowTaskManager();
+#elif !defined(OS_ANDROID)
   base::RecordAction(UserMetricsAction("TaskManager"));
   chrome::ShowTaskManager(browser);
 #else
@@ -1605,7 +1654,7 @@ void ToggleFullscreenMode(Browser* browser) {
 
 void ClearCache(Browser* browser) {
   content::BrowsingDataRemover* remover =
-      content::BrowserContext::GetBrowsingDataRemover(browser->profile());
+      browser->profile()->GetBrowsingDataRemover();
   remover->Remove(base::Time(), base::Time::Max(),
                   content::BrowsingDataRemover::DATA_TYPE_CACHE,
                   content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
@@ -1724,8 +1773,8 @@ void ToggleCommander(Browser* browser) {
 }
 
 #if !defined(TOOLKIT_VIEWS)
-base::Optional<int> GetKeyboardFocusedTabIndex(const Browser* browser) {
-  return base::nullopt;
+absl::optional<int> GetKeyboardFocusedTabIndex(const Browser* browser) {
+  return absl::nullopt;
 }
 #endif
 

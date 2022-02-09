@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Keluar dari Tampilan Layar Penuh</translation>
 <translation id="2177950615300672361">Tab Penyamaran: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul Klien Asli: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Sembunyikan tombol</translation>
 <translation id="2218515861914035131">Tempel sebagai teks biasa</translation>
 <translation id="2249605167705922988">misal: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Izinkan pengidentifikasi untuk konten yang dilindungi (komputer mungkin perlu dimulai ulang)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Prarender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Pilih akar direktori ekstensi untuk dikemas. Untuk memutakhirkan ekstensi, pilih juga berkas kunci pribadi untuk dipakai ulang.</translation>
-<translation id="3266179261140759675">Blokir situs yang ditutup agar tidak mengirim dan menerima data</translation>
 <translation id="3280237271814976245">Simp&amp;an sebagai...</translation>
 <translation id="3285322247471302225">&amp;Tab Baru</translation>
 <translation id="3288047731229977326">Ekstensi yang berjalan dalam mode pengembang dapat membahayakan komputer anda. Jika anda bukan pengembang, anda sebaiknya tidak mengaktifkan semua ekstensi yang berjalan dalam mode pengembang agar tetap aman.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Ini dapat membaca dan mengubah data situs</translation>
 <translation id="3560034655160545939">&amp;Periksa ejaan</translation>
 <translation id="3574917942258583917">Tetap keluar dari mode penyamaran?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ingin membagikan printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; dengan kelompok yang anda miliki: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jika anda menerima, semua anggota kelompok akan dapat mencetak dengan printer tersebut.</translation>
 <translation id="3587482841069643663">Semua</translation>
 <translation id="3627588569887975815">Buka tautan di jendela penya&amp;maran</translation>
 <translation id="3627879631695760395">Pasang <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Penangan</translation>
 <translation id="3678156199662914018">Ekstensi: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Permintaan Berbagi Layar</translation>
+<translation id="3708684582558000260">Jangan izinkan situs yang ditutup mengirim atau menerima data</translation>
 <translation id="3711931198657368127">Te&amp;mpel dan Buka <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspeksi sembulan</translation>
 <translation id="3744111561329211289">Sinkronisasi latar belakang</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Membuat ekstensi:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Terima untuk kelompok</translation>
 <translation id="4096508467498758490">Nonaktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
 <translation id="4109898769411476438">Tutup Peramban Sebelum Mengimpor</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Tampilkan Detail</translation>
 <translation id="4907306957610201395">Kategori Izin</translation>
 <translation id="4912643508233590958">Bangun saat Nganggur</translation>
-<translation id="4918086044614829423">Terima</translation>
 <translation id="4927753642311223124">Di sini tidak ada yang bisa dilihat, lanjutkan.</translation>
 <translation id="4930714375720679147">Aktifkan</translation>
 <translation id="4988526792673242964">Halaman</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Simpan</translation>
 <translation id="5334142896108694079">Singgahan Skrip</translation>
 <translation id="5355926466126177564">Ekstensi "<ph name="EXTENSION_NAME" />" telah mengubah halaman apa yang ditampilkan saat anda menelusuri dari Omnibox.</translation>
-<translation id="5360150013186312835">Tampilkan di Bilah Alat</translation>
+<translation id="5360150013186312835">Tampilkan di Batang Alat</translation>
 <translation id="5362741141255528695">Pilih berkas kunci pribadi.</translation>
 <translation id="536638840841140142">Tidak ada</translation>
 <translation id="5370819323174483825">&amp;Muat ulang</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Bersihkan data situs</translation>
 <translation id="6042308850641462728">Lainnya</translation>
 <translation id="6059925163896151826">Perangkat USB</translation>
-<translation id="6082651258230788217">Tampilkan di bilah alat</translation>
 <translation id="6086846494333236931">Dipasang oleh administrator Anda</translation>
 <translation id="6101226222197207147">Aplikasi baru ditambahkan (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Koneksi Internet anda sedang dikendalikan</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simulasikan mulai ulang peramban</translation>
 <translation id="6445450263907939268">Jika anda tidak menginginkan semua perubahan ini, pulihkan semua pengaturan sebelumnya.</translation>
 <translation id="6447842834002726250">Reremah</translation>
-<translation id="6452181791372256707">Tolak</translation>
 <translation id="6498249116389603658">&amp;Semua bahasa anda</translation>
 <translation id="6503077044568424649">Sering dibuka</translation>
 <translation id="6508261954199872201">Aplikasi: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Ini Dapat Membaca dan Mengubah Data Situs</translation>
 <translation id="708060913198414444">S&amp;alin alamat audio</translation>
 <translation id="7175353351958621980">Di muat dari:</translation>
-<translation id="7186088072322679094">Simpan di Bilah Alat</translation>
+<translation id="7186088072322679094">Simpan di Batang Alat</translation>
 <translation id="7270858098575133036">Tanyakan saat situs ingin menggunakan pesan eksklusif sistem untuk mengakses perangkat MIDI</translation>
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Apakah ini halaman tab baru yang anda harapkan?</translation>
 <translation id="786073089922909430">Layanan: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Tujuan Terbaru</translation>
-<translation id="7898627924844766532">Simpan di bilah alat</translation>
 <translation id="7903925330883316394">Utilitas: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Sedang offline</translation>
 <translation id="7947962633355574091">S&amp;alin Alamat Video</translation>
@@ -452,7 +445,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8725066075913043281">Coba lagi</translation>
 <translation id="8757090071857742562">Tidak dapat cast desktop.  Periksa apakah anda telah mengonfirmasi permintaan untuk mulai berbagi layar.</translation>
 <translation id="8774934320277480003">Batas atas</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ingin berbagi printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; dengan anda.</translation>
 <translation id="8798099450830957504">Standar</translation>
 <translation id="8800004011501252845">Menunjukkan tujuan untuk</translation>
 <translation id="8808478386290700967">Web Store</translation>

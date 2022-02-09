@@ -15,7 +15,7 @@ BLACKLISTED_OS_CONDITION = ["checkout_"+x for x in BLACKLISTED_OS]
 BASE_URL= "ssh://git.viv.int/srv/git/vivaldi"
 CHROMIUM_URL = BASE_URL + "/chromium/src.git"
 
-def __GetModuleInfoFromDeps(deps_info, selected_os=None, git=None):
+def __GetModuleInfoFromDeps(deps_info, selected_os=[], git=None):
   submodules = {}
   for mod, ref in deps_info["deps"].items():
     #print mod, ref
@@ -30,12 +30,12 @@ def __GetModuleInfoFromDeps(deps_info, selected_os=None, git=None):
         condition = ref["condition"]
         if any([cond in condition for cond in BLACKLISTED_OS_CONDITION]):
           continue
-        if selected_os not in condition:
+        if not any([x in condition for x in selected_os]):
           continue
       if ref.get("dep_type",None) == "cipd":
         submodules.setdefault("__cipd__", {})[mod] = ref
         continue
-      if "url" not in ref:
+      if "url" not in ref or "chrome-internal.googlesource.com" in ref["url"]:
         continue
       ref = ref["url"]
     elif selected_os:
@@ -55,6 +55,8 @@ def GetSubmodules(checkout_platform, checkout_filter=None):
                          url = CHROMIUM_URL,
                          base_url = BASE_URL)
 
+  if not isinstance(checkout_platform, (list, tuple)):
+    checkout_platform = [checkout_platform]
   deps_info = chromium_git.GetGitDepInfo()
   submodules = __GetModuleInfoFromDeps(deps_info, checkout_platform, chromium_git)
   def _cipd(mod_packages):
@@ -80,7 +82,7 @@ def GetSubmodules(checkout_platform, checkout_filter=None):
     if sys.platform == "win32":
       cmd.insert(0, "bash")
     print(os.getcwd(),":", " ".join(cmd))
-    command = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    command = subprocess.Popen(cmd, stdin=subprocess.PIPE, text=True)
     command.communicate(ensure_file)
     if command.returncode != 0:
       raise Exception("Command failed with exit code %d"% command.returncode)
@@ -91,7 +93,7 @@ def GetSubmodules(checkout_platform, checkout_filter=None):
         continue;
       module_git = Git.Git(inherit=chromium_git, url=config["url"],
                           source_dir = os.path.join(SRC, "chromium", path))
-      module_git.FetchSource(update_submodules=False)
+      module_git.FetchSource(update_submodules=False, force=True)
       module_git.Checkout(revision=config["commit"], only_commit=True,
                           update_submodules=False)
 

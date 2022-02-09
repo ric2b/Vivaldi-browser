@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notificações</translation>
+<translation id="2491414235131909199">Esta página foi bloqueada por uma extensão</translation>
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Você não deve fornecer nenhuma informação confidencial neste site (como senhas importantes ou números de cartão de crédito), pois elas podem ser roubadas por qualquer invasor que interceptar os dados entre você e o site.</translation>
 <translation id="5869405914158311789">Não foi possível acessar este site</translation>
 <translation id="5932224571077948991">No site, há exibição de anúncios invasivos ou enganosos</translation>
-<translation id="5990559369517809815">Solicitações ao servidor foram bloqueadas por uma extensão.</translation>
 <translation id="6051221802930200923">Não é possível acessar <ph name="SITE" /> no momento, porque o site usa bloqueio de certificados. Como os ataques e erros de rede são geralmente temporários, esta pagina provavelmente funcionará mais tarde.</translation>
 <translation id="6146055958333702838">Verifique todos os cabos e reinicie todos os roteadores, modens ou outros dispositivos de rede
     que você estiver usando.</translation>

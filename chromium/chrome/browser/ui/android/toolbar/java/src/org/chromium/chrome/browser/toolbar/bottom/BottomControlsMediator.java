@@ -26,8 +26,8 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
  * and updating the model accordingly.
  */
 class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
-        KeyboardVisibilityDelegate.KeyboardVisibilityListener,
-        LayoutStateObserver {
+                                        KeyboardVisibilityDelegate.KeyboardVisibilityListener,
+                                        LayoutStateObserver {
     /** The model for the bottom controls component that holds all of its view state. */
     private final PropertyModel mModel;
 
@@ -73,8 +73,8 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
      * @param overlayPanelVisibilitySupplier Notifies overlay panel visibility event.
      */
     BottomControlsMediator(WindowAndroid windowAndroid, PropertyModel model,
-                           BrowserControlsSizer controlsSizer, FullscreenManager fullscreenManager,
-                           int bottomControlsHeight, ObservableSupplier<Boolean> overlayPanelVisibilitySupplier) {
+            BrowserControlsSizer controlsSizer, FullscreenManager fullscreenManager,
+            int bottomControlsHeight, ObservableSupplier<Boolean> overlayPanelVisibilitySupplier) {
         mModel = model;
 
         mFullscreenManager = fullscreenManager;
@@ -119,7 +119,7 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
 
     @Override
     public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
-                                        int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
+            int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
         mModel.set(BottomControlsProperties.Y_OFFSET, bottomOffset);
         updateAndroidViewVisibility();
     }

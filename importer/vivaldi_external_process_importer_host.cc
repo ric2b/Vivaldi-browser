@@ -40,8 +40,9 @@ void ExternalProcessImporterHost::ShowChromeWarningDialog() {
   DCHECK(!headless_);
   importer::ShowImportLockDialog(
       parent_window_,
-      base::Bind(&ExternalProcessImporterHost::OnChromiumImportLockDialogEnd,
-                 weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(
+          &ExternalProcessImporterHost::OnChromiumImportLockDialogEnd,
+          weak_ptr_factory_.GetWeakPtr()),
       importerLockString);
 }
 

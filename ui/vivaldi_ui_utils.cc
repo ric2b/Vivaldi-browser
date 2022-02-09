@@ -34,7 +34,7 @@ namespace {
 bool IsMainVivaldiBrowserWindow(VivaldiBrowserWindow* window) {
   DCHECK(window);
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  base::Optional<base::Value> json =
+  absl::optional<base::Value> json =
       base::JSONReader::Read(window->browser()->ext_data(), options);
   base::DictionaryValue* dict = NULL;
   std::string window_type;

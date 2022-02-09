@@ -2,7 +2,6 @@
 
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
 
-#include "base/optional.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_controller_client.h"
@@ -32,7 +31,7 @@ DocumentBlockedThrottle::WillFailRequest() {
   auto* service = RuleServiceFactory::GetForBrowserContext(
       web_contents->GetBrowserContext());
 
-  base::Optional<RuleGroup> blocking_group;
+  absl::optional<RuleGroup> blocking_group;
   if (service->IsDocumentBlocked(RuleGroup::kTrackingRules,
                                  navigation_handle()->GetRenderFrameHost(),
                                  url))
@@ -51,7 +50,7 @@ DocumentBlockedThrottle::WillFailRequest() {
       new DocumentBlockedInterstitial(web_contents, url, blocking_group.value(),
                                       std::move(controller)));
 
-  base::Optional<std::string> error_page_contents =
+  absl::optional<std::string> error_page_contents =
       blocking_page->GetHTMLContents();
 
   security_interstitials::SecurityInterstitialTabHelper::AssociateBlockingPage(

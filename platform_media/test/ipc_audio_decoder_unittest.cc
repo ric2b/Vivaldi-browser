@@ -41,9 +41,9 @@ class IPCAudioDecoderTest : public testing::Test {
 
     CHECK(decode_thread_.Start());
 
-    IPCFactory::Preinitialize(
-        base::Bind(&CreateIPCMediaPipelineHost), decode_thread_.task_runner(),
-        decode_thread_.task_runner());
+    IPCFactory::Preinitialize(base::BindRepeating(&CreateIPCMediaPipelineHost),
+                              decode_thread_.task_runner(),
+                              decode_thread_.task_runner());
   }
 
   bool Initialize(const std::string& filename) {

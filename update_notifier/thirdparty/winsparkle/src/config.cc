@@ -9,12 +9,10 @@
 
 #include "installer/util/vivaldi_install_util.h"
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 vivaldi::InstallType g_install_type = vivaldi::InstallType::kForCurrentUser;
-bool g_install_mode = false;
-bool g_manual_check = false;
-bool g_silent_update = false;
+UpdateMode g_mode = UpdateMode::kNone;
 base::FilePath g_install_dir;
 #if defined(COMPONENT_BUILD)
 base::FilePath g_build_dir;
@@ -69,13 +67,12 @@ base::FilePath GetExeDir() {
 }
 
 bool IsUsingTaskScheduler() {
-  // Windows Task Scheduler entries are shared among all users. Although we use
-  // a suffix based on the installation hash for task names, it is not enough
-  // for system installs if multiple users want to receive update notifications.
-  // Ultimately for system installs we should use a system account and silent
-  // update shared by all users, but for now we keep the old auto-start based
-  // system for system installs.
-  return g_install_type == vivaldi::InstallType::kForCurrentUser;
+  return true;
 }
 
-}  // namespace winsparkle
+bool DoesRunAsSystemService() {
+  return g_install_type == vivaldi::InstallType::kForAllUsers &&
+         g_mode == UpdateMode::kSilentUpdate;
+}
+
+}  // namespace vivaldi_update_notifier

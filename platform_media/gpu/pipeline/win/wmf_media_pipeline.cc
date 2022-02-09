@@ -11,9 +11,9 @@
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
-#include "base/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -33,6 +33,7 @@
 #include <mfidl.h>
 
 #include <Mferror.h>
+#include <mfapi.h>
 #include <mfreadwrite.h>
 #include <propvarutil.h>
 #include <wrl/client.h>
@@ -48,6 +49,62 @@ namespace {
 
 const int kMicrosecondsPerSecond = 1000000;
 const int kHundredsOfNanosecondsPerSecond = 10000000;
+
+std::string GetCodecName(GUID codec_guid) {
+  // Recognize few common names, for rest get GUID as string. This is based on
+  // https://docs.microsoft.com/en-us/windows/win32/medfound/audio-subtype-guids
+  // https://docs.microsoft.com/en-us/windows/win32/medfound/video-subtype-guids
+  struct GuidAndName {
+    GUID guid;
+    const char* name;
+  };
+  static const GuidAndName codec_names[] = {
+      // Audio
+      {{0x000000FF,
+        0x0000,
+        0x0010,
+        {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}},
+       "AAC-RAW"},
+      {MFAudioFormat_AAC, "AAC"},
+      {MFAudioFormat_ALAC, "ALAC"},
+      {MFAudioFormat_AMR_NB, "AMR_NB"},
+      {MFAudioFormat_AMR_WB, "AMR_WB"},
+      {MFAudioFormat_Dolby_AC3, "Dolby_AC3"},
+      {MFAudioFormat_Dolby_DDPlus, "Dolby_DDPlus"},
+      {MFAudioFormat_FLAC, "FLAC"},
+      {MFAudioFormat_MP3, "MP3"},
+      {MFAudioFormat_Opus, "OPUS"},
+      {MFAudioFormat_PCM, "PCM"},
+      {MFAudioFormat_Vorbis, "Vorbis"},
+
+      // Video
+      {MFVideoFormat_H264, "H.264"},
+      {MFVideoFormat_H265, "H.265"},
+      {MFVideoFormat_HEVC, "HEVC"},
+      {MFVideoFormat_AV1, "AV1"},
+  };
+  for (const auto& i : codec_names) {
+    if (codec_guid == i.guid)
+      return i.name;
+  }
+  unsigned char* guid_chars = nullptr;
+  ::UuidToStringA(&codec_guid, &guid_chars);
+  if (!guid_chars)
+    return std::string();
+  std::string guid_str = reinterpret_cast<char*>(guid_chars);
+  ::RpcStringFreeA(&guid_chars);
+  return guid_str;
+}
+
+bool IsChromiumSuppportedVideo(GUID codec_guid) {
+  // TODO(igor@vivaldi.com): Add Theora and VP8, VP9
+  return codec_guid == MFVideoFormat_AV1;
+}
+
+bool IsChromiumSuppportedAudio(GUID codec_guid) {
+  return codec_guid == MFAudioFormat_FLAC || codec_guid == MFAudioFormat_MP3 ||
+         codec_guid == MFAudioFormat_Opus || codec_guid == MFAudioFormat_Vorbis;
+}
 
 }  // namespace
 
@@ -76,7 +133,7 @@ class WMFMediaPipeline::AudioTimestampCalculator {
 };  // class WMFMediaPipeline::AudioTimestampCalculator
 
 class WMFMediaPipeline::ThreadedImpl {
-  public:
+ public:
   ThreadedImpl();
   ~ThreadedImpl();
 
@@ -85,16 +142,16 @@ class WMFMediaPipeline::ThreadedImpl {
   void ReadData(IPCDecodingBuffer buffer);
   void Seek(base::TimeDelta time, SeekCB seek_cb);
 
-  private:
+ private:
   bool CreateSourceReaderCallbackAndAttributes(
       const std::string& mime_type,
       Microsoft::WRL::ComPtr<IMFAttributes>* attributes);
 
   bool RetrieveStreamIndices();
-  bool ConfigureStream(DWORD stream_index);
+  bool ConfigureStream(PlatformStreamType stream_type);
   bool ConfigureSourceReader();
-  bool HasMediaStream(PlatformMediaDataType type) const;
-  void SetNoMediaStream(PlatformMediaDataType type);
+  bool HasMediaStream(PlatformStreamType stream_type) const;
+  void SetNoMediaStream(PlatformStreamType stream_type);
   base::TimeDelta GetDuration();
   int GetBitrate(base::TimeDelta duration);
   bool GetStride(int* stride);
@@ -103,8 +160,7 @@ class WMFMediaPipeline::ThreadedImpl {
   void OnReadSample(MediaDataStatus status,
                     DWORD stream_index,
                     const Microsoft::WRL::ComPtr<IMFSample>& sample);
-  bool CreateDataBuffer(IMFSample* sample,
-                        IPCDecodingBuffer* decoding_buffer);
+  bool CreateDataBuffer(IMFSample* sample, IPCDecodingBuffer* decoding_buffer);
   bool CreateDataBufferFromMemory(IMFSample* sample,
                                   IPCDecodingBuffer* decoding_buffer);
   bool GetSourceInt32Attribute(REFGUID attr, int& result);
@@ -114,11 +170,12 @@ class WMFMediaPipeline::ThreadedImpl {
   bool is_streaming_ = false;
   Microsoft::WRL::ComPtr<IMFSourceReader> source_reader_;
 
-  DWORD stream_indices_[kPlatformMediaDataTypeCount];
+  DWORD stream_indices_[kPlatformStreamTypeCount] = {};
+  GUID codec_guids_[kPlatformStreamTypeCount] = {};
 
   std::unique_ptr<AudioTimestampCalculator> audio_timestamp_calculator_;
 
-  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];
+  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformStreamTypeCount];
 
   // See |WMFDecoderImpl::get_stride_function_|.
   decltype(MFGetStrideForBitmapInfoHeader)* get_stride_function_;
@@ -130,23 +187,19 @@ class WMFMediaPipeline::ThreadedImpl {
 namespace {
 
 struct AutoPropVariant {
-  AutoPropVariant() {
-    PropVariantInit(&var);
-  }
+  AutoPropVariant() { PropVariantInit(&var); }
 
-  ~AutoPropVariant() {
-    PropVariantClear(&var);
-  }
+  ~AutoPropVariant() { PropVariantClear(&var); }
 
   PROPVARIANT var;
 };
 
 class SourceReaderCallback : public IMFSourceReaderCallback {
  public:
-  using OnReadSampleCB =
-      base::Callback<void(MediaDataStatus status,
-                          DWORD stream_index,
-                          const Microsoft::WRL::ComPtr<IMFSample>& sample)>;
+  using OnReadSampleCB = base::RepeatingCallback<void(
+      MediaDataStatus status,
+      DWORD stream_index,
+      const Microsoft::WRL::ComPtr<IMFSample>& sample)>;
 
   explicit SourceReaderCallback(const OnReadSampleCB& on_read_sample_cb);
 
@@ -182,7 +235,8 @@ SourceReaderCallback::SourceReaderCallback(
 
 STDMETHODIMP SourceReaderCallback::QueryInterface(REFIID iid, void** ppv) {
   static const QITAB qit[] = {
-      QITABENT(SourceReaderCallback, IMFSourceReaderCallback), {0},
+      QITABENT(SourceReaderCallback, IMFSourceReaderCallback),
+      {0},
   };
   return QISearch(this, qit, iid, ppv);
 }
@@ -207,9 +261,10 @@ STDMETHODIMP SourceReaderCallback::OnReadSample(HRESULT status,
   Microsoft::WRL::ComPtr<IMFSample> sample(unwrapped_sample);
 
   if (FAILED(status)) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Error";
-    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index,
-                           sample);
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << ": stream_index=" << stream_index << " hresult=0x" << std::hex
+               << status;
+    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index, sample);
     return S_OK;
   }
 
@@ -234,8 +289,7 @@ STDMETHODIMP SourceReaderCallback::OnReadSample(HRESULT status,
     // ignore it
     DCHECK(!(stream_flags & MF_SOURCE_READERF_STREAMTICK));
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Abort";
-    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index,
-                           sample);
+    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index, sample);
     return E_ABORT;
   }
 
@@ -272,8 +326,7 @@ WMFMediaPipeline::AudioTimestampCalculator::AudioTimestampCalculator()
       samples_per_second_(0),
       frame_sum_(0),
       frame_offset_(0),
-      must_recapture_position_(false) {
-}
+      must_recapture_position_(false) {}
 
 void WMFMediaPipeline::AudioTimestampCalculator::SetChannelCount(
     int channel_count) {
@@ -345,9 +398,6 @@ WMFMediaPipeline::~WMFMediaPipeline() {
 void WMFMediaPipeline::Initialize(ipc_data_source::Info source_info,
                                   InitializeCB initialize_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " mime_type="
-            << source_info.mime_type;
 
   // NOTE(pettern): All tasks must run on the same thread or there will be
   // hangs. See VB-74757 for the consequences.
@@ -480,7 +530,7 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
     time_info.duration = GetDuration();
     bitrate = GetBitrate(time_info.duration);
 
-    if (HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO)) {
+    if (HasMediaStream(PlatformStreamType::kAudio)) {
       if (!GetAudioDecoderConfig(&audio_config)) {
         LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                      << " Failed to get Audio Decoder Config";
@@ -488,7 +538,7 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
       }
     }
 
-    if (HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO)) {
+    if (HasMediaStream(PlatformStreamType::kVideo)) {
       if (!GetVideoDecoderConfig(&video_config)) {
         LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                      << " Failed to get Video Decoder Config";
@@ -497,11 +547,8 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
     }
 
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " FinalizeInitialization successful with PlatformAudioConfig :"
-            << Loggable(audio_config);
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " FinalizeInitialization successful with PlatformVideoConfig :"
-            << Loggable(video_config);
+            << ": mime_type=" << ipc_source_info.mime_type
+            << " bitrate=" << bitrate;
     ok = true;
   } while (false);
 
@@ -512,26 +559,28 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
 
 void WMFMediaPipeline::ThreadedImpl::ReadData(
     IPCDecodingBuffer ipc_decoding_buffer) {
-  PlatformMediaDataType type = ipc_decoding_buffer.type();
+  PlatformStreamType stream_type = ipc_decoding_buffer.stream_type();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!ipc_decoding_buffers_[type]);
+  DCHECK(!GetElem(ipc_decoding_buffers_, stream_type));
 
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " type=" << type;
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " stream_type=" << GetStreamTypeName(stream_type);
 
   DCHECK(source_reader_);
 
-  HRESULT hr = source_reader_->ReadSample(stream_indices_[type], 0, nullptr,
-                                          nullptr, nullptr, nullptr);
+  HRESULT hr =
+      source_reader_->ReadSample(GetElem(stream_indices_, stream_type), 0,
+                                 nullptr, nullptr, nullptr, nullptr);
 
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to read audio sample hr=" << hr;
+               << " Failed to read audio sample hr=0x" << std::hex << hr;
     ipc_decoding_buffer.set_status(MediaDataStatus::kMediaError);
     main_task_runner_->PostTask(FROM_HERE,
                                 base::BindOnce(&IPCDecodingBuffer::Reply,
                                                std::move(ipc_decoding_buffer)));
   }
-  ipc_decoding_buffers_[type] = std::move(ipc_decoding_buffer);
+  GetElem(ipc_decoding_buffers_, stream_type) = std::move(ipc_decoding_buffer);
 }
 
 void WMFMediaPipeline::ThreadedImpl::OnReadSample(
@@ -543,22 +592,20 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << ", status: " << (int)status;
 
-  PlatformMediaDataType media_type =
-      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO;
-  if (stream_index ==
-      stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO]) {
-    media_type = PlatformMediaDataType::PLATFORM_MEDIA_VIDEO;
+  PlatformStreamType media_type = PlatformStreamType::kAudio;
+  if (stream_index == GetElem(stream_indices_, PlatformStreamType::kVideo)) {
+    media_type = PlatformStreamType::kVideo;
   } else if (stream_index !=
-             stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO]) {
+             GetElem(stream_indices_, PlatformStreamType::kAudio)) {
     NOTREACHED() << "Unknown stream type";
   }
-  DCHECK(ipc_decoding_buffers_[media_type]);
-  if (!ipc_decoding_buffers_[media_type])
+  DCHECK(GetElem(ipc_decoding_buffers_, media_type));
+  if (!GetElem(ipc_decoding_buffers_, media_type))
     return;
 
   IPCDecodingBuffer ipc_decoding_buffer =
-      std::move(ipc_decoding_buffers_[media_type]);
-  DCHECK(ipc_decoding_buffer.type() == media_type);
+      std::move(GetElem(ipc_decoding_buffers_, media_type));
+  DCHECK(ipc_decoding_buffer.stream_type() == media_type);
   switch (status) {
     case MediaDataStatus::kOk:
       DCHECK(sample);
@@ -567,13 +614,8 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
       }
       break;
     case MediaDataStatus::kEOS:
-      break;
-
     case MediaDataStatus::kMediaError:
-      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " status MediaDataStatus::kMediaError";
       break;
-
     case MediaDataStatus::kConfigChanged:
       // Chromium's pipeline does not want any decoded data together with the
       // config change messages. So we copy the decoded data into the buffer now
@@ -585,7 +627,7 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
         break;
       }
       switch (media_type) {
-        case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO: {
+        case PlatformStreamType::kAudio: {
           PlatformAudioConfig audio_config;
           if (!GetAudioDecoderConfig(&audio_config)) {
             LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -599,7 +641,7 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
           ipc_decoding_buffer.GetAudioConfig() = audio_config;
           break;
         }
-        case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO: {
+        case PlatformStreamType::kVideo: {
           PlatformVideoConfig video_config;
           if (!GetVideoDecoderConfig(&video_config)) {
             LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -681,8 +723,8 @@ bool WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
     discontinuity = 0;
   }
 
-  switch (decoding_buffer->type()) {
-    case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO: {
+  switch (decoding_buffer->stream_type()) {
+    case PlatformStreamType::kAudio: {
       // We calculate the timestamp and the duration based on the number of
       // audio frames we've already played. We don't trust the timestamp
       // stored on the IMFSample, as sometimes it's wrong, possibly due to
@@ -696,7 +738,7 @@ bool WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
       audio_timestamp_calculator_->UpdateFrameCounter(frames_count);
       break;
     }
-    case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO: {
+    case PlatformStreamType::kVideo: {
       decoding_buffer->set_timestamp(
           base::TimeDelta::FromMicroseconds(timestamp_hns / 10));
       decoding_buffer->set_duration(
@@ -708,7 +750,8 @@ bool WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
   return true;
 }
 
-void WMFMediaPipeline::ThreadedImpl::Seek(base::TimeDelta time, SeekCB seek_cb) {
+void WMFMediaPipeline::ThreadedImpl::Seek(base::TimeDelta time,
+                                          SeekCB seek_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   bool success = false;
@@ -746,16 +789,16 @@ void WMFMediaPipeline::ThreadedImpl::Seek(base::TimeDelta time, SeekCB seek_cb) 
 }
 
 bool WMFMediaPipeline::ThreadedImpl::HasMediaStream(
-    PlatformMediaDataType type) const {
+    PlatformStreamType stream_type) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return stream_indices_[type] !=
-      static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX);
+  return GetElem(stream_indices_, stream_type) !=
+         static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX);
 }
 
 void WMFMediaPipeline::ThreadedImpl::SetNoMediaStream(
-    PlatformMediaDataType type) {
+    PlatformStreamType stream_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  stream_indices_[type] =
+  GetElem(stream_indices_, stream_type) =
       static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX);
 }
 
@@ -774,7 +817,7 @@ bool WMFMediaPipeline::ThreadedImpl::GetAudioDecoderConfig(
 
   Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO],
+      GetElem(stream_indices_, PlatformStreamType::kAudio),
       media_type.GetAddressOf());
 
   if (FAILED(hr) || !media_type) {
@@ -802,8 +845,7 @@ bool WMFMediaPipeline::ThreadedImpl::GetAudioDecoderConfig(
       audio_config->samples_per_second);
 
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Created a PlatformAudioConfig from IMFMediaType attributes :"
-          << Loggable(*audio_config);
+          << " audio_config :" << Loggable(*audio_config);
 
   return true;
 }
@@ -821,7 +863,7 @@ bool WMFMediaPipeline::ThreadedImpl::GetVideoDecoderConfig(
 
   Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO],
+      GetElem(stream_indices_, PlatformStreamType::kVideo),
       media_type.GetAddressOf());
 
   if (FAILED(hr)) {
@@ -853,37 +895,32 @@ bool WMFMediaPipeline::ThreadedImpl::GetVideoDecoderConfig(
   if (pan_scan_enabled) {
     hr = media_type->GetBlob(MF_MT_PAN_SCAN_APERTURE,
                              reinterpret_cast<uint8_t*>(&video_area),
-                             sizeof(MFVideoArea),
-                             NULL);
+                             sizeof(MFVideoArea), NULL);
     if (SUCCEEDED(hr)) {
       // MFOffset structure consists of the integer part and the fractional
       // part, but pixels are not divisible, so we ignore the fractional part.
-      video_config->visible_rect = gfx::Rect(video_area.OffsetX.value,
-                                             video_area.OffsetY.value,
-                                             video_area.Area.cx,
-                                             video_area.Area.cy);
+      video_config->visible_rect =
+          gfx::Rect(video_area.OffsetX.value, video_area.OffsetY.value,
+                    video_area.Area.cx, video_area.Area.cy);
     }
   }
 
   if (!pan_scan_enabled || FAILED(hr)) {
     hr = media_type->GetBlob(MF_MT_MINIMUM_DISPLAY_APERTURE,
                              reinterpret_cast<uint8_t*>(&video_area),
-                             sizeof(MFVideoArea),
-                             NULL);
+                             sizeof(MFVideoArea), NULL);
     if (FAILED(hr)) {
       hr = media_type->GetBlob(MF_MT_GEOMETRIC_APERTURE,
                                reinterpret_cast<uint8_t*>(&video_area),
-                               sizeof(MFVideoArea),
-                               NULL);
+                               sizeof(MFVideoArea), NULL);
     }
 
     if (SUCCEEDED(hr)) {
       // MFOffset structure consists of the integer part and the fractional
       // part, but pixels are not divisible, so we ignore the fractional part.
-      video_config->visible_rect = gfx::Rect(video_area.OffsetX.value,
-                                             video_area.OffsetY.value,
-                                             video_area.Area.cx,
-                                             video_area.Area.cy);
+      video_config->visible_rect =
+          gfx::Rect(video_area.OffsetX.value, video_area.OffsetY.value,
+                    video_area.Area.cx, video_area.Area.cy);
     } else {
       video_config->visible_rect = gfx::Rect(frame_width, frame_height);
     }
@@ -957,19 +994,21 @@ bool WMFMediaPipeline::ThreadedImpl::GetVideoDecoderConfig(
       video_config->rotation = VideoRotation::VIDEO_ROTATION_0;
       break;
   }
+
   return true;
 }
 
 bool WMFMediaPipeline::ThreadedImpl::CreateSourceReaderCallbackAndAttributes(
-    const std::string& mime_type, Microsoft::WRL::ComPtr<IMFAttributes>* attributes) {
+    const std::string& mime_type,
+    Microsoft::WRL::ComPtr<IMFAttributes>* attributes) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   Microsoft::WRL::ComPtr<IMFSourceReaderCallback> source_reader_callback;
   source_reader_callback = new SourceReaderCallback(BindToCurrentLoop(
-      base::Bind(&WMFMediaPipeline::ThreadedImpl::OnReadSample,
-                 weak_ptr_factory_.GetWeakPtr())));
+      base::BindRepeating(&WMFMediaPipeline::ThreadedImpl::OnReadSample,
+                          weak_ptr_factory_.GetWeakPtr())));
 
   HRESULT hr = MFCreateAttributes((*attributes).GetAddressOf(), 1);
   if (FAILED(hr))
@@ -994,53 +1033,82 @@ bool WMFMediaPipeline::ThreadedImpl::RetrieveStreamIndices() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(source_reader_);
 
-  DWORD stream_index = 0;
-
-  while (!(HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) &&
-           HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO))) {
+  bool was_selected[kPlatformStreamTypeCount] = {};
+  for (DWORD stream_index = 0;; ++stream_index) {
     Microsoft::WRL::ComPtr<IMFMediaType> media_type;
     HRESULT hr = source_reader_->GetNativeMediaType(stream_index, 0,
                                                     media_type.GetAddressOf());
-
     if (hr == MF_E_INVALIDSTREAMNUMBER)
       break;  // No more streams.
-
     if (FAILED(hr)) {
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " : GetNativeMediaType error hr=" << hr;
-    } else {
-      GUID major_type;
-      hr = media_type->GetMajorType(&major_type);
-      if (SUCCEEDED(hr)) {
-        if (major_type == MFMediaType_Audio &&
-            stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] ==
-                static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX)) {
-          stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] =
-              stream_index;
-        } else if (major_type == MFMediaType_Video &&
-                   stream_indices_
-                           [PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] ==
-                       static_cast<DWORD>(
-                           MF_SOURCE_READER_INVALID_STREAM_INDEX)) {
-          stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] =
-              stream_index;
-        }
-      }
+              << " : IMFSourceReader::GetNativeMediaType error hr=0x"
+              << std::hex << hr;
+      break;
     }
-    ++stream_index;
+    GUID major_type;
+    hr = media_type->GetMajorType(&major_type);
+    if (FAILED(hr)) {
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " : IMFMediaType::GetMajorType error hr=0x" << std::hex << hr;
+      continue;
+    }
+    BOOL selected = false;
+    hr = source_reader_->GetStreamSelection(stream_index, &selected);
+    if (FAILED(hr)) {
+      // Treat any error as an unselected stream.
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " : IMFSourceReader::GetStreamSelection error hr=0x"
+              << std::hex << hr;
+    }
+    absl::optional<PlatformStreamType> stream_type;
+    if (major_type == MFMediaType_Audio) {
+      stream_type = PlatformStreamType::kAudio;
+    } else if (major_type == MFMediaType_Video) {
+      stream_type = PlatformStreamType::kVideo;
+    }
+    if (!stream_type) {
+      VLOG(1) << "Unknown media type stream_index=" << stream_index;
+      continue;
+    }
+
+    GUID codec_guid{};
+    hr = media_type->GetGUID(MF_MT_SUBTYPE, &codec_guid);
+    if (FAILED(hr)) {
+      // Treat any error as unknown codec.
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " : IMFSourceReader::GetGUID(MF_MT_SUBTYPE) error hr=0x"
+              << std::hex << hr;
+    }
+
+    // Prefer the first selected stream if there are many of audio or video.
+    if (GetElem(stream_indices_, *stream_type) ==
+            static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX) ||
+        (!GetElem(was_selected, *stream_type) && selected)) {
+      GetElem(was_selected, *stream_type) = selected;
+      GetElem(stream_indices_, *stream_type) = stream_index;
+      GetElem(codec_guids_, *stream_type) = codec_guid;
+    }
+    VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << ": stream_index=" << stream_index << " selected=" << selected
+            << " media=" << GetStreamTypeName(*stream_type)
+            << " codec=" << GetCodecName(codec_guid);
   }
 
-  return HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) ||
-         HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO);
+  if (!HasMediaStream(PlatformStreamType::kAudio) &&
+      !HasMediaStream(PlatformStreamType::kVideo)) {
+    return false;
+  }
+  return true;
 }
 
-bool WMFMediaPipeline::ThreadedImpl::ConfigureStream(DWORD stream_index) {
+bool WMFMediaPipeline::ThreadedImpl::ConfigureStream(
+    PlatformStreamType stream_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(source_reader_);
 
-  DCHECK(stream_index == stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] ||
-         stream_index == stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO]);
-  bool is_video = stream_index == stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO];
+  DWORD stream_index = GetElem(stream_indices_, stream_type);
+  bool is_video = (stream_type == PlatformStreamType::kVideo);
 
   Microsoft::WRL::ComPtr<IMFMediaType> new_current_media_type;
   HRESULT hr = MFCreateMediaType(new_current_media_type.GetAddressOf());
@@ -1054,25 +1122,24 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureStream(DWORD stream_index) {
       MF_MT_MAJOR_TYPE, is_video ? MFMediaType_Video : MFMediaType_Audio);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to set media major type.";
+               << " Failed to set media major type hr=0x" << std::hex << hr;
     return false;
   }
 
   hr = new_current_media_type->SetGUID(
-      MF_MT_SUBTYPE,
-      is_video ? MFVideoFormat_YV12 : MFAudioFormat_Float);
+      MF_MT_SUBTYPE, is_video ? MFVideoFormat_YV12 : MFAudioFormat_Float);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to set media subtype hr=" << hr;
+               << " Failed to set media subtype hr=0x" << std::hex << hr;
     return false;
   }
 
-  hr = source_reader_->SetCurrentMediaType(
-    stream_index, NULL, new_current_media_type.Get());
+  hr = source_reader_->SetCurrentMediaType(stream_index, NULL,
+                                           new_current_media_type.Get());
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to set media type hr=" << hr << ". No "
-               << (is_video ? "video" : "audio") << " track?";
+               << " Failed to set media type hr=0x" << std::hex << hr << ". No "
+               << GetStreamTypeName(stream_type) << " track?";
     return false;
   }
 
@@ -1085,7 +1152,7 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureStream(DWORD stream_index) {
                                            media_type.GetAddressOf());
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to obtain media type hr=" << hr;
+               << " Failed to obtain media type hr=0x" << std::hex << hr;
     return false;
   }
 
@@ -1096,24 +1163,55 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureSourceReader() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(source_reader_);
 
-  static const PlatformMediaDataType media_types[] = {
-      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
-      PlatformMediaDataType::PLATFORM_MEDIA_VIDEO};
-  static_assert(base::size(media_types) ==
-                    kPlatformMediaDataTypeCount,
-                "Not all media types chosen to be configured.");
-
-  bool status = false;
-  for (const auto& media_type : media_types) {
-    if (!ConfigureStream(stream_indices_[media_type])) {
-      SetNoMediaStream(media_type);
-    } else {
-      DCHECK(HasMediaStream(media_type));
-      status = true;
+  size_t media_count = 0;
+  bool failed_audio = false;
+  bool failed_video = false;
+  for (PlatformStreamType stream_type : AllStreamTypes()) {
+    if (!HasMediaStream(stream_type))
+      continue;
+    media_count++;
+    if (!ConfigureStream(stream_type)) {
+      SetNoMediaStream(stream_type);
+      switch (stream_type) {
+        case PlatformStreamType::kAudio:
+          failed_audio = true;
+          break;
+        case PlatformStreamType::kVideo:
+          failed_video = true;
+          break;
+      }
     }
   }
+  if (media_count == 0) {
+    // Nothing to play.
+    return false;
+  }
+  if (media_count == 1) {
+    // Single stream that can be either audio or video.
+    return !failed_video && !failed_audio;
+  }
 
-  return status;
+  DCHECK_EQ(media_count, kPlatformStreamTypeCount);
+  if (failed_audio == failed_video) {
+    // Both video and audio are OK or both are failed.
+    return !failed_audio;
+  }
+
+  // We cannot play one of audio, video. Return false if we know that the good
+  // type can be played by Chromium to fallback to it. This way if both audio
+  // and video use open codecs packed into MP4 and Windows does not support one,
+  // then we will play both with Chromium, see VB-81392.
+  if (failed_audio && IsChromiumSuppportedVideo(
+                          GetElem(codec_guids_, PlatformStreamType::kVideo))) {
+    return false;
+  }
+  if (failed_video && IsChromiumSuppportedAudio(
+                          GetElem(codec_guids_, PlatformStreamType::kAudio))) {
+    return false;
+  }
+
+  // Play single video or audio ignoring the failed stream.
+  return true;
 }
 
 base::TimeDelta WMFMediaPipeline::ThreadedImpl::GetDuration() {
@@ -1141,13 +1239,13 @@ int WMFMediaPipeline::ThreadedImpl::GetBitrate(base::TimeDelta duration) {
   int audio_bitrate = 0;
   if (!GetSourceInt32Attribute(MF_PD_AUDIO_ENCODING_BITRATE, audio_bitrate)) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " audio bitrate attribute error is_streaming=" << is_streaming_;
+            << " audio bitrate attribute is unknown";
   }
 
   int video_bitrate = 0;
   if (!GetSourceInt32Attribute(MF_PD_VIDEO_ENCODING_BITRATE, video_bitrate)) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " video bitrate attribute error is_streaming=" << is_streaming_;
+            << " video bitrate attribute is unknown";
   }
 
   const int bitrate = std::max(audio_bitrate + video_bitrate, 0);
@@ -1174,12 +1272,12 @@ bool WMFMediaPipeline::ThreadedImpl::GetStride(int* stride) {
 
   Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO],
+      GetElem(stream_indices_, PlatformStreamType::kVideo),
       media_type.GetAddressOf());
 
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to obtain media type hr=" << hr;
+               << " Failed to obtain media type hr=0x" << std::hex << hr;
     return false;
   }
 
@@ -1188,16 +1286,15 @@ bool WMFMediaPipeline::ThreadedImpl::GetStride(int* stride) {
   hr = MFGetAttributeSize(media_type.Get(), MF_MT_FRAME_SIZE, &width, &height);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to obtain width and height.";
+               << " Failed to obtain width and height hr=0x" << std::hex << hr;
     return false;
   }
 
   LONG stride_long = 0;
-  hr = get_stride_function_(MFVideoFormat_YV12.Data1, width,
-                            &stride_long);
+  hr = get_stride_function_(MFVideoFormat_YV12.Data1, width, &stride_long);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to obtain stride.";
+               << " Failed to obtain stride hr=0x" << std::hex << hr;
     return false;
   }
 
@@ -1214,8 +1311,11 @@ bool GetSourceAttribute(IMFSourceReader* reader,
   HRESULT hr = reader->GetPresentationAttribute(
       static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE), attr, &var);
   if (FAILED(hr)) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " : Received an error hr=" << hr;
+    if (hr != MF_E_ATTRIBUTENOTFOUND) {
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " : IMFSourceReader::GetPresentationAttribute error hr=0x"
+              << std::hex << hr;
+    }
     return false;
   }
   return true;

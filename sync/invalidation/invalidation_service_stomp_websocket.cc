@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/json/json_reader.h"
-#include "base/optional.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "content/public/browser/browser_context.h"
@@ -59,7 +58,7 @@ heart-beat:10000,10000
 constexpr base::TimeDelta kHeartBeatDelay =
     base::TimeDelta::FromMilliseconds(10000);
 constexpr base::TimeDelta kHeartBeatGrace =
-    base::TimeDelta::FromMilliseconds(500);
+    base::TimeDelta::FromMilliseconds(5000);
 
 constexpr char kSubscribeFrame[] = R"(SUBSCRIBE
 id:0
@@ -102,7 +101,7 @@ InvalidationServiceStompWebsocket::InvalidationServiceStompWebsocket(
   handshake_receiver_.set_disconnect_handler(
       base::BindOnce(&InvalidationServiceStompWebsocket::OnMojoPipeDisconnect,
                      base::Unretained(this)));
-  content::BrowserContext::GetDefaultStoragePartition(browser_context)
+  browser_context->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->CreateWebSocket(
           url, {kStomp12Protocol}, net::SiteForCookies(),
@@ -406,9 +405,10 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
                              &server_heart_beats_delay_out))
         return false;
       if (server_heart_beats_delay_out != 0) {
-        base::TimeDelta heart_beats_delay_out = std::max(
-            kHeartBeatDelay,
-            base::TimeDelta::FromMilliseconds(server_heart_beats_delay_out));
+        base::TimeDelta heart_beats_delay_out =
+            std::max(kHeartBeatDelay, base::TimeDelta::FromMilliseconds(
+                                          server_heart_beats_delay_out)) -
+            kHeartBeatGrace;
         heart_beats_out_timer_.Start(
             FROM_HERE, heart_beats_delay_out,
             base::BindRepeating(&InvalidationServiceStompWebsocket::Send,
@@ -460,7 +460,7 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
     }
     body = body.substr(0, body_end);
 
-    base::Optional<base::Value> invalidation = base::JSONReader::Read(body);
+    absl::optional<base::Value> invalidation = base::JSONReader::Read(body);
     if (invalidation)
       client_->OnInvalidation(std::move(*invalidation));
   } else {

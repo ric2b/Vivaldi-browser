@@ -62,11 +62,11 @@ public class BottomControlsCoordinator {
      */
     @SuppressLint("CutPasteId") // Not actually cut and paste since it's View vs ViewGroup.
     public BottomControlsCoordinator(Activity activity, WindowAndroid windowAndroid,
-                                     LayoutManager layoutManager, ResourceManager resourceManager,
-                                     BrowserControlsSizer controlsSizer, FullscreenManager fullscreenManager,
-                                     ScrollingBottomViewResourceFrameLayout root, ThemeColorProvider themeColorProvider,
-                                     BottomControlsContentDelegate contentDelegate,
-                                     ObservableSupplier<Boolean> overlayPanelVisibilitySupplier) {
+            LayoutManager layoutManager, ResourceManager resourceManager,
+            BrowserControlsSizer controlsSizer, FullscreenManager fullscreenManager,
+            ScrollingBottomViewResourceFrameLayout root, ThemeColorProvider themeColorProvider,
+            BottomControlsContentDelegate contentDelegate,
+            ObservableSupplier<Boolean> overlayPanelVisibilitySupplier) {
         PropertyModel model = new PropertyModel(BottomControlsProperties.ALL_KEYS);
 
         ScrollingBottomViewSceneLayer sceneLayer =
@@ -96,6 +96,7 @@ public class BottomControlsCoordinator {
         // BottomControls should update the visibility explicitly if needed.
         setBottomControlsVisible(false);
 
+        sceneLayer.setBrowserControlsSizer(controlsSizer); // Vivaldi
         sceneLayer.setIsVisible(mMediator.isCompositedViewVisible());
         layoutManager.addSceneOverlay(sceneLayer);
 

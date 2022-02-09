@@ -3,6 +3,7 @@
 #include "notes/notes_factory.h"
 
 #include "base/deferred_sequenced_task_runner.h"
+#include "base/files/file_path.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"

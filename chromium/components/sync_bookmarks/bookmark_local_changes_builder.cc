@@ -4,9 +4,11 @@
 
 #include "components/sync_bookmarks/bookmark_local_changes_builder.h"
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -30,14 +32,22 @@ BookmarkLocalChangesBuilder::BookmarkLocalChangesBuilder(
 syncer::CommitRequestDataList BookmarkLocalChangesBuilder::BuildCommitRequests(
     size_t max_entries) const {
   DCHECK(bookmark_tracker_);
+
   const std::vector<const SyncedBookmarkTracker::Entity*>
       entities_with_local_changes =
-          bookmark_tracker_->GetEntitiesWithLocalChanges(max_entries);
-  DCHECK_LE(entities_with_local_changes.size(), max_entries);
+          bookmark_tracker_->GetEntitiesWithLocalChanges(
+              base::FeatureList::IsEnabled(
+                  switches::kSyncBookmarksEnforceLateMaxEntriesToCommit)
+                  ? std::numeric_limits<int>::max()
+                  : max_entries);
 
   syncer::CommitRequestDataList commit_requests;
   for (const SyncedBookmarkTracker::Entity* entity :
        entities_with_local_changes) {
+    if (commit_requests.size() >= max_entries) {
+      break;
+    }
+
     DCHECK(entity);
     DCHECK(entity->IsUnsynced());
     const sync_pb::EntityMetadata* metadata = entity->metadata();
@@ -90,7 +100,8 @@ syncer::CommitRequestDataList BookmarkLocalChangesBuilder::BuildCommitRequests(
       // 2. Bookmarks (maybe ancient legacy bookmarks only?) use/used |name| to
       //    encode the title.
       data->is_folder = node->is_folder();
-      data->unique_position = metadata->unique_position();
+      data->unique_position =
+          syncer::UniquePosition::FromProto(metadata->unique_position());
       // Assign specifics only for the non-deletion case. In case of deletion,
       // EntityData should contain empty specifics to indicate deletion.
       data->specifics = CreateSpecificsFromBookmarkNode(

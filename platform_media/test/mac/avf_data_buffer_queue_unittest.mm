@@ -30,17 +30,17 @@ scoped_refptr<DataBuffer> CreateBuffer(const base::TimeDelta& timestamp,
 class AVFDataBufferQueueTest : public testing::Test {
  public:
   AVFDataBufferQueueTest()
-      : queue_(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO,
+      : queue_(PlatformStreamType::kVideo,
                kCapacity,
-               base::Bind(&AVFDataBufferQueueTest::CapacityAvailable,
-                          base::Unretained(this)),
-               base::Bind(&AVFDataBufferQueueTest::CapacityDepleted,
-                          base::Unretained(this))),
+               base::BindRepeating(&AVFDataBufferQueueTest::CapacityAvailable,
+                                   base::Unretained(this)),
+               base::BindRepeating(&AVFDataBufferQueueTest::CapacityDepleted,
+                                   base::Unretained(this))),
         capacity_available_(false),
         capacity_depleted_(false) {
-    ipc_buffer_.Init(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO);
-    ipc_buffer_.set_reply_cb(
-        base::Bind(&AVFDataBufferQueueTest::OnRead, base::Unretained(this)));
+    ipc_buffer_.Init(PlatformStreamType::kAudio);
+    ipc_buffer_.set_reply_cb(base::BindRepeating(
+        &AVFDataBufferQueueTest::OnRead, base::Unretained(this)));
   }
 
  protected:
@@ -55,7 +55,7 @@ class AVFDataBufferQueueTest : public testing::Test {
   IPCDecodingBuffer ipc_buffer_;
   bool capacity_available_;
   bool capacity_depleted_;
-  base::Optional<MediaDataStatus> last_read_status_;
+  absl::optional<MediaDataStatus> last_read_status_;
 
  private:
   void CapacityAvailable() { capacity_available_ = true; }

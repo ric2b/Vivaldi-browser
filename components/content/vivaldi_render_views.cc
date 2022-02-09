@@ -9,17 +9,18 @@ void RenderViewImpl::OnLoadImageAt(int x, int y) {
   GetWebView()->LoadImageAt(gfx::Point(x, y));
 }
 
-void RenderViewImpl::ApplyVivaldiSpecificPreferences() {
-  if (GetWebView()) {
-    auto renderer_preferences = GetRendererPreferences();
-    GetWebView()->SetImagesEnabled(renderer_preferences.should_show_images);
-    GetWebView()->SetServeResourceFromCacheOnly(
+void RenderViewImpl::DidUpdateRendererPreferences() {
+  blink::WebView* webview = GetWebView();
+  if (webview) {
+    auto renderer_preferences = webview->GetRendererPreferences();
+    webview->SetImagesEnabled(renderer_preferences.should_show_images);
+    webview->SetServeResourceFromCacheOnly(
       renderer_preferences.serve_resources_only_from_cache);
-    GetWebView()->SetPluginsEnabled(
+    webview->SetPluginsEnabled(
       renderer_preferences.should_enable_plugin_content);
-    GetWebView()->SetAllowTabCycleIntoUI(
+    webview->SetAllowTabCycleIntoUI(
         renderer_preferences.allow_tab_cycle_from_webpage_into_ui);
-    GetWebView()->SetAllowAccessKeys(renderer_preferences.allow_access_keys);
+    webview->SetAllowAccessKeys(renderer_preferences.allow_access_keys);
   }
 }
 

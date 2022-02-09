@@ -247,9 +247,12 @@ class XtbHandler(sax.handler.ContentHandler):
     if name == 'translation':
       self.__OnOpenTranslation(attrs.getValue('id'))
     elif name == 'ph':
-      placeholder_text = self.__placeholders.get(attrs.getValue('name'), '')
-      if placeholder_text:
-        self.__text_scraps.append(placeholder_text)
+      # Modify __text_scraps only if <ph> is inside <translation> that is
+      # included into the output.
+      if self.__string_ids:
+        placeholder_text = self.__placeholders.get(attrs.getValue('name'), '')
+        if placeholder_text:
+          self.__text_scraps.append(placeholder_text)
 
   def endElement(self, name):
     popped = self.__element_stack.pop()

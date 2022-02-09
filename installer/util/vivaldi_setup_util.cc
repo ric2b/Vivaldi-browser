@@ -3,9 +3,11 @@
 #include "installer/util/vivaldi_setup_util.h"
 
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/path_service.h"
+#include "base/process/launch.h"
 #include "base/strings/string_util_win.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -45,10 +47,6 @@
 #pragma comment(lib, "comctl32.lib")
 
 namespace vivaldi {
-
-#if !defined(OFFICIAL_BUILD)
-base::FilePath* debug_subprocesses_exe = nullptr;
-#endif
 
 namespace {
 
@@ -346,6 +344,54 @@ base::FilePath SetupExeDirToInstallDir(const base::FilePath& setup_exe_dir) {
 
 }  // namespace
 
+#if !defined(OFFICIAL_BUILD)
+void CheckForDebugSetupCommand(int show_command) {
+  std::string debug_setup;
+  base::Environment::Create()->GetVar(
+      vivaldi::constants::kDebugSetupCommandEnvironment, &debug_setup);
+  if (debug_setup.empty())
+    return;
+  base::CommandLine debug_cmdline =
+      base::CommandLine::FromString(base::UTF8ToWide(debug_setup));
+  // Check if setup.exe is already the debug one.
+  base::FilePath debug_exe = debug_cmdline.GetProgram();
+  base::NormalizeFilePath(debug_exe, &debug_exe);
+  if (base::FilePath::CompareEqualIgnoreCase(debug_exe.value(),
+                                             GetPathOfCurrentExe().value())) {
+    return;
+  }
+
+  // We are called very early befor the global CommandLine instance is
+  // initialized, so do not use CommandLine::ForCurrentProcess().
+  base::CommandLine cmdline =
+      base::CommandLine::FromString(::GetCommandLineW());
+  // The the debug exe about the original one.
+  cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
+                           cmdline.GetProgram());
+  cmdline.SetProgram(debug_exe);
+  cmdline.AppendArguments(debug_cmdline, /*include_program=*/false);
+
+  // Always log verbosely with debug.
+  cmdline.AppendSwitch(installer::switches::kVerboseLogging);
+
+  base::LaunchOptions options;
+  options.wait = true;
+  options.start_hidden = (show_command == SW_HIDE);
+
+  // Remove kDebugSetupCommandEnvironment for the child process.
+  options.environment.emplace(
+      base::UTF8ToWide(vivaldi::constants::kDebugSetupCommandEnvironment),
+      std::wstring());
+
+  base::Process process = base::LaunchProcess(cmdline, options);
+  DWORD exit_code = 255;
+  if (process.IsValid()) {
+    ::GetExitCodeProcess(process.Handle(), &exit_code);
+  }
+  ::ExitProcess(exit_code);
+}
+#endif
+
 bool PrepareSetupConfig(HINSTANCE instance) {
   DCHECK(g_inside_installer_application);
 
@@ -372,7 +418,9 @@ bool PrepareSetupConfig(HINSTANCE instance) {
   g_start_browser_after_install =
       !cmd_line.HasSwitch(installer::switches::kDoNotLaunchChrome);
   bool is_silent_update = cmd_line.HasSwitch(switches::kVivaldiSilentUpdate);
-  if (is_silent_update) {
+  if (is_silent_update && is_update) {
+    // --vsu without --vivaldi-update means to run installation normally, but
+    // make the future update silent.
     g_silent_install = true;
     g_start_browser_after_install = false;
   }
@@ -459,7 +507,7 @@ bool PrepareSetupConfig(HINSTANCE instance) {
 
   // For an existing installation ignore any attempt to change the installation
   // type.
-  base::Optional<vivaldi::InstallType> existing_install_type =
+  absl::optional<vivaldi::InstallType> existing_install_type =
       vivaldi::FindInstallType(options.install_dir);
   if (existing_install_type) {
     if (!is_update) {
@@ -628,7 +676,7 @@ void RestartUpdateNotifier(const installer::InstallerState& installer_state) {
     base::CommandLine update_notifier_command =
         GetCommonUpdateNotifierCommand(exe_dir);
     update_notifier_command.AppendSwitch(vivaldi_update_notifier::kEnable);
-    if (installer_state.system_install()) {
+    if (installer_state.system_install() && !IsInstallSilentUpdate()) {
       // We must not use LaunchNotifierProcess() as the installer is a
       // privileged process at this point and we must start a normal process
       // here.
@@ -636,6 +684,8 @@ void RestartUpdateNotifier(const installer::InstallerState& installer_state) {
                                update_notifier_command.GetArgumentsString(),
                                exe_dir);
     } else {
+      // For system installs with silent updates this starts the notifier as
+      // an elevated process so it can create a timer for the system account.
       LaunchNotifierProcess(update_notifier_command);
     }
   }

@@ -13,9 +13,6 @@ bool GetFixedAcceleratorForCommandId(int command_id, ui::Accelerator* accel) {
   // Accelerators match hardcoded shortcuts in chromium. We have to use these
   // as long as we have no way of defining those ourselves.
   switch (command_id) {
-    case IDC_BACK:
-      *accel = ui::Accelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN);
-      return true;
     case IDC_CONTENT_CONTEXT_UNDO:
       *accel = ui::Accelerator(ui::VKEY_Z, ui::EF_CONTROL_DOWN);
       return true;
@@ -31,10 +28,6 @@ bool GetFixedAcceleratorForCommandId(int command_id, ui::Accelerator* accel) {
     case IDC_CONTENT_CONTEXT_PASTE:
       *accel = ui::Accelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN);
       return true;
-    case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
-      *accel =
-          ui::Accelerator(ui::VKEY_I, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN);
-      return true;
     case IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE:
       *accel = ui::Accelerator();
       return true;
@@ -47,22 +40,14 @@ bool GetFixedAcceleratorForCommandId(int command_id, ui::Accelerator* accel) {
     case IDC_CONTENT_CONTEXT_ROTATECW:
       *accel = ui::Accelerator(ui::VKEY_OEM_6, ui::EF_CONTROL_DOWN);
       return true;
-    case IDC_FORWARD:
-      *accel = ui::Accelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN);
-      return true;
-    case IDC_PRINT:
-      *accel = ui::Accelerator(ui::VKEY_P, ui::EF_CONTROL_DOWN);
-      return true;
-    case IDC_RELOAD:
-      *accel = ui::Accelerator(ui::VKEY_R, ui::EF_CONTROL_DOWN);
-      return true;
-    case IDC_CONTENT_CONTEXT_SAVEAVAS:
-    case IDC_SAVE_PAGE:
-      *accel = ui::Accelerator(ui::VKEY_S, ui::EF_CONTROL_DOWN);
-      return true;
-    case IDC_VIEW_SOURCE:
-      *accel = ui::Accelerator(ui::VKEY_U, ui::EF_CONTROL_DOWN);
-      return true;
+    // This shortcut is for Save As for media (video etc), but it (the shortcut)
+    // will when activated trigger the regular page save action while the menu
+    // entry will trigger the media save action. So I am disabling this shortcut
+    // in the menu for now as it is wrong (same behaviour in chrome and viv).
+    // https://www.w3schools.com/html/html5_video.asp has simple test.
+    //case IDC_CONTENT_CONTEXT_SAVEAVAS:
+    //  *accel = ui::Accelerator(ui::VKEY_S, ui::EF_CONTROL_DOWN);
+    //  return true;
     default:
       return false;
   }

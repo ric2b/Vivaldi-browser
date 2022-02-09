@@ -72,7 +72,8 @@ class TabbedNavigationBarColorController implements VrModeObserver {
         mWindow = window;
         mRootView = (ViewGroup) mWindow.getDecorView().getRootView();
         mResources = mRootView.getResources();
-        mDefaultScrimColor = ApiCompatibilityUtils.getColor(mResources, R.color.black_alpha_65);
+        mDefaultScrimColor =
+                ApiCompatibilityUtils.getColor(mResources, R.color.default_scrim_color);
 
         // If we're not using a light navigation bar, it will always be the same dark color so
         // there's no need to register observers and manipulate coloring.
@@ -167,7 +168,7 @@ class TabbedNavigationBarColorController implements VrModeObserver {
 
         boolean forceDarkNavigation;
         if (DeviceClassManager.enableAccessibilityLayout()
-                || TabUiFeatureUtilities.isGridTabSwitcherEnabled()) {
+                || TabUiFeatureUtilities.isGridTabSwitcherEnabled(mRootView.getContext())) {
             forceDarkNavigation = mTabModelSelector.isIncognitoSelected();
         } else {
             forceDarkNavigation = mTabModelSelector.isIncognitoSelected() && !overviewVisible;
@@ -197,6 +198,9 @@ class TabbedNavigationBarColorController implements VrModeObserver {
      * @param fraction The scrim fraction in range [0, 1].
      */
     public void setNavigationBarScrimFraction(float fraction) {
+        // Note(david@vivaldi.com): The navigation bar color depends on the tab theme and the
+        // system theme. We don't change it here and things will look much smoother.
+        if (ChromeApplicationImpl.isVivaldi()) return;
         mNavigationBarScrimFraction = fraction;
         mWindow.setNavigationBarColor(
                 applyCurrentScrimToColor(getNavigationBarColor(mForceDarkNavigationBarColor)));

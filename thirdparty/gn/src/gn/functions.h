@@ -328,14 +328,6 @@ Value RunSetDefaultToolchain(Scope* scope,
                              const std::vector<Value>& args,
                              Err* err);
 
-extern const char kSetSourcesAssignmentFilter[];
-extern const char kSetSourcesAssignmentFilter_HelpShort[];
-extern const char kSetSourcesAssignmentFilter_Help[];
-Value RunSetSourcesAssignmentFilter(Scope* scope,
-                                    const FunctionCallNode* function,
-                                    const std::vector<Value>& args,
-                                    Err* err);
-
 extern const char kSharedLibrary[];
 extern const char kSharedLibrary_HelpShort[];
 extern const char kSharedLibrary_Help[];
@@ -596,7 +588,7 @@ class NonNestableBlock {
   const char* type_description_;
 
   // Set to true when the key is added to the scope so we don't try to
-  // delete nonexistant keys which will cause assertions.
+  // delete nonexistent keys which will cause assertions.
   bool key_added_;
 };
 

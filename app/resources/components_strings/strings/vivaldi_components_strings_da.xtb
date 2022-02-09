@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Fortsæt</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kører netværksdiagnosticering<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Underretninger</translation>
+<translation id="2491414235131909199">Denne side er blokeret af en udvidelse</translation>
 <translation id="2501278716633472235">Gå tilbage</translation>
 <translation id="2539524384386349900">Registrer</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldigt svar.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Du bør ikke indtaste følsomme oplysninger på dette website (f.eks. adgangskoder eller kreditkortoplysninger), da de kan blive stjålet af hackere.</translation>
 <translation id="5869405914158311789">Der kan ikke oprettes forbindelse til dette website</translation>
 <translation id="5932224571077948991">Websitet viser påtrængende eller vildledende reklamer</translation>
-<translation id="5990559369517809815">Anmodninger til serveren er blokeret af en udvidelse.</translation>
 <translation id="6051221802930200923">Du kan ikke besøge <ph name="SITE" /> lige nu, da websitet bruger certifikatlåsning. Netværksfejl og angreb er normalt midlertidige, så siden vil sandsynligvis fungere igen senere.</translation>
 <translation id="6146055958333702838">Kontrollér eventuelle kabler, og genstart alle routere, modemmer eller andre
     netværksenheder, du bruger.</translation>

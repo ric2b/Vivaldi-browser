@@ -10,10 +10,11 @@
 
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
-#include "base/optional.h"
 #include "base/time/time.h"
+#include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "net/nqe/effective_connection_type.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace optimization_guide {
@@ -29,6 +30,7 @@ extern const base::Feature kOptimizationGuideModelDownloading;
 extern const base::Feature kPageContentAnnotations;
 extern const base::Feature kPageTextExtraction;
 extern const base::Feature kLoadModelFileForEachExecution;
+extern const base::Feature kPushNotifications;
 
 // The grace period duration for how long to give outstanding page text dump
 // requests to respond after DidFinishLoad.
@@ -95,6 +97,9 @@ bool IsRemoteFetchingForAnonymousDataConsentEnabled();
 // enabled.
 bool IsRemoteFetchingExplicitlyAllowedForPerformanceInfo();
 
+// Returns true if the feature to use push notifications is enabled.
+bool IsPushNotificationsEnabled();
+
 // The maximum data byte size for a server-provided bloom filter. This is
 // a client-side safety limit for RAM use in case server sends too large of
 // a bloom filter.
@@ -103,7 +108,7 @@ int MaxServerBloomFilterByteSize();
 // Maximum effective connection type at which hints can be fetched for
 // navigations in real-time. Returns null if the hints fetching for navigations
 // is disabled.
-base::Optional<net::EffectiveConnectionType>
+absl::optional<net::EffectiveConnectionType>
 GetMaxEffectiveConnectionTypeForNavigationHintsFetch();
 
 // Returns the duration of the time window before hints expiration during which
@@ -186,10 +191,6 @@ base::TimeDelta PredictionModelFetchRetryDelay();
 // refresh models.
 base::TimeDelta PredictionModelFetchInterval();
 
-// Returns a set of external Android app packages whose predictions have been
-// approved for fetching from the remote Optimization Guide Service.
-base::flat_set<std::string> ExternalAppPackageNamesApprovedForFetch();
-
 // Returns a set of field trial name hashes that can be sent in the request to
 // the remote Optimization Guide Service if the client is in one of the
 // specified field trials.
@@ -214,6 +215,10 @@ bool ShouldWriteContentAnnotationsToHistoryService();
 // Whether the model files that use |OptimizationTargetModelExecutor| should be
 // loaded for each execution, and then unloaded once complete.
 bool LoadModelFileForEachExecution();
+
+// The time to wait beyond the onload event before sending the hints request for
+// link predictions.
+base::TimeDelta GetOnloadDelayForHintsFetching();
 
 }  // namespace features
 }  // namespace optimization_guide

@@ -36,7 +36,7 @@
 #include <ctime>
 #include <memory>
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 struct Appcast;
 
@@ -108,8 +108,9 @@ base::Process RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
 // DownloadUpdate().
 void CleanDownloadLeftovers();
 
-std::wstring GetExeDirHash(bool base64);
+// Get unique installation hash. Return an empty string on errors.
+std::wstring GetInstallHash(bool for_task_scheduler);
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_UPDATEDOWNLOADER_H_

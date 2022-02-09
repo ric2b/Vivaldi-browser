@@ -470,8 +470,7 @@ Tool variables
         {{target_output_name}}, {{output_extension}} and {{output_dir}} allows
         the target to override these values.
           outputs = [
-            "{{output_dir}}/{{target_output_name}}"
-                "{{output_extension}}",
+            "{{output_dir}}/{{target_output_name}}{{output_extension}}",
             "{{output_dir}}/{{target_output_name}}.lib",
           ]
 
@@ -603,6 +602,11 @@ Tool variables
         {{target_output_name}}, this is not affected by the "output_prefix" in
         the tool or the "output_name" set on the target.
 
+    {{label_no_toolchain}}
+        The label of the current target, never including the toolchain
+        (otherwise, this is identical to {{label}}). This is used as the module
+        name when using .modulemap files.
+
     {{output}}
         The relative path and name of the output(s) of the current build step.
         If there is more than one output, this will expand to a list of all of
@@ -641,6 +645,13 @@ Tool variables
         Defines will be prefixed by "-D" and include directories will be
         prefixed by "-I" (these work with Posix tools as well as Microsoft
         ones).
+
+    {{module_deps}}
+    {{module_deps_no_self}}
+        Strings that correspond to the flags necessary to depend upon the Clang
+        modules referenced by the current target. The "_no_self" version doesn't
+        include the module for the current target, and can be used to compile
+        the pcm itself.
 
     {{source}}
         The relative path and name of the current input file.
@@ -781,7 +792,7 @@ Tool variables
 
   The Swift tool has multiple input and outputs. It must have exactly one
   output of .swiftmodule type, but can have one or more object file outputs,
-  in addition to other type of ouputs. The following expansions are available:
+  in addition to other type of outputs. The following expansions are available:
 
     {{module_name}}
         Expands to the string representing the module name of target under
@@ -842,14 +853,12 @@ Separate linking and dependencies for shared libraries
       command = "..."
       outputs = [
         "{{output_dir}}/{{target_output_name}}{{output_extension}}",
-        "{{output_dir}}/{{target_output_name}}"
-            "{{output_extension}}.TOC",
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC",
       ]
       link_output =
         "{{output_dir}}/{{target_output_name}}{{output_extension}}"
       depend_output =
-        "{{output_dir}}/{{target_output_name}}"
-            "{{output_extension}}.TOC"
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC"
       restat = true
     }
 

@@ -27,9 +27,9 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
-import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -160,7 +160,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
             if (!service.isLoaded()) service.load();
         }
         int[] ids = getDelegate().getAllSearchWidgetIds();
-        LocaleManager.getInstance().recordLocaleBasedSearchWidgetMetrics(
+        AppHooks.get().getLocaleManager().recordLocaleBasedSearchWidgetMetrics(
                 ids != null && ids.length > 0);
     }
 
@@ -415,7 +415,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
         if (ChromeApplicationImpl.isVivaldi()) return true;
         boolean freIsNotNecessary = !FirstRunFlowSequencer.checkIfFirstRunIsNecessary(false, false);
         boolean noNeedToCheckForSearchDialog =
-                !LocaleManager.getInstance().needToCheckForSearchEnginePromo();
+                !AppHooks.get().getLocaleManager().needToCheckForSearchEnginePromo();
         return freIsNotNecessary && noNeedToCheckForSearchDialog;
     }
 

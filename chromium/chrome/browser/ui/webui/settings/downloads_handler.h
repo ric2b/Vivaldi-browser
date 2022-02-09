@@ -5,9 +5,6 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_DOWNLOADS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_DOWNLOADS_HANDLER_H_
 
-#include <memory>
-#include <vector>
-
 #include "base/macros.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
@@ -51,6 +48,7 @@ class DownloadsHandler : public SettingsPageUIHandler,
   void FileSelected(const base::FilePath& path,
                     int index,
                     void* params) override;
+  void FileSelectionCanceled(void* params) override;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Callback for the "getDownloadLocationText" message.  Converts actual

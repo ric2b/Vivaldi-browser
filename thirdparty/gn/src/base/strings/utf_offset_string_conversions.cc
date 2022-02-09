@@ -228,7 +228,7 @@ bool UTF8ToUTF16WithAdjustments(
 }
 
 std::u16string UTF8ToUTF16WithAdjustments(
-    const std::string_view& utf8,
+    std::string_view utf8,
     base::OffsetAdjuster::Adjustments* adjustments) {
   std::u16string result;
   UTF8ToUTF16WithAdjustments(utf8.data(), utf8.length(), &result, adjustments);
@@ -236,7 +236,7 @@ std::u16string UTF8ToUTF16WithAdjustments(
 }
 
 std::u16string UTF8ToUTF16AndAdjustOffsets(
-    const std::string_view& utf8,
+    std::string_view utf8,
     std::vector<size_t>* offsets_for_adjustment) {
   for (size_t& offset : *offsets_for_adjustment) {
     if (offset > utf8.length())
@@ -249,7 +249,7 @@ std::u16string UTF8ToUTF16AndAdjustOffsets(
 }
 
 std::string UTF16ToUTF8AndAdjustOffsets(
-    const std::u16string_view& utf16,
+    std::u16string_view utf16,
     std::vector<size_t>* offsets_for_adjustment) {
   for (size_t& offset : *offsets_for_adjustment) {
     if (offset > utf16.length())

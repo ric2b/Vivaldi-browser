@@ -85,7 +85,7 @@ void VivaldiTranslateLanguageList::SetListInChromium(
       translate::TranslateDownloadManager::GetInstance()->language_list();
   if (language_list) {
     std::vector<std::string> lang_list;
-    for (const auto& value : list) {
+    for (const auto& value : list.GetList()) {
       lang_list.push_back(value.GetString());
     }
     if (lang_list.size()) {
@@ -154,9 +154,8 @@ void VivaldiTranslateLanguageList::StartDownload() {
         }
       })");
 
-  auto url_loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(context_)
-          ->GetURLLoaderFactoryForBrowserProcess();
+  auto url_loader_factory = context_->GetDefaultStoragePartition()
+                                ->GetURLLoaderFactoryForBrowserProcess();
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                  traffic_annotation);
@@ -177,7 +176,7 @@ void VivaldiTranslateLanguageList::OnListDownloaded(
                  << " failed with error " << url_loader_->NetError();
   } else {
     base::JSONParserOptions options = base::JSON_ALLOW_TRAILING_COMMAS;
-    base::Optional<base::Value> json =
+    absl::optional<base::Value> json =
         base::JSONReader::Read(*response_body, options);
     if (json) {
       std::vector<base::Value> args;

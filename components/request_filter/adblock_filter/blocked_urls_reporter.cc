@@ -109,8 +109,8 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
       FROM_HERE,
       base::TimeDelta::FromSeconds(kSecondsBetweenNotifications) -
           time_since_last_notification,
-      base::Bind(&BlockedUrlsReporter::NotifyOfNewBlockedUrls,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&BlockedUrlsReporter::NotifyOfNewBlockedUrls,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void BlockedUrlsReporter::AddToBlockedDomains(RuleGroup group,

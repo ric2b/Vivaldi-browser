@@ -178,7 +178,7 @@ vivaldi::sync::DataType ToVivaldiSyncDataType(
   }
 }
 
-base::Optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
+absl::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
     vivaldi::sync::DataType data_type) {
   switch (data_type) {
     case vivaldi::sync::DataType::DATA_TYPE_BOOKMARKS:
@@ -197,7 +197,7 @@ base::Optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
       return syncer::UserSelectableType::kNotes;
     default:
       NOTREACHED();
-      return base::nullopt;
+      return absl::nullopt;
   }
 }
 
@@ -299,7 +299,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
           ? sync_manager->GetUserSettings()->IsEncryptEverythingEnabled()
           : false;
   engine_data.uses_encryption_password =
-      sync_manager->GetUserSettings()->IsUsingSecondaryPassphrase();
+      sync_manager->GetUserSettings()->IsUsingExplicitPassphrase();
   engine_data.needs_decryption_password =
       sync_manager->GetUserSettings()
           ->IsPassphraseRequiredForPreferredDataTypes();

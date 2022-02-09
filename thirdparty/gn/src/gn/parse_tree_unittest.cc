@@ -34,6 +34,7 @@ TEST(ParseTree, Accessor) {
   Err err;
   Value result = accessor.Execute(setup.scope(), &err);
   EXPECT_TRUE(err.has_error());
+  err = Err();
   EXPECT_EQ(Value::NONE, result.type());
 
   // Define a as a Scope. It should still fail because b isn't defined.
@@ -94,11 +95,18 @@ TEST(ParseTree, SubscriptedAccess) {
 
   Value invalid1 = setup.ExecuteExpression("scope[second_element_idx]", &err);
   EXPECT_TRUE(err.has_error());
+  err = Err();
   EXPECT_EQ(invalid1.type(), Value::NONE);
 
   Value invalid2 = setup.ExecuteExpression("list[bar_key]", &err);
   EXPECT_TRUE(err.has_error());
+  err = Err();
   EXPECT_EQ(invalid2.type(), Value::NONE);
+
+  Value invalid3 = setup.ExecuteExpression("scope[\"baz\"]", &err);
+  EXPECT_TRUE(err.has_error());
+  err = Err();
+  EXPECT_EQ(invalid3.type(), Value::NONE);
 }
 
 TEST(ParseTree, BlockUnusedVars) {

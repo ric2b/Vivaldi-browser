@@ -12,9 +12,9 @@
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/gmock_move_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -27,6 +27,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/safe_browsing/content/browser/client_side_detection_service.h"
 #include "components/safe_browsing/content/browser/client_side_model_loader.h"
+#include "components/safe_browsing/content/browser/client_side_phishing_model.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom-shared.h"
 #include "components/safe_browsing/core/browser/sync/sync_utils.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -98,6 +99,7 @@ class MockSafeBrowsingTokenFetcher : public SafeBrowsingTokenFetcher {
   ~MockSafeBrowsingTokenFetcher() override = default;
 
   MOCK_METHOD1(Start, void(Callback));
+  MOCK_METHOD1(OnInvalidAccessToken, void(const std::string&));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSafeBrowsingTokenFetcher);
@@ -119,18 +121,6 @@ MATCHER(CallbackIsNull, "") {
   return arg.is_null();
 }
 
-class MockModelLoader : public ModelLoader {
- public:
-  MockModelLoader() : ModelLoader(base::RepeatingClosure(), nullptr, false) {}
-  ~MockModelLoader() override = default;
-
-  MOCK_METHOD1(ScheduleFetch, void(int64_t));
-  MOCK_METHOD0(CancelFetcher, void());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockModelLoader);
-};
-
 class MockClientSideDetectionService : public ClientSideDetectionService {
  public:
   MockClientSideDetectionService() : ClientSideDetectionService(nullptr) {}
@@ -145,6 +135,8 @@ class MockClientSideDetectionService : public ClientSideDetectionService {
   MOCK_METHOD1(IsInCache, bool(const GURL&));
   MOCK_METHOD0(OverPhishingReportLimit, bool());
   MOCK_METHOD0(GetModelStr, std::string());
+  MOCK_METHOD0(GetModelSharedMemoryRegion, base::ReadOnlySharedMemoryRegion());
+  MOCK_METHOD0(GetModelType, CSDModelType());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockClientSideDetectionService);
@@ -203,7 +195,15 @@ class FakePhishingDetector : public mojom::PhishingDetector {
   }
 
   // mojom::PhishingDetector
-  void SetPhishingModel(const std::string& model) override { model_ = model; }
+  void SetPhishingModel(const std::string& model, base::File file) override {
+    model_ = model;
+  }
+
+  // mojom::PhishingDetector
+  void SetPhishingFlatBufferModel(base::ReadOnlySharedMemoryRegion region,
+                                  base::File file) override {
+    region_ = std::move(region);
+  }
 
   // mojom::PhishingDetector
   void StartPhishingDetection(
@@ -233,10 +233,15 @@ class FakePhishingDetector : public mojom::PhishingDetector {
 
   void CheckModel(const std::string& model) { EXPECT_EQ(model, model_); }
 
+  void CheckModel(base::ReadOnlySharedMemoryRegion region) {
+    EXPECT_EQ(region.GetGUID(), region_.GetGUID());
+  }
+
   void Reset() {
     phishing_detection_started_ = false;
     url_ = GURL();
     model_ = "";
+    region_ = base::ReadOnlySharedMemoryRegion();
   }
 
  private:
@@ -244,6 +249,7 @@ class FakePhishingDetector : public mojom::PhishingDetector {
   bool phishing_detection_started_ = false;
   GURL url_;
   std::string model_ = "";
+  base::ReadOnlySharedMemoryRegion region_ = base::ReadOnlySharedMemoryRegion();
 
   DISALLOW_COPY_AND_ASSIGN(FakePhishingDetector);
 };
@@ -273,7 +279,8 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
     if (is_incognito_) {
       auto incognito_web_contents =
           content::WebContentsTester::CreateTestWebContents(
-              profile()->GetPrimaryOTRProfile(), nullptr);
+              profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+              nullptr);
       SetContents(std::move(incognito_web_contents));
     }
 
@@ -283,8 +290,7 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
     InitTestApi();
 
     // Inject service classes.
-    csd_service_ =
-        std::make_unique<StrictMock<MockClientSideDetectionService>>();
+    csd_service_ = std::make_unique<MockClientSideDetectionService>();
     database_manager_ = new StrictMock<MockSafeBrowsingDatabaseManager>();
     ui_manager_ = new StrictMock<MockSafeBrowsingUIManager>(
         // TODO(crbug/925153): Port consumers of the SafeBrowsingService to
@@ -307,6 +313,8 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
         std::make_unique<StrictMock<MockSafeBrowsingTokenFetcher>>();
     raw_token_fetcher_ = token_fetcher.get();
     csd_host_->set_token_fetcher_for_testing(std::move(token_fetcher));
+
+    testing::DefaultValue<CSDModelType>::Set(CSDModelType::kProtobuf);
   }
 
   void TearDown() override {
@@ -384,9 +392,9 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
 
  protected:
   std::unique_ptr<ClientSideDetectionHost> csd_host_;
-  std::unique_ptr<StrictMock<MockClientSideDetectionService>> csd_service_;
+  std::unique_ptr<MockClientSideDetectionService> csd_service_;
   scoped_refptr<StrictMock<MockSafeBrowsingUIManager> > ui_manager_;
-  scoped_refptr<StrictMock<MockSafeBrowsingDatabaseManager> > database_manager_;
+  scoped_refptr<StrictMock<MockSafeBrowsingDatabaseManager>> database_manager_;
   FakePhishingDetector fake_phishing_detector_;
   StrictMock<MockSafeBrowsingTokenFetcher>* raw_token_fetcher_ = nullptr;
   base::SimpleTestTickClock clock_;
@@ -699,6 +707,55 @@ TEST_F(ClientSideDetectionHostTest,
 
   ASSERT_FALSE(cb.is_null());
   std::move(cb).Run("fake_access_token");
+}
+
+TEST_F(ClientSideDetectionHostTest,
+       PhishingDetectionDoneCalledTwiceShouldSucceed) {
+  SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
+  SetFeatures(
+      /*enable_features*/ {kClientSideDetectionWithToken},
+      /*disable_features*/ {});
+
+  ClientPhishingRequest verdict;
+  verdict.set_url("http://example.com/");
+  verdict.set_client_score(1.0f);
+  verdict.set_is_phishing(true);
+
+  // Set up mock call to csd service.
+  EXPECT_CALL(*csd_service_,
+              SendClientReportPhishingRequest(PartiallyEqualVerdict(verdict), _,
+                                              "fake_access_token_1"))
+      .Times(1);
+
+  // Set up mock call to csd service.
+  EXPECT_CALL(*csd_service_,
+              SendClientReportPhishingRequest(PartiallyEqualVerdict(verdict), _,
+                                              "fake_access_token_2"))
+      .Times(1);
+
+  // Set up mock call to token fetcher.
+  SafeBrowsingTokenFetcher::Callback cb;
+  EXPECT_CALL(*raw_token_fetcher_, Start(_))
+      .Times(1)
+      .WillRepeatedly(MoveArg<0>(&cb));
+
+  // Make the call.
+  PhishingDetectionDone(verdict.SerializeAsString());
+
+  // Wait for token fetcher to be called.
+  EXPECT_TRUE(Mock::VerifyAndClear(raw_token_fetcher_));
+
+  ASSERT_FALSE(cb.is_null());
+  std::move(cb).Run("fake_access_token_1");
+
+  // Make the call again.
+  EXPECT_CALL(*raw_token_fetcher_, Start(_))
+      .Times(1)
+      .WillRepeatedly(MoveArg<0>(&cb));
+  PhishingDetectionDone(verdict.SerializeAsString());
+  EXPECT_TRUE(Mock::VerifyAndClear(raw_token_fetcher_));
+  ASSERT_FALSE(cb.is_null());
+  std::move(cb).Run("fake_access_token_2");
 }
 
 TEST_F(ClientSideDetectionHostIncognitoTest,
@@ -1098,9 +1155,21 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectionDuration) {
                 .min);
 }
 
+TEST_F(ClientSideDetectionHostTest, TestSendFlatBufferModelToRenderFrame) {
+  base::MappedReadOnlyRegion mapped_region =
+      base::ReadOnlySharedMemoryRegion::Create(10);
+  EXPECT_CALL(*csd_service_, GetModelType())
+      .WillRepeatedly(Return(CSDModelType::kFlatbuffer));
+  EXPECT_CALL(*csd_service_, GetModelSharedMemoryRegion())
+      .WillRepeatedly(
+          Return(testing::ByMove(mapped_region.region.Duplicate())));
+  csd_host_->SendModelToRenderFrame();
+  base::RunLoop().RunUntilIdle();
+  fake_phishing_detector_.CheckModel(mapped_region.region.Duplicate());
+  fake_phishing_detector_.Reset();
+}
+
 TEST_F(ClientSideDetectionHostTest, TestSendModelToRenderFrame) {
-  StrictMock<MockModelLoader> loader;
-  loader.SetModelStrForTesting("standard");
   EXPECT_CALL(*csd_service_, GetModelStr()).WillRepeatedly(Return("standard"));
   csd_host_->SendModelToRenderFrame();
   base::RunLoop().RunUntilIdle();

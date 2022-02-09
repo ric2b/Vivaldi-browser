@@ -8,7 +8,7 @@
 
 LibFile::LibFile(const SourceFile& source_file) : source_file_(source_file) {}
 
-LibFile::LibFile(const std::string_view& lib_name)
+LibFile::LibFile(std::string_view lib_name)
     : name_(lib_name.data(), lib_name.size()) {
   DCHECK(!lib_name.empty());
 }

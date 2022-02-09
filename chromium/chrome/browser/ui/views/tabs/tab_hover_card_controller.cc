@@ -209,6 +209,9 @@ void TabHoverCardController::UpdateHoverCard(
   // then when the fade timer elapses we won't incorrectly try to fade in on the
   // wrong tab.
   if (target_tab_ != tab) {
+    target_tab_observation_.Reset();
+    if (tab)
+      target_tab_observation_.Observe(tab);
     target_tab_ = tab;
     delayed_show_timer_.Stop();
   }
@@ -316,7 +319,7 @@ void TabHoverCardController::ShowHoverCard(bool is_initial,
                                            const Tab* intended_tab) {
   // Make sure the hover card isn't accidentally shown if it's already visible
   // or if the anchor is gone or changed.
-  if (hover_card_ || target_tab_ != intended_tab)
+  if (hover_card_ || !target_tab_ || target_tab_ != intended_tab)
     return;
 
   CreateHoverCard(target_tab_);
@@ -324,7 +327,7 @@ void TabHoverCardController::ShowHoverCard(bool is_initial,
   MaybeStartThumbnailObservation(target_tab_, is_initial);
 
   if (!is_initial || !UseAnimations()) {
-    metrics_->CardFullyVisibleOnTab(target_tab_, target_tab_->IsActive());
+    OnCardFullyVisible();
     hover_card_->GetWidget()->Show();
     return;
   }
@@ -362,15 +365,22 @@ bool TabHoverCardController::UseAnimations() {
 }
 
 void TabHoverCardController::OnViewIsDeleting(views::View* observed_view) {
-  DCHECK_EQ(hover_card_, observed_view);
-  hover_card_observation_.Reset();
-  event_sniffer_.reset();
-  slide_progressed_subscription_ = base::CallbackListSubscription();
-  slide_complete_subscription_ = base::CallbackListSubscription();
-  fade_complete_subscription_ = base::CallbackListSubscription();
-  slide_animator_.reset();
-  fade_animator_.reset();
-  hover_card_ = nullptr;
+  if (hover_card_ == observed_view) {
+    hover_card_observation_.Reset();
+    event_sniffer_.reset();
+    slide_progressed_subscription_ = base::CallbackListSubscription();
+    slide_complete_subscription_ = base::CallbackListSubscription();
+    fade_complete_subscription_ = base::CallbackListSubscription();
+    slide_animator_.reset();
+    fade_animator_.reset();
+    hover_card_ = nullptr;
+  } else if (target_tab_ == observed_view) {
+    UpdateHoverCard(nullptr, TabController::HoverCardUpdateType::kTabRemoved);
+    // These postconditions should always be met after calling
+    // UpdateHoverCard(nullptr, ...)
+    DCHECK(!target_tab_);
+    DCHECK(!target_tab_observation_.IsObserving());
+  }
 }
 
 size_t TabHoverCardController::GetTabCount() const {
@@ -379,10 +389,6 @@ size_t TabHoverCardController::GetTabCount() const {
 
 bool TabHoverCardController::ArePreviewsEnabled() const {
   return static_cast<bool>(thumbnail_observer_);
-}
-
-bool TabHoverCardController::HasPreviewImage() const {
-  return ArePreviewsEnabled() && hover_card_ && !waiting_for_preview_;
 }
 
 views::Widget* TabHoverCardController::GetHoverCardWidget() {
@@ -511,6 +517,12 @@ const views::View* TabHoverCardController::GetTargetAnchorView() const {
   return hover_card_->GetAnchorView();
 }
 
+void TabHoverCardController::OnCardFullyVisible() {
+  const bool has_preview =
+      ArePreviewsEnabled() && !target_tab_->IsActive() && !waiting_for_preview_;
+  metrics_->CardFullyVisibleOnTab(target_tab_, has_preview);
+}
+
 void TabHoverCardController::OnFadeAnimationEnded(
     views::WidgetFadeAnimator* animator,
     views::WidgetFadeAnimator::FadeType fade_type) {
@@ -518,7 +530,7 @@ void TabHoverCardController::OnFadeAnimationEnded(
   // just as we've decided to fade out, so check for null.
   // See: crbug.com/1192451
   if (target_tab_ && fade_type == views::WidgetFadeAnimator::FadeType::kFadeIn)
-    metrics_->CardFullyVisibleOnTab(target_tab_, target_tab_->IsActive());
+    OnCardFullyVisible();
 
   metrics_->CardFadeComplete();
   if (fade_type == views::WidgetFadeAnimator::FadeType::kFadeOut)
@@ -545,7 +557,7 @@ void TabHoverCardController::OnSlideAnimationComplete(
   if (waiting_for_preview_)
     hover_card_->ClearPreviewImage();
 
-  metrics_->CardFullyVisibleOnTab(target_tab_, target_tab_->IsActive());
+  OnCardFullyVisible();
 }
 
 void TabHoverCardController::OnPreviewImageAvaialble(

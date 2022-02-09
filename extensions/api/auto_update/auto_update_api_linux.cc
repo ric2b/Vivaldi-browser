@@ -43,4 +43,13 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }
 
+ExtensionFunction::ResponseAction
+AutoUpdateGetUpdateStatusFunction::Run() {
+  return RespondNow(Error("Not implemented"));
+}
+
+bool AutoUpdateHasAutoUpdatesFunction::HasAutoUpdates() {
+  return false;
+}
+
 }  // namespace extensions

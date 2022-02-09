@@ -58,7 +58,7 @@ Examples
 
 int RunLs(const std::vector<std::string>& args) {
   if (args.size() == 0) {
-    Err(Location(), "You're holding it wrong.",
+    Err(Location(), "Unknown command format. See \"gn help ls\"",
         "Usage: \"gn ls <build dir> [<label_pattern>]*\"")
         .PrintToStdout();
     return 1;

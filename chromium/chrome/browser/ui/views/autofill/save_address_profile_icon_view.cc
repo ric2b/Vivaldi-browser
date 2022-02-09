@@ -8,6 +8,7 @@
 #include "chrome/browser/ui/autofill/save_address_profile_icon_controller.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/autofill/save_address_profile_view.h"
+#include "chrome/browser/ui/views/autofill/update_address_profile_view.h"
 #include "components/vector_icons/vector_icons.h"
 
 namespace autofill {
@@ -27,14 +28,16 @@ views::BubbleDialogDelegate* SaveAddressProfileIconView::GetBubble() const {
   SaveAddressProfileIconController* controller = GetController();
   if (!controller)
     return nullptr;
-  return static_cast<autofill::SaveAddressProfileView*>(
-      controller->GetSaveBubbleView());
+
+  if (controller->IsSaveBubble()) {
+    return static_cast<autofill::SaveAddressProfileView*>(
+        controller->GetBubbleView());
+  }
+  return static_cast<autofill::UpdateAddressProfileView*>(
+      controller->GetBubbleView());
 }
 
 void SaveAddressProfileIconView::UpdateImpl() {
-  if (!GetWebContents())
-    return;
-
   SaveAddressProfileIconController* controller = GetController();
   bool command_enabled =
       SetCommandEnabled(controller && controller->IsBubbleActive());
@@ -43,8 +46,10 @@ void SaveAddressProfileIconView::UpdateImpl() {
 
 std::u16string SaveAddressProfileIconView::GetTextForTooltipAndAccessibleName()
     const {
-  // TODO(crbug.com/1167060): Update upon having final mocks.
-  return std::u16string();
+  SaveAddressProfileIconController* controller = GetController();
+  if (!controller)
+    return std::u16string();
+  return controller->GetPageActionIconTootip();
 }
 
 void SaveAddressProfileIconView::OnExecuting(

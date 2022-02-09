@@ -42,7 +42,7 @@ const char kShellValid[0x80] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0};
 // clang-format on
 
-size_t EscapeStringToString_Space(const std::string_view& str,
+size_t EscapeStringToString_Space(std::string_view str,
                                   const EscapeOptions& options,
                                   char* dest,
                                   bool* needed_quoting) {
@@ -76,7 +76,7 @@ inline bool ShouldEscapeCharForNinja(char ch) {
   return ch == '$' || ch == ' ' || ch == ':';
 }
 
-size_t EscapeStringToString_Ninja(const std::string_view& str,
+size_t EscapeStringToString_Ninja(std::string_view str,
                                   const EscapeOptions& options,
                                   char* dest,
                                   bool* needed_quoting) {
@@ -93,7 +93,7 @@ inline bool ShouldEscapeCharForCompilationDatabase(char ch) {
   return ch == '\\' || ch == '"';
 }
 
-size_t EscapeStringToString_CompilationDatabase(const std::string_view& str,
+size_t EscapeStringToString_CompilationDatabase(std::string_view str,
                                                 const EscapeOptions& options,
                                                 char* dest,
                                                 bool* needed_quoting) {
@@ -119,7 +119,7 @@ size_t EscapeStringToString_CompilationDatabase(const std::string_view& str,
   return i;
 }
 
-size_t EscapeStringToString_Depfile(const std::string_view& str,
+size_t EscapeStringToString_Depfile(std::string_view str,
                                     const EscapeOptions& options,
                                     char* dest,
                                     bool* needed_quoting) {
@@ -137,7 +137,7 @@ size_t EscapeStringToString_Depfile(const std::string_view& str,
   return i;
 }
 
-size_t EscapeStringToString_NinjaPreformatted(const std::string_view& str,
+size_t EscapeStringToString_NinjaPreformatted(std::string_view str,
                                               char* dest) {
   // Only Ninja-escape $.
   size_t i = 0;
@@ -157,7 +157,7 @@ size_t EscapeStringToString_NinjaPreformatted(const std::string_view& str,
 // See:
 //   http://blogs.msdn.com/b/twistylittlepassagesallalike/archive/2011/04/23/everyone-quotes-arguments-the-wrong-way.aspx
 //   http://blogs.msdn.com/b/oldnewthing/archive/2010/09/17/10063629.aspx
-size_t EscapeStringToString_WindowsNinjaFork(const std::string_view& str,
+size_t EscapeStringToString_WindowsNinjaFork(std::string_view str,
                                              const EscapeOptions& options,
                                              char* dest,
                                              bool* needed_quoting) {
@@ -209,7 +209,7 @@ size_t EscapeStringToString_WindowsNinjaFork(const std::string_view& str,
   return i;
 }
 
-size_t EscapeStringToString_PosixNinjaFork(const std::string_view& str,
+size_t EscapeStringToString_PosixNinjaFork(std::string_view str,
                                            const EscapeOptions& options,
                                            char* dest,
                                            bool* needed_quoting) {
@@ -240,7 +240,7 @@ size_t EscapeStringToString_PosixNinjaFork(const std::string_view& str,
 }
 
 // Escapes |str| into |dest| and returns the number of characters written.
-size_t EscapeStringToString(const std::string_view& str,
+size_t EscapeStringToString(std::string_view str,
                             const EscapeOptions& options,
                             char* dest,
                             bool* needed_quoting) {
@@ -286,7 +286,7 @@ size_t EscapeStringToString(const std::string_view& str,
 
 }  // namespace
 
-std::string EscapeString(const std::string_view& str,
+std::string EscapeString(std::string_view str,
                          const EscapeOptions& options,
                          bool* needed_quoting) {
   StackOrHeapBuffer dest(str.size() * kMaxEscapedCharsPerChar);
@@ -295,14 +295,14 @@ std::string EscapeString(const std::string_view& str,
 }
 
 void EscapeStringToStream(std::ostream& out,
-                          const std::string_view& str,
+                          std::string_view str,
                           const EscapeOptions& options) {
   StackOrHeapBuffer dest(str.size() * kMaxEscapedCharsPerChar);
   out.write(dest, EscapeStringToString(str, options, dest, nullptr));
 }
 
 void EscapeJSONStringToStream(std::ostream& out,
-                              const std::string_view& str,
+                              std::string_view str,
                               const EscapeOptions& options) {
   std::string dest;
   bool needed_quoting = !options.inhibit_quoting;

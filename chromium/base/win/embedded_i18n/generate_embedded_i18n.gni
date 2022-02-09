@@ -87,6 +87,11 @@ template("generate_embedded_i18n") {
     script = "//base/win/embedded_i18n/create_string_rc.py"
     inputs = []
 
+    # NOTE(igor@vivaldi.com): add invoker inputs as dependencies.
+    if (defined(invoker.inputs)) {
+      inputs += invoker.inputs
+    }
+
     output_dir = rebase_path(target_gen_dir, root_build_dir)
 
     output_header = "$target_gen_dir/$output_file_name_base.h"

@@ -10,6 +10,7 @@
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
@@ -22,10 +23,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
+#include "components/omnibox/browser/actions/omnibox_pedal.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/document_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/omnibox_pedal.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/search_engine_utils.h"
 #include "components/search_engines/template_url_service.h"
@@ -160,7 +161,7 @@ const char16_t AutocompleteMatch::kInvalidChars[] = {
     0};
 
 // static
-const char AutocompleteMatch::kEllipsis[] = "... ";
+const char16_t AutocompleteMatch::kEllipsis[] = u"... ";
 
 AutocompleteMatch::AutocompleteMatch()
     : transition(ui::PAGE_TRANSITION_GENERATED) {}
@@ -231,6 +232,9 @@ AutocompleteMatch::AutocompleteMatch(AutocompleteMatch&& match) noexcept {
 
 AutocompleteMatch& AutocompleteMatch::operator=(
     AutocompleteMatch&& match) noexcept {
+  if (this == &match) {
+    return *this;
+  }
   provider = std::move(match.provider);
   relevance = std::move(match.relevance);
   typed_count = std::move(match.typed_count);
@@ -271,7 +275,9 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   from_previous = std::move(match.from_previous);
   search_terms_args = std::move(match.search_terms_args);
   post_content = std::move(match.post_content);
-  additional_info = std::move(match.additional_info);
+  // TODO(crbug/1217575): Remove this once the bug is closed, assuming it is not
+  // directly responsible for the crash.
+  std::swap(additional_info, match.additional_info);
   duplicate_matches = std::move(match.duplicate_matches);
   query_tiles = std::move(match.query_tiles);
   navsuggest_tiles = std::move(match.navsuggest_tiles);
@@ -396,6 +402,7 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
     case Type::SEARCH_OTHER_ENGINE:
     case Type::CONTACT_DEPRECATED:
     case Type::VOICE_SUGGEST:
+    case Type::PEDAL_DEPRECATED:
     case Type::CLIPBOARD_TEXT:
     case Type::CLIPBOARD_IMAGE:
     case Type::TILE_SUGGESTION:
@@ -440,9 +447,6 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
           return omnibox::kPageIcon;
       }
 
-    case Type::PEDAL:
-      return (pedal ? pedal->GetVectorIcon() : omnibox::kPedalIcon);
-
     case Type::NUM_TYPES:
       // TODO(https://crbug.com/1024114): Replace with NOTREACHED() once fixed.
       CHECK(false);
@@ -454,95 +458,6 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
   return vector_icons::kErrorIcon;
 }
 #endif
-
-std::u16string AutocompleteMatch::GetWhyThisSuggestionText() const {
-  // TODO(tommycli): Replace these placeholder strings with final ones from UX.
-  switch (type) {
-    case Type::URL_WHAT_YOU_TYPED:
-      return base::ASCIIToUTF16(
-          "This navigation match is the exact URL you typed.");
-
-    case Type::HISTORY_URL:
-    case Type::HISTORY_TITLE:
-    case Type::HISTORY_BODY:
-    case Type::HISTORY_KEYWORD:
-      return base::ASCIIToUTF16(
-          "This navigation match is a previously visited page from Chrome "
-          "History.");
-
-    case Type::NAVSUGGEST:
-      return base::ASCIIToUTF16(
-          "This navigation match is suggested by the search engine based on "
-          "what you typed.");
-
-    case Type::SEARCH_WHAT_YOU_TYPED:
-      return u"This search query is exactly what you typed.";
-
-    case Type::SEARCH_HISTORY:
-      // TODO(tommycli): We may need to distinguish between matches sourced
-      // from search history saved in the cloud vs. locally.
-      return base::ASCIIToUTF16(
-          "This search query is suggested by the search engine based on what "
-          "you typed and past search queries.");
-
-    case Type::SEARCH_SUGGEST:
-    case Type::SEARCH_SUGGEST_ENTITY:
-    case Type::SEARCH_SUGGEST_TAIL:
-      return base::ASCIIToUTF16(
-          "This search query is suggested by the search engine based on what "
-          "you typed.");
-
-    case Type::SEARCH_SUGGEST_PERSONALIZED:
-      return base::ASCIIToUTF16(
-          "This search query is suggested by the search engine based on what "
-          "you typed. It has also been personalized to you.");
-
-    case Type::SEARCH_OTHER_ENGINE:
-      return base::ASCIIToUTF16(
-          "This search query is for a non-default search engine.");
-
-    case Type::BOOKMARK_TITLE:
-      return base::ASCIIToUTF16(
-          "This navigation matches the title of a Bookmark.");
-
-    case Type::NAVSUGGEST_PERSONALIZED:
-      return base::ASCIIToUTF16(
-          "This navigation match is suggested by the search engine based on "
-          "what you typed. It has also been personalized to you.");
-
-    case Type::CALCULATOR:
-      return base::ASCIIToUTF16(
-          "This calculation is the result of evaluating your input provided by "
-          "your default search engine.");
-
-    case Type::CLIPBOARD_URL:
-    case Type::CLIPBOARD_TEXT:
-    case Type::CLIPBOARD_IMAGE:
-      return u"This match is from the system clipboard.";
-
-    case Type::VOICE_SUGGEST:
-      return u"This match is from voice.";
-
-    case Type::DOCUMENT_SUGGESTION:
-      return u"This match is from your documents.";
-
-    case Type::PEDAL:
-      return base::ASCIIToUTF16(
-          "This is a suggested Chrome action based on what you typed.");
-
-    case Type::EXTENSION_APP_DEPRECATED:
-    case Type::SEARCH_SUGGEST_PROFILE:
-    case Type::CONTACT_DEPRECATED:
-    case Type::PHYSICAL_WEB_DEPRECATED:
-    case Type::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
-    case Type::TAB_SEARCH_DEPRECATED:
-    case Type::TILE_SUGGESTION:
-    case Type::TILE_NAVSUGGEST:
-    case Type::NUM_TYPES:
-      NOTREACHED();
-      return std::u16string();
-  }
-}
 
 // static
 bool AutocompleteMatch::MoreRelevant(const AutocompleteMatch& match1,
@@ -578,8 +493,8 @@ bool AutocompleteMatch::BetterDuplicate(const AutocompleteMatch& match1,
     return false;
 
   // Prefer URL autocompleted default matches if the appropriate param is true.
-  if (OmniboxFieldTrial::
-          RichAutocompletionAutocompletePreferUrlsOverPrefixes()) {
+  if (OmniboxFieldTrial::kRichAutocompletionAutocompletePreferUrlsOverPrefixes
+          .Get()) {
     if (match1.additional_text.empty() && !match2.additional_text.empty())
       return true;
     if (!match1.additional_text.empty() && match2.additional_text.empty())
@@ -1098,10 +1013,6 @@ AutocompleteMatch::AsOmniboxEventResultType() const {
       return OmniboxEventProto::Suggestion::CLIPBOARD_URL;
     case AutocompleteMatchType::DOCUMENT_SUGGESTION:
       return OmniboxEventProto::Suggestion::DOCUMENT;
-    case AutocompleteMatchType::PEDAL:
-      // TODO(orinj): Add a new OmniboxEventProto type for Pedals.
-      // return OmniboxEventProto::Suggestion::PEDAL;
-      return OmniboxEventProto::Suggestion::NAVSUGGEST;
     case AutocompleteMatchType::CLIPBOARD_TEXT:
       return OmniboxEventProto::Suggestion::CLIPBOARD_TEXT;
     case AutocompleteMatchType::CLIPBOARD_IMAGE:
@@ -1117,6 +1028,7 @@ AutocompleteMatch::AsOmniboxEventResultType() const {
     case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
     case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
+    case AutocompleteMatchType::PEDAL_DEPRECATED:
     case AutocompleteMatchType::NUM_TYPES:
       break;
   }
@@ -1207,7 +1119,7 @@ void AutocompleteMatch::InlineTailPrefix(const std::u16string& common_prefix) {
       tail_suggest_common_prefix.empty()) {
     tail_suggest_common_prefix = common_prefix;
     // Insert an ellipsis before uncommon part.
-    const auto ellipsis = base::ASCIIToUTF16(kEllipsis);
+    const std::u16string ellipsis = kEllipsis;
     contents = ellipsis + contents;
     // If the first class is not already NONE, prepend a NONE class for the new
     // ellipsis.
@@ -1309,7 +1221,8 @@ bool AutocompleteMatch::TryRichAutocompletion(
   if (!OmniboxFieldTrial::IsRichAutocompletionEnabled())
     return false;
 
-  bool counterfactual = OmniboxFieldTrial::RichAutocompletionCounterfactual();
+  bool counterfactual =
+      OmniboxFieldTrial::kRichAutocompletionCounterfactual.Get();
 
   if (input.prevent_inline_autocomplete())
     return false;
@@ -1334,19 +1247,20 @@ bool AutocompleteMatch::TryRichAutocompletion(
   }
 
   const bool can_autocomplete_titles = RichAutocompletionApplicable(
-      OmniboxFieldTrial::RichAutocompletionAutocompleteTitles(),
-      OmniboxFieldTrial::RichAutocompletionAutocompleteTitlesShortcutProvider(),
-      OmniboxFieldTrial::RichAutocompletionAutocompleteTitlesMinChar(),
-      OmniboxFieldTrial::
-          RichAutocompletionAutocompleteTitlesNoInputsWithSpaces(),
+      OmniboxFieldTrial::kRichAutocompletionAutocompleteTitles.Get(),
+      OmniboxFieldTrial::kRichAutocompletionAutocompleteTitlesShortcutProvider
+          .Get(),
+      OmniboxFieldTrial::kRichAutocompletionAutocompleteTitlesMinChar.Get(),
+      OmniboxFieldTrial::kRichAutocompletionAutocompleteTitlesNoInputsWithSpaces
+          .Get(),
       shortcut_provider, input.text());
   const bool can_autocomplete_non_prefix = RichAutocompletionApplicable(
-      OmniboxFieldTrial::RichAutocompletionAutocompleteNonPrefixAll(),
+      OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefixAll.Get(),
       OmniboxFieldTrial::
-          RichAutocompletionAutocompleteNonPrefixShortcutProvider(),
-      OmniboxFieldTrial::RichAutocompletionAutocompleteNonPrefixMinChar(),
+          kRichAutocompletionAutocompleteNonPrefixShortcutProvider.Get(),
+      OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefixMinChar.Get(),
       OmniboxFieldTrial::
-          RichAutocompletionAutocompleteNonPrefixNoInputsWithSpaces(),
+          kRichAutocompletionAutocompleteNonPrefixNoInputsWithSpaces.Get(),
       shortcut_provider, input.text());
 
   // All else equal, prefer matching primary over secondary texts and prefixes
@@ -1354,7 +1268,8 @@ bool AutocompleteMatch::TryRichAutocompletion(
   // determines whether to prefer matching primary text non-prefixes or
   // secondary text prefixes.
   bool prefer_primary_non_prefix_over_secondary_prefix =
-      OmniboxFieldTrial::RichAutocompletionAutocompletePreferUrlsOverPrefixes();
+      OmniboxFieldTrial::kRichAutocompletionAutocompletePreferUrlsOverPrefixes
+          .Get();
 
   size_t find_index;
 
@@ -1424,9 +1339,11 @@ bool AutocompleteMatch::TryRichAutocompletion(
   }
 
   const bool can_autocomplete_split_url =
-      OmniboxFieldTrial::RichAutocompletionSplitUrlCompletion() &&
+      OmniboxFieldTrial::kRichAutocompletionSplitUrlCompletion.Get() &&
       input.text().size() >=
-          OmniboxFieldTrial::RichAutocompletionSplitCompletionMinChar();
+          static_cast<size_t>(
+              OmniboxFieldTrial::kRichAutocompletionSplitCompletionMinChar
+                  .Get());
 
   // Try split matching (see comments for |split_autocompletion|) with
   // |primary_text|.
@@ -1449,9 +1366,11 @@ bool AutocompleteMatch::TryRichAutocompletion(
   // Try split matching (see comments for |split_autocompletion|) with
   // |secondary_text|.
   const bool can_autocomplete_split_title =
-      OmniboxFieldTrial::RichAutocompletionSplitTitleCompletion() &&
+      OmniboxFieldTrial::kRichAutocompletionSplitTitleCompletion.Get() &&
       input.text().size() >=
-          OmniboxFieldTrial::RichAutocompletionSplitCompletionMinChar();
+          static_cast<size_t>(
+              OmniboxFieldTrial::kRichAutocompletionSplitCompletionMinChar
+                  .Get());
 
   if (can_autocomplete_split_title &&
       !(input_words = FindWordsSequentiallyAtWordbreak(secondary_text_lower,

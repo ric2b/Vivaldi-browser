@@ -26,7 +26,6 @@ OS_CHOICES = {
 }
 
 cipd_pick_list = [
-  "third_party/shaka-player/dist",
   "tools/clang/dsymutil",
   ]
 
@@ -36,14 +35,14 @@ def IsAndroidEnabled():
   return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
 
 host_os = OS_CHOICES.get(sys.platform, 'unix')
-checkout_os = "checkout_"+host_os
+checkout_os = ["checkout_"+host_os]
 
 if IsAndroidEnabled():
-  checkout_os = "checkout_android"
+  checkout_os = ["checkout_android", "checkout_android_native_support"]
 
 def cipd_only_filter(submodules):
   if "__cipd__" in submodules:
-    accept_conditions = checkout_os in ["checkout_android", "checkout_linux"]
+    accept_conditions = any([x in ["checkout_android", "checkout_linux"] for x in checkout_os])
     picked_modules = {}
     for x, d in submodules["__cipd__"].items():
       if x in cipd_pick_list or (accept_conditions and "condition" in d):
@@ -52,7 +51,7 @@ def cipd_only_filter(submodules):
   return {}
 
 def main():
-  fetch_submodules.GetSubmodules(checkout_os, checkout_filter=cipd_only_filter if checkout_os not in ["checkout_android"] else None)
+  fetch_submodules.GetSubmodules(checkout_os, checkout_filter=cipd_only_filter if "checkout_android" not in checkout_os else None)
   return 0
 
 if __name__ == '__main__':

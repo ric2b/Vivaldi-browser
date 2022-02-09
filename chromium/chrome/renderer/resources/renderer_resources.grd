@@ -17,6 +17,9 @@
       <include name="IDR_PLUGIN_POSTER_HTML" file="plugins/plugin_poster.html" flattenhtml="true" type="BINDATA" />
       <include name="IDR_CART_PRODUCT_EXTRACTION_JS" file="cart/cart-product-extraction.js" type="BINDATA"/>
       <include name="IDR_CART_DOMAIN_CART_URL_REGEX_JSON" file="cart/cart_domain_cart_url_regex.json" type="BINDATA"/>
+      <include name="IDR_SKIP_ADD_TO_CART_REQUEST_DOMAIN_MAPPING_JSON" file="cart/skip_add_to_cart_request_domain_mapping.json" type="BINDATA"/>
+      <include name="IDR_PURCHASE_URL_REGEX_DOMAIN_MAPPING_JSON" file="cart/purchase_url_regex_domain_mapping.json" type="BINDATA"/>
+      <include name="IDR_CHECKOUT_URL_REGEX_DOMAIN_MAPPING_JSON" file="cart/checkout_url_regex_domain_mapping.json" type="BINDATA"/>
 
       <!-- Extension libraries. -->
       <if expr="enable_extensions">
@@ -74,8 +77,8 @@
           <include name="IDR_REMOTE_APPS_MOJOM_LITE_JS" file="${mojom_root}\chromeos\components\remote_apps\mojom\remote_apps.mojom-lite.js" use_base_dir="false" type="BINDATA" />
           <include name="IDR_MOJO_URL_MOJOM_LITE_JS" file="${mojom_root}\url\mojom\url.mojom-lite.js" use_base_dir="false" type="BINDATA" />
 
-          <include name="IDR_TTS_STREAM_FACTORY_BINDINGS_JS" file="extensions\chromeos_tts_stream_factory_bindings.js" type="BINDATA" />
-          <include name="IDR_TTS_STREAM_FACTORY_MOJOM_JS" file="${mojom_root}\chromeos\services\tts\public\mojom\tts_service.mojom.js" use_base_dir="false" type="BINDATA" />
+          <include name="IDR_GOOGLE_TTS_STREAM_BINDINGS_JS" file="extensions\chromeos_google_tts_stream_bindings.js" type="BINDATA" />
+          <include name="IDR_GOOGLE_TTS_STREAM_MOJOM_JS" file="${mojom_root}\chromeos\services\tts\public\mojom\tts_service.mojom.js" use_base_dir="false" type="BINDATA" />
         </if>
         <!-- Media Router Mojo service and bindings. -->
         <include name="IDR_MEDIA_CONTROLLER_MOJOM_JS" file="${mojom_root}\components\media_router\common\mojom\media_controller.mojom.js" use_base_dir="false" type="BINDATA" />

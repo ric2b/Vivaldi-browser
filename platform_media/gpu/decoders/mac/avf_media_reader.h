@@ -50,18 +50,17 @@ class AVFMediaReader {
   base::TimeDelta start_time() const;
 
   bool has_audio_track() const {
-    return GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) != nil;
+    return GetTrack(PlatformStreamType::kAudio) != nil;
   }
   bool has_video_track() const {
-    return GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO) != nil;
+    return GetTrack(PlatformStreamType::kVideo) != nil;
   }
 
   AudioStreamBasicDescription audio_stream_format() const;
   CMFormatDescriptionRef video_stream_format() const;
   CGAffineTransform video_transform() const;
 
-  void GetNextMediaSample(PlatformMediaDataType type,
-                          IPCDecodingBuffer* ipc_buffer);
+  void GetNextMediaSample(IPCDecodingBuffer& ipc_buffer);
 
   bool Seek(base::TimeDelta time);
 
@@ -82,16 +81,16 @@ class AVFMediaReader {
 
   bool CalculateBitrate();
   bool ResetStreamReaders(base::TimeDelta start_time);
-  bool ResetStreamReader(PlatformMediaDataType type,
+  bool ResetStreamReader(PlatformStreamType stream_type,
                          base::TimeDelta start_time);
-  bool InitializeOutput(PlatformMediaDataType type);
-  NSDictionary* GetOutputSettings(PlatformMediaDataType type);
+  bool InitializeOutput(PlatformStreamType stream_type);
+  NSDictionary* GetOutputSettings(PlatformStreamType stream_type);
 
-  AVAssetTrack* GetTrack(PlatformMediaDataType type) const;
+  AVAssetTrack* GetTrack(PlatformStreamType stream_type) const;
 
   base::scoped_nsobject<AVAsset> asset_;
   base::scoped_nsobject<DataSourceLoader> data_source_loader_;
-  StreamReader stream_readers_[kPlatformMediaDataTypeCount];
+  StreamReader stream_readers_[kPlatformStreamTypeCount];
 
   int bitrate_;
   gfx::Size video_coded_size_;

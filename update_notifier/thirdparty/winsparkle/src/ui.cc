@@ -84,7 +84,7 @@
 #error "wxWidgets >= 2.9 is required to compile this code"
 #endif
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 using installer::GetLocalizedString;
 using installer::GetLocalizedStringF;
@@ -385,7 +385,7 @@ class UpdateDialog : public WinSparkleDialog {
   // changes state into "checking for updates"
   void StateCheckingUpdates();
   // change state into "no updates found"
-  void StateNoUpdateFound();
+  void StateNoUpdateFound(bool pending_update);
   // change state into "update error"
   void StateUpdateError(Error error);
   // change state into "a new version is available"
@@ -637,14 +637,16 @@ void UpdateDialog::StateCheckingUpdates() {
   MakeResizable(false);
 }
 
-void UpdateDialog::StateNoUpdateFound() {
+void UpdateDialog::StateNoUpdateFound(bool pending_update) {
   LayoutChangesGuard guard(this);
 
   m_heading->SetLabel(
       GetLocalizedString(IDS_UPDATE_NOTIFICATION_UPTODATE_TITLE_BASE));
 
-  SetMessage(GetLocalizedStringF(IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT_BASE,
-                                 VersionAsWide(g_app_version)));
+  SetMessage(GetLocalizedStringF(
+      pending_update ? IDS_UPDATE_NOTIFICATION_PENDING_UPDATE_TEXT_BASE
+                     : IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT_BASE,
+      VersionAsWide(g_app_version)));
 
   m_closeButton->SetLabel(
       GetLocalizedString(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON_BASE));
@@ -887,6 +889,7 @@ const int MSG_STARTED_INSTALLER = wxNewId();
 struct UpdateCheckResult {
   Error error;
   Appcast appcast;
+  bool pending_update = false;
 };
 
 class App : public wxApp {
@@ -996,10 +999,10 @@ void App::OnUpdateCheckDone(wxThreadEvent& event) {
   if (result.error) {
     update_dialog_->StateUpdateError(std::move(result.error));
   } else if (!result.appcast.IsValid()) {
-    update_dialog_->StateNoUpdateFound();
+    update_dialog_->StateNoUpdateFound(result.pending_update);
   } else {
     update_dialog_->m_appcast = std::move(result.appcast);
-    if (g_install_mode) {
+    if (g_mode == UpdateMode::kNetworkInstall) {
       update_dialog_->StateDownloading();
     } else {
       update_dialog_->StateUpdateAvailable();
@@ -1062,7 +1065,7 @@ void App::OnStartedInstaller(wxThreadEvent& event) {
 }
 
 /*--------------------------------------------------------------------------*
-                             winsparkle::UI class
+                             UI class
  *--------------------------------------------------------------------------*/
 
 // This thread is only created when needed -- in most cases, it isn't. Once it
@@ -1079,7 +1082,7 @@ class UIThreadAccess {
 
   ~UIThreadAccess() { LeaveCriticalSection(ui_thread_lock()); }
 
-  winsparkle::App& EnsureApp() {
+  App& EnsureApp() {
     GlobalState& global_state = GetGlobalState();
     if (!global_state.active_app) {
       StartUIThread();
@@ -1093,7 +1096,7 @@ class UIThreadAccess {
     (void)GetGlobalState();
   }
 
-  static void OnUIThreadStarted(winsparkle::App& app) {
+  static void OnUIThreadStarted(App& app) {
     GlobalState& global_state = GetGlobalState();
     DCHECK(!global_state.active_app);
     DCHECK(global_state.start_event);
@@ -1112,7 +1115,7 @@ class UIThreadAccess {
     // The event to wait for UI thread initialization.
     HANDLE start_event = nullptr;
 
-    winsparkle::App* active_app = nullptr;
+    App* active_app = nullptr;
     CRITICAL_SECTION ui_thread_lock;
   };
 
@@ -1188,7 +1191,8 @@ void UI::NotifyCheckingUpdates() {
 }
 
 /*static*/
-void UI::NotifyUpdateCheckDone(const Appcast* appcast, const Error& error) {
+void UI::NotifyUpdateCheckDone(const Appcast* appcast, const Error& error, bool pending_update) {
+  DCHECK(!pending_update || (!appcast && !error));
   UIThreadAccess uit;
   App& app = uit.EnsureApp();
   UpdateCheckResult result;
@@ -1197,6 +1201,7 @@ void UI::NotifyUpdateCheckDone(const Appcast* appcast, const Error& error) {
   } else if (appcast) {
     result.appcast = *appcast;
   }
+  result.pending_update = pending_update;
   app.SendMsg(MSG_UPDATE_CHECK_DONE, result);
 }
 
@@ -1221,4 +1226,4 @@ void UI::NotifyStartedInstaller(const Error& error) {
   app.SendMsg(MSG_STARTED_INSTALLER, error);
 }
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier

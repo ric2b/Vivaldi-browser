@@ -54,7 +54,9 @@ TEST_F(NavigationManagerUtilTest, GetCommittedItemWithUniqueID) {
           /*is_renderer_initiated=*/false);
   manager_->AddPendingItem(GURL("http://chromium.org"), Referrer(),
                            ui::PAGE_TRANSITION_TYPED,
-                           web::NavigationInitiationType::BROWSER_INITIATED);
+                           web::NavigationInitiationType::BROWSER_INITIATED,
+                           /*is_post_navigation=*/false,
+                           /*is_using_https_as_default_scheme=*/false);
   NavigationItem* item = manager_->GetPendingItem();
   int unique_id = item->GetUniqueID();
   context->SetNavigationItemUniqueID(item->GetUniqueID());
@@ -68,15 +70,6 @@ TEST_F(NavigationManagerUtilTest, GetCommittedItemWithUniqueID) {
   EXPECT_EQ(item, GetCommittedItemWithUniqueID(manager_.get(), unique_id));
   EXPECT_EQ(item, GetItemWithUniqueID(manager_.get(), context.get()));
   EXPECT_EQ(0, GetCommittedItemIndexWithUniqueID(manager_.get(), unique_id));
-
-  // Add transient item.
-  manager_->AddTransientItem(GURL("http://chromium.org"));
-  item = manager_->GetTransientItem();
-  unique_id = item->GetUniqueID();
-  context->SetNavigationItemUniqueID(unique_id);
-  EXPECT_FALSE(GetCommittedItemWithUniqueID(manager_.get(), unique_id));
-  EXPECT_EQ(item, GetItemWithUniqueID(manager_.get(), context.get()));
-  EXPECT_EQ(-1, GetCommittedItemIndexWithUniqueID(manager_.get(), unique_id));
 
   // Add item to NavigationContextImpl.
   auto context_item = std::make_unique<NavigationItemImpl>();

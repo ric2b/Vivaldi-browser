@@ -43,8 +43,8 @@ std::u16string VivaldiGenerateUniqueFolderName(
 
   // Otherwise iterate until we find a unique name.
   for (size_t i = 1; i <= existing_folder_names.size(); ++i) {
-    std::u16string name = folder_name + base::ASCIIToUTF16(" (") +
-                          base::NumberToString16(i) + base::ASCIIToUTF16(")");
+    std::u16string name = folder_name + u" (" +
+                          base::NumberToString16(i) + u")";
     if (existing_folder_names.find(name) == existing_folder_names.end())
       return name;
   }

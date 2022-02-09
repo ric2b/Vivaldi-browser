@@ -96,7 +96,7 @@ bool CleanOneDir(const std::string& dir) {
     return false;
   }
 
-  // Write a .d file for the build which references a nonexistant file.
+  // Write a .d file for the build which references a nonexistent file.
   // This will make Ninja always mark the build as dirty.
   std::string dummy_content("build.ninja: nonexistant_file.gn\n");
   if (base::WriteFile(build_ninja_d_file, dummy_content.data(),

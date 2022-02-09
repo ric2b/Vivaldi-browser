@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Thoát khỏi Chế độ Toàn màn hình</translation>
 <translation id="2177950615300672361">Tab ẩn danh: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Mô-đun Ứng dụng khách Gốc: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Ẩn nút bấm</translation>
 <translation id="2218515861914035131">Dán dưới dạng văn bản thuần túy</translation>
 <translation id="2249605167705922988">ví dụ: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Cho phép định danh trên nội dung được bảo vệ (có thể cần phải khởi động lại máy tính)</translation>
@@ -136,7 +135,6 @@
 <translation id="3222066309010235055">Trình kết xuất trước: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mi-cờ-rô</translation>
 <translation id="3241680850019875542">Chọn thư mục gốc của tiện ích để đóng gói. Để cập nhật tiện ích, bạn cũng chọn tệp khóa cá nhân để sử dụng lại.</translation>
-<translation id="3266179261140759675">Không cho các trang web đã đóng gửi và nhận dữ liệu</translation>
 <translation id="3280237271814976245">Lưu &amp;dưới dạng...</translation>
 <translation id="3285322247471302225">&amp;Tab Mới</translation>
 <translation id="3288047731229977326">Tiện ích chạy ở chế độ nhà phát triển có thể gây hại cho máy tính của bạn. Nếu bạn không phải là nhà phát triển, bạn nên vô hiệu hóa các tiện ích này chạy trong chế độ nhà phát triển để giữ an toàn.</translation>
@@ -144,7 +142,6 @@
 <translation id="33022249435934718">Xử lý GDI</translation>
 <translation id="3303818374450886607">Bản sao</translation>
 <translation id="3305661444342691068">Mở PDF với Preview</translation>
-<translation id="3308134619352333507">Ẩn Nút bấm</translation>
 <translation id="3317459757438853210">Hai mặt</translation>
 <translation id="3341703758641437857">Cho phép truy cập vào URL của tệp</translation>
 <translation id="3347086966102161372">S&amp;ao chép địa chỉ hình ảnh</translation>
@@ -159,7 +156,6 @@
 <translation id="354068948465830244">Tiện ích này có thể đọc và thay đổi dữ liệu trang web</translation>
 <translation id="3560034655160545939">&amp;Kiểm tra chính tả</translation>
 <translation id="3574917942258583917">Bạn vẫn muốn thoát khỏi chế độ ẩn danh?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; muốn chia sẻ máy in &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; với một nhóm bạn sở hữu: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Nếu bạn chấp nhận, tất cả thành viên của nhóm sẽ có thể in tới máy in.</translation>
 <translation id="3587482841069643663">Tất cả</translation>
 <translation id="3627588569887975815">Mở liên kết tron&amp;g cửa số ẩn danh</translation>
 <translation id="3627879631695760395">Cài đặt <ph name="APP" />...</translation>
@@ -193,7 +189,6 @@
 <translation id="4087089424473531098">Đã tạo tiện ích:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Chấp nhận cho nhóm</translation>
 <translation id="4096508467498758490">Vô hiệu hóa tiện ích chế độ nhà phát triển</translation>
 <translation id="4100839878934973028">Một chương trình khác trên máy tính của bạn đã thêm một ứng dụng có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="4109898769411476438">Đóng Trình duyệt Trước khi Nhập</translation>
@@ -229,7 +224,6 @@
 <translation id="488785315393301722">Hiển thị chi tiết</translation>
 <translation id="4907306957610201395">Danh mục Quyền</translation>
 <translation id="4912643508233590958">Đánh thức khỏi Chế độ rảnh</translation>
-<translation id="4918086044614829423">Chấp nhận</translation>
 <translation id="4927753642311223124">Không có lỗi.</translation>
 <translation id="4930714375720679147">Bật</translation>
 <translation id="4988526792673242964">Trang</translation>
@@ -258,7 +252,6 @@
 <translation id="5317780077021120954">Lưu</translation>
 <translation id="5334142896108694079">Bộ nhớ đệm Tập lệnh</translation>
 <translation id="5355926466126177564">Tiện ích "<ph name="EXTENSION_NAME" />" đã thay đổi trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
-<translation id="5360150013186312835">Hiển thị trên Thanh công cụ</translation>
 <translation id="5362741141255528695">Chọn tệp khóa cá nhân.</translation>
 <translation id="536638840841140142">Không</translation>
 <translation id="5370819323174483825">&amp;Tải lại</translation>
@@ -304,7 +297,6 @@
 <translation id="6011449291337289699">Xóa dữ liệu trang web</translation>
 <translation id="6042308850641462728">Thêm</translation>
 <translation id="6059925163896151826">Thiết bị USB</translation>
-<translation id="6082651258230788217">Hiển thị trên thanh công cụ</translation>
 <translation id="6086846494333236931">Được cài đặt bởi quản trị viên của bạn</translation>
 <translation id="6101226222197207147">Đã thêm ứng dụng mới (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Kết nối Internet của bạn đang bị kiểm soát</translation>
@@ -331,7 +323,6 @@
 <translation id="6406303162637086258">Mô phỏng khởi động lại trình duyệt</translation>
 <translation id="6445450263907939268">Nếu không thích những thay đổi này, bạn có thể khôi phục cài đặt trước của mình.</translation>
 <translation id="6447842834002726250">Cookie</translation>
-<translation id="6452181791372256707">Từ chối</translation>
 <translation id="6498249116389603658">&amp;Tất cả ngôn ngữ của bạn</translation>
 <translation id="6503077044568424649">Truy cập nhiều nhất</translation>
 <translation id="6508261954199872201">Ứng dụng: <ph name="APP_NAME" /></translation>
@@ -362,7 +353,6 @@
 <translation id="7070484045139057854">Tiện ích này Có thể Đọc và Thay đổi Dữ liệu Trang web</translation>
 <translation id="708060913198414444">S&amp;ao chép địa chỉ âm thanh</translation>
 <translation id="7175353351958621980">Được nạp từ:</translation>
-<translation id="7186088072322679094">Giữ trên Thanh công cụ</translation>
 <translation id="7270858098575133036">Hỏi tôi khi có trang web muốn sử dụng thông báo dành riêng cho hệ thống để truy cập thiết bị MIDI</translation>
 <translation id="7287143125007575591">Truy cập bị từ chối.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -401,7 +391,6 @@
 <translation id="7857949311770343000">Đây có phải là trang tab mới bạn muốn không?</translation>
 <translation id="786073089922909430">Dịch vụ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Máy in đích Gần đây</translation>
-<translation id="7898627924844766532">Giữ trên thanh công cụ</translation>
 <translation id="7903925330883316394">Tiện ích: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Hiện đang ngoại tuyến</translation>
 <translation id="7947962633355574091">S&amp;ao chép Địa chỉ Video</translation>
@@ -450,7 +439,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8725066075913043281">Thử lại</translation>
 <translation id="8757090071857742562">Không thể truyền màn hình nền. Kiểm tra xem bạn đã xác nhận lời nhắc để bắt đầu chia sẻ màn hình hay chưa.</translation>
 <translation id="8774934320277480003">Lề trên</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; muốn chia sẻ máy in &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; với bạn.</translation>
 <translation id="8798099450830957504">Mặc định</translation>
 <translation id="8800004011501252845">Hiển thị điểm đến cho</translation>
 <translation id="8808478386290700967">Cửa hàng Trực tuyến</translation>

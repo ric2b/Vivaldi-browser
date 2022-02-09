@@ -139,6 +139,7 @@ class ClientCertResolverTest : public testing::Test,
     network_profile_handler_.reset();
     network_state_handler_.reset();
     NetworkCertLoader::Shutdown();
+    SystemTokenCertDbStorage::Shutdown();
     shill_clients::Shutdown();
   }
 
@@ -226,9 +227,9 @@ class ClientCertResolverTest : public testing::Test,
     network_profile_handler_.reset(new NetworkProfileHandler());
     network_config_handler_.reset(new NetworkConfigurationHandler());
     managed_config_handler_.reset(new ManagedNetworkConfigurationHandlerImpl());
-    client_cert_resolver_.reset(new ClientCertResolver());
+    client_cert_resolver_ = std::make_unique<ClientCertResolver>();
 
-    test_clock_.reset(new base::SimpleTestClock);
+    test_clock_ = std::make_unique<base::SimpleTestClock>();
     test_clock_->SetNow(base::Time::Now());
     client_cert_resolver_->SetClockForTesting(test_clock_.get());
 

@@ -186,14 +186,14 @@ void SavedpasswordsGetFunction::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<password_manager::PasswordForm>> passwords) {
   namespace Results = vivaldi::savedpasswords::Get::Results;
 
-  std::unique_ptr<base::ListValue> results;
+  std::vector<base::Value> results;
   for (const auto& result : passwords) {
     if (base::UTF16ToUTF8(result->username_value) == username_) {
       results =
           Results::Create(true, base::UTF16ToUTF8(result->password_value));
     }
   }
-  if (!results) {
+  if (results.empty()) {
     results = Results::Create(false, "");
   }
 

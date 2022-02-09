@@ -13,7 +13,7 @@
 
 namespace {
 
-void AssertValueSourceDirString(const std::string_view s) {
+void AssertValueSourceDirString(std::string_view s) {
   if (!s.empty()) {
 #if defined(OS_WIN)
     DCHECK(s[0] == '/' ||
@@ -27,10 +27,9 @@ void AssertValueSourceDirString(const std::string_view s) {
 
 // Validates input value (input_value) and sets proper error message.
 // Note: Parameter blame_input is used only for generating error message.
-template <typename StringType>
 bool ValidateResolveInput(bool as_file,
                           const Value& blame_input_value,
-                          const StringType& input_value,
+                          std::string_view input_value,
                           Err* err) {
   if (as_file) {
     // It's an error to resolve an empty string or one that is a directory
@@ -57,7 +56,7 @@ bool ValidateResolveInput(bool as_file,
   return true;
 }
 
-static StringAtom SourceDirStringAtom(const std::string_view s) {
+static StringAtom SourceDirStringAtom(std::string_view s) {
   if (EndsWithSlash(s)) {  // Avoid allocation when possible.
     AssertValueSourceDirString(s);
     return StringAtom(s);
@@ -73,25 +72,23 @@ static StringAtom SourceDirStringAtom(const std::string_view s) {
 
 }  // namespace
 
-SourceDir::SourceDir(const std::string_view s)
+SourceDir::SourceDir(std::string_view s)
     : value_(SourceDirStringAtom(s)) {
   actual_path_ = StringAtom(BuildSettings::RemapSourcePathToActual(value_.str()));
 }
 
-SourceDir::SourceDir(const std::string_view p, const std::string& p_act)
+SourceDir::SourceDir(std::string_view p, const std::string_view& p_act)
     : value_(SourceDirStringAtom(p)),
       actual_path_(SourceDirStringAtom(p_act).str()) {}
 
-template <typename StringType>
-std::string SourceDir::ResolveRelativeAs(
-    bool as_file,
-    const Value& blame_input_value,
-    const StringType& input_value,
-    Err* err,
-    const std::string_view& source_root,
-    const std::string_view& actual_path_in,
-    StringAtom* actual_path_out) const {
-  if (!ValidateResolveInput<StringType>(as_file, blame_input_value, input_value,
+std::string SourceDir::ResolveRelativeAs(bool as_file,
+                                         const Value& blame_input_value,
+                                         std::string_view input_value,
+                                         Err* err,
+                                         std::string_view source_root,
+                                         std::string_view actual_path_in,
+                                         StringAtom* actual_path_out) const {
+  if (!ValidateResolveInput(as_file, blame_input_value, input_value,
                                         err)) {
     return std::string();
   }
@@ -99,17 +96,16 @@ std::string SourceDir::ResolveRelativeAs(
                          actual_path_in, actual_path_out);
 }
 
-SourceFile SourceDir::ResolveRelativeFile(
-    const Value& p,
-    Err* err,
-    const std::string_view& source_root) const {
+SourceFile SourceDir::ResolveRelativeFile(const Value& p,
+                                          Err* err,
+                                          std::string_view source_root) const {
   SourceFile ret;
 
   if (!p.VerifyTypeIs(Value::STRING, err))
     return ret;
 
   const std::string& input_string = p.string_value();
-  if (!ValidateResolveInput<std::string>(true, p, input_string, err))
+  if (!ValidateResolveInput(true, p, input_string, err))
     return ret;
 
   ret.SetValue(ResolveRelative(input_string, value_.str(), true, source_root,
@@ -117,10 +113,21 @@ SourceFile SourceDir::ResolveRelativeFile(
   return ret;
 }
 
+SourceDir SourceDir::ResolveRelativeDir(const Value& blame_input_value,
+                                        std::string_view input_value,
+                                        Err* err,
+                                        std::string_view source_root) const {
+  SourceDir ret;
+  ret.value_ = StringAtom(ResolveRelativeAs(false, blame_input_value,
+                                            input_value, err, source_root,
+                                            actual_path_, &ret.actual_path_));
+  return ret;
+}
+
 std::string SourceDir::ResolveRelativeAs(bool as_file,
                                          const Value& v,
                                          Err* err,
-                                         const std::string_view& source_root,
+                                         std::string_view source_root,
                                          const std::string* v_value) const {
   if (!v.VerifyTypeIs(Value::STRING, err))
     return std::string();
@@ -135,14 +142,13 @@ std::string SourceDir::ResolveRelativeAs(bool as_file,
   return result;
 }
 
-SourceDir SourceDir::ResolveRelativeDir(
-    const Value& v,
-    Err* err,
-    const std::string_view& source_root) const {
+SourceDir SourceDir::ResolveRelativeDir(const Value& v,
+                                        Err* err,
+                                        std::string_view source_root) const {
   if (!v.VerifyTypeIs(Value::STRING, err))
     return SourceDir();
 
-  return ResolveRelativeDir<std::string>(v, v.string_value(), err, source_root);
+  return ResolveRelativeDir(v, v.string_value(), err, source_root);
 }
 
 base::FilePath SourceDir::Resolve(const base::FilePath& source_root,
@@ -150,22 +156,3 @@ base::FilePath SourceDir::Resolve(const base::FilePath& source_root,
   return ResolvePath(use_actual_path ? actual_path_.str() : value_.str(), false,
                      source_root);
 }
-
-// Explicit template instantiation
-template std::string SourceDir::ResolveRelativeAs(
-    bool as_file,
-    const Value& blame_input_value,
-    const std::string& input_value,
-    Err* err,
-    const std::string_view& source_root,
-    const std::string_view& actual_path_in,
-    StringAtom* actual_path_out) const;
-
-template std::string SourceDir::ResolveRelativeAs(
-    bool as_file,
-    const Value& blame_input_value,
-    const std::string_view& input_value,
-    Err* err,
-    const std::string_view& source_root,
-    const std::string_view& actual_path_in,
-    StringAtom* actual_path_out) const;

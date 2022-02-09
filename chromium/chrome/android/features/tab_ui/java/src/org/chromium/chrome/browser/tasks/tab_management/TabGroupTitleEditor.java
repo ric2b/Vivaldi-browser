@@ -81,15 +81,15 @@ public abstract class TabGroupTitleEditor {
         };
 
         mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
-        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false)
+        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false, true) // Vivaldi
                         instanceof TabGroupModelFilter;
-        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(true)
+        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(true, true) // Vivaldi
                         instanceof TabGroupModelFilter;
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 false))
+                 false, true)) // Vivaldi
                 .addTabGroupObserver(mFilterObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 true))
+                 true, true)) // Vivaldi
                 .addTabGroupObserver(mFilterObserver);
     }
 
@@ -131,10 +131,10 @@ public abstract class TabGroupTitleEditor {
         mTabModelSelector.getTabModelFilterProvider().removeTabModelFilterObserver(
                 mTabModelObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 false))
+                 false, true)) // Vivaldi
                 .removeTabGroupObserver(mFilterObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 true))
+                 true, true)) // Vivaldi
                 .removeTabGroupObserver(mFilterObserver);
     }
 }

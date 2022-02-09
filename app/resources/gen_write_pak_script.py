@@ -16,7 +16,7 @@ if not options.locales:
   raise Exception("Must specify at least one locale");
 
 with open(options.target, "w") as f:
-  print >>f, """# Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+  print("""# Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 import argparse
 import os
 
@@ -48,4 +48,4 @@ for locale in LOCALES:
   print ('  <output filename="' + format + '" type="%%(type)s" lang="%%(spec_locale)s" />') %% params
 print "</output>"
 print "-"*40
-""" % dict(locales = '",\n  "'.join(sorted(list(set(options.locales)))))
+""" % dict(locales = '",\n  "'.join(sorted(list(set(options.locales))))), file=f)

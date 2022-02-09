@@ -112,7 +112,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     private final ThemeColorProvider.TintObserver mTintObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
-    private final SnackbarManager.SnackbarManageable mSnackbarManageable;
+    private final SnackbarManager mSnackbarManager;
     private final Snackbar mUndoClosureSnackBar;
     private final ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
 
@@ -136,7 +136,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             ThemeColorProvider themeColorProvider,
             @Nullable TabGridDialogMediator.DialogController dialogController,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            SnackbarManager.SnackbarManageable snackbarManageable,
+            SnackbarManager snackbarManager,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier) {
         mContext = context;
         mResetHandler = resetHandler;
@@ -147,7 +147,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         mThemeColorProvider = themeColorProvider;
         mTabGridDialogController = dialogController;
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
-        mSnackbarManageable = snackbarManageable;
+        mSnackbarManager = snackbarManager;
         mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mUndoClosureSnackBar =
                 Snackbar.make(context.getString(R.string.undo_tab_strip_closure_message), this,
@@ -164,10 +164,9 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                 if (type == TabSelectionType.FROM_NEW) {
                     mAddedTabId = tab.getId();
                 }
-                if (lastId != tab.getId() && mSnackbarManageable.getSnackbarManager().isShowing()) {
+                if (lastId != tab.getId() && mSnackbarManager.isShowing()) {
                     // Dismiss undo snackbar when there is a selection of different tab.
-                    mSnackbarManageable.getSnackbarManager().dismissSnackbars(
-                            TabGroupUiMediator.this);
+                    mSnackbarManager.dismissSnackbars(TabGroupUiMediator.this);
                 }
                 // Maybe activate conditional tab strip for selection from toolbar swipe, but skip
                 // the same tab selection that is probably due to partial toolbar swipe. Also, when
@@ -182,7 +181,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                     }
                 }
                 if (type == TabSelectionType.FROM_CLOSE) return;
-                if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+                if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)
                         && getTabsToShowForId(lastId).contains(tab)) {
                     return;
                 }
@@ -201,7 +200,8 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                 // The strip should hide when users close the second-to-last tab in strip. The
                 // tabCountToHide for group is 1 because tab group status is updated with this
                 // closure before this method is called.
-                int tabCountToHide = TabUiFeatureUtilities.isTabGroupsAndroidEnabled() ? 1 : 2;
+                int tabCountToHide =
+                        TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext) ? 1 : 2;
                 List<Tab> tabList = getTabsToShowForId(tab.getId());
                 if (tabList.size() == tabCountToHide) {
                     resetTabStripWithRelatedTabsForId(Tab.INVALID_TAB_ID);
@@ -304,12 +304,12 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
             public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                mSnackbarManageable.getSnackbarManager().dismissSnackbars(TabGroupUiMediator.this);
+                mSnackbarManager.dismissSnackbars(TabGroupUiMediator.this);
                 resetTabStripWithRelatedTabsForId(mTabModelSelector.getCurrentTabId());
             }
         };
 
-        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)) {
             mTabGroupModelFilterObserver = new EmptyTabGroupModelFilterObserver() {
                 @Override
                 public void didMoveTabOutOfGroup(Tab movedTab, int prevFilterIndex) {
@@ -322,10 +322,10 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             // TODO(995951): Add observer similar to TabModelSelectorTabModelObserver for
             // TabModelFilter.
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                     false))
+                     false, true)) // Vivaldi
                     .addTabGroupObserver(mTabGroupModelFilterObserver);
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                     true))
+                     true, true)) // Vivaldi
                     .addTabGroupObserver(mTabGroupModelFilterObserver);
         }
 
@@ -375,6 +375,8 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
 
         mThemeColorProvider.addThemeColorObserver(mThemeColorObserver);
         mThemeColorProvider.addTintObserver(mTintObserver);
+        mModel.set(TabGroupUiProperties.PRIMARY_COLOR, mThemeColorProvider.getThemeColor());
+        mModel.set(TabGroupUiProperties.TINT, mThemeColorProvider.getTint());
 
         setupToolbarButtons();
         mModel.set(TabGroupUiProperties.IS_MAIN_CONTENT_VISIBLE, true);
@@ -394,7 +396,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
 
     private void setupToolbarButtons() {
         View.OnClickListener leftButtonOnClickListener;
-        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)) {
             // For tab group, the left button is to show the tab grid dialog.
             leftButtonOnClickListener = view -> {
                 Tab currentTab = mTabModelSelector.getCurrentTab();
@@ -409,7 +411,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                 ConditionalTabStripUtils.setFeatureStatus(FeatureStatus.FORBIDDEN);
                 RecordUserAction.record("TabStrip.UserDismissed");
                 if (ConditionalTabStripUtils.shouldShowSnackbarForDismissal()) {
-                    mSnackbarManageable.getSnackbarManager().showSnackbar(mUndoClosureSnackBar);
+                    mSnackbarManager.showSnackbar(mUndoClosureSnackBar);
                 } else {
                     showOptOutInfoBarForTab(mTabModelSelector.getCurrentTab());
                 }
@@ -421,7 +423,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         View.OnClickListener rightButtonOnClickListener = view -> {
             Tab parentTabToAttach = null;
             Tab currentTab = mTabModelSelector.getCurrentTab();
-            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
+            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)) {
                 List<Tab> relatedTabs = getTabsToShowForId(currentTab.getId());
 
                 assert relatedTabs.size() > 0;
@@ -493,7 +495,6 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                                  -> mModel.set(TabGroupUiProperties.INITIAL_SCROLL_INDEX,
                                          listOfTabs.indexOf(mTabModelSelector.getCurrentTab())));
         }
-
         mVisibilityController.setBottomControlsVisible(mIsTabGroupUiVisible);
     }
 
@@ -532,10 +533,10 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             mTabModelSelector.removeObserver(mTabModelSelectorObserver);
             if (mTabGroupModelFilterObserver != null) {
                 ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getTabModelFilter(false))
+                                .getTabModelFilter(false, true)) // Vivaldi
                         .removeTabGroupObserver(mTabGroupModelFilterObserver);
                 ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getTabModelFilter(true))
+                                .getTabModelFilter(true, true)) // Vivaldi
                         .removeTabGroupObserver(mTabGroupModelFilterObserver);
             }
         }

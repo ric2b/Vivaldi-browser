@@ -44,7 +44,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_LAYER_SCROLLABLE_AREA_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_LAYER_SCROLLABLE_AREA_H_
 
-#include <memory>
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/scroll_anchor.h"
@@ -80,7 +79,7 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData {
       const PaintLayerScrollableAreaRareData&) = delete;
 
   StickyConstraintsMap sticky_constraints_map_;
-  base::Optional<cc::SnapContainerData> snap_container_data_;
+  absl::optional<cc::SnapContainerData> snap_container_data_;
   bool snap_container_data_needs_update_ = true;
   bool needs_resnap_ = false;
   Vector<IntRect> tickmarks_override_;
@@ -143,7 +142,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     // previously "deleted" scrollbar will be restored, rather than constructing
     // a new one.
    public:
-    ScrollbarManager(PaintLayerScrollableArea& scrollable_area)
+    explicit ScrollbarManager(PaintLayerScrollableArea& scrollable_area)
         : scrollable_area_(scrollable_area),
           h_bar_is_attached_(0),
           v_bar_is_attached_(0) {}
@@ -193,7 +192,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     STACK_ALLOCATED();
 
    public:
-    PreventRelayoutScope(SubtreeLayoutScope&);
+    explicit PreventRelayoutScope(SubtreeLayoutScope&);
     ~PreventRelayoutScope();
 
     static bool RelayoutIsPrevented() { return count_; }
@@ -576,14 +575,14 @@ class CORE_EXPORT PaintLayerScrollableArea final
   }
 
   const cc::SnapContainerData* GetSnapContainerData() const override;
-  void SetSnapContainerData(base::Optional<cc::SnapContainerData>) override;
+  void SetSnapContainerData(absl::optional<cc::SnapContainerData>) override;
   bool SetTargetSnapAreaElementIds(cc::TargetSnapAreaElementIds) override;
   bool SnapContainerDataNeedsUpdate() const override;
   void SetSnapContainerDataNeedsUpdate(bool) override;
   bool NeedsResnap() const override;
   void SetNeedsResnap(bool) override;
 
-  base::Optional<FloatPoint> GetSnapPositionAndSetTarget(
+  absl::optional<FloatPoint> GetSnapPositionAndSetTarget(
       const cc::SnapSelectionStrategy& strategy) override;
 
   void DisposeImpl() override;
@@ -656,6 +655,9 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // Returns true iff scrollbar existence changed.
   bool SetHasHorizontalScrollbar(bool has_scrollbar);
   bool SetHasVerticalScrollbar(bool has_scrollbar);
+
+  // Force scrollbars off for reconstruction.
+  void RemoveScrollbarsForReconstruction();
 
   void UpdateScrollCornerStyle();
   LayoutSize MinimumSizeForResizing(float zoom_factor);
@@ -789,7 +791,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     DISALLOW_NEW();
 
    public:
-    ScrollingBackgroundDisplayItemClient(
+    explicit ScrollingBackgroundDisplayItemClient(
         const PaintLayerScrollableArea& scrollable_area)
         : scrollable_area_(&scrollable_area) {}
 
@@ -806,7 +808,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     DISALLOW_NEW();
 
    public:
-    ScrollCornerDisplayItemClient(
+    explicit ScrollCornerDisplayItemClient(
         const PaintLayerScrollableArea& scrollable_area)
         : scrollable_area_(&scrollable_area) {}
 
@@ -822,9 +824,9 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollingBackgroundDisplayItemClient
       scrolling_background_display_item_client_{*this};
   ScrollCornerDisplayItemClient scroll_corner_display_item_client_{*this};
-  base::Optional<HistoryItem::ViewState> pending_view_state_;
+  absl::optional<HistoryItem::ViewState> pending_view_state_;
 };
 
 }  // namespace blink
 
-#endif  // LayerScrollableArea_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_LAYER_SCROLLABLE_AREA_H_

@@ -36,6 +36,7 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   class Delegate {
    public:
     virtual void OnDestroyed(VivaldiRenderViewContextMenu* menu) = 0;
+    virtual bool GetShowShortcuts() = 0;
   };
 
   // Called by the owner of this controller.

@@ -194,9 +194,9 @@ void RulesIndexManager::ReadRules(const RuleSource& rule_source) {
           &GetRuleBufferFromFile,
           rules_list_folder_.AppendASCII(base::NumberToString(rule_source.id)),
           rule_source.rules_list_checksum, BufferType::kRulesList,
-          base::Bind(&RulesIndexManager::OnRulesRead,
-                     weak_factory_.GetWeakPtr(), rule_source.id,
-                     rule_source.rules_list_checksum)));
+          base::BindOnce(&RulesIndexManager::OnRulesRead,
+                         weak_factory_.GetWeakPtr(), rule_source.id,
+                         rule_source.rules_list_checksum)));
 }
 
 void RulesIndexManager::OnRulesRead(uint32_t source_id,
@@ -291,8 +291,8 @@ void RulesIndexManager::ReadIndex(const std::string& checksum) {
       FROM_HERE, base::BindOnce(&GetRuleBufferFromFile,
                                 rules_list_folder_.Append(kIndexFileName),
                                 index_checksum_, BufferType::kIndex,
-                                base::Bind(&RulesIndexManager::OnIndexRead,
-                                           weak_factory_.GetWeakPtr())));
+                                base::BindOnce(&RulesIndexManager::OnIndexRead,
+                                               weak_factory_.GetWeakPtr())));
 }
 
 }  // namespace adblock_filter

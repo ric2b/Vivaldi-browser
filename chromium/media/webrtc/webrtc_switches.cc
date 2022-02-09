@@ -20,6 +20,11 @@ const char kAgcStartupMinVolume[] = "agc-startup-min-volume";
 
 namespace features {
 
+// When enabled we will tell WebRTC that we want to use the
+// Windows.Graphics.Capture API based DesktopCapturer, if it is available.
+const base::Feature kWebRtcAllowWgcDesktopCapturer{
+    "AllowWgcDesktopCapturer", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables multichannel capture audio to be processed without downmixing in the
 // WebRTC audio processing module.
 const base::Feature kWebRtcEnableCaptureMultiChannelApm{
@@ -35,5 +40,9 @@ const base::Feature kWebRtcAllow48kHzProcessingOnArm{
 // adaptation. Feature for http://crbug.com/873650. Is sent to WebRTC.
 const base::Feature kWebRtcHybridAgc{"WebRtcHybridAgc",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables and configures the clipping control in the WebRTC analog AGC.
+const base::Feature kWebRtcAnalogAgcClippingControl{
+    "WebRtcAnalogAgcClippingControl", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

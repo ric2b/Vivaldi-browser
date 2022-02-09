@@ -56,7 +56,7 @@ AccountID AccountTable::CreateDefaultAccount() {
   row.name = l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_ACCOUNT_NAME);
   row.account_type = ACCOUNT_TYPE_LOCAL;
   row.interval = 0;
-  row.username = base::UTF8ToUTF16("");
+  row.username = u"";
   return CreateAccount(row);
 }
 

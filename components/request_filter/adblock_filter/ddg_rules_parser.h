@@ -5,6 +5,7 @@
 
 #include "base/values.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter_rule.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace adblock_filter {
 struct ParseResult;
@@ -23,9 +24,9 @@ class DuckDuckGoRulesParser {
                  const std::string& domain,
                  bool default_ignore,
                  const base::Value* excluded_origins);
-  base::Optional<std::bitset<RequestFilterRule::kTypeCount>> GetTypes(
+  absl::optional<std::bitset<RequestFilterRule::kTypeCount>> GetTypes(
       const base::Value* rule_properties);
-  base::Optional<std::vector<std::string>> GetDomains(
+  absl::optional<std::vector<std::string>> GetDomains(
       const base::Value* rule_properties);
   ParseResult* parse_result_;
 

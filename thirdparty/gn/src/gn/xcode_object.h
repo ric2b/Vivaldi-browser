@@ -23,11 +23,6 @@
 // https://chromium.googlesource.com/external/gyp/+/master/pylib/gyp/xcodeproj_file.py
 // for more information on Xcode project file format.
 
-enum class CompilerFlags {
-  NONE,
-  HELP,
-};
-
 // PBXObjectClass -------------------------------------------------------------
 
 enum PBXObjectClass {
@@ -193,8 +188,7 @@ class PBXAggregateTarget : public PBXTarget {
 class PBXBuildFile : public PBXObject {
  public:
   PBXBuildFile(const PBXFileReference* file_reference,
-               const PBXBuildPhase* build_phase,
-               const CompilerFlags compiler_flag);
+               const PBXBuildPhase* build_phase);
   ~PBXBuildFile() override;
 
   // PBXObject implementation.
@@ -205,7 +199,6 @@ class PBXBuildFile : public PBXObject {
  private:
   const PBXFileReference* file_reference_ = nullptr;
   const PBXBuildPhase* build_phase_ = nullptr;
-  const CompilerFlags compiler_flag_;
 
   DISALLOW_COPY_AND_ASSIGN(PBXBuildFile);
 };
@@ -329,8 +322,7 @@ class PBXNativeTarget : public PBXTarget {
 
   void AddResourceFile(const PBXFileReference* file_reference);
 
-  void AddFileForIndexing(const PBXFileReference* file_reference,
-                          const CompilerFlags compiler_flag);
+  void AddFileForIndexing(const PBXFileReference* file_reference);
 
   // PBXObject implementation.
   PBXObjectClass Class() const override;
@@ -355,11 +347,9 @@ class PBXProject : public PBXObject {
   ~PBXProject() override;
 
   void AddSourceFileToIndexingTarget(const std::string& navigator_path,
-                                     const std::string& source_path,
-                                     const CompilerFlags compiler_flag);
+                                     const std::string& source_path);
   void AddSourceFile(const std::string& navigator_path,
                      const std::string& source_path,
-                     const CompilerFlags compiler_flag,
                      PBXNativeTarget* target);
   void AddAggregateTarget(const std::string& name,
                           const std::string& shell_script);

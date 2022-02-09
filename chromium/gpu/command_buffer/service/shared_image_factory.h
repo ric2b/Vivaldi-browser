@@ -82,6 +82,7 @@ class GPU_GLES2_EXPORT SharedImageFactory {
                          int client_id,
                          gfx::GpuMemoryBufferHandle handle,
                          gfx::BufferFormat format,
+                         gfx::BufferPlane plane,
                          SurfaceHandle surface_handle,
                          const gfx::Size& size,
                          const gfx::ColorSpace& color_space,
@@ -126,6 +127,14 @@ class GPU_GLES2_EXPORT SharedImageFactory {
   SharedContextState* GetSharedContextState() const {
     return shared_context_state_;
   }
+
+#if defined(OS_WIN)
+  bool CreateSharedImageVideoPlanes(base::span<const Mailbox> mailboxes,
+                                    gfx::GpuMemoryBufferHandle handle,
+                                    gfx::BufferFormat format,
+                                    const gfx::Size& size,
+                                    uint32_t usage);
+#endif
 
 #if defined(OS_ANDROID)
   bool CreateSharedImageWithAHB(const Mailbox& out_mailbox,

@@ -83,6 +83,7 @@ source_set("adblock_filter") {
     "//url",
     "//third_party/re2",
     "//vivaldi/components/request_filter/adblock_filter/flat:adblock_rules_list",
+    "//vivaldi/components/content_injection",
     "//third_party/blink/public/common",
   ]
 }

@@ -5,12 +5,14 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "base/version.h"
 #include "base/win/registry.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "installer/util/vivaldi_install_constants.h"
+
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // Installation-related utilities shared by the browser, installer and
 // update_notifier.exe
@@ -42,10 +44,12 @@ enum class InstallType {
 
 bool IsVivaldiInstalled(const base::FilePath& install_top_dir);
 
-base::Optional<InstallType> FindInstallType(
+absl::optional<InstallType> FindInstallType(
     const base::FilePath& install_top_dir);
 
 bool IsStandaloneBrowser();
+
+InstallType GetBrowserInstallType();
 
 // Get the default directory for the Vivaldi installation. install_type must not
 // be kStandalone as that has no notion of a default directory.
@@ -61,7 +65,18 @@ const base::FilePath& GetPathOfCurrentExe();
 
 base::FilePath GetInstallBinaryDir();
 
-base::Version GetInstallVersion(const base::FilePath& install_binary_dir);
+// Get the version of Vivaldi installation in the given directory or in
+// GetInstallBinaryDir() if not given. If there is a pending update, return its
+// version.
+base::Version GetInstallVersion(
+    base::FilePath install_binary_dir = base::FilePath());
+
+// Return the version of a pending update if any or nullopt if there is no
+// pending update. If the version cannot be determined, return a non-null
+// optional with the version where IsValid() method return false. Use
+// GetInstallBinaryDir() if install_binary_dir is not given.
+absl::optional<base::Version> GetPendingUpdateVersion(
+    base::FilePath install_binary_dir = base::FilePath());
 
 // Assuming kChromeNewExe exists alongside the browser executable, return the
 // command to finish the installation. Return an empty string on errors.
@@ -121,11 +136,11 @@ std::wstring ReadRegistryString(const wchar_t* name,
                                 const base::win::RegKey& key);
 
 // Return nullopt on errors.
-base::Optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
+absl::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
                                             const base::win::RegKey& key);
 
 // Return nullopt on errors.
-base::Optional<bool> ReadRegistryBool(const wchar_t* name,
+absl::optional<bool> ReadRegistryBool(const wchar_t* name,
                                       const base::win::RegKey& key);
 
 // If value is empty, this delete the name.

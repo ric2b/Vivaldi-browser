@@ -41,6 +41,7 @@
 <translation id="1395262318152388157">进度滑块</translation>
 <translation id="1404323374378969387">挪威语</translation>
 <translation id="1430915738399379752">打印</translation>
+<translation id="1433628812591023318">若要将某个文件拖放到 Parallels Desktop，必须先将此文件移至“Windows 文件”文件夹。</translation>
 <translation id="1435838927755162558">与 Parallels Desktop 共享文件夹</translation>
 <translation id="1467432559032391204">向左</translation>
 <translation id="1471718551822868769">斯洛伐克语</translation>
@@ -168,7 +169,7 @@
 <translation id="2830077785865012357">中文注音</translation>
 <translation id="2843806747483486897">更改默认设置...</translation>
 <translation id="2850124913210091882">备份</translation>
-<translation id="2873951654529031587">垃圾箱</translation>
+<translation id="2873951654529031587">回收站</translation>
 <translation id="288024221176729610">捷克语</translation>
 <translation id="2887525882758501333">PDF 文档</translation>
 <translation id="2888807692577297075">找不到与&lt;b&gt;“<ph name="SEARCH_STRING" />”&lt;/b&gt;匹配的项</translation>
@@ -196,6 +197,7 @@
 <translation id="3067790092342515856">Windows 文件</translation>
 <translation id="3078461028045006476">使用“<ph name="EXTENSION_NAME" />”分享</translation>
 <translation id="3083975830683400843">Chromebit</translation>
+<translation id="3113153474486991170">无法从此处打开“<ph name="PATH" />”。您需要将它复制到“我的文件”，才能打开它。</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">完成</translation>
 <translation id="3188257591659621405">我的文件</translation>
@@ -315,7 +317,7 @@
 <translation id="4477002475007461989">罗马尼亚语</translation>
 <translation id="4477219268485577442">保加利亚语（注音）</translation>
 <translation id="4509667233588080747">英语（美国）Workman 国际键盘</translation>
-<translation id="4522570452068850558">详细信息</translation>
+<translation id="4522570452068850558">详情</translation>
 <translation id="4527800702232535228">已与 Parallels Desktop 共享此文件夹</translation>
 <translation id="4552678318981539154">购买更多存储空间</translation>
 <translation id="4559318885353833501">已删除 <ph name="FILE_NAME" /></translation>
@@ -400,7 +402,7 @@
 <translation id="5159383109919732130"><ph name="BEGIN_BOLD" />暂时请不要取出您的设备！<ph name="END_BOLD" />
    <ph name="LINE_BREAKS" />
    取出使用中的设备可能会导致数据丢失。请等待操作完成，然后使用“文件”菜单弹出设备。</translation>
-<translation id="5159560892333415631">清空垃圾箱</translation>
+<translation id="5159560892333415631">清空回收站</translation>
 <translation id="5163869187418756376">共享失败。请检查连接是否正常，然后重试。</translation>
 <translation id="516592729076796170">美式 Programmer Dvorak 键盘</translation>
 <translation id="5170477580121653719">Google 云端硬盘可用存储空间：<ph name="SPACE_AVAILABLE" />。</translation>
@@ -415,7 +417,7 @@
 <translation id="5275973617553375938">从 Google 云端硬盘恢复的文件</translation>
 <translation id="5288441970121584418">汉堡包</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
-<translation id="5299998344490869684">确定要清空垃圾箱吗？</translation>
+<translation id="5299998344490869684">确定要清空回收站吗？</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5318819489018851358">与 Linux 共享</translation>
 <translation id="5323213332664049067">拉丁美洲</translation>
@@ -444,6 +446,7 @@
 <translation id="5602622065581044566">保加利亚语注音键盘</translation>
 <translation id="5605830556594064952">美国英语(Dvorak)</translation>
 <translation id="5625294776298156701">泰米尔语 Tamil99 键盘</translation>
+<translation id="5633226425545095130">移动此内容会将其分享给所有能看到共享文件夹“<ph name="DESTINATION_NAME" />”的人。</translation>
 <translation id="5649768706273821470">收听</translation>
 <translation id="5678784840044122290">此 Linux 应用将可以在您的终端上使用，且可能在启动器中显示图标。</translation>
 <translation id="5686799162999241776"><ph name="BEGIN_BOLD" />无法断开与档案或虚拟磁盘的连接<ph name="END_BOLD" />
@@ -605,6 +608,7 @@
 <translation id="7417453074306512035">埃塞俄比亚语键盘</translation>
 <translation id="7417705661718309329">Google 地图</translation>
 <translation id="7460898608667578234">乌克兰语</translation>
+<translation id="7486315294984620427">若要将某个文件拖放到 Parallels Desktop，必须先将此文件复制到“Windows 文件”文件夹。</translation>
 <translation id="7489215562877293245">找到了 <ph name="FILE_COUNT" />
     <ph name="LINE_BREAK1" />
     可以开始备份到 <ph name="BEGIN_LINK" />Google 云端硬盘<ph name="END_LINK" />了</translation>
@@ -717,6 +721,7 @@
 <translation id="8395901698320285466">尺寸</translation>
 <translation id="8437209419043462667">美国英语</translation>
 <translation id="8456681095658380701">名称无效</translation>
+<translation id="8459404855768962328">复制此内容会将其分享给所有能看到共享文件夹“<ph name="DESTINATION_NAME" />”的人。</translation>
 <translation id="8461467696380332069">右键点击某个文件，然后选择“固定到任务栏”，以便在任务栏中快速访问您的文件。</translation>
 <translation id="8463494891489624050">越南语 VIQR</translation>
 <translation id="8466234950814670489">Tar 归档</translation>
@@ -747,7 +752,7 @@
 <translation id="872537912056138402">克罗地亚语</translation>
 <translation id="8750438273876807512">轻触并按住某个文件，点按 <ph name="ICON" />，然后选择“固定到任务栏”，即可在任务栏中快速访问您的文件。</translation>
 <translation id="8775404590947523323">系统会自动保存您所做的修改。<ph name="BREAKS" />要保留原始图像的副本，请取消选中“覆盖原始文件”。</translation>
-<translation id="8802459921616481935">移至垃圾箱</translation>
+<translation id="8802459921616481935">移至回收站</translation>
 <translation id="8808686172382650546">猫</translation>
 <translation id="8810671769985673465">压缩失败，已有此项内容：“<ph name="FILE_NAME" />”</translation>
 <translation id="8813284582615685103">西班牙语（西班牙）</translation>
@@ -781,7 +786,7 @@
 <translation id="9154418932169119429">此图片无法在离线模式下显示。</translation>
 <translation id="9172592259078059678">古吉拉特语音译</translation>
 <translation id="9173120999827300720">英语（美国）国际键盘</translation>
-<translation id="9174050671906956834">移至垃圾箱 30 天后，所移动的内容将被永久删除。</translation>
+<translation id="9174050671906956834">移至回收站 30 天后，所移动的内容将被永久删除。</translation>
 <translation id="9189836632794948435">哈萨克语</translation>
 <translation id="9213073329713032541">安装已成功启动。</translation>
 <translation id="9219103736887031265">图片</translation>

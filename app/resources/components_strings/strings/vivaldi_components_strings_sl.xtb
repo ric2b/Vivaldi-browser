@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Nadaljuj</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Izvajanje omrežne diagnostike<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Obvestila</translation>
+<translation id="2491414235131909199">To stran je blokirala razširitev</translation>
 <translation id="2501278716633472235">Pojdi nazaj</translation>
 <translation id="2539524384386349900">Zaznava</translation>
 <translation id="255002559098805027">Spletno mesto <ph name="HOST_NAME" /> je poslalo neveljaven odgovor.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Na tem spletnem mestu ne vnašajte občutljivih informacij (npr. gesel ali številk kreditnih kartic), ker jih lahko ukradejo napadalci.</translation>
 <translation id="5869405914158311789">Tega spletnega mesta ni mogoče doseči</translation>
 <translation id="5932224571077948991">Spletno mesto prikazuje vsiljive ali zavajajoče oglase</translation>
-<translation id="5990559369517809815">Zahteve za strežnik je blokirala razširitev.</translation>
 <translation id="6051221802930200923">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, ker uporablja pripenjanje certifikata. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="6146055958333702838">Preverite kable in znova zaženite usmerjevalnike, modeme ali druge omrežne 
     naprave, ki jih uporabljate.</translation>

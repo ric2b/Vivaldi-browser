@@ -143,7 +143,7 @@ const SourceTypeForExt kSourceTypeForExt[] = {
     {"y", "sourcecode.yacc"},
 };
 
-const char* GetSourceType(const std::string_view& ext) {
+const char* GetSourceType(std::string_view ext) {
   for (size_t i = 0; i < std::size(kSourceTypeForExt); ++i) {
     if (kSourceTypeForExt[i].ext == ext)
       return kSourceTypeForExt[i].source_type;
@@ -152,11 +152,11 @@ const char* GetSourceType(const std::string_view& ext) {
   return "text";
 }
 
-bool HasExplicitFileType(const std::string_view& ext) {
+bool HasExplicitFileType(std::string_view ext) {
   return ext == "dart";
 }
 
-bool IsSourceFileForIndexing(const std::string_view& ext) {
+bool IsSourceFileForIndexing(std::string_view ext) {
   return ext == "c" || ext == "cc" || ext == "cpp" || ext == "cxx" ||
          ext == "m" || ext == "mm";
 }
@@ -190,18 +190,6 @@ void PrintValue(std::ostream& out, IndentRules rules, const NoReference& obj) {
 
 void PrintValue(std::ostream& out, IndentRules rules, const PBXObject* value) {
   out << value->Reference();
-}
-
-void PrintValue(std::ostream& out, IndentRules rules, CompilerFlags flags) {
-  out << "{COMPILER_FLAGS = \"";
-  switch (flags) {
-    case CompilerFlags::HELP:
-      out << "--help";
-      break;
-    case CompilerFlags::NONE:
-      break;
-  }
-  out << "\"; }";
 }
 
 template <typename ObjectClass>
@@ -463,11 +451,8 @@ void PBXAggregateTarget::Print(std::ostream& out, unsigned indent) const {
 // PBXBuildFile ---------------------------------------------------------------
 
 PBXBuildFile::PBXBuildFile(const PBXFileReference* file_reference,
-                           const PBXBuildPhase* build_phase,
-                           const CompilerFlags compiler_flag)
-    : file_reference_(file_reference),
-      build_phase_(build_phase),
-      compiler_flag_(compiler_flag) {
+                           const PBXBuildPhase* build_phase)
+    : file_reference_(file_reference), build_phase_(build_phase) {
   DCHECK(file_reference_);
   DCHECK(build_phase_);
 }
@@ -488,9 +473,6 @@ void PBXBuildFile::Print(std::ostream& out, unsigned indent) const {
   out << indent_str << Reference() << " = {";
   PrintProperty(out, rules, "isa", ToString(Class()));
   PrintProperty(out, rules, "fileRef", file_reference_);
-  if (compiler_flag_ != CompilerFlags::NONE) {
-    PrintProperty(out, rules, "settings", compiler_flag_);
-  }
   out << "};\n";
 }
 
@@ -731,15 +713,15 @@ PBXNativeTarget::~PBXNativeTarget() = default;
 
 void PBXNativeTarget::AddResourceFile(const PBXFileReference* file_reference) {
   DCHECK(file_reference);
-  resource_build_phase_->AddBuildFile(std::make_unique<PBXBuildFile>(
-      file_reference, resource_build_phase_, CompilerFlags::NONE));
+  resource_build_phase_->AddBuildFile(
+      std::make_unique<PBXBuildFile>(file_reference, resource_build_phase_));
 }
 
-void PBXNativeTarget::AddFileForIndexing(const PBXFileReference* file_reference,
-                                         const CompilerFlags compiler_flag) {
+void PBXNativeTarget::AddFileForIndexing(
+    const PBXFileReference* file_reference) {
   DCHECK(file_reference);
-  source_build_phase_->AddBuildFile(std::make_unique<PBXBuildFile>(
-      file_reference, source_build_phase_, compiler_flag));
+  source_build_phase_->AddBuildFile(
+      std::make_unique<PBXBuildFile>(file_reference, source_build_phase_));
 }
 
 PBXObjectClass PBXNativeTarget::Class() const {
@@ -785,18 +767,15 @@ PBXProject::~PBXProject() = default;
 
 void PBXProject::AddSourceFileToIndexingTarget(
     const std::string& navigator_path,
-    const std::string& source_path,
-    const CompilerFlags compiler_flag) {
+    const std::string& source_path) {
   if (!target_for_indexing_) {
     AddIndexingTarget();
   }
-  AddSourceFile(navigator_path, source_path, compiler_flag,
-                target_for_indexing_);
+  AddSourceFile(navigator_path, source_path, target_for_indexing_);
 }
 
 void PBXProject::AddSourceFile(const std::string& navigator_path,
                                const std::string& source_path,
-                               const CompilerFlags compiler_flag,
                                PBXNativeTarget* target) {
   PBXFileReference* file_reference =
       sources_->AddSourceFile(navigator_path, source_path);
@@ -805,7 +784,7 @@ void PBXProject::AddSourceFile(const std::string& navigator_path,
     return;
 
   DCHECK(target);
-  target->AddFileForIndexing(file_reference, compiler_flag);
+  target->AddFileForIndexing(file_reference);
 }
 
 void PBXProject::AddAggregateTarget(const std::string& name,
@@ -870,6 +849,7 @@ PBXNativeTarget* PBXProject::AddNativeTarget(
   attributes["CODE_SIGNING_REQUIRED"] = "NO";
   attributes["CONFIGURATION_BUILD_DIR"] = output_dir;
   attributes["PRODUCT_NAME"] = product_name;
+  attributes["EXCLUDED_SOURCE_FILE_NAMES"] = "*.*";
 
   targets_.push_back(std::make_unique<PBXNativeTarget>(
       name, shell_script, config_name_, attributes, output_type, product_name,

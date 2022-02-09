@@ -251,6 +251,8 @@ action("vivaldi_version_info") {
   script = vivaldi_version_py_path
   inputs = [
     vivaldi_version_path,
+    chrome_version_path,
+    lastchange_path,
   ]
   outputs = [
     "$root_build_dir/vivaldi_version.txt",

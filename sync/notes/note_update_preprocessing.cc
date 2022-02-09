@@ -88,7 +88,8 @@ void AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
   }
 
   if (update_entity.has_unique_position()) {
-    data->unique_position = update_entity.unique_position();
+    data->unique_position =
+        UniquePosition::FromProto(update_entity.unique_position());
   } else if (update_entity.has_position_in_parent() ||
              update_entity.has_insert_after_item_id()) {
     bool missing_originator_fields = false;
@@ -106,12 +107,11 @@ void AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
 
     if (update_entity.has_position_in_parent()) {
       data->unique_position =
-          UniquePosition::FromInt64(update_entity.position_in_parent(), suffix)
-              .ToProto();
+          UniquePosition::FromInt64(update_entity.position_in_parent(), suffix);
     } else {
       // If update_entity has insert_after_item_id, use 0 index.
       DCHECK(update_entity.has_insert_after_item_id());
-      data->unique_position = UniquePosition::FromInt64(0, suffix).ToProto();
+      data->unique_position = UniquePosition::FromInt64(0, suffix);
     }
   } else {
     DLOG(ERROR) << "Missing required position information in update: "

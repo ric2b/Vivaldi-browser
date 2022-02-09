@@ -21,7 +21,7 @@ const unsigned kProcessingImportFlag = 2;
 // Returns true if this variable name should be considered private. Private
 // values start with an underscore, and are not imported from "gni" files
 // when processing an import.
-bool IsPrivateVar(const std::string_view& name) {
+bool IsPrivateVar(std::string_view name) {
   return name.empty() || name[0] == '_';
 }
 
@@ -80,13 +80,12 @@ bool Scope::HasValues(SearchNested search_nested) const {
   return !values_.empty();
 }
 
-const Value* Scope::GetValue(const std::string_view& ident,
-                             bool counts_as_used) {
+const Value* Scope::GetValue(std::string_view ident, bool counts_as_used) {
   const Scope* found_in_scope = nullptr;
   return GetValueWithScope(ident, counts_as_used, &found_in_scope);
 }
 
-const Value* Scope::GetValueWithScope(const std::string_view& ident,
+const Value* Scope::GetValueWithScope(std::string_view ident,
                                       bool counts_as_used,
                                       const Scope** found_in_scope) {
   // First check for programmatically-provided values.
@@ -116,7 +115,7 @@ const Value* Scope::GetValueWithScope(const std::string_view& ident,
   return nullptr;
 }
 
-Value* Scope::GetMutableValue(const std::string_view& ident,
+Value* Scope::GetMutableValue(std::string_view ident,
                               SearchNested search_mode,
                               bool counts_as_used) {
   // Don't do programmatic values, which are not mutable.
@@ -135,7 +134,7 @@ Value* Scope::GetMutableValue(const std::string_view& ident,
   return nullptr;
 }
 
-std::string_view Scope::GetStorageKey(const std::string_view& ident) const {
+std::string_view Scope::GetStorageKey(std::string_view ident) const {
   RecordMap::const_iterator found = values_.find(ident);
   if (found != values_.end())
     return found->first;
@@ -146,12 +145,12 @@ std::string_view Scope::GetStorageKey(const std::string_view& ident) const {
   return std::string_view();
 }
 
-const Value* Scope::GetValue(const std::string_view& ident) const {
+const Value* Scope::GetValue(std::string_view ident) const {
   const Scope* found_in_scope = nullptr;
   return GetValueWithScope(ident, &found_in_scope);
 }
 
-const Value* Scope::GetValueWithScope(const std::string_view& ident,
+const Value* Scope::GetValueWithScope(std::string_view ident,
                                       const Scope** found_in_scope) const {
   RecordMap::const_iterator found = values_.find(ident);
   if (found != values_.end()) {
@@ -163,7 +162,7 @@ const Value* Scope::GetValueWithScope(const std::string_view& ident,
   return nullptr;
 }
 
-Value* Scope::SetValue(const std::string_view& ident,
+Value* Scope::SetValue(std::string_view ident,
                        Value v,
                        const ParseNode* set_node) {
   Record& r = values_[ident];  // Clears any existing value.
@@ -172,7 +171,7 @@ Value* Scope::SetValue(const std::string_view& ident,
   return &r.value;
 }
 
-void Scope::RemoveIdentifier(const std::string_view& ident) {
+void Scope::RemoveIdentifier(std::string_view ident) {
   RecordMap::iterator found = values_.find(ident);
   if (found != values_.end())
     values_.erase(found);
@@ -209,7 +208,7 @@ const Template* Scope::GetTemplate(const std::string& name) const {
   return nullptr;
 }
 
-void Scope::MarkUsed(const std::string_view& ident) {
+void Scope::MarkUsed(std::string_view ident) {
   RecordMap::iterator found = values_.find(ident);
   if (found == values_.end()) {
     NOTREACHED();
@@ -233,7 +232,7 @@ void Scope::MarkAllUsed(const std::set<std::string>& excluded_values) {
   }
 }
 
-void Scope::MarkUnused(const std::string_view& ident) {
+void Scope::MarkUnused(std::string_view ident) {
   RecordMap::iterator found = values_.find(ident);
   if (found == values_.end()) {
     NOTREACHED();
@@ -242,7 +241,7 @@ void Scope::MarkUnused(const std::string_view& ident) {
   found->second.used = false;
 }
 
-bool Scope::IsSetButUnused(const std::string_view& ident) const {
+bool Scope::IsSetButUnused(std::string_view ident) const {
   RecordMap::const_iterator found = values_.find(ident);
   if (found != values_.end()) {
     if (!found->second.used) {
@@ -304,7 +303,7 @@ bool Scope::NonRecursiveMergeTo(Scope* dest,
                                 Err* err) const {
   // Values.
   for (const auto& pair : values_) {
-    const std::string_view& current_name = pair.first;
+    const std::string_view current_name = pair.first;
     if (options.skip_private_vars && IsPrivateVar(current_name))
       continue;  // Skip this private var.
     if (!options.excluded_values.empty() &&
@@ -390,23 +389,6 @@ bool Scope::NonRecursiveMergeTo(Scope* dest,
                                      "<SHOULDN'T HAPPEN>", err);
   }
 
-  // Sources assignment filter.
-  if (sources_assignment_filter_) {
-    if (!options.clobber_existing) {
-      if (dest->GetSourcesAssignmentFilter()) {
-        // Sources assignment filter present in both the source and the dest.
-        std::string desc_string(desc_for_err);
-        *err = Err(node_for_err, "Assignment filter collision.",
-                   "The " + desc_string +
-                       " contains a sources_assignment_filter "
-                       "which\nwould clobber the one in your current scope.");
-        return false;
-      }
-    }
-    dest->sources_assignment_filter_ =
-        std::make_unique<PatternList>(*sources_assignment_filter_);
-  }
-
   // Templates.
   for (const auto& pair : templates_) {
     const std::string& current_name = pair.first;
@@ -445,7 +427,7 @@ bool Scope::NonRecursiveMergeTo(Scope* dest,
     dest->templates_[current_name] = pair.second;
   }
 
-  // Propogate build dependency files,
+  // Propagate build dependency files,
   dest->AddBuildDependencyFiles(build_dependency_files_);
 
   return true;
@@ -491,14 +473,6 @@ const Scope* Scope::GetTargetDefaults(const std::string& target_type) const {
     return found->second.get();
   if (containing())
     return containing()->GetTargetDefaults(target_type);
-  return nullptr;
-}
-
-const PatternList* Scope::GetSourcesAssignmentFilter() const {
-  if (sources_assignment_filter_)
-    return sources_assignment_filter_.get();
-  if (containing())
-    return containing()->GetSourcesAssignmentFilter();
   return nullptr;
 }
 

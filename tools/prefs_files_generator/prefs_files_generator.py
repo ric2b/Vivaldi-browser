@@ -125,7 +125,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Generates relevant c++ files from vivalid_prefs.json and chrome_prefs.json')
 
-    parser.add_argument('--prefs-definitions', type=file)
+    parser.add_argument('--prefs-definitions', type=argparse.FileType('r'))
     parser.add_argument('--prefs-names-h', type=argparse.FileType('w'))
     parser.add_argument('--prefs-names-cc', type=argparse.FileType('w'))
     parser.add_argument('--prefs-enums-h', type=argparse.FileType('w'))

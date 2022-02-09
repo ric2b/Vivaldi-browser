@@ -345,6 +345,21 @@ public class DownloadDialogBridge
         getPrefService().setInteger(Pref.PROMPT_FOR_DOWNLOAD_ANDROID, status);
     }
 
+    /**
+     * @return The value for {@link Pref#PROMPT_FOR_DOWNLOAD}. This is currently only used by
+     * enterprise policy.
+     */
+    public static boolean getPromptForDownloadPolicy() {
+        return getPrefService().getBoolean(Pref.PROMPT_FOR_DOWNLOAD);
+    }
+
+    /**
+     * @return whether to prompt the download location dialog is controlled by enterprise policy.
+     */
+    public static boolean isLocationDialogManaged() {
+        return DownloadDialogBridgeJni.get().isLocationDialogManaged();
+    }
+
     public static boolean shouldShowDateTimePicker() {
         return DownloadDialogBridgeJni.get().shouldShowDateTimePicker();
     }
@@ -363,6 +378,7 @@ public class DownloadDialogBridge
         boolean isDataReductionProxyEnabled();
         long getDownloadLaterMinFileSize();
         boolean shouldShowDateTimePicker();
+        boolean isLocationDialogManaged();
     }
 
     /** Vivaldi - Function to start external download manager activity **/

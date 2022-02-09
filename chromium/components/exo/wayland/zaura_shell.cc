@@ -24,6 +24,7 @@
 #include "components/exo/wm_helper.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_occlusion_tracker.h"
+#include "ui/compositor/layer.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_util.h"
@@ -189,6 +190,14 @@ void aura_surface_set_window_session_id(wl_client* client,
   GetUserDataAs<AuraSurface>(resource)->SetWindowSessionId(id);
 }
 
+void aura_surface_set_can_go_back(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraSurface>(resource)->SetCanGoBack();
+}
+
+void aura_surface_unset_can_go_back(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraSurface>(resource)->UnsetCanGoBack();
+}
+
 const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_frame,
     aura_surface_set_parent,
@@ -207,7 +216,9 @@ const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_snap_left,
     aura_surface_set_snap_right,
     aura_surface_unset_snap,
-    aura_surface_set_window_session_id};
+    aura_surface_set_window_session_id,
+    aura_surface_set_can_go_back,
+    aura_surface_unset_can_go_back};
 
 }  // namespace
 
@@ -330,6 +341,14 @@ void AuraSurface::SetWindowSessionId(int32_t window_session_id) {
   surface_->SetWindowSessionId(window_session_id);
 }
 
+void AuraSurface::SetCanGoBack() {
+  surface_->SetCanGoBack();
+}
+
+void AuraSurface::UnsetCanGoBack() {
+  surface_->UnsetCanGoBack();
+}
+
 // Overridden from SurfaceObserver:
 void AuraSurface::OnSurfaceDestroying(Surface* surface) {
   surface->RemoveSurfaceObserver(this);
@@ -340,11 +359,14 @@ void AuraSurface::OnWindowOcclusionChanged(Surface* surface) {
   if (!surface_ || !surface_->IsTrackingOcclusion())
     return;
   auto* window = surface_->window();
-  ComputeAndSendOcclusionFraction(window->occlusion_state(),
+  ComputeAndSendOcclusionFraction(window->GetOcclusionState(),
                                   window->occluded_region_in_root());
 }
 
 void AuraSurface::OnFrameLockingChanged(Surface* surface, bool lock) {
+  if (wl_resource_get_version(resource_) <
+      ZAURA_SURFACE_LOCK_FRAME_NORMAL_SINCE_VERSION)
+    return;
   if (lock)
     zaura_surface_send_lock_frame_normal(resource_);
   else

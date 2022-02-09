@@ -7,16 +7,15 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer_set.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_producer.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service_observer.h"
 #include "chrome/browser/ui/global_media_controls/presentation_request_notification_item.h"
 #include "components/media_router/browser/presentation/web_contents_presentation_manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // An object that creates and manages media notifications related to
 // presentation requests.
@@ -73,12 +72,18 @@ class PresentationRequestNotificationProducer final
   content::WebContents* GetWebContents();
   base::WeakPtr<PresentationRequestNotificationItem> GetNotificationItem();
 
-  void SetPresentationManagerForTesting(
+  void SetTestPresentationManager(
       base::WeakPtr<media_router::WebContentsPresentationManager>
           presentation_manager);
 
  private:
   friend class PresentationRequestNotificationProducerTest;
+  class PresentationRequestWebContentsObserver;
+
+  // An observer for the WebContents associated with |item_| that closes the
+  // dialog when the WebContents is destroyed or navigated.
+  std::unique_ptr<PresentationRequestWebContentsObserver>
+      presentation_request_observer_;
 
   // MediaNotificationServiceObserver:
   void OnNotificationListChanged() final;
@@ -103,7 +108,9 @@ class PresentationRequestNotificationProducer final
 
   // Returns true if there is an item, and the item is for a non-default
   // presentation request.
-  bool HasItemForNonDefaultRequest() const { return item_ && item_->context(); }
+  bool HasItemForNonDefaultRequest() const {
+    return item_ && !item_->is_default_presentation_request();
+  }
 
   // Queries |notification_service_| for active sessions associated with the
   // WebContents that |this| manages and stores the value in |should_hide_|.
@@ -117,10 +124,13 @@ class PresentationRequestNotificationProducer final
   // dialog is closed.
   // It is used to remove |this| from |presentation_manager_|'s observers.
   base::WeakPtr<media_router::WebContentsPresentationManager>
-      presentation_manager_ = nullptr;
+      presentation_manager_;
+  //  A copy of the WebContentsPresentationManager used for testing.
+  base::WeakPtr<media_router::WebContentsPresentationManager>
+      test_presentation_manager_;
 
   // The notification managed by this producer, if there is one.
-  base::Optional<PresentationRequestNotificationItem> item_;
+  absl::optional<PresentationRequestNotificationItem> item_;
 
   // True if |notification_service_| should hide |item_| because there are
   // active notifications on WebContents managed by this producer.

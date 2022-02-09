@@ -25,9 +25,9 @@ RazerChromaHandler::RazerChromaHandler(Profile* profile)
       RazerChromaPlatformDriver::CreateRazerChromaPlatformDriver(profile));
 
   prefs_registrar_.Init(profile->GetPrefs());
-  prefs_registrar_.Add(
-      vivaldiprefs::kRazerChromaEnabled,
-      base::Bind(&RazerChromaHandler::OnPrefChanged, base::Unretained(this)));
+  prefs_registrar_.Add(vivaldiprefs::kRazerChromaEnabled,
+                       base::BindRepeating(&RazerChromaHandler::OnPrefChanged,
+                                           base::Unretained(this)));
 
   // Set initial value.
   OnPrefChanged(vivaldiprefs::kRazerChromaEnabled);

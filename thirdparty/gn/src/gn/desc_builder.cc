@@ -24,7 +24,7 @@
 #include "gn/variables.h"
 
 // Example structure of Value for single target
-// (not applicable or empty fields will be ommitted depending on target type)
+// (not applicable or empty fields will be omitted depending on target type)
 //
 // target_properties = {
 //   "type" : "output_type", // matching Target::GetStringForOutputType
@@ -37,7 +37,7 @@
 //   "public" : either "*" or [ list of public headers],
 //   "inputs" : [ list of inputs for target ],
 //   "configs" : [ list of configs for this target ],
-//   "public_configs" : [ list of public configs for this taget],
+//   "public_configs" : [ list of public configs for this target],
 //   "all_dependent_configs", [ list of all dependent configs for this target],
 //   "script" : "script for action targets",
 //   "args" : [ argument list for action targets ],
@@ -252,6 +252,11 @@ class ConfigDescBuilder : public BaseDescBuilder {
       auto configs = std::make_unique<base::ListValue>();
       FillInConfigVector(configs.get(), config_->configs().vector());
       res->SetWithoutPathExpansion(variables::kConfigs, std::move(configs));
+    }
+
+    if (what(variables::kVisibility)) {
+      res->SetWithoutPathExpansion(variables::kVisibility,
+                                   config_->visibility().AsValue());
     }
 
 #define CONFIG_VALUE_ARRAY_HANDLER(name, type)                        \

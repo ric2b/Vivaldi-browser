@@ -79,7 +79,8 @@ ContentInjectionProvider::GetInjectionsForFrame(
     activations.in_allow_rules |=
         index_manager->rules_index()
             ->GetActivationsForFrame(
-                base::Bind(&IsOriginWanted, service, index_manager->group()),
+                base::BindRepeating(&IsOriginWanted, service,
+                                    index_manager->group()),
                 frame->GetParent())
             .in_allow_rules;
 

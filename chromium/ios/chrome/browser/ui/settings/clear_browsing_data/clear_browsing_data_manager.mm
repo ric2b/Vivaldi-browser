@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browsing_data/core/history_notice_utils.h"
 #include "components/browsing_data/core/pref_names.h"
@@ -33,6 +33,8 @@
 #include "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #include "ios/chrome/browser/history/web_history_service_factory.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
@@ -105,12 +107,13 @@ static NSDictionary* _imageNamesByItemTypes = @{
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
 
-  // Observer for browsing data removal events and associated ScopedObserver
-  // used to track registration with BrowsingDataRemover.
+  // Observer for browsing data removal events and associated
+  // base::ScopedObservation used to track registration with
+  // BrowsingDataRemover.
   std::unique_ptr<BrowsingDataRemoverObserver> _observer;
   std::unique_ptr<
-      ScopedObserver<BrowsingDataRemover, BrowsingDataRemoverObserver>>
-      _scoped_observer;
+      base::ScopedObservation<BrowsingDataRemover, BrowsingDataRemoverObserver>>
+      _scoped_observation;
 
   // Corresponds browsing data counters to their masks/flags. Items are inserted
   // as clear data items are constructed.
@@ -170,10 +173,9 @@ static NSDictionary* _imageNamesByItemTypes = @{
                         _browserState->GetPrefs());
 
     _observer = std::make_unique<BrowsingDataRemoverObserverBridge>(self);
-    _scoped_observer = std::make_unique<
-        ScopedObserver<BrowsingDataRemover, BrowsingDataRemoverObserver>>(
-        _observer.get());
-    _scoped_observer->Add(remover);
+    _scoped_observation = std::make_unique<base::ScopedObservation<
+        BrowsingDataRemover, BrowsingDataRemoverObserver>>(_observer.get());
+    _scoped_observation->Observe(remover);
 
     _prefChangeRegistrar.Init(_browserState->GetPrefs());
     _prefObserverBridge.reset(new PrefObserverBridge(self));
@@ -324,6 +326,7 @@ static NSDictionary* _imageNamesByItemTypes = @{
       addItemWithTitle:l10n_util::GetNSString(IDS_IOS_CLEAR_BUTTON)
                 action:^{
                   [weakSelf clearDataForDataTypes:dataTypeMaskToRemove];
+                  [weakSelf signOutIfNotSyncing];
                 }
                  style:UIAlertActionStyleDestructive];
   return actionCoordinator;
@@ -334,7 +337,7 @@ static NSDictionary* _imageNamesByItemTypes = @{
   // Google Account footer.
   signin::IdentityManager* identityManager =
       IdentityManagerFactory::GetForBrowserState(self.browserState);
-  if (identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+  if (identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     [model addSectionWithIdentifier:SectionIdentifierGoogleAccount];
     [model setFooter:[self footerForGoogleAccountSectionItem]
         forSectionWithIdentifier:SectionIdentifierGoogleAccount];
@@ -536,6 +539,22 @@ static NSDictionary* _imageNamesByItemTypes = @{
 }
 
 #pragma mark - Private Methods
+
+// Signs the user out of Chrome if the sign-in state is |ConsentLevel::kSignin|.
+- (void)signOutIfNotSyncing {
+  DCHECK(self.browserState);
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(self.browserState);
+  DCHECK(identityManager);
+  if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
+    AuthenticationService* authenticationService =
+        AuthenticationServiceFactory::GetForBrowserState(_browserState);
+    DCHECK(authenticationService);
+    authenticationService->SignOut(
+        signin_metrics::ProfileSignout::USER_DELETED_ACCOUNT_COOKIES,
+        /*force_clear_browsing_data=*/false, nil);
+  }
+}
 
 - (void)clearDataForDataTypes:(BrowsingDataRemoveMask)mask {
   DCHECK(mask != BrowsingDataRemoveMask::REMOVE_NOTHING);

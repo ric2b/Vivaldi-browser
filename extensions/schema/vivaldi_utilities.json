@@ -151,7 +151,8 @@
         "description": "Object with url fragments, including top level domain which is eTLD aware.",
         "properties": {
           "scheme": {
-            "$ref": "UrlFragment"
+            "$ref": "UrlFragment",
+            "description": "If URL cannot be parsed at all, this will be empty"
           },
           "username": {
             "$ref": "UrlFragment"
@@ -290,6 +291,20 @@
             "description": "Store in the clipboard"
           }
         ]
+      },
+      {
+        "id": "GetVersionResults",
+        "type": "object",
+        "properties": {
+          "vivaldiVersion": {
+            "type": "string",
+            "description": "The Vivaldi version as a string."
+          },
+          "chromiumVersion": {
+            "type": "string",
+            "description": "The Chromium version as a string."
+          }
+        }
       }
     ],
     "functions": [
@@ -375,24 +390,18 @@
             "type": "string",
             "description": "The URL to process.",
             "name": "url"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "valid",
-                "type": "boolean",
-                "description": "If false the supplied URL could not be parsed as such, otherwise true."
-              },
-              {
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
                 "name": "fragments",
                 "$ref": "UrlFragments",
                 "description": "The URL split up in fragments."
-              }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "getSelectedText",
@@ -476,24 +485,16 @@
         "name": "getVersion",
         "type": "function",
         "description": "Gets the Vivaldi version and Chromium versions.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "vivaldiVer",
-                "type": "string",
-                "description": "The Vivaldi version as a string."
-              },
-              {
-                "name": "chromiumVer",
-                "type": "string",
-                "description": "The Chromium version as a string."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "$ref": "GetVersionResults"
+            }
+          ]
+        }
       },
       {
         "name": "getFFMPEGState",

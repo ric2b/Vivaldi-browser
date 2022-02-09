@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Ukončit režim celé obrazovky</translation>
 <translation id="2177950615300672361">Soukromý list: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul nativního klienta: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Skrýt tlačítko</translation>
 <translation id="2218515861914035131">Vložit jako prostý text</translation>
 <translation id="2249605167705922988">např. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Povolit identifikátory chráněného obsahu (může být potřeba restart počítače)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Předběžně vykreslit: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vyberte kořenový adresář rozšíření, které chcete zabalit. Chcete-li rozšíření aktualizovat, vyberte také soubor soukromého klíče, jenž chcete znovu použít.</translation>
-<translation id="3266179261140759675">Nedovolit nedávno zavřeným webům odesílat a přijímat data</translation>
 <translation id="3280237271814976245">Uložit &amp;jako…</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
 <translation id="3288047731229977326">Rozšíření spuštěná ve vývojářském režimu mohou poškodit počítač. Pokud nejste vývojář, měli byste s ohledem na svou bezpečnost rozšíření spuštěná v tomto režimu zakázat.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Rozšíření může číst a měnit data webů</translation>
 <translation id="3560034655160545939">&amp;Kontrola pravopisu</translation>
 <translation id="3574917942258583917">Přesto ukončit soukromé prohlížení?</translation>
-<translation id="357886715122934472">Uživatel &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce sdílet tiskárnu &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; se skupinou, kterou vlastníte: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Pokud tuto akci přijmete, pomocí této tiskárny budou moci tisknout všichni členové skupiny.</translation>
 <translation id="3587482841069643663">Vše</translation>
 <translation id="3627588569887975815">Otevřít odkaz v &amp;soukromém okně</translation>
 <translation id="3627879631695760395">Nainstalovat aplikaci <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Obslužné nástroje</translation>
 <translation id="3678156199662914018">Rozšíření: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Požadavek na sdílení obrazovky s aplikací <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Nepovolovat zavřeným webům dokončit odeslání a příjem dat</translation>
 <translation id="3711931198657368127">Vl&amp;ožit a přejít na adresu <ph name="URL" /></translation>
 <translation id="3727187387656390258">Prozkoumat vyskakovací okno</translation>
 <translation id="3744111561329211289">Synchronizace na pozadí</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Bylo vytvořeno rozšíření:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Přijmout pozvání pro skupinu</translation>
 <translation id="4096508467498758490">Zakázat rozšíření ve vývojářském režimu</translation>
 <translation id="4100839878934973028">Jiný program ve vašem počítači nainstaloval aplikaci, která může měnit funkce prohlížeče Vivaldi.</translation>
 <translation id="4109898769411476438">Před importem zavřete prohlížeč</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Zobrazit podrobnosti</translation>
 <translation id="4907306957610201395">Třída oprávnění</translation>
 <translation id="4912643508233590958">Probuzení z nečinnosti</translation>
-<translation id="4918086044614829423">Přijmout</translation>
 <translation id="4927753642311223124">Není tu nic k vidění, vše v pořádku.</translation>
 <translation id="4930714375720679147">Zapnout</translation>
 <translation id="4988526792673242964">Stránky</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Uložit</translation>
 <translation id="5334142896108694079">Mezipaměť skriptů</translation>
 <translation id="5355926466126177564">Rozšíření <ph name="EXTENSION_NAME" /> změnilo stránku, která se zobrazí při vyhledávání z omniboxu.</translation>
-<translation id="5360150013186312835">Zobrazit na liště</translation>
+<translation id="5360150013186312835">Zobrazit v panelu nástrojů</translation>
 <translation id="5362741141255528695">Vyberte soubor soukromého klíče.</translation>
 <translation id="536638840841140142">Žádné</translation>
 <translation id="5370819323174483825">Načíst &amp;znovu</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Vymazání údajů stránek</translation>
 <translation id="6042308850641462728">Více</translation>
 <translation id="6059925163896151826">Zařízení USB</translation>
-<translation id="6082651258230788217">Zobrazit na liště</translation>
 <translation id="6086846494333236931">Nainstalováno vaším administrátorem</translation>
 <translation id="6101226222197207147">Byla přidána nová aplikace (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Vaše připojení k internetu je ovládáno</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simulovat restart prohlížeče</translation>
 <translation id="6445450263907939268">Pokud jste tyto změny provádět nechtěli, můžete obnovit svá předchozí nastavení.</translation>
 <translation id="6447842834002726250">Soubory cookie</translation>
-<translation id="6452181791372256707">Odmítnout</translation>
 <translation id="6498249116389603658">&amp;Všechny vaše jazyky</translation>
 <translation id="6503077044568424649">Nejnavštěvovanější</translation>
 <translation id="6508261954199872201">Aplikace: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Rozšíření může číst a měnit data webů</translation>
 <translation id="708060913198414444">K&amp;opírovat adresu zvukového souboru</translation>
 <translation id="7175353351958621980">Načteno z:</translation>
-<translation id="7186088072322679094">Ponechat na liště</translation>
+<translation id="7186088072322679094">Zachovat v panelu nástrojů</translation>
 <translation id="7270858098575133036">Zeptat se, bude-li stránka vyžadovat přímý přístup k zařízením MIDI</translation>
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Je toto stránka nového listu, kterou jste očekávali?</translation>
 <translation id="786073089922909430">Služba: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Nedávné cíle</translation>
-<translation id="7898627924844766532">Ponechat na liště</translation>
 <translation id="7903925330883316394">Nástroj: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Momentálně nepoužívána</translation>
 <translation id="7947962633355574091">K&amp;opírovat adresu souboru videa</translation>
@@ -451,7 +444,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8725066075913043281">Zkusit znovu</translation>
 <translation id="8757090071857742562">Plochu nelze odeslat. Zkontrolujte, zda jste potvrdili výzvu k zahájení sdílení obrazovky.</translation>
 <translation id="8774934320277480003">Horní okraj</translation>
-<translation id="8783093612333542422">Uživatel &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; s vámi chce sdílet tiskárnu &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Výchozí</translation>
 <translation id="8800004011501252845">Zobrazují se cíle pro</translation>
 <translation id="8808478386290700967">Obchod Chrome</translation>

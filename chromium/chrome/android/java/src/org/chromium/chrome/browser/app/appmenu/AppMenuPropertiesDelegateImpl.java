@@ -45,11 +45,13 @@ import org.chromium.chrome.browser.image_descriptions.ImageDescriptionsControlle
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
+import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.tab_management.PriceTrackingUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
@@ -57,7 +59,6 @@ import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
-import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
@@ -230,7 +231,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 menuGroup = MenuGroup.TABLET_EMPTY_MODE_MENU;
             }
         } else if (isOverview) {
-            menuGroup = StartSurfaceConfiguration.isStartSurfaceEnabled()
+            menuGroup = ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled()
                     ? MenuGroup.START_SURFACE_MODE_MENU
                     : MenuGroup.OVERVIEW_MODE_MENU;
         }
@@ -270,8 +271,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             Menu menu, Tab currentTab, AppMenuHandler handler, boolean isIncognito) {
         GURL url = currentTab.getUrl();
         boolean isChromeScheme = url.getScheme().equals(UrlConstants.CHROME_SCHEME)
-                || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_URL_PREFIX)
-                || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_NATIVE_URL_PREFIX)
+                || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_SCHEME)
+                || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME)
                 || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
         boolean isFileScheme = url.getScheme().equals(UrlConstants.FILE_SCHEME);
         boolean isContentScheme = url.getScheme().equals(UrlConstants.CONTENT_SCHEME);
@@ -300,6 +301,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             // Vivaldi
             if (currentTab.isNativePage() || currentTab.getWebContents() == null)
                 bookmarkMenuItem.setEnabled(false);
+
+            // Vivaldi
+            // Disable the "Back" menu item if there is no page to go to.
+            MenuItem backMenuItem = actionBar.findItem(R.id.backward_menu_id);
+            if (backMenuItem != null)
+                backMenuItem.setEnabled(currentTab.canGoBack());
 
             if (!ChromeApplicationImpl.isVivaldi()) {
             MenuItem offlineMenuItem = actionBar.findItem(R.id.offline_page_id);
@@ -341,13 +348,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             UpdateMenuItemHelper.getInstance().registerObserver(mAppMenuInvalidator);
         }
 
-        menu.findItem(R.id.move_to_other_window_menu_id).setVisible(shouldShowMoveToOtherWindow());
+        boolean showNewWindow = shouldShowNewWindow();
+        boolean showMoveToOtherWindow = !showNewWindow && shouldShowMoveToOtherWindow();
+        menu.findItem(R.id.new_window_menu_id).setVisible(showNewWindow);
+        menu.findItem(R.id.move_to_other_window_menu_id).setVisible(showMoveToOtherWindow);
 
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.all_bookmarks_menu_id).setVisible(false);
             menu.findItem(R.id.downloads_menu_id).setVisible(false);
             menu.findItem(R.id.open_history_menu_id).setVisible(false);
-            menu.findItem(R.id.share_row_menu_id).setVisible(!currentTab.isNativePage());
             // NOTE(jarle@vivaldi.com) VAB-2769 blind fix.
             // Check Vivaldi only menu items for null returns.
             MenuItem cloneTabMenuItem = menu.findItem(R.id.vivaldi_clone_tab_menu_id);
@@ -446,7 +455,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     private void prepareCommonMenuItems(Menu menu, @MenuGroup int menuGroup, boolean isIncognito) {
         // We have to iterate all menu items since same menu item ID may be associated with more
         // than one menu items.
-        boolean isMenuGroupTabsVisible = TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+        boolean isMenuGroupTabsVisible = TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)
                 && !DeviceClassManager.enableAccessibilityLayout();
         boolean isMenuGroupTabsEnabled = isMenuGroupTabsVisible
                 && mTabModelSelector.getTabModelFilterProvider()
@@ -557,7 +566,35 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected boolean shouldShowMoveToOtherWindow() {
         boolean hasMoreThanOneTab = mTabModelSelector.getTotalTabCount() > 1;
-        return mMultiWindowModeStateDispatcher.isOpenInOtherWindowSupported() && hasMoreThanOneTab;
+        boolean showAlsoForSingleTab = !isPartnerHomepageEnabled();
+        return mMultiWindowModeStateDispatcher.isOpenInOtherWindowSupported()
+                && (showAlsoForSingleTab || hasMoreThanOneTab);
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public boolean isTabletSizeScreen() {
+        return mIsTablet;
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public boolean isPartnerHomepageEnabled() {
+        return PartnerBrowserCustomizations.getInstance().isHomepageProviderAvailableAndEnabled();
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public boolean isNewWindowMenuFeatureEnabled() {
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.NEW_WINDOW_APP_MENU);
+    }
+
+    /**
+     * @return Whether the "New window" menu item should be displayed.
+     */
+    protected boolean shouldShowNewWindow() {
+        if (!isNewWindowMenuFeatureEnabled() || !isTabletSizeScreen()) return false;
+        if (mMultiWindowModeStateDispatcher.isMultiInstanceRunning()) return false;
+        return mMultiWindowModeStateDispatcher.canEnterMultiWindowMode()
+                || mMultiWindowModeStateDispatcher.isInMultiWindowMode()
+                || mMultiWindowModeStateDispatcher.isInMultiDisplayMode();
     }
 
     /**
@@ -569,6 +606,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public boolean shouldShowPaintPreview(
             boolean isChromeScheme, @NonNull Tab currentTab, boolean isIncognito) {
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.PAINT_PREVIEW_DEMO) && !isChromeScheme
                 && !isIncognito;
     }

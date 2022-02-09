@@ -54,7 +54,7 @@ std::unique_ptr<PBXBuildFile> GetPBXBuildFileObject(
     const PBXFileReference* file_reference,
     const PBXSourcesBuildPhase* build_phase) {
   std::unique_ptr<PBXBuildFile> pbx_build_file(
-      new PBXBuildFile(file_reference, build_phase, CompilerFlags::NONE));
+      new PBXBuildFile(file_reference, build_phase));
   return pbx_build_file;
 }
 

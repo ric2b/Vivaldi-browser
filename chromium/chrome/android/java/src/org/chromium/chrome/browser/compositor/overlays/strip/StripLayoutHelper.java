@@ -46,6 +46,8 @@ import org.chromium.ui.base.LocalizationUtils;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -1658,9 +1660,16 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 -(tabView.getHeight()
                         - (int) mContext.getResources().getDimension(R.dimen.tab_strip_height))
                 - ((MarginLayoutParams) tabView.getLayoutParams()).topMargin;
-        // Vivaldi - Note(nagamani@vivaldi.com): Don't apply vertical offset when address bar is at
-        // the bottom
-        if (!VivaldiUtils.isTopToolbarOn()) verticalOffset = 0;
+        // Vivaldi - Note(nagamani@vivaldi.com): TabView height of native and other webpages are
+        // different. Hence offset need to be adjusted accordingly.
+        if (!VivaldiUtils.isTopToolbarOn()) {
+            if (TabModelUtils.getCurrentTab(mModel).isNativePage())
+                verticalOffset = 0;
+            else
+                verticalOffset = -((ChromeActivity) mContext)
+                                          .getBrowserControlsManager()
+                                          .getBottomControlsHeight();
+        }
         mTabMenu.setVerticalOffset(verticalOffset);
 
         // 4. Set the horizontal offset to align the tab menu with the right side of the tab

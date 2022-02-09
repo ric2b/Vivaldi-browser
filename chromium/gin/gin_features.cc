@@ -63,6 +63,11 @@ const base::Feature kV8Turboprop{"V8Turboprop",
 const base::Feature kV8Sparkplug{"V8Sparkplug",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Makes sure the experimental Sparkplug compiler is only enabled if short
+// builtin calls are enabled too.
+const base::Feature kV8SparkplugNeedsShortBuiltinCalls{
+    "V8SparkplugNeedsShortBuiltinCalls", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables short builtin calls feature.
 const base::Feature kV8ShortBuiltinCalls{"V8ShortBuiltinCalls",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
@@ -71,12 +76,18 @@ const base::Feature kV8ShortBuiltinCalls{"V8ShortBuiltinCalls",
 const base::Feature kV8TurboFastApiCalls{"V8TurboFastApiCalls",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables untrusted code mitigations.
+const base::Feature kV8UntrustedCodeMitigations{
+    "V8UntrustedCodeMitigations", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Artificially delays script execution.
 const base::Feature kV8ScriptAblation{"V8ScriptAblation",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
-const base::FeatureParam<int> kV8ScriptRunDelayOnceMs{
-    &kV8ScriptAblation, "V8ScriptRunDelayOnceMs", 0};
-const base::FeatureParam<int> kV8ScriptRunDelayMs{&kV8ScriptAblation,
-                                                  "V8ScriptRunDelayMs", 0};
+const base::FeatureParam<int> kV8ScriptDelayOnceMs{&kV8ScriptAblation,
+                                                   "V8ScriptDelayOnceMs", 0};
+const base::FeatureParam<int> kV8ScriptDelayMs{&kV8ScriptAblation,
+                                               "V8ScriptDelayMs", 0};
+const base::FeatureParam<double> kV8ScriptDelayFraction{
+    &kV8ScriptAblation, "V8ScriptDelayFraction", 0.0};
 
 }  // namespace features

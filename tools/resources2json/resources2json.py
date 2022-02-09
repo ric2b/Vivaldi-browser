@@ -43,8 +43,8 @@ def main():
             """
             if os.path.splitext(filepath)[1] in [
                 '.txt', '.html', '.js', '.css' ]:
-                    return file.read()
-            return base64.b64encode(file.read())
+                    return file.read().decode("utf-8")
+            return base64.b64encode(file.read()).decode("utf-8")
 
     contents = { name: get_content(os.path.join(args.input_dir, name))
         for name in files}

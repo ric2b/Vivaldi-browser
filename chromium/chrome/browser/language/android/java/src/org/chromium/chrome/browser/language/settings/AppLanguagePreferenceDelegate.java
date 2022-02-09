@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.language.settings;
 
 import android.app.Activity;
 import android.content.res.Resources;
-import android.text.TextUtils;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.chrome.browser.language.AppLocaleUtils;
@@ -14,6 +13,10 @@ import org.chromium.chrome.browser.language.R;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiRelaunchUtils;
 
 /**
  * Helper class to manage the preferences UI when selecting an app language from LanguageSettings.
@@ -82,10 +85,8 @@ public class AppLanguagePreferenceDelegate {
         // Set language text and initial downloading summary.
         mPreference.setLanguageItem(code);
         CharSequence nativeName = mPreference.getLanguageItem().getNativeDisplayName();
-        CharSequence downloadingMessage =
-                mActivity.getResources().getString(R.string.languages_split_downloading);
-        // TODO (https://crbug.com/1197364) Add placeholder to string.
-        CharSequence summary = TextUtils.concat(nativeName, " - ", downloadingMessage);
+        CharSequence summary = mActivity.getResources().getString(
+                R.string.languages_split_downloading, nativeName);
         mPreference.setSummary(summary);
 
         // Disable preference so a second downloaded cannot be started while one is in progress.
@@ -106,12 +107,16 @@ public class AppLanguagePreferenceDelegate {
     private void languageSplitDownloadComplete() {
         CharSequence nativeName = mPreference.getLanguageItem().getNativeDisplayName();
         CharSequence appName = BuildInfo.getInstance().hostPackageLabel;
-        CharSequence downloadReadyMessage =
-                mActivity.getResources().getString(R.string.languages_split_ready, appName);
-        // TODO (https://crbug.com/1197364) Add placeholder to string.
-        CharSequence summary = TextUtils.concat(nativeName, " - ", downloadReadyMessage);
+        CharSequence summary = mActivity.getResources().getString(
+                R.string.languages_split_ready, nativeName, appName);
         mPreference.setSummary(summary);
         mPreference.setEnabled(true);
+
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) {
+            VivaldiRelaunchUtils.showRelaunchDialog(mActivity, null);
+            return;
+        }
 
         makeAndShowRestartSnackbar();
         // TODO (https://crbug.com/1196144): Add logging.
@@ -122,9 +127,8 @@ public class AppLanguagePreferenceDelegate {
      */
     private void languageSplitDownloadFailed() {
         CharSequence nativeName = mPreference.getLanguageItem().getNativeDisplayName();
-        CharSequence downloadFailedMessage = mActivity.getResources().getString(
-                R.string.download_failed_reason_unknown_error, "");
-        CharSequence summary = TextUtils.concat(nativeName, " - ", downloadFailedMessage);
+        CharSequence summary =
+                mActivity.getResources().getString(R.string.languages_split_failed, nativeName);
         mPreference.setSummary(summary);
         mPreference.setEnabled(true);
 
@@ -144,6 +148,7 @@ public class AppLanguagePreferenceDelegate {
                                 mStackbarController, Snackbar.TYPE_PERSISTENT,
                                 Snackbar.UMA_TAB_CLOSE_UNDO)
                         .setAction(resources.getString(R.string.languages_infobar_restart), null);
+        snackbar.setSingleLine(false);
         if (mSnackbarManager.canShowSnackbar()) {
             mSnackbarManager.showSnackbar(snackbar);
         } else {

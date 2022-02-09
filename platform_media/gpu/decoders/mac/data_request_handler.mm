@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/mac/foundation_util.h"
 #include "base/logging.h"
+#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 
@@ -32,7 +32,8 @@ bool ShouldReadAll(AVAssetResourceLoadingDataRequest* data_request) {
 }
 
 int64_t GetLengthToReadAndOffset(
-    AVAssetResourceLoadingDataRequest* data_request, int64_t* offset) {
+    AVAssetResourceLoadingDataRequest* data_request,
+    int64_t* offset) {
   *offset = data_request.currentOffset;
   if (ShouldReadAll(data_request))
     return -1;
@@ -125,17 +126,14 @@ void DataRequestHandler::Load(AVAssetResourceLoadingRequest* request) {
     // https://jaredsinclair.com/2016/09/03/implementing-avassetresourceload.html
     // and
     // https://developer.apple.com/documentation/avfoundation/avassetresourceloadingcontentinformationrequest?language=objc
-    FillContentInformation(
-        [request contentInformationRequest]);
+    FillContentInformation([request contentInformationRequest]);
     CloseRequest(request, Status::kSuccess);
     return;
   }
 
-  AVAssetResourceLoadingDataRequest* data_request =
-      [request dataRequest];
+  AVAssetResourceLoadingDataRequest* data_request = [request dataRequest];
   if (!data_request) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " No data request.";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No data request.";
     CloseRequest(request, Status::kBadRequest);
     return;
   }
@@ -163,8 +161,7 @@ void DataRequestHandler::Load(AVAssetResourceLoadingRequest* request) {
   DCHECK(offset >= 0);
   DCHECK(request != nil);
   if (!CanHandleRequests()) {
-    VLOG(1) << " PRVOPMEDIA(GPU) : " << __FUNCTION__
-            << " can_handle=false";
+    VLOG(1) << " PRVOPMEDIA(GPU) : " << __FUNCTION__ << " can_handle=false";
     CloseRequest(request, Status::kBadRequest);
     return;
   }
@@ -211,7 +208,6 @@ void DataRequestHandler::Load(AVAssetResourceLoadingRequest* request) {
 
 void DataRequestHandler::FillContentInformation(
     AVAssetResourceLoadingContentInformationRequest* information_request) {
-
   VLOG(2) << " PRVOPMEDIA(GPU) : " << __FUNCTION__;
 
   [information_request setByteRangeAccessSupported:YES];
@@ -229,8 +225,7 @@ void DataRequestHandler::FillContentInformation(
   [information_request setContentLength:length];
 }
 
-void DataRequestHandler::CancelRequest(
-    AVAssetResourceLoadingRequest* request) {
+void DataRequestHandler::CancelRequest(AVAssetResourceLoadingRequest* request) {
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " request=" << static_cast<void*>(request);
   DCHECK(request);
@@ -265,8 +260,7 @@ void DataRequestHandler::AbortAllDataRequests() {
 void DataRequestHandler::Stop() {
   DCHECK(dispatch_queue_get_label(ipc_queue_) ==
          dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " can_read=" << can_read_
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " can_read=" << can_read_
           << " waiting_for_reply=" << !source_buffer_
           << " pending_requests_.size()=" << pending_requests_.size();
 
@@ -292,23 +286,21 @@ bool DataRequestHandler::IsStopped() const {
 void DataRequestHandler::Suspend() {
   DCHECK(dispatch_queue_get_label(ipc_queue_) ==
          dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " can_read=" << can_read_
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " can_read=" << can_read_
           << " waiting_for_reply=" << !source_buffer_
           << " pending_requests_.size()=" << pending_requests_.size()
           << " suspended_=" << suspended_;
 
   if (suspended_)
     return;
-  suspended_= true;
+  suspended_ = true;
   AbortAllDataRequests();
 }
 
 void DataRequestHandler::Resume() {
   DCHECK(dispatch_queue_get_label(ipc_queue_) ==
          dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " can_read=" << can_read_
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " can_read=" << can_read_
           << " waiting_for_reply=" << !source_buffer_
           << " pending_requests_.size()=" << pending_requests_.size()
           << " suspended_=" << suspended_;
@@ -331,7 +323,8 @@ bool DataRequestHandler::IsHandlingDataRequests() const {
 }
 
 void DataRequestHandler::DispatchRead(AVAssetResourceLoadingRequest* request,
-                                      int64_t offset, int64_t length) {
+                                      int64_t offset,
+                                      int64_t length) {
   DCHECK(can_read_);
   DCHECK(source_buffer_);
   DCHECK(request);
@@ -403,9 +396,9 @@ void DataRequestHandler::DidReadNextChunk(
     // Do not use [NSData dataWithBytesNoCopy] and always make a copy of data in
     // the IPC buffer. At least on MacOS 10.15 the data can be accessed after
     // respondWithData returns.
-    NSData* ns_data = [NSData
-        dataWithBytes:const_cast<uint8_t*>(source_buffer_.GetReadData())
-                     length:read_size];
+    NSData* ns_data =
+        [NSData dataWithBytes:const_cast<uint8_t*>(source_buffer_.GetReadData())
+                       length:read_size];
     [data_request respondWithData:ns_data];
 
     int64_t offset;
@@ -429,9 +422,11 @@ void DataRequestHandler::DidReadNextChunk(
   if (!pending_requests_.empty()) {
     // Dispatch the request with a minimal current offset.
     DCHECK(can_read_);
-    auto i = std::min_element(pending_requests_.begin(), pending_requests_.end(), [](auto r1, auto r2) {
-      return r1.dataRequest.currentOffset < r2.dataRequest.currentOffset;
-    });
+    auto i = std::min_element(pending_requests_.begin(),
+                              pending_requests_.end(), [](auto r1, auto r2) {
+                                return r1.dataRequest.currentOffset <
+                                       r2.dataRequest.currentOffset;
+                              });
     AVAssetResourceLoadingRequest* request = *i;
     pending_requests_.erase(i);
 

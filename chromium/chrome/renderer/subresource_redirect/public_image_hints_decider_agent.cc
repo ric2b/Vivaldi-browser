@@ -46,12 +46,12 @@ bool PublicImageHintsDeciderAgent::IsMainFrame() const {
 
 void PublicImageHintsDeciderAgent::DidStartNavigation(
     const GURL& url,
-    base::Optional<blink::WebNavigationType> navigation_type) {
+    absl::optional<blink::WebNavigationType> navigation_type) {
   if (!IsMainFrame())
     return;
   // Clear the hints when a navigation starts, so that hints from previous
   // navigation do not apply in case the same renderframe is reused.
-  public_image_urls_ = base::nullopt;
+  public_image_urls_ = absl::nullopt;
 }
 
 void PublicImageHintsDeciderAgent::ReadyToCommitNavigation(
@@ -82,7 +82,7 @@ void PublicImageHintsDeciderAgent::SetCompressPublicImagesHints(
   RecordImageHintsUnavailableMetrics();
 }
 
-base::Optional<SubresourceRedirectResult>
+absl::optional<SubresourceRedirectResult>
 PublicImageHintsDeciderAgent::ShouldRedirectSubresource(
     const GURL& url,
     ShouldRedirectDecisionCallback callback) {
@@ -93,6 +93,8 @@ PublicImageHintsDeciderAgent::ShouldRedirectSubresource(
 
   if (public_image_urls_->find(GetURLForPublicDecision(url)) !=
       public_image_urls_->end()) {
+    if (!ShouldCompressRedirectSubresource())
+      return SubresourceRedirectResult::kIneligibleCompressionDisabled;
     return SubresourceRedirectResult::kRedirectable;
   }
 
@@ -160,12 +162,14 @@ void PublicImageHintsDeciderAgent::RecordMetrics(
     case SubresourceRedirectResult::kIneligibleRedirectFailed:
     case SubresourceRedirectResult::kIneligibleBlinkDisallowed:
     case SubresourceRedirectResult::kIneligibleSubframeResource:
+    case SubresourceRedirectResult::kIneligibleCompressionDisabled:
       public_image_compression_data_use.SetIneligibleOtherImageBytes(
           content_length);
       break;
     case SubresourceRedirectResult::kIneligibleRobotsDisallowed:
     case SubresourceRedirectResult::kIneligibleRobotsTimeout:
     case SubresourceRedirectResult::kIneligibleLoginDetected:
+    case SubresourceRedirectResult::kIneligibleFirstKDisableSubresourceRedirect:
       NOTREACHED();
   }
   mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;

@@ -149,8 +149,7 @@ void VivaldiUtilitiesAPI::PostProfileSetup() {
   // the constructor of this object has been called.
   Profile* profile = Profile::FromBrowserContext(browser_context_);
   content::DownloadManager* manager =
-      content::BrowserContext::GetDownloadManager(
-          profile->GetOriginalProfile());
+      profile->GetOriginalProfile()->GetDownloadManager();
   manager->AddObserver(this);
 }
 
@@ -193,8 +192,7 @@ void VivaldiUtilitiesAPI::OnListenerAdded(const EventListenerInfo& details) {
       vivaldi::utilities::OnDownloadManagerReady::kEventName) {
     Profile* profile = Profile::FromBrowserContext(browser_context_);
     content::DownloadManager* manager =
-      content::BrowserContext::GetDownloadManager(
-        profile->GetOriginalProfile());
+        profile->GetOriginalProfile()->GetDownloadManager();
     if (manager->IsManagerInitialized()) {
       ::vivaldi::BroadcastEvent(
           vivaldi::utilities::OnDownloadManagerReady::kEventName,
@@ -510,87 +508,84 @@ ExtensionFunction::ResponseAction UtilitiesGetUrlFragmentsFunction::Run() {
 
   vivaldi::utilities::UrlFragments fragments;
   GURL url(params->url);
-  if (!url.is_valid()) {
-    return RespondNow(ArgumentList(Results::Create(false, fragments)));
-  }
-
-  url::Parsed parsed;
-  if (url.SchemeIsFile()) {
-    ParseFileURL(url.spec().c_str(), url.spec().length(), &parsed);
-  } else {
-    ParseStandardURL(url.spec().c_str(), url.spec().length(), &parsed);
-    if (url.host().empty() && parsed.host.end() > 0) {
-      // Of the type "javascript:..."
-      ParsePathURL(url.spec().c_str(), url.spec().length(), false, &parsed);
-    }
-  }
-
-  if (parsed.scheme.is_valid()) {
-    fragments.scheme.fragment = url.scheme();
-    fragments.scheme.begin = parsed.CountCharactersBefore(
-        url::Parsed::SCHEME, true);
-    fragments.scheme.end = parsed.scheme.end();
-  }
-  if (parsed.username.is_valid()) {
-    fragments.username.fragment = url.username();
-    fragments.username.begin = parsed.CountCharactersBefore(
-        url::Parsed::USERNAME, true);
-    fragments.username.end = parsed.username.end();
-  }
-  if (parsed.password.is_valid()) {
-    fragments.password.fragment = url.password();
-    fragments.password.begin = parsed.CountCharactersBefore(
-        url::Parsed::PASSWORD, true);
-    fragments.password.end = parsed.password.end();
-  }
-  if (parsed.host.is_valid()) {
-    fragments.host.fragment = url.host();
-    fragments.host.begin = parsed.CountCharactersBefore(
-        url::Parsed::HOST, true);
-    fragments.host.end = parsed.host.end();
-  }
-  if (parsed.port.is_valid()) {
-    fragments.port.fragment = url.port();
-    fragments.port.begin = parsed.CountCharactersBefore(
-        url::Parsed::PORT, true);
-    fragments.port.end = parsed.port.end();
-  }
-  if (parsed.path.is_valid()) {
-    fragments.path.fragment = url.path();
-    fragments.path.begin = parsed.CountCharactersBefore(
-        url::Parsed::PATH, true);
-    fragments.path.end = parsed.path.end();
-  }
-  if (parsed.query.is_valid()) {
-    fragments.query.fragment = url.query();
-    fragments.query.begin = parsed.CountCharactersBefore(
-        url::Parsed::QUERY, true);
-    fragments.query.end = parsed.query.end();
-  }
-  if (parsed.ref.is_valid()) {
-    fragments.ref.fragment = url.ref();
-    fragments.ref.begin = parsed.CountCharactersBefore(
-        url::Parsed::REF, true);
-    fragments.ref.end = parsed.ref.end();
-  }
-  if (parsed.host.is_valid()) {
-    DomainInfo info = GetDomainInfo(url);
-    if (!info.domain_without_registry.empty()) {
-      fragments.tld.fragment = info.domain_and_registry.substr(
-          info.domain_without_registry.length() + 1);
+  if (url.is_valid()) {
+    url::Parsed parsed;
+    if (url.SchemeIsFile()) {
+      ParseFileURL(url.spec().c_str(), url.spec().length(), &parsed);
     } else {
-      fragments.tld.fragment = info.domain_and_registry;
+      ParseStandardURL(url.spec().c_str(), url.spec().length(), &parsed);
+      if (url.host().empty() && parsed.host.end() > 0) {
+        // Of the type "javascript:..."
+        ParsePathURL(url.spec().c_str(), url.spec().length(), false, &parsed);
+      }
     }
-    std::size_t offset = fragments.host.fragment.find(fragments.tld.fragment);
-    if (offset != std::string::npos) {
-      fragments.tld.begin = fragments.host.begin + offset;
-      fragments.tld.end = parsed.host.end();
+
+    if (parsed.scheme.is_valid()) {
+      fragments.scheme.fragment = url.scheme();
+      fragments.scheme.begin = parsed.CountCharactersBefore(
+          url::Parsed::SCHEME, true);
+      fragments.scheme.end = parsed.scheme.end();
+    }
+    if (parsed.username.is_valid()) {
+      fragments.username.fragment = url.username();
+      fragments.username.begin = parsed.CountCharactersBefore(
+          url::Parsed::USERNAME, true);
+      fragments.username.end = parsed.username.end();
+    }
+    if (parsed.password.is_valid()) {
+      fragments.password.fragment = url.password();
+      fragments.password.begin = parsed.CountCharactersBefore(
+          url::Parsed::PASSWORD, true);
+      fragments.password.end = parsed.password.end();
+    }
+    if (parsed.host.is_valid()) {
+      fragments.host.fragment = url.host();
+      fragments.host.begin = parsed.CountCharactersBefore(
+          url::Parsed::HOST, true);
+      fragments.host.end = parsed.host.end();
+    }
+    if (parsed.port.is_valid()) {
+      fragments.port.fragment = url.port();
+      fragments.port.begin = parsed.CountCharactersBefore(
+          url::Parsed::PORT, true);
+      fragments.port.end = parsed.port.end();
+    }
+    if (parsed.path.is_valid()) {
+      fragments.path.fragment = url.path();
+      fragments.path.begin = parsed.CountCharactersBefore(
+          url::Parsed::PATH, true);
+      fragments.path.end = parsed.path.end();
+    }
+    if (parsed.query.is_valid()) {
+      fragments.query.fragment = url.query();
+      fragments.query.begin = parsed.CountCharactersBefore(
+          url::Parsed::QUERY, true);
+      fragments.query.end = parsed.query.end();
+    }
+    if (parsed.ref.is_valid()) {
+      fragments.ref.fragment = url.ref();
+      fragments.ref.begin = parsed.CountCharactersBefore(
+          url::Parsed::REF, true);
+      fragments.ref.end = parsed.ref.end();
+    }
+    if (parsed.host.is_valid()) {
+      DomainInfo info = GetDomainInfo(url);
+      if (!info.domain_without_registry.empty()) {
+        fragments.tld.fragment = info.domain_and_registry.substr(
+            info.domain_without_registry.length() + 1);
+      } else {
+        fragments.tld.fragment = info.domain_and_registry;
+      }
+      std::size_t offset = fragments.host.fragment.find(fragments.tld.fragment);
+      if (offset != std::string::npos) {
+        fragments.tld.begin = fragments.host.begin + offset;
+        fragments.tld.end = parsed.host.end();
+      }
     }
   }
 
-  return RespondNow(ArgumentList(Results::Create(true, fragments)));
+  return RespondNow(ArgumentList(Results::Create(fragments)));
 }
-
 
 ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
   using vivaldi::utilities::GetSelectedText::Params;
@@ -833,8 +828,10 @@ void UtilitiesSelectLocalImageFunction::SendResult(bool success) {
 ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {
   namespace Results = vivaldi::utilities::GetVersion::Results;
 
-  return RespondNow(ArgumentList(Results::Create(
-      ::vivaldi::GetVivaldiVersionString(), version_info::GetVersionNumber())));
+  vivaldi::utilities::GetVersionResults results;
+  results.vivaldi_version = ::vivaldi::GetVivaldiVersionString();
+  results.chromium_version = version_info::GetVersionNumber();
+  return RespondNow(ArgumentList(Results::Create(results)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetFFMPEGStateFunction::Run() {
@@ -1378,8 +1375,9 @@ UtilitiesIsDownloadManagerReadyFunction::Run() {
   namespace Results = vivaldi::utilities::IsDownloadManagerReady::Results;
 
   content::DownloadManager* manager =
-      content::BrowserContext::GetDownloadManager(
-          Profile::FromBrowserContext(browser_context())->GetOriginalProfile());
+      Profile::FromBrowserContext(browser_context())
+          ->GetOriginalProfile()
+          ->GetDownloadManager();
 
   bool initialized = manager->IsManagerInitialized();
   return RespondNow(ArgumentList(Results::Create(initialized)));
@@ -1413,7 +1411,7 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
       return RespondNow(NoArguments());
     }
     profile =
-        profile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID());
+        profile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID(), false);
   }
 
   HostContentSettingsMap* map =

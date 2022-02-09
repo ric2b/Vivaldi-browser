@@ -99,7 +99,7 @@ void SessionService::OnExtDataUpdated(content::WebContents* web_contents) {
 /* static */
 bool SessionServiceBase::ShouldTrackVivaldiBrowser(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  base::Optional<base::Value> json =
+  absl::optional<base::Value> json =
       base::JSONReader::Read(browser->ext_data(), options);
   base::DictionaryValue* dict = NULL;
   std::string window_type;
@@ -480,7 +480,7 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       if (!contents)
         continue;
 
-      base::Optional<tab_groups::TabGroupId> group;
+      absl::optional<tab_groups::TabGroupId> group;
       SessionRestoreDelegate::RestoredTab restored_tab(
           contents, is_selected_tab, tab.extension_app_id.empty(), tab.pinned,
           group);
@@ -503,7 +503,7 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       content::WebContents* contents =
           RestoreTab(tab, tab_index_offset + i, browser, false);
       if (contents) {
-        base::Optional<tab_groups::TabGroupId> group;
+        absl::optional<tab_groups::TabGroupId> group;
         // Sanitize the last active time.
         SessionRestoreDelegate::RestoredTab restored_tab(
             contents, false, tab.extension_app_id.empty(), tab.pinned, group);
@@ -537,11 +537,11 @@ content::WebContents* VivaldiSessionService::RestoreTab(
   scoped_refptr<content::SessionStorageNamespace> session_storage_namespace;
   if (!tab.session_storage_persistent_id.empty()) {
     session_storage_namespace =
-        content::BrowserContext::GetDefaultStoragePartition(profile_)
+        profile_->GetDefaultStoragePartition()
             ->GetDOMStorageContext()
             ->RecreateSessionStorage(tab.session_storage_persistent_id);
   }
-  base::Optional<tab_groups::TabGroupId> group;
+  absl::optional<tab_groups::TabGroupId> group;
   content::WebContents* web_contents = chrome::AddRestoredTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       group, false,  // select
@@ -581,7 +581,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   if (windows->empty()) {
     // Restore was unsuccessful. The DOM storage system can also delete its
     // data, since no session restore will happen at a later point in time.
-    content::BrowserContext::GetDefaultStoragePartition(profile_)
+    profile_->GetDefaultStoragePartition()
         ->GetDOMStorageContext()
         ->StartScavengingUnusedSessionStorage();
     NOTREACHED();
@@ -656,7 +656,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   // sessionStorages needed for the session restore have now been recreated
   // by RestoreTab. Now it's safe for the DOM storage system to start
   // deleting leftover data.
-  content::BrowserContext::GetDefaultStoragePartition(profile_)
+  profile_->GetDefaultStoragePartition()
       ->GetDOMStorageContext()
       ->StartScavengingUnusedSessionStorage();
   return last_browser;

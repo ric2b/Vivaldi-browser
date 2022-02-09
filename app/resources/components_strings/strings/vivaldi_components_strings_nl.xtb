@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Doorgaan</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Probleemoplosser voor netwerken uitvoeren<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Meldingen</translation>
+<translation id="2491414235131909199">Deze pagina is geblokkeerd door een extensie</translation>
 <translation id="2501278716633472235">Terug</translation>
 <translation id="2539524384386349900">Detecteren</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> heeft een ongeldige reactie verzonden.</translation>
@@ -140,7 +141,6 @@
 <translation id="5838278095973806738">Je moet geen gevoelige gegevens (zoals wachtwoorden of creditcards) opgeven op deze website, omdat ze kunnen worden gestolen door aanvallers.</translation>
 <translation id="5869405914158311789">Deze website is niet bereikbaar</translation>
 <translation id="5932224571077948991">Website geeft opdringerige of misleidende advertenties weer</translation>
-<translation id="5990559369517809815">Verzoeken aan de server zijn door een extensie geblokkeerd.</translation>
 <translation id="6051221802930200923">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat de website gebruikmaakt van certificaatpinning. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
 <translation id="6146055958333702838">Controleer alle kabels en start alle routers, modems of andere gebruikte netwerkapparaten, opnieuw op.</translation>
 <translation id="614940544461990577">Probeer het volgende:</translation>

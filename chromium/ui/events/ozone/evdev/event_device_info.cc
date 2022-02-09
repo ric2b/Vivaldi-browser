@@ -9,7 +9,6 @@
 #include <cstring>
 
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_restrictions.h"
@@ -63,6 +62,11 @@ constexpr struct {
 } kStylusButtonDevices[] = {
     {0x413c, 0x81d5},  // Dell Active Pen PN579X
 };
+
+// Note: this is not SteelSeries's actual VID; the Stratus Duo just reports it
+// incorrectly over Bluetooth.
+const uint16_t kSteelSeriesStratusDuoBluetoothVendorId = 0x0111;
+const uint16_t kSteelSeriesStratusDuoBluetoothProductId = 0x1431;
 
 bool GetEventBits(int fd,
                   const base::FilePath& path,
@@ -498,6 +502,10 @@ bool EventDeviceInfo::IsStylusButtonDevice() const {
   return false;
 }
 
+bool EventDeviceInfo::IsMicrophoneMuteSwitchDevice() const {
+  return HasSwEvent(SW_MUTE_DEVICE) && device_type_ == INPUT_DEVICE_INTERNAL;
+}
+
 bool IsInKeyboardBlockList(input_id input_id_) {
   for (const auto& blocklist_id : kKeyboardBlocklist) {
     if (input_id_.vendor == blocklist_id.vendor &&
@@ -526,6 +534,13 @@ bool EventDeviceInfo::HasKeyboard() const {
 }
 
 bool EventDeviceInfo::HasMouse() const {
+  // The SteelSeries Stratus Duo claims to be a mouse over Bluetooth, preventing
+  // it from being set up as a gamepad correctly, so check for its vendor and
+  // product ID. (b/189491809)
+  if (input_id_.vendor == kSteelSeriesStratusDuoBluetoothVendorId &&
+      input_id_.product == kSteelSeriesStratusDuoBluetoothProductId) {
+    return false;
+  }
   return HasRelXY() && !HasProp(INPUT_PROP_POINTING_STICK);
 }
 
@@ -543,6 +558,11 @@ bool EventDeviceInfo::HasTablet() const {
 
 bool EventDeviceInfo::HasTouchscreen() const {
   return HasAbsXY() && HasDirect();
+}
+
+bool EventDeviceInfo::HasStylusSwitch() const {
+  return HasSwEvent(SW_PEN_INSERTED) && (device_type_ == INPUT_DEVICE_UNKNOWN ||
+                                         device_type_ == INPUT_DEVICE_INTERNAL);
 }
 
 bool EventDeviceInfo::HasGamepad() const {

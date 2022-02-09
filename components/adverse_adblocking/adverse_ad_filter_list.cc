@@ -58,8 +58,8 @@ AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)
     pref_change_registrar_.Init(prefs);
     pref_change_registrar_.Add(
         vivaldiprefs::kPrivacyAdverseAdBlockEnabled,
-        base::Bind(&AdverseAdFilterListService::SettingsUpdated,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(&AdverseAdFilterListService::SettingsUpdated,
+                            weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -86,9 +86,8 @@ void AdverseAdFilterListService::OnProfileAndServicesInitialized() {
 
   blocklist_file_exists_ = base::PathExists(GetDefaultFilePath());
 
-  url_loader_factory_ =
-      content::BrowserContext::GetDefaultStoragePartition(profile_)
-          ->GetURLLoaderFactoryForBrowserProcess();
+  url_loader_factory_ = profile_->GetDefaultStoragePartition()
+                            ->GetURLLoaderFactoryForBrowserProcess();
 
   OnDoBlockListLifecycleCheck();
 }
@@ -325,7 +324,7 @@ void AdverseAdFilterListService::LoadAndInitializeFromString(
 
   ComputeSHA256Sum(json_string->c_str(), json_string->length());
 
-  base::Optional<base::Value> loaded_json_list =
+  absl::optional<base::Value> loaded_json_list =
       base::JSONReader::Read(*json_string);
 
   DLOG_IF(WARNING, loaded_json_list);

@@ -62,6 +62,9 @@ MenuTreeNode MakeAPITreeNode(Menu_Node* menu_node) {
     tree_node.title.reset(
         new std::string(base::UTF16ToUTF8(menu_node->GetTitle())));
   }
+  if (menu_node->showShortcut()) {
+    tree_node.showshortcut = std::make_unique<bool>(*menu_node->showShortcut());
+  }
   switch (menu_node->type()) {
     case menus::Menu_Node::MENU:
       tree_node.type = vivaldi::menu_content::NODE_TYPE_MENU;
@@ -352,6 +355,55 @@ ExtensionFunction::ResponseAction MenuContentRemoveFunction::Run() {
       vivaldi::menu_content::Remove::Results::Create(success)));
 }
 
+
+ExtensionFunction::ResponseAction MenuContentRemoveActionFunction::Run() {
+  // Model for main menus are always loaded on startup while the one for
+  // context menus is loaded on demand. Test the latter and load it first if
+  // needed.
+  Menu_Model* model = ContextMenuServiceFactory::GetForBrowserContext(
+      browser_context());
+  if (model->loaded()) {
+    bool success = HandleRemoval();
+    return RespondNow(ArgumentList(
+      vivaldi::menu_content::RemoveAction::Results::Create(success)));
+  } else {
+    AddRef();  // Balanced in MenuModelLoaded().
+    model->AddObserver(this);
+    model->Load();
+    return RespondLater();
+  }
+}
+
+void MenuContentRemoveActionFunction::MenuModelLoaded(Menu_Model* model) {
+  model->RemoveObserver(this);
+  bool success = HandleRemoval();
+  Respond(ArgumentList(
+      vivaldi::menu_content::RemoveAction::Results::Create(success)));
+  Release();  // Balanced in Run().
+}
+
+bool MenuContentRemoveActionFunction::HandleRemoval() {
+   std::unique_ptr<vivaldi::menu_content::RemoveAction::Params> params(
+      vivaldi::menu_content::RemoveAction::Params::Create(*args_));
+  Menu_Model* model = MainMenuServiceFactory::GetForBrowserContext(
+    browser_context());
+  if (!model->loaded()) {
+    return false;
+  }
+  for (const std::string& action : params->actions) {
+    model->RemoveAction(model->mainmenu_node(), action);
+  }
+  model = ContextMenuServiceFactory::GetForBrowserContext(
+    browser_context());
+  if (!model->loaded()) {
+    return false;
+  }
+  for (const std::string& action : params->actions) {
+    model->RemoveAction(model->mainmenu_node(), action);
+  }
+  return true;
+}
+
 ExtensionFunction::ResponseAction MenuContentUpdateFunction::Run() {
   std::unique_ptr<vivaldi::menu_content::Update::Params> params(
       vivaldi::menu_content::Update::Params::Create(*args_));
@@ -367,6 +419,13 @@ ExtensionFunction::ResponseAction MenuContentUpdateFunction::Run() {
       }
       if (params->changes.parameter) {
         success = pair.second->SetParameter(node, *params->changes.parameter);
+      }
+      if (params->changes.showshortcut) {
+        // Note. We set the value on the menu node. This means the whole menu
+        // and all items below are managed by this. We can control this per
+        // menu item (the 'node' must be used).
+        success = pair.second->SetShowShortcut(pair.first,
+            *params->changes.showshortcut);
       }
       if (success && params->changes.container_mode) {
         success = pair.second->SetContainerMode(node,

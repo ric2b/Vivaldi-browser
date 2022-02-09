@@ -36,7 +36,6 @@ extern const char kLaunchIfEnabled[];
 extern const char kUnregister[];
 
 // Command line switches for debugging not supported in the official build.
-extern const char kDebugSetupExe[];
 extern const char kDebugVersion[];
 
 // Prefixes for event names for inter-process communications

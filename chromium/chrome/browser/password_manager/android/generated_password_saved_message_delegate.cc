@@ -37,6 +37,7 @@ void GeneratedPasswordSavedMessageDelegate::ShowPrompt(
     std::unique_ptr<password_manager::PasswordFormManagerForUI> saved_form) {
   web_contents_ = web_contents;
   message_ = std::make_unique<messages::MessageWrapper>(
+      messages::MessageIdentifier::GENERATED_PASSWORD_SAVED,
       base::OnceCallback<void()>(),
       base::BindOnce(
           &GeneratedPasswordSavedMessageDelegate::HandleDismissCallback,
@@ -59,5 +60,6 @@ void GeneratedPasswordSavedMessageDelegate::ShowPrompt(
   message_->SetIconResourceId(
       ResourceMapper::MapToJavaDrawableId(IDR_ANDROID_INFOBAR_SAVE_PASSWORD));
   messages::MessageDispatcherBridge::Get()->EnqueueMessage(
-      message_.get(), web_contents, messages::MessageScopeType::NAVIGATION);
+      message_.get(), web_contents, messages::MessageScopeType::NAVIGATION,
+      messages::MessagePriority::kNormal);
 }

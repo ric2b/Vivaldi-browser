@@ -51,6 +51,9 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
     private final Supplier<Integer> mActivityThemeColorSupplier;
     private final BooleanSupplier mIsTabletSupplier;
 
+    /** Whether the theme should apply while in dark mode. */
+    private final boolean mAllowThemingInNightMode;
+
     /** Whether or not the default color is used. */
     private boolean mIsDefaultColorUsed;
 
@@ -59,9 +62,12 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
      * @param tabSupplier Supplier of the current tab.
      * @param activityThemeColorSupplier Supplier of activity theme color.
      * @param isTabletSupplier Supplier of a boolean indicating we're on a tablet device.
+     * @param allowThemingInNightMode Whether the tab theme should be used when the device is in
+     *                                night mode.
      */
     public TopUiThemeColorProvider(Context context, ObservableSupplier<Tab> tabSupplier,
-            Supplier<Integer> activityThemeColorSupplier, BooleanSupplier isTabletSupplier) {
+            Supplier<Integer> activityThemeColorSupplier, BooleanSupplier isTabletSupplier,
+            boolean allowThemingInNightMode) {
         super(context);
         mTabObserver = new CurrentTabObserver(tabSupplier,
                 new EmptyTabObserver() {
@@ -80,6 +86,7 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
                 });
         mActivityThemeColorSupplier = activityThemeColorSupplier;
         mIsTabletSupplier = isTabletSupplier;
+        mAllowThemingInNightMode = allowThemingInNightMode;
     }
 
     /**
@@ -158,9 +165,11 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
      * activity).
      */
     private boolean isThemingAllowed(Tab tab) {
+        boolean disallowDueToNightMode =
+                !mAllowThemingInNightMode && ColorUtils.inNightMode(tab.getContext());
+
         return tab.isThemingAllowed() && !mIsTabletSupplier.getAsBoolean()
-                && !ColorUtils.inNightMode(tab.getContext()) && !tab.isNativePage()
-                && !tab.isIncognito();
+                && !disallowDueToNightMode && !tab.isNativePage() && !tab.isIncognito();
     }
 
     /**

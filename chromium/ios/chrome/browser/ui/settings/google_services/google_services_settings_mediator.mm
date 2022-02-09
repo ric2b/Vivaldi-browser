@@ -583,7 +583,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
       case AllowChromeSigninItemType: {
         SyncSwitchItem* signinDisabledItem =
             base::mac::ObjCCast<SyncSwitchItem>(item);
-        if (signin::IsSigninAllowedByPolicy()) {
+        if (signin::IsSigninAllowedByPolicy(self.userPrefService)) {
           signinDisabledItem.on = self.allowChromeSigninPreference.value;
         } else {
           signinDisabledItem.on = NO;
@@ -692,7 +692,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
     NSMutableArray* items = [NSMutableArray array];
     if (signin::IsMobileIdentityConsistencyEnabled()) {
       int detailTextID =
-          signin::IsSigninAllowedByPolicy()
+          signin::IsSigninAllowedByPolicy(self.userPrefService)
               ? IDS_IOS_GOOGLE_SERVICES_SETTINGS_ALLOW_SIGNIN_DETAIL
               : IDS_IOS_GOOGLE_SERVICES_SETTINGS_SIGNIN_DISABLED_BY_ADMINISTRATOR;
       SyncSwitchItem* allowSigninItem =
@@ -954,15 +954,30 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 
 #pragma mark - GoogleServicesSettingsServiceDelegate
 
-- (void)toggleSwitchItem:(TableViewItem*)item withValue:(BOOL)value {
-  ItemType type = static_cast<ItemType>(item.type);
+- (void)toggleSwitchItem:(TableViewItem*)item
+               withValue:(BOOL)value
+              targetRect:(CGRect)targetRect {
   SyncSwitchItem* syncSwitchItem = base::mac::ObjCCast<SyncSwitchItem>(item);
   syncSwitchItem.on = value;
+  ItemType type = static_cast<ItemType>(item.type);
   switch (type) {
-    case AllowChromeSigninItemType:
-      self.allowChromeSigninPreference.value = value;
-      [self updateNonPersonalizedSectionWithNotification:YES];
+    case AllowChromeSigninItemType: {
+      if (self.isAuthenticated) {
+        __weak GoogleServicesSettingsMediator* weakSelf = self;
+        [self.commandHandler
+            showSignOutFromTargetRect:targetRect
+                           completion:^(BOOL success) {
+                             weakSelf.allowChromeSigninPreference.value =
+                                 success ? value : !value;
+                             [weakSelf
+                                 updateNonPersonalizedSectionWithNotification:
+                                     YES];
+                           }];
+      } else {
+        self.allowChromeSigninPreference.value = value;
+      }
       break;
+    }
     case AutocompleteSearchesAndURLsItemType:
       self.autocompleteSearchPreference.value = value;
       break;

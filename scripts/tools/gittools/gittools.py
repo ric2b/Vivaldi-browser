@@ -90,7 +90,7 @@ class Git(object):
     sys.stdout.flush()
     try:
       if not self.dryrun:
-        output = subprocess.check_output(command, cwd = cwd)
+        output = subprocess.check_output(command, cwd = cwd, text=True)
       else:
         output = dryrun_response
 
@@ -114,7 +114,7 @@ class Git(object):
     sys.stdout.flush()
     try:
       if not self.dryrun:
-        pipe = subprocess.Popen(command, cwd = cwd,
+        pipe = subprocess.Popen(command, cwd = cwd, text=True, 
               # stdout=subprocess.PIPE
               )
       else:
@@ -144,7 +144,7 @@ class Git(object):
     sys.stdout.flush()
     return ret
 
-  def FetchSource(self, update_submodules=True):
+  def FetchSource(self, update_submodules=True, force=False):
 
     try:
       line = self.GitCommand("rev-parse", [
@@ -161,7 +161,7 @@ class Git(object):
         os.makedirs(self.parent);
       except:
         pass # ignore errors, most are "dir already exists"
-      if self.GitCommandStdout("clone", ["--recursive", self.url,
+      if self.GitCommandStdout("clone", (["--recursive"] if update_submodules else []) + [self.url,
                                self.checkout_dir], cwd=self.parent) != 0:
         raise Exception("Cloning %s into %s failed" %(self.url, self.root))
     else:

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="gl">
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadores}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os dereitos reservados.</translation>
 <translation id="3700829948786686853">Benvido ao Vivaldi</translation>
 <translation id="4121750346708795461">Ao usar esta aplicación, aceptas o <ph name="BEGIN_LINK1" />contrato de licenza para o usuario final<ph name="END_LINK1" /> e a <ph name="BEGIN_LINK2" />política de privacidade<ph name="END_LINK2" /> do Vivaldi.</translation>

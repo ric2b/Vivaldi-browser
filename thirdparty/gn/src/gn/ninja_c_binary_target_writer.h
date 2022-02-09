@@ -12,6 +12,7 @@
 #include "gn/unique_vector.h"
 
 struct EscapeOptions;
+struct ModuleDep;
 
 // Writes a .ninja file for a binary target type (an executable, a shared
 // library, or a static library).
@@ -26,7 +27,13 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   using OutputFileSet = std::set<OutputFile>;
 
   // Writes all flags for the compiler: includes, defines, cflags, etc.
-  void WriteCompilerVars();
+  void WriteCompilerVars(const std::vector<ModuleDep>& module_dep_info);
+
+  // Write module_deps or module_deps_no_self flags for clang modulemaps.
+  void WriteModuleDepsSubstitution(
+      const Substitution* substitution,
+      const std::vector<ModuleDep>& module_dep_info,
+      bool include_self);
 
   // Writes build lines required for precompiled headers. Any generated
   // object files will be appended to the |object_files|. Any generated
@@ -71,6 +78,7 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   void WriteSources(const std::vector<OutputFile>& pch_deps,
                     const std::vector<OutputFile>& input_deps,
                     const std::vector<OutputFile>& order_only_deps,
+                    const std::vector<ModuleDep>& module_dep_info,
                     std::vector<OutputFile>* object_files,
                     std::vector<SourceFile>* other_files);
   void WriteSwiftSources(const std::vector<OutputFile>& input_deps,
@@ -88,7 +96,7 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   // the "||" and everything following it on the ninja line.
   //
   // The order-only dependencies are the non-linkable deps passed in as an
-  // argument, plus the data file depdencies in the target.
+  // argument, plus the data file dependencies in the target.
   void WriteOrderOnlyDependencies(
       const UniqueVector<const Target*>& non_linkable_deps);
 

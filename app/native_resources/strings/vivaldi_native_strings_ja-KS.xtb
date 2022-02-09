@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">リンクをメールで送る</translation>
 <translation id="1454726940098520109">分かったからもうええわ</translation>
 <translation id="1462666970065907900">このウィンドウほんまに閉じんの？</translation>
+<translation id="1480046233931937785">クレジット</translation>
 <translation id="1526344461589023948">ダウンロードした更新ファイル、保存できへんかったわ。コンピューターの空きが十分あるか確認して、もう一回試してみて。</translation>
 <translation id="1657174850639146440">怪獣９</translation>
 <translation id="1676595396635191120">さらのプライベートウィンドウ</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">さらのタブで開く</translation>
 <translation id="3027988479108856431">ごめん、Yandex起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存して全部のYandexウィンドウ閉じてからやってみて。</translation>
 <translation id="3084011186245865060">風景６</translation>
+<translation id="3093931836425623631">Vivaldiは、Chromiumオープンソースプロジェクトと、他のオープンソースソフトウェアで構築されてるねん。</translation>
 <translation id="3127383884976966729">動物７</translation>
 <translation id="3156398087075132709">さらのブックマーク</translation>
 <translation id="3255747772218936245">アップデートをインストール</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">風景７</translation>
 <translation id="7111492742514999492">風景９</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldiは<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />オープンソースプロジェクトとその他<ph name="BEGIN_LINK_OSS" />オープンソースソフトウェア<ph name="END_LINK_OSS" />で成り立っております。</translation>
 <translation id="7581266044164103589">更新インストーラー、起動できへんかったわ。コンピューターにメモリとストレージの空きが十分あるか確認して、後でもう一回試してみて。</translation>
 <translation id="7658239707568436148">やんぴ</translation>
 <translation id="7715497554424665066">更新シカトする (&amp;I)</translation>

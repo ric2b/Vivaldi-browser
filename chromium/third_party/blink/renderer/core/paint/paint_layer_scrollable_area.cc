@@ -390,8 +390,8 @@ IntRect PaintLayerScrollableArea::CornerRect() const {
   if (!VerticalScrollbar() && !HorizontalScrollbar()) {
     // We need to know the thickness of custom scrollbars even when they don't
     // exist in order to set the resizer square size properly.
-    horizontal_thickness =
-        GetPageScrollbarTheme().ScrollbarThickness(ScaleFromDIP());
+    horizontal_thickness = GetPageScrollbarTheme().ScrollbarThickness(
+        ScaleFromDIP(), EScrollbarWidth::kAuto);
     vertical_thickness = horizontal_thickness;
   } else if (VerticalScrollbar() && !HorizontalScrollbar()) {
     horizontal_thickness = VerticalScrollbar()->ScrollbarThickness();
@@ -1018,8 +1018,7 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
   allow_second_overflow_relayout_ = false;
 
   if (NeedsScrollbarReconstruction()) {
-    SetHasHorizontalScrollbar(false);
-    SetHasVerticalScrollbar(false);
+    RemoveScrollbarsForReconstruction();
     // In case that DelayScrollOffsetClampScope prevented destruction of the
     // scrollbars.
     scrollbar_manager_.DestroyDetachedScrollbars();
@@ -1297,9 +1296,10 @@ static bool CanHaveOverflowScrollbars(const LayoutBox& box) {
 void PaintLayerScrollableArea::UpdateAfterStyleChange(
     const ComputedStyle* old_style) {
   // Don't do this on first style recalc, before layout has ever happened.
-  if (!overflow_rect_.size.IsZero()) {
+  if (!overflow_rect_.size.IsZero())
     UpdateScrollableAreaSet();
-  }
+
+  UpdateResizerStyle(old_style);
 
   // Whenever background changes on the scrollable element, the scroll bar
   // overlay style might need to be changed to have contrast against the
@@ -1314,16 +1314,18 @@ void PaintLayerScrollableArea::UpdateAfterStyleChange(
   Color new_background = GetLayoutBox()->StyleRef().VisitedDependentColor(
       GetCSSPropertyBackgroundColor());
 
-  if (new_background != old_background) {
+  if (new_background != old_background)
     RecalculateScrollbarOverlayColorTheme(new_background);
+
+  if (NeedsScrollbarReconstruction()) {
+    RemoveScrollbarsForReconstruction();
+    return;
   }
 
   bool needs_horizontal_scrollbar;
   bool needs_vertical_scrollbar;
   ComputeScrollbarExistence(needs_horizontal_scrollbar,
                             needs_vertical_scrollbar, kOverflowIndependent);
-
-  UpdateResizerStyle(old_style);
 
   // Avoid some unnecessary computation if there were and will be no scrollbars.
   if (!HasScrollbar() && !needs_horizontal_scrollbar &&
@@ -1343,8 +1345,6 @@ void PaintLayerScrollableArea::UpdateAfterStyleChange(
         LayoutBlock::ScrollbarChangeContext::kStyleChange);
   }
 
-  // FIXME: Need to detect a swap from custom to native scrollbars (and vice
-  // versa).
   if (HorizontalScrollbar())
     HorizontalScrollbar()->StyleChanged();
   if (VerticalScrollbar())
@@ -1360,8 +1360,11 @@ void PaintLayerScrollableArea::UpdateAfterStyleChange(
     }
   }
 
-  if (!old_style || old_style->UsedColorScheme() != UsedColorScheme())
+  if (!old_style || old_style->UsedColorScheme() != UsedColorScheme() ||
+      old_style->ScrollbarWidth() !=
+          GetLayoutBox()->StyleRef().ScrollbarWidth()) {
     SetScrollControlsNeedFullPaintInvalidation();
+  }
 }
 
 void PaintLayerScrollableArea::UpdateAfterOverflowRecalc() {
@@ -1463,25 +1466,31 @@ static inline const LayoutObject& ScrollbarStyleSource(
     const LayoutBox& layout_box) {
   if (IsA<LayoutView>(layout_box)) {
     Document& doc = layout_box.GetDocument();
+
+    // If scrollbar properties have been set on the root element, they will be
+    // propagated to the viewport.
+    Element* doc_element = doc.documentElement();
+    if (doc_element && doc_element->GetLayoutObject() &&
+        doc_element->GetLayoutObject()->StyleRef().ScrollbarWidth() !=
+            EScrollbarWidth::kAuto)
+      return *doc_element->GetLayoutObject();
+
     if (Settings* settings = doc.GetSettings()) {
       if (!settings->GetAllowCustomScrollbarInMainFrame() &&
           layout_box.GetFrame() && layout_box.GetFrame()->IsMainFrame())
         return layout_box;
     }
 
-    // Try the <body> element first as a scrollbar source, but only if the body
+    // Try the <body> element as a scrollbar source, but only if the body
     // can scroll.
     Element* body = doc.body();
     if (body && body->GetLayoutObject() && body->GetLayoutObject()->IsBox() &&
-        body->GetLayoutObject()->StyleRef().HasPseudoElementStyle(
-            kPseudoIdScrollbar))
+        body->GetLayoutObject()->StyleRef().HasCustomScrollbarStyle())
       return *body->GetLayoutObject();
 
     // If the <body> didn't have a custom style, then the root element might.
-    Element* doc_element = doc.documentElement();
     if (doc_element && doc_element->GetLayoutObject() &&
-        doc_element->GetLayoutObject()->StyleRef().HasPseudoElementStyle(
-            kPseudoIdScrollbar))
+        doc_element->GetLayoutObject()->StyleRef().HasCustomScrollbarStyle())
       return *doc_element->GetLayoutObject();
   } else if (!layout_box.GetNode() && layout_box.Parent()) {
     return *layout_box.Parent();
@@ -1500,9 +1509,7 @@ int PaintLayerScrollableArea::HypotheticalScrollbarThickness(
     return scrollbar->ScrollbarThickness();
 
   const LayoutObject& style_source = ScrollbarStyleSource(*GetLayoutBox());
-  bool has_custom_scrollbar_style =
-      style_source.StyleRef().HasPseudoElementStyle(kPseudoIdScrollbar);
-  if (has_custom_scrollbar_style) {
+  if (style_source.StyleRef().HasCustomScrollbarStyle()) {
     return CustomScrollbar::HypotheticalScrollbarThickness(
         this, orientation, To<Element>(style_source.GetNode()));
   }
@@ -1510,7 +1517,8 @@ int PaintLayerScrollableArea::HypotheticalScrollbarThickness(
   ScrollbarTheme& theme = GetPageScrollbarTheme();
   if (theme.UsesOverlayScrollbars() && !should_include_overlay_thickness)
     return 0;
-  return theme.ScrollbarThickness(ScaleFromDIP());
+  return theme.ScrollbarThickness(ScaleFromDIP(),
+                                  style_source.StyleRef().ScrollbarWidth());
 }
 
 bool PaintLayerScrollableArea::NeedsScrollbarReconstruction() const {
@@ -1519,8 +1527,7 @@ bool PaintLayerScrollableArea::NeedsScrollbarReconstruction() const {
 
   const LayoutObject& style_source = ScrollbarStyleSource(*GetLayoutBox());
   bool needs_custom =
-      style_source.IsBox() &&
-      style_source.StyleRef().HasPseudoElementStyle(kPseudoIdScrollbar);
+      style_source.IsBox() && style_source.StyleRef().HasCustomScrollbarStyle();
 
   Scrollbar* scrollbars[] = {HorizontalScrollbar(), VerticalScrollbar()};
 
@@ -1532,14 +1539,13 @@ bool PaintLayerScrollableArea::NeedsScrollbarReconstruction() const {
     if (scrollbar->IsCustomScrollbar() != needs_custom)
       return true;
 
-    if (needs_custom) {
-      DCHECK(scrollbar->IsCustomScrollbar());
-      // We have a custom scrollbar with a stale m_owner.
-      if (To<CustomScrollbar>(scrollbar)->StyleSource()->GetLayoutObject() !=
-          style_source) {
-        return true;
-      }
+    // We have a scrollbar with a stale style source.
+    if (scrollbar->StyleSource() &&
+        scrollbar->StyleSource()->GetLayoutObject() != style_source) {
+      return true;
+    }
 
+    if (needs_custom) {
       // Should use custom scrollbar and nothing should change.
       continue;
     }
@@ -1564,7 +1570,8 @@ void PaintLayerScrollableArea::ComputeScrollbarExistence(
   if (VisualViewportSuppliesScrollbars() ||
       !CanHaveOverflowScrollbars(*GetLayoutBox()) ||
       GetLayoutBox()->GetFrame()->GetSettings()->GetHideScrollbars() ||
-      GetLayoutBox()->IsLayoutNGFieldset()) {
+      GetLayoutBox()->IsLayoutNGFieldset() ||
+      GetLayoutBox()->StyleRef().ScrollbarWidth() == EScrollbarWidth::kNone) {
     needs_horizontal_scrollbar = false;
     needs_vertical_scrollbar = false;
     return;
@@ -1601,10 +1608,9 @@ void PaintLayerScrollableArea::ComputeScrollbarExistence(
     // only appear when scrolling, we don't create them if there isn't overflow
     // to scroll. Thus, overlay scrollbars can't be "always on". i.e.
     // |overlay:scroll| behaves like |overlay:auto|.
-    bool has_custom_scrollbar_style =
-        ScrollbarStyleSource(*GetLayoutBox())
-            .StyleRef()
-            .HasPseudoElementStyle(kPseudoIdScrollbar);
+    bool has_custom_scrollbar_style = ScrollbarStyleSource(*GetLayoutBox())
+                                          .StyleRef()
+                                          .HasCustomScrollbarStyle();
     bool will_be_overlay = GetPageScrollbarTheme().UsesOverlayScrollbars() &&
                            !has_custom_scrollbar_style;
     if (will_be_overlay) {
@@ -1696,11 +1702,34 @@ bool PaintLayerScrollableArea::TryRemovingAutoScrollbars(
   return false;
 }
 
+void PaintLayerScrollableArea::RemoveScrollbarsForReconstruction() {
+  if (!HasHorizontalScrollbar() && !HasVerticalScrollbar())
+    return;
+  if (HasHorizontalScrollbar()) {
+    SetScrollbarNeedsPaintInvalidation(kHorizontalScrollbar);
+    scrollbar_manager_.SetHasHorizontalScrollbar(false);
+  }
+  if (HasVerticalScrollbar()) {
+    SetScrollbarNeedsPaintInvalidation(kVerticalScrollbar);
+    scrollbar_manager_.SetHasVerticalScrollbar(false);
+  }
+  UpdateScrollCornerStyle();
+  UpdateScrollOrigin();
+
+  // Force an update since we know the scrollbars have changed things.
+  if (GetLayoutBox()->GetDocument().HasAnnotatedRegions())
+    GetLayoutBox()->GetDocument().SetAnnotatedRegionsDirty(true);
+}
+
 bool PaintLayerScrollableArea::SetHasHorizontalScrollbar(bool has_scrollbar) {
   if (FreezeScrollbarsScope::ScrollbarsAreFrozen())
     return false;
 
   if (has_scrollbar == HasHorizontalScrollbar())
+    return false;
+
+  // when scrollbar-width is "none", the scrollbar will not be displayed
+  if (GetLayoutBox()->StyleRef().ScrollbarWidth() == EScrollbarWidth::kNone)
     return false;
 
   SetScrollbarNeedsPaintInvalidation(kHorizontalScrollbar);
@@ -1736,6 +1765,10 @@ bool PaintLayerScrollableArea::SetHasVerticalScrollbar(bool has_scrollbar) {
   }
 
   if (has_scrollbar == HasVerticalScrollbar())
+    return false;
+
+  // when scrollbar-width is "none", the scrollbar will not be displayed
+  if (GetLayoutBox()->StyleRef().ScrollbarWidth() == EScrollbarWidth::kNone)
     return false;
 
   SetScrollbarNeedsPaintInvalidation(kVerticalScrollbar);
@@ -1799,7 +1832,7 @@ const cc::SnapContainerData* PaintLayerScrollableArea::GetSnapContainerData()
 }
 
 void PaintLayerScrollableArea::SetSnapContainerData(
-    base::Optional<cc::SnapContainerData> data) {
+    absl::optional<cc::SnapContainerData> data) {
   EnsureRareData().snap_container_data_ = data;
 }
 
@@ -1838,21 +1871,36 @@ void PaintLayerScrollableArea::SetNeedsResnap(bool needs_resnap) {
   EnsureRareData().needs_resnap_ = needs_resnap;
 }
 
-base::Optional<FloatPoint>
+absl::optional<FloatPoint>
 PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
     const cc::SnapSelectionStrategy& strategy) {
   if (!RareData() || !RareData()->snap_container_data_)
-    return base::nullopt;
+    return absl::nullopt;
 
   cc::SnapContainerData& data = RareData()->snap_container_data_.value();
   if (!data.size())
-    return base::nullopt;
+    return absl::nullopt;
+
+  // If the document has a focused element that is coincident with the snap
+  // target, update the snap target to point to the focused element. This
+  // ensures that we stay snapped to the focused element after a relayout.
+  // TODO(crbug.com/1199911): If the focused element is not a snap target but
+  // has an ancestor that is, perhaps the rule should be applied for the
+  // ancestor element.
+  CompositorElementId active_element_id = CompositorElementId();
+  if (auto* active_element = GetDocument()->ActiveElement()) {
+    active_element_id =
+        CompositorElementIdFromDOMNodeId(DOMNodeIds::IdForNode(active_element));
+  }
 
   cc::TargetSnapAreaElementIds snap_targets;
   gfx::ScrollOffset snap_position;
-  base::Optional<FloatPoint> snap_point;
-  if (data.FindSnapPosition(strategy, &snap_position, &snap_targets))
+  absl::optional<FloatPoint> snap_point;
+  if (data.FindSnapPosition(strategy, &snap_position, &snap_targets,
+                            active_element_id)) {
     snap_point = FloatPoint(snap_position.x(), snap_position.y());
+  }
+
   if (data.SetTargetSnapAreaElementIds(snap_targets))
     GetLayoutBox()->SetNeedsPaintPropertyUpdate();
 
@@ -2276,8 +2324,16 @@ void PaintLayerScrollableArea::Resize(const IntPoint& pos,
 PhysicalRect PaintLayerScrollableArea::ScrollIntoView(
     const PhysicalRect& absolute_rect,
     const mojom::blink::ScrollIntoViewParamsPtr& params) {
+  // Ignore sticky position offsets for the purposes of scrolling elements into
+  // view. See https://www.w3.org/TR/css-position-3/#stickypos-scroll for
+  // details
+  const MapCoordinatesFlags flag =
+      (RuntimeEnabledFeatures::CSSPositionStickyStaticScrollPositionEnabled())
+          ? kIgnoreStickyOffset
+          : 0;
+
   PhysicalRect local_expose_rect =
-      GetLayoutBox()->AbsoluteToLocalRect(absolute_rect);
+      GetLayoutBox()->AbsoluteToLocalRect(absolute_rect, flag);
   PhysicalOffset border_origin_to_scroll_origin(-GetLayoutBox()->BorderLeft(),
                                                 -GetLayoutBox()->BorderTop());
   // There might be scroll bar between border_origin and scroll_origin.
@@ -2339,9 +2395,10 @@ PhysicalRect PaintLayerScrollableArea::ScrollIntoView(
 
   if (intersect.IsEmpty() && !scroll_snapport_rect.IsEmpty() &&
       !local_expose_rect.IsEmpty()) {
-    return GetLayoutBox()->LocalToAbsoluteRect(local_expose_rect);
+    return GetLayoutBox()->LocalToAbsoluteRect(local_expose_rect, flag);
   }
-  intersect = GetLayoutBox()->LocalToAbsoluteRect(intersect);
+  intersect = GetLayoutBox()->LocalToAbsoluteRect(intersect, flag);
+
   return intersect;
 }
 
@@ -2722,9 +2779,7 @@ Scrollbar* PaintLayerScrollableArea::ScrollbarManager::CreateScrollbar(
   Scrollbar* scrollbar = nullptr;
   const LayoutObject& style_source =
       ScrollbarStyleSource(*ScrollableArea()->GetLayoutBox());
-  bool has_custom_scrollbar_style =
-      style_source.StyleRef().HasPseudoElementStyle(kPseudoIdScrollbar);
-  if (has_custom_scrollbar_style) {
+  if (style_source.StyleRef().HasCustomScrollbarStyle()) {
     DCHECK(style_source.GetNode() && style_source.GetNode()->IsElementNode());
     scrollbar = MakeGarbageCollected<CustomScrollbar>(
         ScrollableArea(), orientation, To<Element>(style_source.GetNode()));

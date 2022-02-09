@@ -19,7 +19,7 @@ to set the default value. Can also be accessed through `try_.defaults`.
 
 load("./args.star", "args")
 load("./branches.star", "branches")
-load("./builders.star", "builders", "os")
+load("./builders.star", "builders", "os", "os_category")
 
 DEFAULT_EXCLUDE_REGEXPS = [
     # Contains documentation that doesn't affect the outputs
@@ -107,8 +107,8 @@ def try_builder(
         specifying additional parameters for exporting test results to BigQuery.
         Will always upload to the following tables in addition to any tables
         specified by the list's elements:
-          luci-resultdb.chromium.try_test_results
-          luci-resultdb.chromium.gpu_try_test_results
+          chrome-luci-data.chromium.try_test_results
+          chrome-luci-data.gpu_try_test_results
     """
     if not branches.matches(branch_selector):
         return
@@ -119,15 +119,23 @@ def try_builder(
     experiments.setdefault("chromium.resultdb.result_sink.junit_tests", 100)
 
     merged_resultdb_bigquery_exports = [
+        # TODO(crbug.com/1230801): Remove when all usages of this table have
+        # been migrated to `chrome-luci-data.chromium.try_test_results`.
         resultdb.export_test_results(
             bq_table = "luci-resultdb.chromium.try_test_results",
         ),
         resultdb.export_test_results(
-            bq_table = "luci-resultdb.chromium.gpu_try_test_results",
+            bq_table = "chrome-luci-data.chromium.try_test_results",
+        ),
+        resultdb.export_test_results(
+            bq_table = "chrome-luci-data.chromium.gpu_try_test_results",
             predicate = resultdb.test_result_predicate(
                 # Only match the telemetry_gpu_integration_test and
                 # fuchsia_telemetry_gpu_integration_test targets.
-                test_id_regexp = "ninja://(chrome/test:|content/test:fuchsia_)telemetry_gpu_integration_test/.+",
+                # Android Telemetry targets also have a suffix added to the end
+                # denoting the binary that's included, so also catch those with
+                # [^/]*.
+                test_id_regexp = "ninja://(chrome/test:|content/test:fuchsia_)telemetry_gpu_integration_test[^/]*/.+",
             ),
         ),
     ]
@@ -150,6 +158,15 @@ def try_builder(
     subproject_list_view = defaults.get_value("subproject_list_view", subproject_list_view)
     if subproject_list_view:
         list_view.append(subproject_list_view)
+
+    # in CQ/try, disable ATS on windows. http://b/183895446
+    goma_enable_ats = defaults.get_value_from_kwargs("goma_enable_ats", kwargs)
+    os = defaults.get_value_from_kwargs("os", kwargs)
+    if os and os.category == os_category.WINDOWS:
+        if goma_enable_ats == args.COMPUTE:
+            kwargs["goma_enable_ats"] = False
+        if kwargs["goma_enable_ats"] != False:
+            fail("Try Windows builder {} must disable ATS".format(name))
 
     # Define the builder first so that any validation of luci.builder arguments
     # (e.g. bucket) occurs before we try to use it
@@ -185,6 +202,7 @@ def try_builder(
         )
 
 def blink_builder(*, name, goma_backend = None, **kwargs):
+    kwargs.setdefault("os", builders.os.LINUX_BIONIC_REMOVE)
     return try_builder(
         name = name,
         builder_group = "tryserver.blink",
@@ -266,7 +284,7 @@ def chromium_angle_ios_builder(*, name, **kwargs):
     )
 
 def chromium_chromiumos_builder(*, name, **kwargs):
-    kwargs.setdefault("os", os.LINUX_BIONIC_REMOVE)
+    kwargs.setdefault("os", builders.os.LINUX_BIONIC_REMOVE)
     return try_builder(
         name = name,
         builder_group = "tryserver.chromium.chromiumos",
@@ -286,6 +304,7 @@ def chromium_dawn_builder(*, name, **kwargs):
     )
 
 def chromium_linux_builder(*, name, goma_backend = builders.goma.backend.RBE_PROD, **kwargs):
+    kwargs.setdefault("os", builders.os.LINUX_BIONIC_REMOVE)
     return try_builder(
         name = name,
         builder_group = "tryserver.chromium.linux",
@@ -317,7 +336,7 @@ def chromium_mac_ios_builder(
         name,
         executable = "recipe:chromium_trybot",
         goma_backend = builders.goma.backend.RBE_PROD,
-        os = builders.os.MAC_10_15,
+        os = builders.os.MAC_11,
         xcode = builders.xcode.x12d4e,
         **kwargs):
     return try_builder(

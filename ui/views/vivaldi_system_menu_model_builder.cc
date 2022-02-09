@@ -105,6 +105,6 @@ void VivaldiSystemMenuModelBuilder::AddFrameToggleItems(
           switches::kDebugEnableFrameToggle)) {
     model->AddSeparator(ui::NORMAL_SEPARATOR);
     model->AddItem(IDC_DEBUG_FRAME_TOGGLE,
-                   base::ASCIIToUTF16("Toggle Frame Type"));
+                   u"Toggle Frame Type");
   }
 }

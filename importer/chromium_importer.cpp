@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -79,11 +80,73 @@ void ChromiumImporter::StartImport(
   bridge_->NotifyEnded();
 }
 
+#if defined(OS_WIN)
+std::string import_encryption_key;
+#endif // OS_WIN
 void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
   // Initializes Chrome decryptor
 
   std::vector<importer::ImportedPasswordForm> forms;
   base::FilePath source_path = profile_dir_;
+
+#if defined(OS_WIN)
+  // Read encryption key from other browser local state
+  base::FilePath local_state_file =
+      profile_dir_.DirName().AppendASCII("Local State");
+  if (!base::PathExists(local_state_file)) {
+    LOG(ERROR) << "Unable to find Local State for import browser.";
+    return;
+  }
+
+  std::string local_state_string;
+  if (!ReadFileToString(local_state_file, &local_state_string)) {
+    LOG(ERROR) << "Unable to read Local State from disk.";
+    return;
+  }
+
+  base::Optional<base::Value> local_state(
+      base::JSONReader::Read(local_state_string));
+  if (!local_state) {
+    LOG(ERROR) << "Unable to parse JSON in Local State.";
+    return;
+  }
+
+  if (local_state->is_dict()) {
+    base::Value* os_crypt_dict = local_state->FindDictKey("os_crypt");
+    if (!os_crypt_dict) {
+      LOG(ERROR) << "Unable to find 'os_cypt' entry for import browser.";
+      return;
+    }
+
+    const std::string* base64_encoded_key =
+        os_crypt_dict->FindStringKey("encrypted_key");
+    if (!base64_encoded_key) {
+      LOG(ERROR) << "Unable to find 'encrypted_key' entry for import browser.";
+      return;
+    }
+
+    std::string encrypted_key_with_header;
+    base::Base64Decode(*base64_encoded_key, &encrypted_key_with_header);
+
+    // Key prefix for a key encrypted with DPAPI.
+    const char kDPAPIKeyPrefix[] = "DPAPI";
+    if (!base::StartsWith(encrypted_key_with_header, kDPAPIKeyPrefix,
+                          base::CompareCase::SENSITIVE)) {
+      LOG(ERROR) << "Key is not DPAPI key, unable to decrypt.";
+      return ;
+    }
+
+    std::string dpapi_encrypted_key =
+        encrypted_key_with_header.substr(sizeof(kDPAPIKeyPrefix) - 1);
+
+    // This DPAPI decryption can fail if the user's password has been reset
+    // by an Administrator.
+    if (!OSCrypt::DecryptString(dpapi_encrypted_key, &import_encryption_key)) {
+      LOG(ERROR) << "Decryption key invalid.";
+      return;
+    }
+  }
+#endif // OS_WIN
 
   base::FilePath file = source_path.AppendASCII("Login Data");
   if (base::PathExists(file)) {
@@ -167,9 +230,12 @@ bool ChromiumImporter::ReadAndParseSignons(
         command_line.HasSwitch(switches::kEnableEncryptionSelection);
     chrome::GetDefaultUserDataDirectory(&config->user_data_path);
     OSCrypt::SetConfig(std::move(config));
-#endif
-
     OSCrypt::DecryptString16(cipher_text, &plain_text);
+#endif // OS_LINUX
+#if defined(OS_WIN)
+    OSCrypt::DecryptImportedString16(cipher_text, &plain_text,
+                                     import_encryption_key);
+#endif // OS_WIN
 #endif
 
     form.password_value = plain_text;

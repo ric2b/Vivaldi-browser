@@ -83,7 +83,7 @@ TEST(StringUtils, ExpandStringLiteralIdentifier) {
   EXPECT_TRUE(CheckExpansionCase("hello #$%", nullptr, false));
   EXPECT_TRUE(CheckExpansionCase("hello #${", nullptr, false));
   EXPECT_TRUE(CheckExpansionCase("hello #${}", nullptr, false));
-  EXPECT_TRUE(CheckExpansionCase("hello #$nonexistant", nullptr, false));
+  EXPECT_TRUE(CheckExpansionCase("hello #$nonexistent", nullptr, false));
   EXPECT_TRUE(CheckExpansionCase("hello #${unterminated", nullptr, false));
   EXPECT_TRUE(CheckExpansionCase("hex truncated: $0", nullptr, false));
   EXPECT_TRUE(CheckExpansionCase("hex truncated: $0x", nullptr, false));

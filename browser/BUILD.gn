@@ -5,7 +5,6 @@ import("//extensions/buildflags/buildflags.gni")
 static_library("browser") {
   public_deps = [
     "//vivaldi/app",
-    "//vivaldi/components:content_adverse_adblocking",
     "//vivaldi/clientparts",
     "//vivaldi/importer:browser",
     "//vivaldi/prefs:prefs_files_generator",
@@ -60,7 +59,6 @@ static_library("browser") {
   }
   if (enable_extensions) {
     deps += [
-      "//chrome/browser/web_applications:web_applications_on_extensions",
       "//chrome/browser/web_applications/extensions",
       "//chrome/browser/extensions",
     ]

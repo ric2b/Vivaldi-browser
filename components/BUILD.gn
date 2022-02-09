@@ -5,7 +5,8 @@ source_set("adverse_adblocking") {
     "adverse_adblocking/adverse_ad_filter_list.h",
     "adverse_adblocking/vivaldi_subresource_filter_throttle.cc",
     "adverse_adblocking/vivaldi_subresource_filter_throttle.h",
-    "adverse_adblocking/vivaldi_subresource_filter_client.h",
+    "adverse_adblocking/vivaldi_subresource_filter_throttle_manager.cc",
+    "adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h",
     "adverse_adblocking/adverse_ad_filter_list_factory.h",
   ]
   deps = [
@@ -18,21 +19,6 @@ source_set("adverse_adblocking") {
     "//components/subresource_filter/content/browser",
     "//content/public/browser",
     "//extensions/buildflags",
-    "//vivaldi/prefs:prefs_files_generated",
-  ]
-}
-
-source_set("content_adverse_adblocking") {
-  sources = [
-    "adverse_adblocking/vivaldi_subresource_filter_client.cc",
-    "adverse_adblocking/vivaldi_subresource_filter_client.h",
-  ]
-
-  deps = [
-    ":adverse_adblocking",
-    "//chrome/common:buildflags",
-    "//components/subresource_filter/content/browser",
-    "//content/public/browser",
     "//vivaldi/prefs:prefs_files_generated",
   ]
 }

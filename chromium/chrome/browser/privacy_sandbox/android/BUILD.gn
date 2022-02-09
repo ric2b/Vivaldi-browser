@@ -10,6 +10,7 @@ generate_jni("jni_headers") {
 
 android_library("java") {
   sources = [
+    "java/src/org/chromium/chrome/browser/privacy_sandbox/FlocSettingsFragment.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxBridge.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxHelpers.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxReferrer.java",
@@ -36,7 +37,10 @@ android_library("java") {
 
 android_library("javatests") {
   testonly = true
-  sources = [ "javatests/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxSettingsFragmentTest.java" ]
+  sources = [
+    "javatests/src/org/chromium/chrome/browser/privacy_sandbox/FlocSettingsFragmentTest.java",
+    "javatests/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxSettingsFragmentTest.java",
+  ]
   deps = [
     ":java",
     "//base:base_java",
@@ -47,6 +51,7 @@ android_library("javatests") {
     "//chrome/test/android:chrome_java_test_support",
     "//content/public/test/android:content_java_test_support",
     "//third_party/androidx:androidx_test_runner_java",
+    "//third_party/hamcrest:hamcrest_library_java",
     "//third_party/junit:junit",
   ]
 }
@@ -57,6 +62,7 @@ android_resources("java_resources") {
     "java/res/drawable/privacy_sandbox_illustration.xml",
     "java/res/layout/privacy_sandbox_header.xml",
     "java/res/values/dimens.xml",
+    "java/res/xml/floc_preferences.xml",
     "java/res/xml/privacy_sandbox_preferences.xml",
   ]
   deps = [

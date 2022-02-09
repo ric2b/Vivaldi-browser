@@ -90,7 +90,7 @@ VivaldiPrefsApiNotification::VivaldiPrefsApiNotification(Profile* profile)
     : profile_(profile), weak_ptr_factory_(this) {
   DCHECK(profile == profile->GetOriginalProfile());
 
-  prefs_properties_ = ::vivaldi::ExtractLastRegisteredPrefsPropertes();
+  pref_properties_map_ = ::vivaldi::ExtractLastRegisteredPrefsProperties();
   prefs_registrar_.Init(profile->GetPrefs());
   local_prefs_registrar_.Init(g_browser_process->local_state());
 
@@ -106,10 +106,10 @@ VivaldiPrefsApiNotification::VivaldiPrefsApiNotification(Profile* profile)
       ::vivaldi::NativeSettingsObserver::Create(profile));
 }
 
-const ::vivaldi::PrefProperties* VivaldiPrefsApiNotification::GetPrefProperties(
-    const std::string& path) {
-  const auto& item = prefs_properties_.find(path);
-  if (item == prefs_properties_.end())
+const ::vivaldi::PrefProperties*
+VivaldiPrefsApiNotification::GetPrefProperties(const std::string& path) {
+  const auto& item = pref_properties_map_.find(path);
+  if (item == pref_properties_map_.end())
     return nullptr;
   return &(item->second);
 }
@@ -126,32 +126,35 @@ void VivaldiPrefsApiNotification::RegisterLocalPref(const std::string& path) {
   if (local_prefs_registrar_.IsObserved(path))
     return;
 
-  local_prefs_registrar_.Add(path,
-                             base::Bind(&VivaldiPrefsApiNotification::OnChanged,
-                                        weak_ptr_factory_.GetWeakPtr()));
+  local_prefs_registrar_.Add(
+      path, base::BindRepeating(&VivaldiPrefsApiNotification::OnChanged,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void VivaldiPrefsApiNotification::RegisterProfilePref(const std::string& path) {
   if (prefs_registrar_.IsObserved(path))
     return;
 
-  prefs_registrar_.Add(path, base::Bind(&VivaldiPrefsApiNotification::OnChanged,
-                                        weak_ptr_factory_.GetWeakPtr()));
+  prefs_registrar_.Add(
+      path, base::BindRepeating(&VivaldiPrefsApiNotification::OnChanged,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void VivaldiPrefsApiNotification::OnChanged(const std::string& path) {
-  vivaldi::prefs::PreferenceValue pref_value;
-  pref_value.path = path;
+  vivaldi::prefs::PreferenceNotification pref_notification;
+  pref_notification.path = path;
 
   const ::vivaldi::PrefProperties* properties;
   PrefService* prefs = GetPrefService(profile_, path, &properties);
   DCHECK(prefs);
-  pref_value.value =
+  pref_notification.value =
       std::make_unique<base::Value>(GetPrefValueForJS(prefs, path, properties));
+  pref_notification.uses_default =
+      prefs->FindPreference(path)->IsDefaultValue();
 
-  ::vivaldi::BroadcastEvent(vivaldi::prefs::OnChanged::kEventName,
-                            vivaldi::prefs::OnChanged::Create(pref_value),
-                            profile_);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::prefs::OnChanged::kEventName,
+      vivaldi::prefs::OnChanged::Create(pref_notification), profile_);
 }
 
 VivaldiPrefsApiNotification::~VivaldiPrefsApiNotification() {}
@@ -250,7 +253,7 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
                               base::Value::GetTypeName(value->type()) +
                               " value to an enumerated preference: " + path));
     }
-    base::Optional<int> enum_value =
+    absl::optional<int> enum_value =
         properties->enum_properties()->FindValue(value->GetString());
     if (!enum_value) {
       return RespondNow(

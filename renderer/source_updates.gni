@@ -6,6 +6,8 @@ update_target("//chrome/renderer:renderer") {
     "//vivaldi/renderer/vivaldi_render_frame_observer.h",
     "//vivaldi/renderer/vivaldi_spatial_navigation.cc",
     "//vivaldi/renderer/vivaldi_spatial_navigation.h",
+    "//vivaldi/renderer/tabs_private_service.cc",
+    "//vivaldi/renderer/tabs_private_service.h",
   ]
 }
 

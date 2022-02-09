@@ -79,17 +79,24 @@ class Target : public Item {
   OutputType output_type() const { return output_type_; }
   void set_output_type(OutputType t) { output_type_ = t; }
 
-  // True for targets that compile source code (all types of libaries and
+  // True for targets that compile source code (all types of libraries and
   // executables).
   bool IsBinary() const;
 
   // Can be linked into other targets.
   bool IsLinkable() const;
 
-  // True if the target links dependencies rather than propogated up the graph.
+  // True if the target links dependencies rather than propagated up the graph.
   // This is also true of action and copy steps even though they don't link
-  // dependencies, because they also don't propogate libraries up.
+  // dependencies, because they also don't propagate libraries up.
   bool IsFinal() const;
+
+  // Set when the target should normally be treated as a data dependency. These
+  // do not need to be treated as inputs or hard dependencies for normal build
+  // steps, but have to be kept in the dependency tree to be properly
+  // propagated. Treating these as data only decreases superfluous rebuilds and
+  // increases parallelism.
+  bool IsDataOnly() const;
 
   // Will be the empty string to use the target label as the output name.
   // See GetComputedOutputName().
@@ -411,6 +418,7 @@ class Target : public Item {
 
   // Validates the given thing when a target is resolved.
   bool CheckVisibility(Err* err) const;
+  bool CheckConfigVisibility(Err* err) const;
   bool CheckTestonly(Err* err) const;
   bool CheckAssertNoDeps(Err* err) const;
   void CheckSourcesGenerated() const;

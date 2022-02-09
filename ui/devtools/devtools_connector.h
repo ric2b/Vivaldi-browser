@@ -42,7 +42,7 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   void OnLoadCompleted() override;
   void OpenNodeFrontend() override;
   void ReadyForTest() override;
-  InfoBarService* GetInfoBarService() override;
+  infobars::ContentInfoBarManager* GetInfoBarManager() override;
   void RenderProcessGone(bool crashed) override;
   void SetEyeDropperActive(bool active) override;
   void ShowCertificateViewer(const std::string& cert_chain) override;

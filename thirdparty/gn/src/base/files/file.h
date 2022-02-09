@@ -23,7 +23,7 @@
 namespace base {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_HAIKU) || defined(OS_ANDROID) && __ANDROID_API__ < 21
+    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ANDROID) && __ANDROID_API__ < 21
 typedef struct stat stat_wrapper_t;
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 typedef struct stat64 stat_wrapper_t;
@@ -183,7 +183,7 @@ class File {
   // Same as above but without seek.
   int ReadAtCurrentPosNoBestEffort(char* data, int size);
 
-  // Writes the given buffer into the file at the given offset, overwritting any
+  // Writes the given buffer into the file at the given offset, overwriting any
   // data that was previously there. Returns the number of bytes written, or -1
   // on error. Note that this function makes a best effort to write all data on
   // all platforms. |data| can be nullptr when |size| is 0.

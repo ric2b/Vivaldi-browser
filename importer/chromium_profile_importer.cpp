@@ -119,7 +119,7 @@ void ChromiumProfileImporter::DetectChromiumProfiles(
           chromeProfiles[i].importer_type ==
               ImporterType::TYPE_OPERA_OPIUM_DEV) {
         ChromeProfileInfo operaprof;
-        operaprof.profileDisplayName = base::UTF8ToUTF16("Default");
+        operaprof.profileDisplayName = u"Default";
         operaprof.profileName = "";
         prof.push_back(operaprof);
 
@@ -144,7 +144,7 @@ void ChromiumProfileImporter::ReadProfiles(std::vector<ChromeProfileInfo>* cp,
   std::string input;
   ReadFileToString(profileFileName, &input);
 
-  base::Optional<base::Value> root(base::JSONReader::Read(input));
+  absl::optional<base::Value> root(base::JSONReader::Read(input));
 
   base::DictionaryValue* dict = NULL;
   if (!root->GetAsDictionary(&dict)) {

@@ -46,17 +46,17 @@ enum CALayerResult {
   CA_LAYER_FAILED_TILE_NOT_CANDIDATE = 7,
   CA_LAYER_FAILED_QUAD_BLEND_MODE = 8,
   // CA_LAYER_FAILED_QUAD_TRANSFORM = 9,
-  // CA_LAYER_FAILED_QUAD_CLIPPING = 10,
+  CA_LAYER_FAILED_QUAD_CLIPPING = 10,
   CA_LAYER_FAILED_DEBUG_BORDER = 11,
   CA_LAYER_FAILED_PICTURE_CONTENT = 12,
   // CA_LAYER_FAILED_RENDER_PASS = 13,
   CA_LAYER_FAILED_SURFACE_CONTENT = 14,
-  CA_LAYER_FAILED_YUV_VIDEO_CONTENT = 15,
+  // CA_LAYER_FAILED_YUV_VIDEO_CONTENT = 15,
   CA_LAYER_FAILED_DIFFERENT_CLIP_SETTINGS = 16,
   CA_LAYER_FAILED_DIFFERENT_VERTEX_OPACITIES = 17,
   // CA_LAYER_FAILED_RENDER_PASS_FILTER_SCALE = 18,
   CA_LAYER_FAILED_RENDER_PASS_BACKDROP_FILTERS = 19,
-  // CA_LAYER_FAILED_RENDER_PASS_MASK = 20,
+  CA_LAYER_FAILED_RENDER_PASS_MASK = 20,
   CA_LAYER_FAILED_RENDER_PASS_FILTER_OPERATION = 21,
   CA_LAYER_FAILED_RENDER_PASS_SORTING_CONTEXT_ID = 22,
   CA_LAYER_FAILED_TOO_MANY_RENDER_PASS_DRAW_QUADS = 23,
@@ -64,6 +64,9 @@ enum CALayerResult {
   CA_LAYER_FAILED_QUAD_ROUNDED_CORNER_CLIP_MISMATCH = 25,
   CA_LAYER_FAILED_QUAD_ROUNDED_CORNER_NOT_UNIFORM = 26,
   CA_LAYER_FAILED_TOO_MANY_QUADS = 27,
+  CA_LAYER_FAILED_YUV_NOT_CANDIDATE = 28,
+  CA_LAYER_FAILED_Y_UV_TEXCOORD_MISMATCH = 29,
+  CA_LAYER_FAILED_YUV_INVALID_PLANES = 30,
   CA_LAYER_FAILED_COUNT,
 };
 
@@ -97,7 +100,8 @@ CALayerResult FromRenderPassQuad(
     return CA_LAYER_FAILED_RENDER_PASS_BACKDROP_FILTERS;
   }
 
-  if (quad->shared_quad_state->sorting_context_id != 0)
+  auto* shared_quad_state = quad->shared_quad_state;
+  if (shared_quad_state->sorting_context_id != 0)
     return CA_LAYER_FAILED_RENDER_PASS_SORTING_CONTEXT_ID;
 
   auto it = render_pass_filters.find(quad->render_pass_id);
@@ -107,6 +111,18 @@ CALayerResult FromRenderPassQuad(
       if (!success)
         return CA_LAYER_FAILED_RENDER_PASS_FILTER_OPERATION;
     }
+  }
+
+  // TODO(crbug.com/1215491): support not 2d axis aligned clipping.
+  if (shared_quad_state->clip_rect &&
+      !shared_quad_state->quad_to_target_transform.Preserves2dAxisAlignment()) {
+    return CA_LAYER_FAILED_QUAD_CLIPPING;
+  }
+
+  // TODO(crbug.com/1215491): support not 2d axis aligned mask.
+  if (!shared_quad_state->mask_filter_info.IsEmpty() &&
+      !shared_quad_state->quad_to_target_transform.Preserves2dAxisAlignment()) {
+    return CA_LAYER_FAILED_RENDER_PASS_MASK;
   }
 
   ca_layer_overlay->rpdq = quad;
@@ -167,6 +183,37 @@ CALayerResult FromTextureQuad(DisplayResourceProvider* resource_provider,
   return CA_LAYER_SUCCESS;
 }
 
+CALayerResult FromYUVVideoQuad(DisplayResourceProvider* resource_provider,
+                               const YUVVideoDrawQuad* quad,
+                               CALayerOverlay* ca_layer_overlay) {
+  // For YUVVideoDrawQuads, the Y and UV planes alias the same underlying
+  // IOSurface. Ensure all planes are overlays and have the same contents
+  // rect. Then use the Y plane as the resource for the overlay.
+  ResourceId y_resource_id = quad->y_plane_resource_id();
+  if (!resource_provider->IsOverlayCandidate(y_resource_id) ||
+      !resource_provider->IsOverlayCandidate(quad->u_plane_resource_id()) ||
+      !resource_provider->IsOverlayCandidate(quad->v_plane_resource_id())) {
+    return CA_LAYER_FAILED_YUV_NOT_CANDIDATE;
+  }
+  if (quad->y_plane_resource_id() == quad->u_plane_resource_id() ||
+      quad->y_plane_resource_id() == quad->v_plane_resource_id() ||
+      quad->u_plane_resource_id() != quad->v_plane_resource_id()) {
+    return CA_LAYER_FAILED_YUV_INVALID_PLANES;
+  }
+
+  gfx::RectF ya_contents_rect =
+      gfx::ScaleRect(quad->ya_tex_coord_rect, 1.f / quad->ya_tex_size.width(),
+                     1.f / quad->ya_tex_size.height());
+  gfx::RectF uv_contents_rect =
+      gfx::ScaleRect(quad->uv_tex_coord_rect, 1.f / quad->uv_tex_size.width(),
+                     1.f / quad->uv_tex_size.height());
+  if (ya_contents_rect != uv_contents_rect)
+    return CA_LAYER_FAILED_Y_UV_TEXCOORD_MISMATCH;
+  ca_layer_overlay->contents_resource_id = y_resource_id;
+  ca_layer_overlay->contents_rect = ya_contents_rect;
+  return CA_LAYER_SUCCESS;
+}
+
 CALayerResult FromTileQuad(DisplayResourceProvider* resource_provider,
                            const TileDrawQuad* quad,
                            CALayerOverlay* ca_layer_overlay) {
@@ -210,7 +257,7 @@ class CALayerOverlayProcessorInternal {
     // another CALayer to the tree). Handling non-single border radii is also,
     // but requires APIs not supported on all macOS versions.
     if (quad->shared_quad_state->mask_filter_info.HasRoundedCorners()) {
-      DCHECK(quad->shared_quad_state->is_clipped);
+      DCHECK(quad->shared_quad_state->clip_rect);
       if (quad->shared_quad_state->mask_filter_info.rounded_corner_bounds()
               .GetType() > gfx::RRectF::Type::kSingle) {
         return CA_LAYER_FAILED_QUAD_ROUNDED_CORNER_NOT_UNIFORM;
@@ -235,9 +282,9 @@ class CALayerOverlayProcessorInternal {
       most_recent_overlay_shared_state_->sorting_context_id =
           quad->shared_quad_state->sorting_context_id;
       most_recent_overlay_shared_state_->is_clipped =
-          quad->shared_quad_state->is_clipped;
+          quad->shared_quad_state->clip_rect.has_value();
       most_recent_overlay_shared_state_->clip_rect =
-          gfx::RectF(quad->shared_quad_state->clip_rect);
+          gfx::RectF(quad->shared_quad_state->clip_rect.value_or(gfx::Rect()));
       most_recent_overlay_shared_state_->rounded_corner_bounds =
           quad->shared_quad_state->mask_filter_info.rounded_corner_bounds();
 
@@ -279,7 +326,9 @@ class CALayerOverlayProcessorInternal {
       case DrawQuad::Material::kSurfaceContent:
         return CA_LAYER_FAILED_SURFACE_CONTENT;
       case DrawQuad::Material::kYuvVideoContent:
-        return CA_LAYER_FAILED_YUV_VIDEO_CONTENT;
+        return FromYUVVideoQuad(resource_provider,
+                                YUVVideoDrawQuad::MaterialCast(quad),
+                                ca_layer_overlay);
       default:
         break;
     }
@@ -341,13 +390,17 @@ void CALayerOverlayProcessor::PutForcedOverlayContentIntoOverlays(
   for (auto it = quad_list->begin(); it != quad_list->end(); ++it) {
     const DrawQuad* quad = *it;
     bool force_quad_to_overlay = false;
+    gfx::ProtectedVideoType protected_video_type =
+        gfx::ProtectedVideoType::kClear;
 
     // Put hardware protected video into an overlay
     if (quad->material == ContentDrawQuadBase::Material::kYuvVideoContent) {
       const YUVVideoDrawQuad* video_quad = YUVVideoDrawQuad::MaterialCast(quad);
       if (video_quad->protected_video_type ==
-          gfx::ProtectedVideoType::kHardwareProtected)
+          gfx::ProtectedVideoType::kHardwareProtected) {
         force_quad_to_overlay = true;
+        protected_video_type = gfx::ProtectedVideoType::kHardwareProtected;
+      }
     }
 
     if (quad->material == ContentDrawQuadBase::Material::kTextureContent) {
@@ -368,7 +421,7 @@ void CALayerOverlayProcessor::PutForcedOverlayContentIntoOverlays(
       if (!PutQuadInSeparateOverlay(it, resource_provider, render_pass,
                                     display_rect, quad, render_pass_filters,
                                     render_pass_backdrop_filters,
-                                    ca_layer_overlays)) {
+                                    protected_video_type, ca_layer_overlays)) {
         failed = true;
         break;
       }
@@ -454,6 +507,7 @@ bool CALayerOverlayProcessor::PutQuadInSeparateOverlay(
         render_pass_filters,
     const base::flat_map<AggregatedRenderPassId, cc::FilterOperations*>&
         render_pass_backdrop_filters,
+    gfx::ProtectedVideoType protected_video_type,
     CALayerOverlayList* ca_layer_overlays) const {
   CALayerOverlayProcessorInternal processor;
   CALayerOverlay ca_layer;
@@ -471,6 +525,7 @@ bool CALayerOverlayProcessor::PutQuadInSeparateOverlay(
   if (!AreClipSettingsValid(ca_layer, ca_layer_overlays))
     return true;
 
+  ca_layer.protected_video_type = protected_video_type;
   render_pass->ReplaceExistingQuadWithSolidColor(at, SK_ColorTRANSPARENT,
                                                  SkBlendMode::kSrcOver);
   ca_layer_overlays->push_back(ca_layer);

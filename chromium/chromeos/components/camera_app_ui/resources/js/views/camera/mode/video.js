@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 import {AsyncJobQueue} from '../../../async_job_queue.js';
-import {assert, assertString} from '../../../chrome_util.js';
+import {
+  assert,
+  assertString,
+} from '../../../chrome_util.js';
 import * as dom from '../../../dom.js';
 // eslint-disable-next-line no-unused-vars
 import * as h264 from '../../../h264.js';
@@ -12,6 +15,7 @@ import * as loadTimeData from '../../../models/load_time_data.js';
 import {
   VideoSaver,  // eslint-disable-line no-unused-vars
 } from '../../../models/video_saver.js';
+import {DeviceOperator} from '../../../mojo/device_operator.js';
 import * as sound from '../../../sound.js';
 import * as state from '../../../state.js';
 import * as toast from '../../../toast.js';
@@ -36,6 +40,8 @@ import {RecordTime} from './record_time.js';
 const encoderPreference = new Map([
   ['strongbad', {profile: h264.Profile.HIGH, multiplier: 6}],
   ['trogdor', {profile: h264.Profile.HIGH, multiplier: 6}],
+  ['dedede', {profile: h264.Profile.HIGH, multiplier: 8}],
+  ['volteer', {profile: h264.Profile.HIGH, multiplier: 8}],
 ]);
 
 /**
@@ -163,12 +169,12 @@ export class VideoHandler {
  */
 export class Video extends ModeBase {
   /**
-   * @param {!MediaStream} stream
+   * @param {!MediaStream} stream Preview stream.
    * @param {!Facing} facing
    * @param {!VideoHandler} handler
    */
   constructor(stream, facing, handler) {
-    super(stream, facing, null);
+    super(stream, facing);
 
     /**
      * @const {!VideoHandler}
@@ -209,6 +215,13 @@ export class Video extends ModeBase {
      * Whether current recording ever paused/resumed before it ended.
      */
     this.everPaused_ = false;
+  }
+
+  /**
+   * @override
+   */
+  async clear() {
+    await this.stopCapture();
   }
 
   /**
@@ -286,10 +299,8 @@ export class Video extends ModeBase {
     if (avc1Parameters !== null) {
       return avc1Parameters;
     }
-    const preference = encoderPreference.get(loadTimeData.getBoard());
-    if (preference === undefined) {
-      return null;
-    }
+    const preference = encoderPreference.get(loadTimeData.getBoard()) ||
+        {profile: h264.Profile.HIGH, multiplier: 2};
     const {profile, multiplier} = preference;
     const {width, height, frameRate} =
         this.stream_.getVideoTracks()[0].getSettings();
@@ -452,27 +463,31 @@ export class VideoFactory extends ModeFactory {
   /**
    * @override
    */
-  async prepareDevice(deviceOperator, constraints) {
+  async prepareDevice(constraints, resolution) {
+    this.captureResolution_ = resolution;
     const deviceId = assertString(constraints.video.deviceId.exact);
-    await deviceOperator.setCaptureIntent(
-        deviceId, cros.mojom.CaptureIntent.VIDEO_RECORD);
+    const deviceOperator = await DeviceOperator.getInstance();
+    if (deviceOperator !== null) {
+      await deviceOperator.setCaptureIntent(
+          deviceId, cros.mojom.CaptureIntent.VIDEO_RECORD);
 
-    let /** number */ minFrameRate = 0;
-    let /** number */ maxFrameRate = 0;
-    if (constraints.video && constraints.video.frameRate) {
-      const frameRate = constraints.video.frameRate;
-      if (frameRate.exact) {
-        minFrameRate = frameRate.exact;
-        maxFrameRate = frameRate.exact;
-      } else if (frameRate.min && frameRate.max) {
-        minFrameRate = frameRate.min;
-        maxFrameRate = frameRate.max;
+      let /** number */ minFrameRate = 0;
+      let /** number */ maxFrameRate = 0;
+      if (constraints.video && constraints.video.frameRate) {
+        const frameRate = constraints.video.frameRate;
+        if (frameRate.exact) {
+          minFrameRate = frameRate.exact;
+          maxFrameRate = frameRate.exact;
+        } else if (frameRate.min && frameRate.max) {
+          minFrameRate = frameRate.min;
+          maxFrameRate = frameRate.max;
+        }
+        // TODO(wtlee): To set the fps range to the default value, we should
+        // remove the frameRate from constraints instead of using incomplete
+        // range.
       }
-      // TODO(wtlee): To set the fps range to the default value, we should
-      // remove the frameRate from constraints instead of using incomplete
-      // range.
+      await deviceOperator.setFpsRange(deviceId, minFrameRate, maxFrameRate);
     }
-    await deviceOperator.setFpsRange(deviceId, minFrameRate, maxFrameRate);
   }
 
   /**

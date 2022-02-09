@@ -270,7 +270,7 @@ def main():
 
   def relflag(s):  # Make s relative to builddir when cwd and sdk on same drive.
     try:
-      return os.path.relpath(s)
+      return os.path.relpath(s).replace('\\', '/')
     except ValueError:
       return s
 

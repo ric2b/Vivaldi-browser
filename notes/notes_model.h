@@ -99,7 +99,7 @@ class NotesModel : public KeyedService {
   NoteNode* AddFolder(const NoteNode* parent,
                       size_t index,
                       const std::u16string& name,
-                      base::Optional<base::GUID> guid = base::nullopt);
+                      absl::optional<base::GUID> guid = absl::nullopt);
 
   // Adds a note at the specified position with the given |creation_time| and
   // |guid|. If no GUID is provided (i.e. nullopt), then a random one will be
@@ -109,8 +109,8 @@ class NotesModel : public KeyedService {
                     const std::u16string& subject,
                     const GURL& url,
                     const std::u16string& content,
-                    base::Optional<base::Time> creation_time = base::nullopt,
-                    base::Optional<base::GUID> guid = base::nullopt);
+                    absl::optional<base::Time> creation_time = absl::nullopt,
+                    absl::optional<base::GUID> guid = absl::nullopt);
 
   // Adds a separator at the specified position with the given |creation_time|
   // and |guid|. If no GUID is provided (i.e. nullopt), then a random one will
@@ -118,9 +118,9 @@ class NotesModel : public KeyedService {
   NoteNode* AddSeparator(
       const NoteNode* parent,
       size_t index,
-      base::Optional<std::u16string> name = base::nullopt,
-      base::Optional<base::Time> creation_time = base::nullopt,
-      base::Optional<base::GUID> guid = base::nullopt);
+      absl::optional<std::u16string> name = absl::nullopt,
+      absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::GUID> guid = absl::nullopt);
 
   NoteNode* AddNode(NoteNode* parent,
                     int index,

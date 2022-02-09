@@ -101,6 +101,13 @@ NavigatorManagedData::GetManagedConfigurationService() {
 
 void NavigatorManagedData::OnServiceConnectionError() {
   device_api_service_.reset();
+
+  // We should reset managed configuration service only it actually got
+  // disconnected.
+  if (managed_configuration_service_.is_bound() &&
+      !managed_configuration_service_.is_connected()) {
+    managed_configuration_service_.reset();
+  }
   // Resolve all pending promises with a failure.
   for (ScriptPromiseResolver* resolver : pending_promises_) {
     resolver->Reject(
@@ -181,7 +188,7 @@ ScriptPromise NavigatorManagedData::getAnnotatedLocation(
 
 void NavigatorManagedData::OnConfigurationReceived(
     ScriptPromiseResolver* scoped_resolver,
-    const base::Optional<HashMap<String, String>>& configurations) {
+    const absl::optional<HashMap<String, String>>& configurations) {
   pending_promises_.erase(scoped_resolver);
 
   ScriptState* script_state = scoped_resolver->GetScriptState();

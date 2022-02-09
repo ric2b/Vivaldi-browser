@@ -27,9 +27,14 @@
 namespace blink {
 namespace {
 
+// The default fps and default size are used when querying gpu_factories_ to see
+// if a codec profile is supported. 1280x720 at 30 fps corresponds to level 3.1
+// for both VP9 and H264. This matches the maximum H264 profile level that is
+// returned by the internal software decoder.
+// TODO(crbug.com/1213437): Query gpu_factories_ or decoder_factory_ to
+// determine the maximum resolution and frame rate.
 const int kDefaultFps = 30;
-// Any reasonable size, will be overridden by the decoder anyway.
-const gfx::Size kDefaultSize(640, 480);
+const gfx::Size kDefaultSize(1280, 720);
 
 struct CodecConfig {
   media::VideoCodec codec;
@@ -49,7 +54,7 @@ constexpr std::array<CodecConfig, 8> kCodecConfigs = {{
 
 // Translate from media::VideoDecoderConfig to webrtc::SdpVideoFormat, or return
 // nothing if the profile isn't supported.
-base::Optional<webrtc::SdpVideoFormat> VdcToWebRtcFormat(
+absl::optional<webrtc::SdpVideoFormat> VdcToWebRtcFormat(
     const media::VideoDecoderConfig& config) {
   switch (config.codec()) {
     case media::VideoCodec::kCodecAV1:
@@ -70,7 +75,7 @@ base::Optional<webrtc::SdpVideoFormat> VdcToWebRtcFormat(
           break;
         default:
           // Unsupported profile in WebRTC.
-          return base::nullopt;
+          return absl::nullopt;
       }
       return webrtc::SdpVideoFormat(
           "VP9", {{webrtc::kVP9FmtpProfileId,
@@ -90,7 +95,7 @@ base::Optional<webrtc::SdpVideoFormat> VdcToWebRtcFormat(
           break;
         default:
           // Unsupported H264 profile in WebRTC.
-          return base::nullopt;
+          return absl::nullopt;
       }
 
       const int width = config.visible_rect().width();
@@ -110,7 +115,7 @@ base::Optional<webrtc::SdpVideoFormat> VdcToWebRtcFormat(
       return format;
     }
     default:
-      return base::nullopt;
+      return absl::nullopt;
   }
 }
 
@@ -225,7 +230,7 @@ RTCVideoDecoderFactory::GetSupportedFormats() const {
         media::VideoColorSpace(), media::kNoTransformation, kDefaultSize,
         gfx::Rect(kDefaultSize), kDefaultSize, media::EmptyExtraData(),
         media::EncryptionScheme::kUnencrypted);
-    base::Optional<webrtc::SdpVideoFormat> format;
+    absl::optional<webrtc::SdpVideoFormat> format;
 
     // The RTCVideoDecoderAdapter is for HW decoders only, so ignore it if there
     // are no gpu_factories_.

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Fortsett</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kjør Nettverksdiagnose<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Varsler</translation>
+<translation id="2491414235131909199">Denne siden er blokkert av en utvidelse</translation>
 <translation id="2501278716633472235">Gå tilbake</translation>
 <translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldig svar.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Du bør ikke skrive inn sensitiv informasjon på denne siden (for eksempel passord eller betalingsinformasjon) da det kan blir stjålet av angripere.</translation>
 <translation id="5869405914158311789">Siden kan ikke nås</translation>
 <translation id="5932224571077948991">Nettstedet viser påtrengende eller villedende annonser</translation>
-<translation id="5990559369517809815">Forespørsler til tjeneren har blitt blokkert av en utvidelse.</translation>
 <translation id="6051221802930200923">Du kan ikke besøke <ph name="SITE" /> akkurat no, fordi nettsiden bruker sertifikatlåsing. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="6146055958333702838">Kontroller eventuelle kabler og start eventuelle rutere, modem og andre
     nettverksenheter på nytt.</translation>

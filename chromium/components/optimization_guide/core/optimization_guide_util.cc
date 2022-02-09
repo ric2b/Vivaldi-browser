@@ -26,6 +26,12 @@ std::string GetStringNameForOptimizationTarget(
       return "LanguageDetection";
     case proto::OPTIMIZATION_TARGET_PAGE_TOPICS:
       return "PageTopics";
+    case proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB:
+      return "SegmentationNewTab";
+    case proto::OPTIMIZATION_TARGET_SEGMENTATION_SHARE:
+      return "SegmentationShare";
+    case proto::OPTIMIZATION_TARGET_SEGMENTATION_VOICE:
+      return "SegmentationVoice";
   }
   NOTREACHED();
   return std::string();
@@ -76,10 +82,10 @@ GetActiveFieldTrialsAllowedForFetch() {
   return filtered_active_field_trials;
 }
 
-base::Optional<base::FilePath> GetFilePathFromPredictionModel(
+absl::optional<base::FilePath> GetFilePathFromPredictionModel(
     const proto::PredictionModel& model) {
   if (!model.model().has_download_url())
-    return base::nullopt;
+    return absl::nullopt;
 
 #if defined(OS_WIN)
   return base::FilePath(base::UTF8ToWide(model.model().download_url()));

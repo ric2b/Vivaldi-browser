@@ -4,6 +4,7 @@
 
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/mac/foundation_util.h"
 #include "base/trace_event/trace_event.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
@@ -81,6 +82,7 @@
   uint64_t _bridgedNativeWidgetId;
   remote_cocoa::NativeWidgetNSWindowBridge* _bridge;
   BOOL _willUpdateRestorableState;
+  BOOL _isEnforcingNeverMadeVisible;
 }
 @synthesize bridgedNativeWidgetId = _bridgedNativeWidgetId;
 @synthesize bridge = _bridge;
@@ -103,9 +105,39 @@
 // inserting a symbol on NativeWidgetMacNSWindow and should be kept even if it
 // does nothing.
 - (void)dealloc {
+  if (_isEnforcingNeverMadeVisible) {
+    [self removeObserver:self forKeyPath:@"visible"];
+  }
   _willUpdateRestorableState = YES;
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
   [super dealloc];
+}
+
+- (void)enforceNeverMadeVisible {
+  if (_isEnforcingNeverMadeVisible)
+    return;
+  _isEnforcingNeverMadeVisible = YES;
+  [self addObserver:self
+         forKeyPath:@"visible"
+            options:NSKeyValueObservingOptionNew
+            context:nil];
+}
+
+- (void)observeValueForKeyPath:(NSString*)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary*)change
+                       context:(void*)context {
+  if ([keyPath isEqual:@"visible"]) {
+    DCHECK(_isEnforcingNeverMadeVisible);
+    DCHECK_EQ(object, self);
+    DCHECK_EQ(context, nil);
+    if ([change[NSKeyValueChangeNewKey] boolValue])
+      base::debug::DumpWithoutCrashing();
+  }
+  [super observeValueForKeyPath:keyPath
+                       ofObject:object
+                         change:change
+                        context:context];
 }
 
 // Public methods.
@@ -327,6 +359,7 @@
     return;
   if (![self _isConsideredOpenForPersistentState])
     return;
+
   base::scoped_nsobject<NSMutableData> restorableStateData(
       [[NSMutableData alloc] init]);
   base::scoped_nsobject<NSKeyedArchiver> encoder([[NSKeyedArchiver alloc]

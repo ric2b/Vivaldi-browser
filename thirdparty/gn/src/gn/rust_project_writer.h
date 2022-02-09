@@ -12,7 +12,7 @@ class Builder;
 class BuildSettings;
 
 // rust-project.json is an output format describing the rust build graph. It is
-// used by rust-analyzer (a LSP server), similiar to compile-commands.json.
+// used by rust-analyzer (a LSP server), similar to compile-commands.json.
 //
 // an example output is in rust_project_writer.cc
 class RustProjectWriter {
@@ -30,7 +30,7 @@ class RustProjectWriter {
                          std::ostream& rust_project);
 
  private:
-  // This fuction visits the deps graph of a target in a DFS fashion.
+  // This function visits the deps graph of a target in a DFS fashion.
   static void VisitDeps(const Target* target, std::set<const Target*>* visited);
 };
 

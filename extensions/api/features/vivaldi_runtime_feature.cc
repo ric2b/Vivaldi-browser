@@ -78,7 +78,7 @@ std::string LoadRuntimeFeaturesFile() {
 FeatureService::FeatureService(content::BrowserContext* browser_context) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   std::string features_text = LoadRuntimeFeaturesFile();
-  base::Optional<base::Value> json = base::JSONReader::Read(features_text);
+  absl::optional<base::Value> json = base::JSONReader::Read(features_text);
   if (!json) {
     LOG(ERROR) << kRuntimeFeaturesFilename << " does not contain a valid JSON.";
   } else if (!LoadFlags(profile, std::move(*json))) {

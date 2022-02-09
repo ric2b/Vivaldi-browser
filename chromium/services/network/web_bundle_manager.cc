@@ -5,6 +5,7 @@
 #include "services/network/web_bundle_manager.h"
 
 #include "base/bind.h"
+#include "components/web_package/web_bundle_utils.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/network_context.h"
 #include "services/network/public/mojom/web_bundle_handle.mojom.h"
@@ -12,19 +13,6 @@
 #include "services/network/web_bundle_url_loader_factory.h"
 
 namespace network {
-
-namespace {
-
-// The max memory limit per process of subrsource web bundles.
-//
-// Note: Currently the network service keeps the binary of the subresource web
-// bundle in the memory. To protect the network service from OOM attacks, we set
-// the max memory limit per renderer process. When the memory usage of
-// subresource web bundles exceeds the limit, the web bundle loading fails, and
-// the subresouce loading from the web bundle will fail on the page.
-constexpr uint64_t kDefaultMaxMemoryPerProcess = 10ull * 1024 * 1024;
-
-}  // namespace
 
 // Represents a pending subresource request.
 struct WebBundlePendingSubresourceRequest {
@@ -81,7 +69,7 @@ class WebBundleManager::MemoryQuotaConsumer
 };
 
 WebBundleManager::WebBundleManager()
-    : max_memory_per_process_(kDefaultMaxMemoryPerProcess) {}
+    : max_memory_per_process_(web_package::kDefaultMaxMemoryPerProcess) {}
 
 WebBundleManager::~WebBundleManager() = default;
 
@@ -90,7 +78,9 @@ WebBundleManager::CreateWebBundleURLLoaderFactory(
     const GURL& bundle_url,
     const ResourceRequest::WebBundleTokenParams& web_bundle_token_params,
     int32_t process_id,
-    const base::Optional<url::Origin>& request_initiator_origin_lock) {
+    const absl::optional<url::Origin>& request_initiator_origin_lock,
+    mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
+    absl::optional<std::string> devtools_request_id) {
   DCHECK(factories_.find({process_id, web_bundle_token_params.token}) ==
          factories_.end());
 
@@ -108,7 +98,8 @@ WebBundleManager::CreateWebBundleURLLoaderFactory(
   auto factory = std::make_unique<WebBundleURLLoaderFactory>(
       bundle_url, std::move(remote), request_initiator_origin_lock,
       std::make_unique<MemoryQuotaConsumer>(weak_ptr_factory_.GetWeakPtr(),
-                                            process_id));
+                                            process_id),
+      std::move(devtools_observer), std::move(devtools_request_id));
 
   // Process pending subresource requests if there are.
   // These subresource requests arrived earlier than the request for the bundle.

@@ -4,6 +4,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/hit_test.h"
 #include "ui/views/widget/widget.h"
 #include "ui/vivaldi_native_app_window_views.h"
@@ -19,7 +20,9 @@ VivaldiNativeAppWindowFrameViewMac::VivaldiNativeAppWindowFrameViewMac(
 VivaldiNativeAppWindowFrameViewMac::~VivaldiNativeAppWindowFrameViewMac() =
     default;
 
-void VivaldiNativeAppWindowFrameViewMac::Layout() {}
+void VivaldiNativeAppWindowFrameViewMac::Layout() {
+  NonClientFrameView::Layout();
+}
 
 gfx::Rect VivaldiNativeAppWindowFrameViewMac::GetWindowBoundsForClientBounds(
     const gfx::Rect& client_bounds) const {

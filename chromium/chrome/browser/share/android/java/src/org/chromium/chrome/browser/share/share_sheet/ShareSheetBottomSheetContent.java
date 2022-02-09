@@ -84,10 +84,16 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
         mIconBridge = iconBridge;
         mShareSheetCoordinator = shareSheetCoordinator;
         mParams = params;
-        mLinkGenerationState =
-                mParams.getLinkToTextSuccessful() != null && mParams.getLinkToTextSuccessful()
-                ? LinkGeneration.LINK
-                : LinkGeneration.FAILURE;
+
+        // Set |mLinkGenerationState| to invalid value of |MAX| if |getLinkToTextSuccessful|
+        // is not set in order to distinguish it from failure state. |getLinkToTextSuccessful| will
+        // be set only for link to text.
+        if (mParams.getLinkToTextSuccessful() == null) {
+            mLinkGenerationState = LinkGeneration.MAX;
+        } else {
+            mLinkGenerationState = mParams.getLinkToTextSuccessful() ? LinkGeneration.LINK
+                                                                     : LinkGeneration.FAILURE;
+        }
         createContentView();
     }
 
@@ -202,12 +208,6 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
         String title = mParams.getTitle();
         String subtitle =
                 UrlFormatter.formatUrlForDisplayOmitSchemeOmitTrivialSubdomains(mParams.getUrl());
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARING_HUB_V15)) {
-            fetchFavicon(mParams.getUrl());
-            setTitleStyle(R.style.TextAppearance_TextMediumThick_Primary);
-            setTextForPreview(title, subtitle);
-            return;
-        }
 
         if (contentTypes.contains(ContentType.IMAGE)) {
             setImageForPreviewFromUri(mParams.getFileUris().get(0));
@@ -309,11 +309,15 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
     }
 
     public void updateLinkGenerationState() {
-        if (mLinkGenerationState == LinkGeneration.FAILURE) return;
-        if (mLinkGenerationState == LinkGeneration.LINK) {
-            mLinkGenerationState = LinkGeneration.TEXT;
-        } else {
-            mLinkGenerationState = LinkGeneration.LINK;
+        switch (mLinkGenerationState) {
+            case LinkGeneration.FAILURE:
+                return;
+            case LinkGeneration.LINK:
+                mLinkGenerationState = LinkGeneration.TEXT;
+                break;
+            case LinkGeneration.TEXT:
+                mLinkGenerationState = LinkGeneration.LINK;
+                break;
         }
     }
 

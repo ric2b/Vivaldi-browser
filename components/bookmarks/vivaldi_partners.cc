@@ -186,7 +186,7 @@ std::string AssetReader::GetPath() const {
 #endif  //  OS_ANDROID
 }
 
-base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
+absl::optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
   base::StringPiece json_text;
 #if defined(OS_ANDROID)
   path_ = kAssetsDir;
@@ -197,11 +197,11 @@ base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
   int json_fd = base::android::OpenApkAsset(path_, &region);
   if (json_fd < 0) {
     LOG(ERROR) << "failed to open the asset at " << path_;
-    return base::nullopt;
+    return absl::nullopt;
   }
   if (!mapped_file.Initialize(base::File(json_fd), region)) {
     LOG(ERROR) << "failed to initialize memory mapping for " << path_;
-    return base::nullopt;
+    return absl::nullopt;
   }
   json_text = base::StringPiece(reinterpret_cast<char*>(mapped_file.data()),
                                 mapped_file.length());
@@ -217,7 +217,7 @@ base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
   std::string json_buffer;
   if (!base::ReadFileToString(path_, &json_buffer)) {
     LOG(ERROR) << "failed to read " << path_;
-    return base::nullopt;
+    return absl::nullopt;
   }
   json_text = base::StringPiece(json_buffer);
 #endif  //  OS_ANDROID
@@ -297,12 +297,12 @@ const PartnerDatabase* g_partner_db = nullptr;
 // static
 std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
   AssetReader reader;
-  base::Optional<base::Value> partner_db_value =
+  absl::optional<base::Value> partner_db_value =
       reader.ReadJson(kPartnerDBFile);
   if (!partner_db_value)
     return nullptr;
 
-  base::Optional<base::Value> partners_locale_value =
+  absl::optional<base::Value> partners_locale_value =
       reader.ReadJson(kPartnerLocaleMapFile);
   if (!partners_locale_value)
     return nullptr;

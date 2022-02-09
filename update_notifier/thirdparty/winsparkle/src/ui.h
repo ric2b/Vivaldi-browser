@@ -30,7 +30,7 @@
 
 #include <string>
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 struct Appcast;
 struct DownloadReport;
@@ -54,7 +54,9 @@ class UI {
 
   static void NotifyCheckingUpdates();
 
-  static void NotifyUpdateCheckDone(const Appcast* appcast, const Error& error);
+  static void NotifyUpdateCheckDone(const Appcast* appcast,
+                                    const Error& error,
+                                    bool pending_update);
 
   static void NotifyDownloadProgress(const DownloadReport& report);
 
@@ -63,6 +65,6 @@ class UI {
   static void NotifyStartedInstaller(const Error& error);
 };
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_UI_H_

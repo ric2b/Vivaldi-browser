@@ -14,7 +14,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,6 +27,7 @@
 #include "chromeos/dbus/userdataauth/userdataauth_client.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/sha2.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace chromeos {
 
@@ -308,7 +308,7 @@ void FakeSessionManagerClient::LoginScreenStorageStore(
     const login_manager::LoginScreenStorageMetadata& metadata,
     const std::string& data,
     LoginScreenStorageStoreCallback callback) {
-  PostReply(FROM_HERE, std::move(callback), base::nullopt /* error */);
+  PostReply(FROM_HERE, std::move(callback), absl::nullopt /* error */);
 }
 
 void FakeSessionManagerClient::LoginScreenStorageRetrieve(
@@ -316,7 +316,7 @@ void FakeSessionManagerClient::LoginScreenStorageRetrieve(
     LoginScreenStorageRetrieveCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), "Test" /* data */,
-                                base::nullopt /* error */));
+                                absl::nullopt /* error */));
 }
 
 void FakeSessionManagerClient::LoginScreenStorageListKeys(
@@ -324,7 +324,7 @@ void FakeSessionManagerClient::LoginScreenStorageListKeys(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback), std::vector<std::string>() /* keys */,
-                     base::nullopt /* error */));
+                     absl::nullopt /* error */));
 }
 
 void FakeSessionManagerClient::LoginScreenStorageDelete(
@@ -341,6 +341,15 @@ void FakeSessionManagerClient::StartSession(
 void FakeSessionManagerClient::StopSession(
     login_manager::SessionStopReason reason) {
   session_stopped_ = true;
+}
+
+void FakeSessionManagerClient::LoadShillProfile(
+    const cryptohome::AccountIdentifier& cryptohome_id) {
+  if (on_load_shill_profile_callback_.is_null())
+    return;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(on_load_shill_profile_callback_, cryptohome_id));
 }
 
 void FakeSessionManagerClient::StartDeviceWipe() {
@@ -648,7 +657,8 @@ void FakeSessionManagerClient::UpgradeArcContainer(
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(&FakeSessionManagerClient::NotifyArcInstanceStopped,
-                       weak_ptr_factory_.GetWeakPtr()));
+                       weak_ptr_factory_.GetWeakPtr(),
+                       login_manager::ArcContainerStopReason::UPGRADE_FAILURE));
   }
 }
 
@@ -666,7 +676,8 @@ void FakeSessionManagerClient::StopArcInstance(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&FakeSessionManagerClient::NotifyArcInstanceStopped,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     login_manager::ArcContainerStopReason::USER_REQUEST));
 
   container_running_ = false;
 }
@@ -687,7 +698,7 @@ void FakeSessionManagerClient::GetArcStartTime(
     DBusMethodCallback<base::TimeTicks> callback) {
   PostReply(
       FROM_HERE, std::move(callback),
-      arc_available_ ? base::make_optional(arc_start_time_) : base::nullopt);
+      arc_available_ ? absl::make_optional(arc_start_time_) : absl::nullopt);
 }
 
 void FakeSessionManagerClient::EnableAdbSideload(
@@ -700,9 +711,10 @@ void FakeSessionManagerClient::QueryAdbSideload(
                                 adb_sideload_enabled_));
 }
 
-void FakeSessionManagerClient::NotifyArcInstanceStopped() {
+void FakeSessionManagerClient::NotifyArcInstanceStopped(
+    login_manager::ArcContainerStopReason reason) {
   for (auto& observer : observers_)
-    observer.ArcInstanceStopped();
+    observer.ArcInstanceStopped(reason);
 }
 
 bool FakeSessionManagerClient::GetFlagsForUser(

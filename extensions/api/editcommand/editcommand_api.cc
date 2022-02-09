@@ -16,6 +16,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 #include "content/browser/web_contents/web_contents_impl.h" // nogncheck
+#include "ui/vivaldi_ui_utils.h"
 
 namespace extensions {
 
@@ -25,7 +26,13 @@ ExtensionFunction::ResponseAction EditcommandExecuteFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
+  content::WebContents* web_contents = nullptr;
+  if (params->tab_id) {
+    web_contents = ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+        *params->tab_id, browser_context(), nullptr);
+  } else {
+    web_contents = dispatcher()->GetAssociatedWebContents();
+  }
   if (!web_contents)
     return RespondNow(Error("No WebContents"));
 
@@ -62,7 +69,8 @@ ExtensionFunction::ResponseAction EditcommandExecuteFunction::Run() {
   else if (params->command == "pasteAndMatchStyle")
     web_contents->PasteAndMatchStyle();
 
-  return RespondNow(NoArguments());
+  return RespondNow(
+      ArgumentList(vivaldi::editcommand::Execute::Results::Create(true)));
 }
 
 }  // namespace extensions

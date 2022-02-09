@@ -11,13 +11,10 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service_observer.h"
 #include "components/media_message_center/media_notification_item.h"
+#include "components/media_router/browser/presentation/start_presentation_context.h"
 #include "content/public/browser/presentation_request.h"
 
 class MediaNotificationService;
-
-namespace media_router {
-class StartPresentationContext;
-}  // namespace media_router
 
 class PresentationRequestNotificationItem final
     : public media_message_center::MediaNotificationItem {
@@ -43,6 +40,13 @@ class PresentationRequestNotificationItem final
   media_router::StartPresentationContext* context() const {
     return context_.get();
   }
+  bool is_default_presentation_request() const {
+    return is_default_presentation_request_;
+  }
+
+  std::unique_ptr<media_router::StartPresentationContext> PassContext() {
+    return std::move(context_);
+  }
   const content::PresentationRequest request() const { return request_; }
 
  private:
@@ -55,8 +59,15 @@ class PresentationRequestNotificationItem final
 
   const std::string id_;
   MediaNotificationService* const notification_service_;
-  // It is possible that |context_| is nullptr when it is created for a default
-  // presentation request.
+
+  // True if the item is created from a default PresentationRequest, which means
+  // |context_| is set to nullptr in the constructor.
+  const bool is_default_presentation_request_;
+
+  // |context_| is nullptr if:
+  // (1) It is created for a default PresentationRequest;
+  // (2) MediaNotificationService has passed |context_| to initialize a
+  // CastDialogController.
   std::unique_ptr<media_router::StartPresentationContext> context_;
   const content::PresentationRequest request_;
 

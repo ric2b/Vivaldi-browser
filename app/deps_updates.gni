@@ -25,6 +25,14 @@ if (!is_android) {
       "//vivaldi/app:vivaldi_unscaled_native_resources",
       "//vivaldi/app:vivaldi_merge_repacks",
     ]
+    if (enable_pak_file_integrity_checks) {
+      files_to_hash -= ["chrome_100_percent.pak"]
+      files_to_hash += ["vivaldi_100_percent.pak"]
+      if (enable_hidpi) {
+        files_to_hash -= ["chrome_200_percent.pak"]
+        files_to_hash += ["vivaldi_200_percent.pak"]
+      }
+    }
   }
 
   _mac_postfix = ""

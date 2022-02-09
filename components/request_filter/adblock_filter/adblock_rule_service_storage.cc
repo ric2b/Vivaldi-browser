@@ -94,7 +94,7 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
     const std::string* source_url_string =
         source_value.FindStringKey(kSourceUrlKey);
 
-    base::Optional<int> group = source_value.FindIntKey(kGroupKey);
+    absl::optional<int> group = source_value.FindIntKey(kGroupKey);
     // The rule must have its group set
     if (!group || group.value() < static_cast<int>(RuleGroup::kFirst) ||
         group.value() > static_cast<int>(RuleGroup::kLast))
@@ -114,7 +114,7 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       continue;
     }
 
-    base::Optional<bool> allow_abp_snippets =
+    absl::optional<bool> allow_abp_snippets =
         source_value.FindBoolKey(kAllowAbpSnippets);
     if (allow_abp_snippets && allow_abp_snippets.value())
       rule_sources.back().allow_abp_snippets = true;
@@ -124,19 +124,19 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
     if (rules_list_checksum)
       rule_sources.back().rules_list_checksum = std::move(*rules_list_checksum);
 
-    base::Optional<base::Time> last_update =
+    absl::optional<base::Time> last_update =
         util::ValueToTime(source_value.FindKey(kLastUpdateKey));
     if (last_update) {
       rule_sources.back().last_update = last_update.value();
     }
 
-    base::Optional<base::Time> next_fetch =
+    absl::optional<base::Time> next_fetch =
         util::ValueToTime(source_value.FindKey(kNextFetchKey));
     if (next_fetch) {
       rule_sources.back().next_fetch = next_fetch.value();
     }
 
-    base::Optional<int> last_fetch_result =
+    absl::optional<int> last_fetch_result =
         source_value.FindIntKey(kLastFetchResultKey);
     if (last_fetch_result &&
         last_fetch_result.value() >= static_cast<int>(FetchResult::kFirst) &&
@@ -144,23 +144,23 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       rule_sources.back().last_fetch_result =
           FetchResult(last_fetch_result.value());
 
-    base::Optional<bool> has_tracker_infos =
+    absl::optional<bool> has_tracker_infos =
         source_value.FindBoolKey(kHasTrackerInfosKey);
     if (has_tracker_infos)
       rule_sources.back().has_tracker_infos = has_tracker_infos.value();
 
-    base::Optional<int> valid_rules_count =
+    absl::optional<int> valid_rules_count =
         source_value.FindIntKey(kValidRulesCountKey);
     if (valid_rules_count)
       rule_sources.back().rules_info.valid_rules = *valid_rules_count;
 
-    base::Optional<int> unsupported_rules_count =
+    absl::optional<int> unsupported_rules_count =
         source_value.FindIntKey(kUnsupportedRulesCountKey);
     if (unsupported_rules_count)
       rule_sources.back().rules_info.unsupported_rules =
           *unsupported_rules_count;
 
-    base::Optional<int> invalid_rules_count =
+    absl::optional<int> invalid_rules_count =
         source_value.FindIntKey(kInvalidRulesCountKey);
     if (invalid_rules_count)
       rule_sources.back().rules_info.invalid_rules = *invalid_rules_count;
@@ -181,12 +181,12 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
     if (redirect)
       rule_sources.back().unsafe_adblock_metadata.redirect = GURL(*redirect);
 
-    base::Optional<int64_t> version =
+    absl::optional<int64_t> version =
         util::ValueToInt64(source_value.FindKey(kVersionKey));
     if (version)
       rule_sources.back().unsafe_adblock_metadata.version = *version;
 
-    base::Optional<base::TimeDelta> expires =
+    absl::optional<base::TimeDelta> expires =
         util::ValueToTimeDelta(source_value.FindKey(kExpiresKey));
     if (last_update) {
       rule_sources.back().unsafe_adblock_metadata.expires = expires.value();
@@ -215,7 +215,7 @@ void LoadKnownSources(base::Value& sources_list,
     const std::string* source_url_string =
         source_value.FindStringKey(kSourceUrlKey);
 
-    base::Optional<int> group = source_value.FindIntKey(kGroupKey);
+    absl::optional<int> group = source_value.FindIntKey(kGroupKey);
     // The rule must have its group set
     if (!group || group.value() < static_cast<int>(RuleGroup::kFirst) ||
         group.value() > static_cast<int>(RuleGroup::kLast))
@@ -235,7 +235,7 @@ void LoadKnownSources(base::Value& sources_list,
       continue;
     }
 
-    base::Optional<bool> allow_abp_snippets =
+    absl::optional<bool> allow_abp_snippets =
         source_value.FindBoolKey(kAllowAbpSnippets);
     if (allow_abp_snippets && allow_abp_snippets.value())
       known_sources.back().allow_abp_snippets = true;
@@ -250,7 +250,7 @@ void LoadRulesGroup(RuleGroup group,
                     base::Value& rule_group_value,
                     RuleServiceStorage::LoadResult& load_result) {
   DCHECK(rule_group_value.is_dict());
-  base::Optional<int> active_exception_list =
+  absl::optional<int> active_exception_list =
       rule_group_value.FindIntKey(kExceptionsTypeKey);
   if (active_exception_list &&
       active_exception_list >= RuleService::kFirstExceptionList &&
@@ -271,7 +271,7 @@ void LoadRulesGroup(RuleGroup group,
                           load_result.exceptions[static_cast<size_t>(group)]
                                                 [RuleService::kExemptList]);
 
-  base::Optional<bool> enabled = rule_group_value.FindBoolKey(kEnabledKey);
+  absl::optional<bool> enabled = rule_group_value.FindBoolKey(kEnabledKey);
   if (enabled)
     load_result.groups_enabled[static_cast<size_t>(group)] = enabled.value();
 
@@ -322,7 +322,7 @@ void DoLoad(const base::FilePath& path,
       LoadRulesGroup(RuleGroup::kAdBlockingRules, *ad_blocking_rules,
                      *load_result);
     }
-    base::Optional<int> version = root->FindIntKey(kVersionKey);
+    absl::optional<int> version = root->FindIntKey(kVersionKey);
     if (version)
       load_result->storage_version =
           std::max(0, std::min(kCurrentStorageVersion, version.value()));
@@ -468,8 +468,8 @@ RuleServiceStorage::RuleServiceStorage(
               base::TimeDelta::FromSeconds(kSaveDelay)),
       weak_factory_(this) {
   DCHECK(rule_service_);
-  file_io_task_runner_->PostTask(FROM_HERE,
-                                 base::Bind(&BackupCallback, writer_.path()));
+  file_io_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&BackupCallback, writer_.path()));
 }
 
 RuleServiceStorage::~RuleServiceStorage() {

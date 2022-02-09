@@ -8,7 +8,7 @@
       {
         "id": "PreferenceValue",
         "type": "object",
-        "description": "Preference with its current value.",
+        "description": "Preference with its new desired value.",
         "properties": {
           "path": {
             "type": "string",
@@ -17,6 +17,25 @@
           "value": {
             "type": "any",
             "description": "Preference value."
+          }
+        }
+      },
+      {
+        "id": "PreferenceNotification",
+        "type": "object",
+        "description": "Preference value change notification.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The preference path"
+          },
+          "value": {
+            "type": "any",
+            "description": "Preference value."
+          },
+          "usesDefault": {
+            "type": "boolean",
+            "description": "True if the current value comes from the default and has not been overriden by the user."
           }
         }
       },
@@ -351,7 +370,7 @@
           {
             "name": "newValue",
             "description": "Information about the changed preference.",
-            "$ref": "PreferenceValue"
+            "$ref": "PreferenceNotification"
           }
         ]
       }

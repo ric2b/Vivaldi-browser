@@ -5,6 +5,8 @@
 #ifndef TOOLS_GN_GENERATED_FILE_TARGET_GENERATOR_H_
 #define TOOLS_GN_GENERATED_FILE_TARGET_GENERATOR_H_
 
+#include <string_view>
+
 #include "base/macros.h"
 #include "gn/target.h"
 #include "gn/target_generator.h"
@@ -35,7 +37,7 @@ class GeneratedFileTargetGenerator : public TargetGenerator {
   // it is okay to set metadata collection variables on this target.
   //
   // Should be called before FillContents().
-  bool IsMetadataCollectionTarget(const std::string_view& variable,
+  bool IsMetadataCollectionTarget(std::string_view variable,
                                   const ParseNode* origin);
 
   bool contents_defined_ = false;

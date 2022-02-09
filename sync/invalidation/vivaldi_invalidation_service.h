@@ -43,8 +43,9 @@ class VivaldiInvalidationService
   invalidation::InvalidatorState GetInvalidatorState() const override;
   std::string GetInvalidatorClientId() const override;
   invalidation::InvalidationLogger* GetInvalidationLogger() override;
-  void RequestDetailedStatus(base::Callback<void(const base::DictionaryValue&)>
-                                 post_caller) const override;
+  void RequestDetailedStatus(
+      base::RepeatingCallback<void(const base::DictionaryValue&)> post_caller)
+      const override;
 
   // Implementing VivaldiAccountManager::Observer
   void OnVivaldiAccountUpdated() override;

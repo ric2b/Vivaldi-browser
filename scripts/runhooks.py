@@ -4,6 +4,7 @@ from builtins import range
 import sys, os, os.path
 import subprocess
 import argparse
+import re
 import read_deps_file as deps_utils
 import datetime
 import platform
@@ -17,9 +18,13 @@ git_hooks_folder = os.path.join(SRC, ".git", "hooks")
 chromium_git_hooks_folder = os.path.join(SRC, ".git", "modules", "chromium", "hooks")
 
 depot_tools_path = os.path.join(SRC, "chromium/third_party/depot_tools")
-os.environ["PATH"] = os.pathsep.join([depot_tools_path, os.environ["PATH"]])
+os.environ["PATH"] = os.pathsep.join([os.environ["PATH"], depot_tools_path])
+if "PYTHONPATH" in os.environ:
+  del os.environ["PYTHONPATH"]
 if os.access("build/toolchain.json", os.F_OK) and "DEPOT_TOOLS_WIN_TOOLCHAIN" in os.environ:
   del os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]
+os.environ["DEPOT_TOOLS_BOOTSTRAP_PYTHON3"]="0"
+os.environ["VPYTHON_BYPASS"]= "manually managed python not supported by chrome operations"
 
 OS_CHOICES = {
   "win32": "win",
@@ -48,6 +53,29 @@ def IsAndroidEnabled():
   if "ANDROID_ENABLED" in os.environ:
     return True
   return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
+
+def HostArch():
+  # Copied from Chromium //build/detect_host_arch.py
+  """Returns the host architecture with a predictable string."""
+  host_arch = platform.machine()
+
+  # Convert machine type to format recognized by gyp.
+  if re.match(r'i.86', host_arch) or host_arch == 'i86pc':
+    host_arch = 'ia32'
+  elif host_arch in ['x86_64', 'amd64']:
+    host_arch = 'x64'
+  elif host_arch.startswith('arm'):
+    host_arch = 'arm'
+  elif host_arch.startswith('aarch64'):
+    host_arch = 'arm64'
+  elif host_arch.startswith('mips64'):
+    host_arch = 'mips64'
+  elif host_arch.startswith('mips'):
+    host_arch = 'mips'
+  elif host_arch.startswith('ppc'):
+    host_arch = 'ppc'
+  elif host_arch.startswith('s390'):
+    host_arch = 's390'
 
 def ProcessGNDefinesItems(items):
   """Converts a list of strings to a list of key-value pairs."""
@@ -122,6 +150,7 @@ def RunHooks(hooks, cwd, env=None, prefix_name=None):
   global_vars = {
     '__builtin__': None,
     'host_os': host_os,
+    "host_cpu": HostArch(),
     checkout_os: True,
     checkout_cpu: True,
     "checkout_pgo_profiles": False,

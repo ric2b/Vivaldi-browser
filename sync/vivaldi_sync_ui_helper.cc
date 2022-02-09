@@ -119,7 +119,7 @@ bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {
     return sync_manager_->GetUserSettings()->SetDecryptionPassphrase(password);
   }
 
-  if (sync_manager_->GetUserSettings()->IsUsingSecondaryPassphrase())
+  if (sync_manager_->GetUserSettings()->IsUsingExplicitPassphrase())
     return false;
 
   if (!password.empty()) {

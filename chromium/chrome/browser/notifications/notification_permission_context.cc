@@ -213,5 +213,3 @@ void NotificationPermissionContext::DecidePermission(
 bool NotificationPermissionContext::IsRestrictedToSecureOrigins() const {
   return true;
 }
-
-/* Vivaldi specific */

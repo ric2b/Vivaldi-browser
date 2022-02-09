@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Изпрати препратката по е-поща</translation>
 <translation id="1454726940098520109">Повече не показвай потвърждението</translation>
 <translation id="1462666970065907900">Наистина ли затваряте прозореца?</translation>
+<translation id="1480046233931937785">Признание</translation>
 <translation id="1526344461589023948">Възникна грешка при запис на изтеглено обновяване. Моля, проверете дали компютърът разполага с достатъчно свободно място и по-късно опитайте отново.</translation>
 <translation id="1657174850639146440">Чудовище 9</translation>
 <translation id="1676595396635191120">Създай частен прозорец</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Отвори в нов раздел</translation>
 <translation id="3027988479108856431">Настройките на вашия Yandex са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Yandex. После натиснете „Напред“.</translation>
 <translation id="3084011186245865060">Пейзаж 6</translation>
+<translation id="3093931836425623631">Vivaldi е създаден на основата на проекта Chromium и на друг софтуер с отворен код.</translation>
 <translation id="3127383884976966729">Животно 7</translation>
 <translation id="3156398087075132709">Създай отметка</translation>
 <translation id="3255747772218936245">Инсталирай обновяването</translation>
@@ -98,7 +100,7 @@
 <translation id="5416008465899576639">Има нова версия на Vivaldi.</translation>
 <translation id="5497042274492038489">Потвърждение при затваряне</translation>
 <translation id="5594602170491763400">Чудовище 5</translation>
-<translation id="5615637589913244581">Opera версия 15+ (Бета)</translation>
+<translation id="5615637589913244581">Opera версия 15+ (бета)</translation>
 <translation id="5648110075441906505">Отвори картината в нов прозорец</translation>
 <translation id="5656371807944747581">Грешка при обновяване!</translation>
 <translation id="5716238312826274098">Забрана на известяването</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Пейзаж 7</translation>
 <translation id="7111492742514999492">Пейзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi се създава благодарение на проекта с отворен код <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и друг <ph name="BEGIN_LINK_OSS" />софтуер с отворен код<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Провалено зареждане на инсталатора с обновяване. Моля, проверете дали компютърът разполага с достатъчно памет или свободно място и по-късно опитайте отново.</translation>
 <translation id="7658239707568436148">Отказ</translation>
 <translation id="7715497554424665066">&amp;Подмини обновяването</translation>
@@ -151,7 +152,7 @@
 <translation id="8562339533180097902">Затвори Vivaldi и инсталирай</translation>
 <translation id="8567452685425968223">Извличане на обновяването…</translation>
 <translation id="8624587806981488221">Пре&amp;зареди картината</translation>
-<translation id="864444594187862076">Opera версия 15+ (Разработка)</translation>
+<translation id="864444594187862076">Opera версия 15+ (разработка)</translation>
 <translation id="8651348004684669199">Добави показания раздел</translation>
 <translation id="8669345741879513971">Чудовище 10</translation>
 <translation id="867544375504146191">Яндекс</translation>

@@ -5,8 +5,6 @@
 #include "ui/gtk/gtk_ui.h"
 
 #include <cairo.h>
-#include <gdk/gdk.h>
-#include <gdk/gdkkeysyms.h>
 #include <pango/pango.h>
 
 #include <cmath>
@@ -23,9 +21,8 @@
 #include "base/nix/xdg_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
-#include "base/strings/stringprintf.h"
 #include "chrome/browser/themes/theme_properties.h"  // nogncheck
-#include "printing/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"          // nogncheck
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -35,6 +32,7 @@
 #include "ui/base/ime/linux/fake_input_method_context.h"
 #include "ui/base/ime/linux/linux_input_method_context.h"
 #include "ui/base/ime/linux/linux_input_method_context_factory.h"
+#include "ui/base/linux/linux_ui_delegate.h"
 #include "ui/display/display.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_keyboard_layout_manager.h"
@@ -49,7 +47,7 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/gtk/gtk_compat.h"
 #include "ui/gtk/gtk_key_bindings_handler.h"
-#include "ui/gtk/gtk_ui_delegate.h"
+#include "ui/gtk/gtk_ui_platform.h"
 #include "ui/gtk/gtk_util.h"
 #include "ui/gtk/input_method_context_impl_gtk.h"
 #include "ui/gtk/native_theme_gtk.h"
@@ -74,11 +72,26 @@
 #if defined(USE_OZONE)
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/ozone/buildflags.h"
 #include "ui/ozone/public/ozone_platform.h"
+#if BUILDFLAG(OZONE_PLATFORM_WAYLAND)
+#define USE_WAYLAND
+#endif
+#if BUILDFLAG(OZONE_PLATFORM_X11) && !defined(USE_X11)
+#define USE_X11
+#endif
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "printing/printing_context_linux.h"
+#endif
+
+#if defined(USE_WAYLAND)
+#include "ui/gtk/wayland/gtk_ui_platform_wayland.h"
+#endif
+
+#if defined(USE_X11)
+#include "ui/gtk/x/gtk_ui_platform_x11.h"
 #endif
 
 namespace gtk {
@@ -284,23 +297,38 @@ views::LinuxUI::WindowFrameAction GetDefaultMiddleClickAction() {
   }
 }
 
+std::unique_ptr<GtkUiPlatform> CreateGtkUiPlatform(ui::LinuxUiBackend backend) {
+  switch (backend) {
+#if defined(USE_X11)
+    case ui::LinuxUiBackend::kX11:
+      return std::make_unique<GtkUiPlatformX11>();
+#endif
+#if defined(USE_WAYLAND)
+    case ui::LinuxUiBackend::kWayland:
+      return std::make_unique<GtkUiPlatformWayland>();
+#endif
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+}
+
 }  // namespace
 
-GtkUi::GtkUi(ui::GtkUiDelegate* delegate) : delegate_(delegate) {
+GtkUi::GtkUi() {
   using Action = views::LinuxUI::WindowFrameAction;
   using ActionSource = views::LinuxUI::WindowFrameActionSource;
 
-  DCHECK(delegate_);
   DCHECK(!g_gtk_ui);
   g_gtk_ui = this;
 
-  window_frame_actions_ = {
-      {ActionSource::kDoubleClick, Action::kToggleMaximize},
-      {ActionSource::kMiddleClick, GetDefaultMiddleClickAction()},
-      {ActionSource::kRightClick, Action::kMenu}};
+  CHECK(LoadGtk());
 
-  static bool loaded = LoadGtk(BUILDFLAG(GTK_VERSION));
-  CHECK(loaded);
+  auto* delegate = ui::LinuxUiDelegate::GetInstance();
+  // TODO(thomasanderson): This should be replaced with DCHECK(delegate) once
+  // fully migrated to ozone.
+  auto backend = delegate ? delegate->GetBackend() : ui::LinuxUiBackend::kX11;
+  platform_ = CreateGtkUiPlatform(backend);
 
   // Avoid GTK initializing atk-bridge, and let AuraLinux implementation
   // do it once it is ready.
@@ -308,15 +336,22 @@ GtkUi::GtkUi(ui::GtkUiDelegate* delegate) : delegate_(delegate) {
   env->SetVar("NO_AT_BRIDGE", "1");
   GtkInitFromCommandLine(*base::CommandLine::ForCurrentProcess());
   native_theme_ = NativeThemeGtk::instance();
+
+  window_frame_actions_ = {
+      {ActionSource::kDoubleClick, Action::kToggleMaximize},
+      {ActionSource::kMiddleClick, GetDefaultMiddleClickAction()},
+      {ActionSource::kRightClick, Action::kMenu}};
 }
 
 GtkUi::~GtkUi() {
+  DCHECK_EQ(g_gtk_ui, this);
   g_gtk_ui = nullptr;
 }
 
-ui::GtkUiDelegate* GtkUi::GetDelegate() {
+// static
+GtkUiPlatform* GtkUi::GetPlatform() {
   DCHECK(g_gtk_ui) << "GtkUi instance is not set.";
-  return g_gtk_ui->delegate_;
+  return g_gtk_ui->platform_.get();
 }
 
 void GtkUi::Initialize() {
@@ -344,9 +379,15 @@ void GtkUi::Initialize() {
                          G_CALLBACK(OnCursorThemeNameChangedThunk), this);
   g_signal_connect_after(settings, "notify::gtk-cursor-theme-size",
                          G_CALLBACK(OnCursorThemeSizeChangedThunk), this);
-  g_signal_connect_after(settings, "notify::gtk-xft-dpi",
-                         G_CALLBACK(OnDeviceScaleFactorMaybeChangedThunk),
-                         this);
+
+  // Listen for DPI changes.
+  auto* dpi_callback = G_CALLBACK(OnDeviceScaleFactorMaybeChangedThunk);
+  if (GtkCheckVersion(4)) {
+    g_signal_connect_after(settings, "notify::gtk-xft-dpi", dpi_callback, this);
+  } else {
+    GdkScreen* screen = gdk_screen_get_default();
+    g_signal_connect_after(screen, "notify::resolution", dpi_callback, this);
+  }
 
   // Listen for scale factor changes.  We would prefer to listen on
   // a GdkScreen, but there is no scale-factor property, so use an
@@ -368,7 +409,7 @@ void GtkUi::Initialize() {
 
   indicators_count = 0;
 
-  GetDelegate()->OnInitialized(GetDummyWindow());
+  platform_->OnInitialized(GetDummyWindow());
 }
 
 bool GtkUi::GetTint(int id, color_utils::HSL* tint) const {
@@ -776,7 +817,7 @@ bool GtkUi::MatchEvent(const ui::Event& event,
   // determine if GtkUi's key binding handling implementation is used or not.
   // Ozone/Wayland was unintentionally using GtkUi for keybinding handling, so
   // early out here, for now, until a proper solution for ozone is implemented.
-  if (!GetDelegate()->GetGdkKeymap())
+  if (!platform_->GetGdkKeymap())
     return false;
 
   // Ensure that we have a keyboard handler.
@@ -1030,11 +1071,18 @@ float GtkUi::GetRawDeviceScaleFactor() {
   float scale = gtk_widget_get_scale_factor(GetDummyWindow());
   DCHECK_GT(scale, 0.0);
 
-  auto* settings = gtk_settings_get_default();
-  int resolution = kDefaultDPI;
-  g_object_get(settings, "gtk-xft-dpi", &resolution, nullptr);
+  double resolution = 0;
+  if (GtkCheckVersion(4)) {
+    auto* settings = gtk_settings_get_default();
+    int dpi = 0;
+    g_object_get(settings, "gtk-xft-dpi", &dpi, nullptr);
+    resolution = dpi / 1024.0;
+  } else {
+    GdkScreen* screen = gdk_screen_get_default();
+    resolution = gdk_screen_get_resolution(screen);
+  }
   if (resolution > 0)
-    scale *= resolution / kDefaultDPI / 1024;
+    scale *= resolution / kDefaultDPI;
 
   // Round to the nearest 64th so that UI can losslessly multiply and divide
   // the scale factor.
@@ -1060,7 +1108,3 @@ float GtkUi::GetDeviceScaleFactor() const {
 }
 
 }  // namespace gtk
-
-views::LinuxUI* BuildGtkUi(ui::GtkUiDelegate* delegate) {
-  return new gtk::GtkUi(delegate);
-}

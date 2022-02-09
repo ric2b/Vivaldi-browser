@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Sänd länk som e-post</translation>
 <translation id="1454726940098520109">Visa inte bekräftelse igen</translation>
 <translation id="1462666970065907900">Är du säker på att du vill stänga det här fönstret?</translation>
+<translation id="1480046233931937785">Tack till</translation>
 <translation id="1526344461589023948">Ett fel inträffade medan en nedladdad uppdatering höll på att sparas. Vänligen kontrollera att datorn har tillräckligt med diskutrymme och försök igen senare.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privat fönster</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Öppna i ny flik</translation>
 <translation id="3027988479108856431">Dessvärre är dina Yandexinställningar inte tillgängliga medan webbläsaren körs. För att importera inställningarna till Vivaldi, spara det du håller med och stäng alla Yandexfönster. Klicka sedan Fortsätt.</translation>
 <translation id="3084011186245865060">Landskap 6</translation>
+<translation id="3093931836425623631">Vivaldi är möjlig genom Chromium open source-projektet och annan programvara med öppen källkod.</translation>
 <translation id="3127383884976966729">Djur 7</translation>
 <translation id="3156398087075132709">Nytt bokmärke</translation>
 <translation id="3255747772218936245">Installera uppdatering</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi möjliggörs av öppen källkods-projektet <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> och annan <ph name="BEGIN_LINK_OSS" />mjukvara med öppen källkod<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Misslyckades med att starta installationsprogrammet för uppdateringen. Vänligen kontrollera att datorn har tillräckligt med minne och diskutrymme och försök igen senare.</translation>
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="7715497554424665066">&amp;Ignorera uppdatering</translation>

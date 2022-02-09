@@ -691,9 +691,11 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
                         case DESCRIPTION:
                             if (item.getDescription().isEmpty()) return 1;
                             else if (t1.getBookmarkItem().getDescription().isEmpty()) return -1;
-                            return item.getDescription().compareTo(t1.getBookmarkItem().getDescription());
+                            return item.getDescription().compareTo(
+                                    t1.getBookmarkItem().getDescription());
                         case DATE:
-                            return (int)(item.getCreated() -(t1.getBookmarkItem().getCreated()));
+                            return Long.compare(item.getCreated(),
+                                    t1.getBookmarkItem().getCreated());
                         default:
                             return 0;
                     }

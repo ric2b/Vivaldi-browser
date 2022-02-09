@@ -9,30 +9,11 @@ namespace vivaldiprefs {
 
 // Profile prefs go here.
 extern const char kAutoUpdateEnabled[];
-
-// Old pref names that have been changed during the migration
-// to the new prefs api.
-extern const char kOldAlwaysLoadPinnedTabAfterRestore[];
-extern const char kOldDeferredTabLoadingAfterRestore[];
-#if defined(USE_AURA)
-extern const char kOldHideMouseCursorInFullscreen[];
-#endif  // USE_AURA
-extern const char kOldMousegesturesEnabled[];
-extern const char kOldPluginsWidevideEnabled[];
-extern const char kOldRockerGesturesEnabled[];
-extern const char kOldSmoothScrollingEnabled[];
-extern const char kOldVivaldiCaptureDirectory[];
-extern const char kOldVivaldiHomepage[];
-extern const char kOldVivaldiNumberOfDaysToKeepVisits[];
-extern const char kOldVivaldiTabZoom[];
-extern const char kOldVivaldiTabsToLinks[];
-extern const char kOldVivaldiUseNativeWindowDecoration[];
-
+extern const char kVivaldiAccountPendingRegistration[];
 extern const char kVivaldiExperiments[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 
 // Local state prefs go here.
-
 extern const char kVivaldiAutoUpdateStandalone[];
 extern const char kVivaldiUniqueUserId[];
 extern const char kVivaldiStatsNextDailyPing[];
@@ -51,6 +32,24 @@ extern const char kVivaldiAccountServerUrlIdentity[];
 extern const char kVivaldiAccountServerUrlOpenId[];
 extern const char kVivaldiSyncServerUrl[];
 extern const char kVivaldiSyncNotificationsServerUrl[];
+
+// Old pref names that have been changed during the migration
+// to the new prefs api.
+extern const char kOldAlwaysLoadPinnedTabAfterRestore[];
+extern const char kOldDeferredTabLoadingAfterRestore[];
+#if defined(USE_AURA)
+extern const char kOldHideMouseCursorInFullscreen[];
+#endif  // USE_AURA
+extern const char kOldMousegesturesEnabled[];
+extern const char kOldPluginsWidevideEnabled[];
+extern const char kOldRockerGesturesEnabled[];
+extern const char kOldSmoothScrollingEnabled[];
+extern const char kOldVivaldiCaptureDirectory[];
+extern const char kOldVivaldiHomepage[];
+extern const char kOldVivaldiNumberOfDaysToKeepVisits[];
+extern const char kOldVivaldiTabZoom[];
+extern const char kOldVivaldiTabsToLinks[];
+extern const char kOldVivaldiUseNativeWindowDecoration[];
 
 }  // namespace vivaldiprefs
 

@@ -17,12 +17,11 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_driver.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
@@ -45,12 +44,8 @@ constexpr int64_t kUnmaskDetailsResponseTimeoutMs = 3 * 1000;  // 3 sec
 // Time to wait between multiple calls to GetUnmaskDetails().
 constexpr int64_t kDelayForGetUnmaskDetails = 3 * 60 * 1000;  // 3 min
 
-// Used for asynchronously waiting for |event| to be signaled.
-bool WaitForEvent(base::WaitableEvent* event) {
-  event->declare_only_used_while_idle();
-  return event->TimedWait(
-      base::TimeDelta::FromMilliseconds(kUnmaskDetailsResponseTimeoutMs));
-}
+// Suffix for server IDs in the cache indicating that a card is a virtual card.
+const char kVirtualCardIdentifier[] = "_vcn";
 }  // namespace
 
 CreditCardAccessManager::CreditCardAccessManager(
@@ -63,9 +58,6 @@ CreditCardAccessManager::CreditCardAccessManager(
       payments_client_(client_->GetPaymentsClient()),
       personal_data_manager_(personal_data_manager),
       form_event_logger_(form_event_logger),
-      ready_to_start_authentication_(
-          base::WaitableEvent::ResetPolicy::AUTOMATIC,
-          base::WaitableEvent::InitialState::NOT_SIGNALED),
       can_fetch_unmask_details_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                                 base::WaitableEvent::InitialState::SIGNALED) {
 }
@@ -110,6 +102,20 @@ bool CreditCardAccessManager::ShouldDisplayGPayLogo() {
 
 bool CreditCardAccessManager::UnmaskedCardCacheIsEmpty() {
   return unmasked_card_cache_.empty();
+}
+
+std::vector<const CachedServerCardInfo*>
+CreditCardAccessManager::GetCachedUnmaskedCards() const {
+  std::vector<const CachedServerCardInfo*> unmasked_cards;
+  for (auto const& iter : unmasked_card_cache_) {
+    unmasked_cards.push_back(&iter.second);
+  }
+  return unmasked_cards;
+}
+
+bool CreditCardAccessManager::IsCardPresentInUnmaskedCache(
+    const std::string& server_id) const {
+  return unmasked_card_cache_.find(server_id) != unmasked_card_cache_.end();
 }
 
 bool CreditCardAccessManager::ServerCardsAvailable() {
@@ -259,14 +265,19 @@ void CreditCardAccessManager::FetchCreditCard(
   }
 
   // If card has been previously unmasked, use cached data.
+  std::string identifier = card->record_type() == CreditCard::VIRTUAL_CARD
+                               ? card->server_id() + kVirtualCardIdentifier
+                               : card->server_id();
   std::unordered_map<std::string, CachedServerCardInfo>::iterator it =
-      unmasked_card_cache_.find(card->server_id());
+      unmasked_card_cache_.find(identifier);
   if (it != unmasked_card_cache_.end()) {  // key is in cache
     accessor->OnCreditCardFetched(/*did_succeed=*/true,
                                   /*credit_card=*/&it->second.card,
                                   /*cvc=*/it->second.cvc);
-    base::UmaHistogramCounts1000("Autofill.UsedCachedServerCard",
-                                 ++it->second.cache_uses);
+    std::string metrics_name = card->record_type() == CreditCard::VIRTUAL_CARD
+                                   ? "Autofill.UsedCachedVirtualCard"
+                                   : "Autofill.UsedCachedServerCard";
+    base::UmaHistogramCounts1000(metrics_name, ++it->second.cache_uses);
     return;
   }
 
@@ -328,12 +339,10 @@ void CreditCardAccessManager::FetchCreditCard(
 
     // Wait for |ready_to_start_authentication_| to be signaled by
     // OnDidGetUnmaskDetails() or until timeout before calling Authenticate().
-    auto task_runner = base::ThreadPool::CreateTaskRunner({base::MayBlock()});
-    cancelable_authenticate_task_tracker_.PostTaskAndReplyWithResult(
-        task_runner.get(), FROM_HERE,
-        base::BindOnce(&WaitForEvent, &ready_to_start_authentication_),
+    ready_to_start_authentication_.OnEventOrTimeOut(
         base::BindOnce(&CreditCardAccessManager::Authenticate,
-                       weak_ptr_factory_.GetWeakPtr()));
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::TimeDelta::FromMilliseconds(kUnmaskDetailsResponseTimeoutMs));
   } else {
     Authenticate(get_unmask_details_returned);
   }
@@ -370,9 +379,13 @@ void CreditCardAccessManager::SignalCanFetchUnmaskDetails() {
 
 void CreditCardAccessManager::CacheUnmaskedCardInfo(const CreditCard& card,
                                                     const std::u16string& cvc) {
-  DCHECK_EQ(card.record_type(), CreditCard::FULL_SERVER_CARD);
-  CachedServerCardInfo card_info = {card, cvc, 0};
-  unmasked_card_cache_[card.server_id()] = card_info;
+  DCHECK(card.record_type() == CreditCard::FULL_SERVER_CARD ||
+         card.record_type() == CreditCard::VIRTUAL_CARD);
+  std::string identifier = card.record_type() == CreditCard::VIRTUAL_CARD
+                               ? card.server_id() + kVirtualCardIdentifier
+                               : card.server_id();
+  CachedServerCardInfo card_info = {card, cvc, /*cache_uses=*/0};
+  unmasked_card_cache_[identifier] = card_info;
 }
 
 UnmaskAuthFlowType CreditCardAccessManager::GetAuthenticationType(
@@ -418,7 +431,7 @@ void CreditCardAccessManager::Authenticate(bool get_unmask_details_returned) {
         card_selected_without_unmask_details_timestamp_.value());
     AutofillMetrics::LogUserPerceivedLatencyOnCardSelectionTimedOut(
         /*did_time_out=*/!get_unmask_details_returned);
-    card_selected_without_unmask_details_timestamp_ = base::nullopt;
+    card_selected_without_unmask_details_timestamp_ = absl::nullopt;
   }
 
   unmask_auth_flow_type_ = GetAuthenticationType(get_unmask_details_returned);
@@ -496,7 +509,7 @@ void CreditCardAccessManager::OnCVCAuthenticationComplete(
 
   // Store request options temporarily if given. They will be used for
   // AdditionallyPerformFidoAuth.
-  base::Optional<base::Value> request_options = base::nullopt;
+  absl::optional<base::Value> request_options = absl::nullopt;
   if (unmask_details_.fido_request_options.has_value()) {
     // For opted-in user (CVC then FIDO case), request options are returned in
     // unmask detail response.
@@ -698,7 +711,6 @@ void CreditCardAccessManager::HandleDialogUserResponse(
     case WebauthnDialogCallbackType::kVerificationCancelled:
       // TODO(crbug.com/949269): Add tests and logging for canceling verify
       // pending dialog.
-      cancelable_authenticate_task_tracker_.TryCancelAll();
       payments_client_->CancelRequest();
       SignalCanFetchUnmaskDetails();
       ready_to_start_authentication_.Reset();

@@ -12,12 +12,12 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
+#include "chrome/browser/ash/crostini/crostini_terminal.h"
+#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_terminal.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/menu_manager.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -30,6 +30,7 @@
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/services/app_service/public/cpp/types_util.h"
 #include "content/public/browser/context_menu_params.h"
 #include "ui/display/scoped_display_for_new_windows.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -67,10 +68,9 @@ AppServiceContextMenu::AppServiceContextMenu(
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->AppRegistryCache()
       .ForOneApp(app_id, [this](const apps::AppUpdate& update) {
-        app_type_ =
-            update.Readiness() == apps::mojom::Readiness::kUninstalledByUser
-                ? apps::mojom::AppType::kUnknown
-                : app_type_ = update.AppType();
+        app_type_ = apps_util::IsInstalled(update.Readiness())
+                        ? app_type_ = update.AppType()
+                        : apps::mojom::AppType::kUnknown;
       });
 }
 
@@ -120,17 +120,15 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_WINDOW:
-      if (app_type_ == apps::mojom::AppType::kLacros)
-        crosapi::BrowserManager::Get()->NewWindow(/*incognito=*/false);
+    case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW: {
+      const bool is_incognito =
+          command_id == ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW;
+      if (app_type_ == apps::mojom::AppType::kStandaloneBrowser)
+        crosapi::BrowserManager::Get()->NewWindow(is_incognito);
       else
-        controller()->CreateNewWindow(/*incognito=*/false);
+        controller()->CreateNewWindow(is_incognito);
       break;
-
-    case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW:
-      // TODO(crbug.com/1188020): Support Incognito window of Lacros.
-      controller()->CreateNewWindow(/*incognito=*/true);
-      break;
-
+    }
     case ash::SHUTDOWN_GUEST_OS:
       if (app_id() == crostini::kCrostiniTerminalSystemAppId) {
         crostini::CrostiniManager::GetForProfile(profile())->StopVm(

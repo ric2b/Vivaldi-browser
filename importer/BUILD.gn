@@ -19,12 +19,14 @@ static_library("importer") {
     ]
     deps = [
       "//base:base",
+      "//chrome/app:chromium_strings",
       #"//chrome/app:generated_resources",
       #"//chrome/common:common",
       #"//chrome/utility:utility",
       "//chrome/common:buildflags",
       "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
+      "//ppapi/buildflags",
       "//sql",
       "//third_party/boringssl",
       "//ui/base",

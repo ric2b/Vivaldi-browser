@@ -181,20 +181,20 @@ extensions::AppWindowRegistry::AppWindowList GetAppWindowsForNSWindow(
 @property(readonly, nonatomic) NSMenuItem* menuItem;
 
 // Get the source item using the tags and create the menu item.
-- (id)initWithController:(AppShimMenuController*)controller
-                 menuTag:(NSInteger)menuTag
-                 itemTag:(NSInteger)itemTag
-              resourceId:(int)resourceId
-                  action:(SEL)action
-           keyEquivalent:(NSString*)keyEquivalent;
+- (instancetype)initWithController:(AppShimMenuController*)controller
+                           menuTag:(NSInteger)menuTag
+                           itemTag:(NSInteger)itemTag
+                        resourceId:(int)resourceId
+                            action:(SEL)action
+                     keyEquivalent:(NSString*)keyEquivalent;
 // Retain the source item given |menuTag| and |sourceItemTag|. Copy
 // the menu item given |menuTag| and |targetItemTag|.
 // This is useful when we want a doppelganger with a different source item.
 // For example, if there are conflicting key equivalents.
-- (id)initWithMenuTag:(NSInteger)menuTag
-        sourceItemTag:(NSInteger)sourceItemTag
-        targetItemTag:(NSInteger)targetItemTag
-        keyEquivalent:(NSString*)keyEquivalent;
+- (instancetype)initWithMenuTag:(NSInteger)menuTag
+                  sourceItemTag:(NSInteger)sourceItemTag
+                  targetItemTag:(NSInteger)targetItemTag
+                  keyEquivalent:(NSString*)keyEquivalent;
 // Set the title using |resourceId_| and unset the source item's key equivalent.
 - (void)enableForApp:(const Extension*)app;
 // Restore the source item's key equivalent.
@@ -207,12 +207,12 @@ extensions::AppWindowRegistry::AppWindowList GetAppWindowsForNSWindow(
   return _menuItem;
 }
 
-- (id)initWithController:(AppShimMenuController*)controller
-                 menuTag:(NSInteger)menuTag
-                 itemTag:(NSInteger)itemTag
-              resourceId:(int)resourceId
-                  action:(SEL)action
-           keyEquivalent:(NSString*)keyEquivalent {
+- (instancetype)initWithController:(AppShimMenuController*)controller
+                           menuTag:(NSInteger)menuTag
+                           itemTag:(NSInteger)itemTag
+                        resourceId:(int)resourceId
+                            action:(SEL)action
+                     keyEquivalent:(NSString*)keyEquivalent {
   if ((self = [super init])) {
     _sourceItem.reset([GetItemByTag(menuTag, itemTag) retain]);
     DCHECK(_sourceItem);
@@ -228,10 +228,10 @@ extensions::AppWindowRegistry::AppWindowList GetAppWindowsForNSWindow(
   return self;
 }
 
-- (id)initWithMenuTag:(NSInteger)menuTag
-        sourceItemTag:(NSInteger)sourceItemTag
-        targetItemTag:(NSInteger)targetItemTag
-        keyEquivalent:(NSString*)keyEquivalent {
+- (instancetype)initWithMenuTag:(NSInteger)menuTag
+                  sourceItemTag:(NSInteger)sourceItemTag
+                  targetItemTag:(NSInteger)targetItemTag
+                  keyEquivalent:(NSString*)keyEquivalent {
   if ((self = [super init])) {
     _menuItem.reset([GetItemByTag(menuTag, targetItemTag) copy]);
     _sourceItem.reset([GetItemByTag(menuTag, sourceItemTag) retain]);
@@ -291,7 +291,7 @@ extensions::AppWindowRegistry::AppWindowList GetAppWindowsForNSWindow(
 
 @implementation AppShimMenuController
 
-- (id)init {
+- (instancetype)init {
   if ((self = [super init])) {
     [self buildAppMenuItems];
     [self registerEventHandlers];

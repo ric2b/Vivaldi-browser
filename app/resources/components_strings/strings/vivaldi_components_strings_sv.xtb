@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Fortsätt</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Att köra nätverksdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Aviseringar</translation>
+<translation id="2491414235131909199">Den här sidan har blockerats av ett tillägg</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2539524384386349900">Identifiera</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> skickade ett ogiltigt svar.</translation>
@@ -144,7 +145,6 @@
 <translation id="5838278095973806738">Du bör inte ange några känsliga uppgifter på den här webbplatsen (till exempel lösenord eller kreditkortsuppgifter) eftersom angripare kan stjäla dem.</translation>
 <translation id="5869405914158311789">Webbplatsen kan inte nås</translation>
 <translation id="5932224571077948991">Påträngande eller vilseledande annonser visas på webbplatsen</translation>
-<translation id="5990559369517809815">Förfrågningar till servern har blockerats av ett tillägg.</translation>
 <translation id="6051221802930200923">Du kan inte besöka <ph name="SITE" /> just nu eftersom tekniken att fästa certifikat används på webbplatsen. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
 <translation id="6146055958333702838">Kontrollera kablar och starta om routrar, modem och andra nätverksenheter
     som används.</translation>

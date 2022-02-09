@@ -9,44 +9,48 @@
 
 #include "platform_media/common/feature_toggles.h"
 
-#include "base/containers/id_map.h"
+#include <map>
 
+#include "base/memory/weak_ptr.h"
+#include "gpu/ipc/common/gpu_channel.mojom.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
-
-namespace media {
-class IPCMediaPipeline;
-class PlatformMediaPipelineFactory;
-}
 
 namespace gpu {
 
 class GpuChannel;
 
-class ProprietaryMediaGpuChannel : public IPC::Listener, public IPC::Sender
-{
+// Helpers extending GpuChannel functionality to support IPC pipeline.
+class PropmediaGpuChannel {
  public:
+  // Due to linking dependency limitations we cannot reference IPCMediaPipeline
+  // from this code. So we use an indirection via this class and a pointer to
+  // a function that creates its instance. The pointer is initialized in
+  // the GpuServiceImpl constructor.
+  class PipelineBase : public IPC::Listener {
+   public:
+    ~PipelineBase() override = default;
+    virtual void Initialize(
+        IPC::Sender* channel,
+        gpu::mojom::VivaldiMediaPipelineParamsPtr params) = 0;
+  };
 
-  ProprietaryMediaGpuChannel(gpu::GpuChannel* channel);
-  ~ProprietaryMediaGpuChannel() override;
+  static GPU_IPC_SERVICE_EXPORT std::unique_ptr<PipelineBase> (
+      *g_create_pipeline)();
 
-  // IPC::Sender implementation:
-  bool Send(IPC::Message* msg) override;
+  PropmediaGpuChannel();
+  ~PropmediaGpuChannel();
 
-  // IPC::Listener implementation:
-  bool OnMessageReceived(const IPC::Message& msg) override;
+  static void StartNewMediaPipeline(
+      base::WeakPtr<GpuChannel> gpu_channel,
+      gpu::mojom::VivaldiMediaPipelineParamsPtr params);
+
+  static void DestroyMediaPipeline(base::WeakPtr<GpuChannel> gpu_channel,
+                                   int32_t route_id);
 
  private:
-
-  void OnNewMediaPipeline(int32_t route_id);
-  void OnDestroyMediaPipeline(int32_t route_id);
-  bool OnPipelineMessageReceived(const IPC::Message& message);
-
-  gpu::GpuChannel* const channel_;
-  base::IDMap<std::unique_ptr<media::IPCMediaPipeline>> media_pipelines_;
-  std::unique_ptr<media::PlatformMediaPipelineFactory> pipeline_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(ProprietaryMediaGpuChannel);
+  std::map<int32_t, std::unique_ptr<PipelineBase>> pipelines_;
 };
 
 }  // namespace gpu

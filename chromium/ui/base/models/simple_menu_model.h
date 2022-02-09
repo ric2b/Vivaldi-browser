@@ -175,6 +175,9 @@ class COMPONENT_EXPORT(UI_BASE) SimpleMenuModel : public MenuModel {
 
   // Sets whether the item at |index| is may have mnemonics.
   void SetMayHaveMnemonicsAt(int index, bool may_have_mnemonics);
+  // Sets an application-window unique identifier associated with this menu item
+  // allowing it to be tracked without knowledge of menu-specific command IDs.
+  void SetElementIdentifierAt(int index, ElementIdentifier unique_id);
 
   // Clears all items. Note that it does not free MenuModel of submenu.
   void Clear();
@@ -203,6 +206,7 @@ class COMPONENT_EXPORT(UI_BASE) SimpleMenuModel : public MenuModel {
   bool IsAlertedAt(int index) const override;
   bool IsNewFeatureAt(int index) const override;
   bool MayHaveMnemonicsAt(int index) const override;
+  ElementIdentifier GetElementIdentifierAt(int index) const override;
   void ActivatedAt(int index) override;
   void ActivatedAt(int index, int event_flags) override;
   MenuModel* GetSubmenuModelAt(int index) const override;
@@ -241,6 +245,7 @@ class COMPONENT_EXPORT(UI_BASE) SimpleMenuModel : public MenuModel {
     bool visible = true;
     bool is_new_feature = false;
     bool may_have_mnemonics = true;
+    ElementIdentifier unique_id;
   };
 
   typedef std::vector<Item> ItemVector;

@@ -215,7 +215,7 @@ class CalendarBackend
   // that CancelableClosure starts cancelled with the default constructor), and
   // we can use Cancel() to cancel the scheduled commit. There can be only one
   // scheduled commit at a time (see ScheduleCommit).
-  base::CancelableClosure scheduled_commit_;
+  base::CancelableOnceClosure scheduled_commit_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Send link via mail</translation>
 <translation id="1454726940098520109">Vi ikke bekræftelse igen</translation>
 <translation id="1462666970065907900">Vil du virkelig lukke vinduet?</translation>
+<translation id="1480046233931937785">Kredittering</translation>
 <translation id="1526344461589023948">Der opstod en fejl under forsøg på at gemme en downloadet opdatering. Kontrollér venligst at computeren har nok diskplads og prøv igen senere.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nyt privat vindue</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Åbn i ny fane</translation>
 <translation id="3027988479108856431">Trist, dine Yandex-indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gemme dit arbejde og lukke alle Yandex-vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="3084011186245865060">Landskab 6</translation>
+<translation id="3093931836425623631">Vivaldi er muliggjort af Chromium open source-projektet og anden open source software.</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3156398087075132709">Nyt bogmærke</translation>
 <translation id="3255747772218936245">Installer opdatering</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Landskab 7</translation>
 <translation id="7111492742514999492">Landskab 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi er gjort mulig af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Start af opdaterings-installationsprogramet fejlede. Kontrollér venligst at computeren har nok RAM eller diskplads og prøv igen senere.</translation>
 <translation id="7658239707568436148">Annuller</translation>
 <translation id="7715497554424665066">&amp;Ignorer opdatering</translation>

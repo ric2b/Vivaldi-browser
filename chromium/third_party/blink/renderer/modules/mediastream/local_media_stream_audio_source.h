@@ -43,7 +43,7 @@ class MODULES_EXPORT LocalMediaStreamAudioSource final
   // MediaStreamAudioSource implementation.
   void ChangeSourceImpl(const MediaStreamDevice& new_device) final;
 
-  base::Optional<AudioProcessingProperties> GetAudioProcessingProperties()
+  absl::optional<AudioProcessingProperties> GetAudioProcessingProperties()
       const final;
 
  private:
@@ -57,7 +57,8 @@ class MODULES_EXPORT LocalMediaStreamAudioSource final
                base::TimeTicks audio_capture_time,
                double volume,
                bool key_pressed) final;
-  void OnCaptureError(const std::string& message) final;
+  void OnCaptureError(media::AudioCapturerSource::ErrorCode code,
+                      const std::string& message) final;
   void OnCaptureMuted(bool is_muted) final;
 
   // The LocalFrame that will consume the audio data. Used when creating

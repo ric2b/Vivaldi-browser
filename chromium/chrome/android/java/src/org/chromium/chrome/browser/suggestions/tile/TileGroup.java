@@ -30,7 +30,6 @@ import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
 import org.chromium.chrome.browser.suggestions.SuggestionsOfflineModelObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.suggestions.mostvisited.MostVisitedSites;
-import org.chromium.components.browser_ui.widget.tile.TileView;
 import org.chromium.components.favicon.IconType;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.ui.mojom.WindowOpenDisposition;
@@ -58,6 +57,8 @@ public class TileGroup implements MostVisitedSites.Observer {
         void removeMostVisitedItem(Tile tile, Callback<GURL> removalUndoneCallback);
 
         void openMostVisitedItem(int windowDisposition, Tile tile);
+
+        void openMostVisitedItemInGroup(int windowDisposition, Tile tile);
 
         /**
          * Gets the list of most visited sites.
@@ -123,12 +124,6 @@ public class TileGroup implements MostVisitedSites.Observer {
          * be responsible for updating the tile data and triggering the visual refresh.
          */
         LargeIconBridge.LargeIconCallback createIconLoadCallback(Tile tile);
-
-        /**
-         * Updates the layout of the TileView if it isn't null. This method is called when a tile is
-         * build.
-         */
-        default void updateTileViewLayout(TileView tileView) {}
     }
 
     /**
@@ -350,6 +345,10 @@ public class TileGroup implements MostVisitedSites.Observer {
         if (trackLoadTask) removeTask(TileTask.FETCH_DATA);
     }
 
+    public TileSetupDelegate getTileSetupDelegate() {
+        return mTileSetupDelegate;
+    }
+
     /** Loads tile data from {@link #mPendingTiles} and clears it afterwards. */
     private void loadTiles() {
         assert mPendingTiles != null;
@@ -473,11 +472,6 @@ public class TileGroup implements MostVisitedSites.Observer {
         return mPendingTasks.contains(task);
     }
 
-    @VisibleForTesting
-    TileSetupDelegate getTileSetupDelegate() {
-        return mTileSetupDelegate;
-    }
-
     @Nullable
     public SiteSuggestion getHomepageTileData() {
         for (Tile tile : mTileSections.get(TileSectionType.PERSONALIZED)) {
@@ -559,6 +553,14 @@ public class TileGroup implements MostVisitedSites.Observer {
         }
 
         @Override
+        public void openItemInGroup(int windowDisposition) {
+            Tile tile = findTile(mSuggestion);
+            if (tile == null) return;
+
+            mTileGroupDelegate.openMostVisitedItemInGroup(windowDisposition, tile);
+        }
+
+        @Override
         public void removeItem() {
             Tile tile = findTile(mSuggestion);
             if (tile == null) return;
@@ -570,8 +572,8 @@ public class TileGroup implements MostVisitedSites.Observer {
         }
 
         @Override
-        public String getUrl() {
-            return mSuggestion.url.getSpec();
+        public GURL getUrl() {
+            return mSuggestion.url;
         }
 
         @Override

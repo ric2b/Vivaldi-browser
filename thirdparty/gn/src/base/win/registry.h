@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
-#include "base/win/windows_types.h"
+#include <windows.h>
 
 #include "base/macros.h"
 #include "base/win/scoped_handle.h"
@@ -58,7 +58,7 @@ class RegKey {
   HKEY Take();
 
   // Returns false if this key does not have the specified value, or if an error
-  // occurrs while attempting to access it.
+  // occurs while attempting to access it.
   bool HasValue(const char16_t* value_name) const;
 
   // Returns the number of values for this key, or 0 if the number cannot be

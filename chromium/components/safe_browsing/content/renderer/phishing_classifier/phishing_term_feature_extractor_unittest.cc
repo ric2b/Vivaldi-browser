@@ -29,7 +29,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::ASCIIToUTF16;
 using ::testing::Return;
 using ::testing::StrictMock;
 
@@ -86,10 +85,22 @@ class PhishingTermFeatureExtractorTest : public ::testing::Test {
     ResetExtractor(3 /* max shingles per page */);
   }
 
+  bool has_page_term(const std::string& str) const {
+    return term_hashes_.find(str) != term_hashes_.end();
+  }
+
+  bool has_page_word(uint32_t page_word_hash) const {
+    return word_hashes_.find(page_word_hash) != word_hashes_.end();
+  }
+
   void ResetExtractor(size_t max_shingles_per_page) {
     extractor_ = std::make_unique<PhishingTermFeatureExtractor>(
-        &term_hashes_, &word_hashes_, 3 /* max_words_per_term */,
-        kMurmurHash3Seed, max_shingles_per_page, 4 /* shingle_size */);
+        base::BindRepeating(&PhishingTermFeatureExtractorTest::has_page_term,
+                            base::Unretained(this)),
+        base::BindRepeating(&PhishingTermFeatureExtractorTest::has_page_word,
+                            base::Unretained(this)),
+        3 /* max_words_per_term */, kMurmurHash3Seed, max_shingles_per_page,
+        4 /* shingle_size */);
   }
 
   // Runs the TermFeatureExtractor on |page_text|, waiting for the
@@ -202,9 +213,7 @@ TEST_F(PhishingTermFeatureExtractorTest, ExtractFeatures) {
   EXPECT_THAT(expected_shingle_hashes, testing::ContainerEq(shingle_hashes));
 
   // Test various separators.
-  page_text = ASCIIToUTF16(
-      "Capitalization plus non-space\n"
-      "separator... punctuation!");
+  page_text = u"Capitalization plus non-space\nseparator... punctuation!";
   expected_features.Clear();
   expected_features.AddBooleanFeature(features::kPageTerm +
                                       std::string("capitalization"));
@@ -266,19 +275,15 @@ TEST_F(PhishingTermFeatureExtractorTest, ExtractFeatures) {
 
   // Chinese translation of the phrase "hello goodbye hello goodbye". This tests
   // that we can correctly separate terms in languages that don't use spaces.
-  page_text = base::UTF8ToUTF16(
-      "\xe4\xbd\xa0\xe5\xa5\xbd\xe5\x86\x8d\xe8\xa7\x81"
-      "\xe4\xbd\xa0\xe5\xa5\xbd\xe5\x86\x8d\xe8\xa7\x81");
+  page_text = u"你好再见你好再见";
   expected_features.Clear();
   expected_features.AddBooleanFeature(features::kPageTerm +
-                                      std::string("\xe4\xbd\xa0\xe5\xa5\xbd"));
+                                      std::string("你好"));
   expected_features.AddBooleanFeature(features::kPageTerm +
-                                      std::string("\xe5\x86\x8d\xe8\xa7\x81"));
+                                      std::string("再见"));
   expected_shingle_hashes.clear();
   expected_shingle_hashes.insert(
-      MurmurHash3String("\xe4\xbd\xa0\xe5\xa5\xbd \xe5\x86\x8d\xe8\xa7\x81 "
-                        "\xe4\xbd\xa0\xe5\xa5\xbd \xe5\x86\x8d\xe8\xa7\x81 ",
-                        kMurmurHash3Seed));
+      MurmurHash3String("你好 再见 你好 再见 ", kMurmurHash3Seed));
 
   features.Clear();
   shingle_hashes.clear();
@@ -297,7 +302,7 @@ TEST_F(PhishingTermFeatureExtractorTest, Continuation) {
   // correctly, the extractor has to process the entire string of text.
   std::u16string page_text(u"one ");
   for (int i = 0; i < 28; ++i) {
-    page_text.append(ASCIIToUTF16(base::StringPrintf("%d ", i)));
+    page_text.append(base::ASCIIToUTF16(base::StringPrintf("%d ", i)));
   }
   page_text.append(u"two");
 
@@ -423,7 +428,7 @@ TEST_F(PhishingTermFeatureExtractorTest, Continuation) {
 TEST_F(PhishingTermFeatureExtractorTest, PartialExtractionTest) {
   std::unique_ptr<std::u16string> page_text(new std::u16string(u"one "));
   for (int i = 0; i < 28; ++i) {
-    page_text->append(ASCIIToUTF16(base::StringPrintf("%d ", i)));
+    page_text->append(base::ASCIIToUTF16(base::StringPrintf("%d ", i)));
   }
 
   base::TimeTicks now = base::TimeTicks::Now();
@@ -447,7 +452,7 @@ TEST_F(PhishingTermFeatureExtractorTest, PartialExtractionTest) {
 
   page_text = std::make_unique<std::u16string>();
   for (int i = 30; i < 58; ++i) {
-    page_text->append(ASCIIToUTF16(base::StringPrintf("%d ", i)));
+    page_text->append(base::ASCIIToUTF16(base::StringPrintf("%d ", i)));
   }
   page_text->append(u"multi word test ");
   features.Clear();

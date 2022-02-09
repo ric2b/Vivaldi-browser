@@ -95,7 +95,7 @@ bool VivaldiContextMenuViews::Show() {
 
 void VivaldiContextMenuViews::SetIcon(const gfx::Image& icon, int id) {
   if (menu_view_->GetMenuItemByID(id)) {
-    menu_view_->SetIcon(*icon.ToImageSkia(), id);
+    menu_view_->GetMenuItemByID(id)->SetIcon(ui::ImageModel::FromImage(icon));
   }
 }
 

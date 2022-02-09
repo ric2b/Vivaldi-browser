@@ -42,6 +42,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Utilities for detecting multi-window/multi-instance support.
@@ -74,7 +75,7 @@ public class MultiWindowUtils implements ActivityStateListener {
         int MULTI_WINDOW = 1;
     }
 
-    private MultiWindowUtils() {}
+    protected MultiWindowUtils() {}
 
     /**
      * Returns the singleton instance of MultiWindowUtils.
@@ -114,8 +115,28 @@ public class MultiWindowUtils implements ActivityStateListener {
      */
     public boolean isOpenInOtherWindowSupported(Activity activity) {
         if (!isInMultiWindowMode(activity) && !isInMultiDisplayMode(activity)) return false;
-        // Supported only in multi-window mode and if activity supports side-by-side instances.
+
         return getOpenInOtherWindowActivity(activity) != null;
+    }
+
+    /**
+     * See if Chrome can get itself into multi-window mode.
+     * @param activity The {@link Activity} to check.
+     * @return {@code True} if Chrome can get itself into multi-window mode.
+     */
+    public boolean canEnterMultiWindowMode(Activity activity) {
+        return aospMultiWindowModeSupported() || customMultiWindowModeSupported();
+    }
+
+    @VisibleForTesting
+    boolean aospMultiWindowModeSupported() {
+        return false;
+    }
+
+    @VisibleForTesting
+    boolean customMultiWindowModeSupported() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                && Build.MANUFACTURER.toUpperCase(Locale.ENGLISH).equals("SAMSUNG");
     }
 
     /**

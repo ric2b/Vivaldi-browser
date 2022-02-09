@@ -19,13 +19,13 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/strings/string_piece_forward.h"
 #include "build/build_config.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_discovery_base.h"
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/pin.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace device {
 
@@ -45,8 +45,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
  public:
   using RequestCallback = base::RepeatingCallback<void(const std::string&)>;
 
-  enum class RequestType { kMakeCredential, kGetAssertion };
-
   using AuthenticatorMap =
       std::map<std::string, FidoAuthenticator*, std::less<>>;
 
@@ -60,9 +58,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
         const TransportAvailabilityInfo& other);
     ~TransportAvailabilityInfo();
 
-    // TODO(hongjunchoi): Factor |request_type| from TransportAvailabilityInfo.
-    // See: https://crbug.com/875011
-    RequestType request_type = RequestType::kMakeCredential;
+    FidoRequestType request_type = FidoRequestType::kMakeCredential;
 
     // Indicates whether this is a GetAssertion request with an empty allow
     // list.
@@ -76,7 +72,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     // request. This is only set for a GetAssertion request and if a platform
     // authenticator has been added to the request handler. (The Windows
     // WebAuthn API does NOT count as a platform authenticator in this case.)
-    base::Optional<bool> has_recognized_platform_authenticator_credential;
+    absl::optional<bool> has_recognized_platform_authenticator_credential;
 
     // The set of recognized platform credential user entities that can fulfill
     // a GetAssertion request. Not all platform authenticators report this, so

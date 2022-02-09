@@ -32,6 +32,7 @@
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/common/url_constants.h"
 #include "chromium/content/public/browser/navigation_entry.h"
@@ -71,8 +72,8 @@ bool QRCodeGeneratorEnabled(content::WebContents* web_contents) {
     return false;
 
   bool incognito = web_contents->GetBrowserContext()->IsOffTheRecord();
-  return qrcode_generator::QRCodeGeneratorBubbleController::
-      IsGeneratorAvailable(entry->GetURL(), incognito);
+  return !incognito && qrcode_generator::QRCodeGeneratorBubbleController::
+                           IsGeneratorAvailable(entry->GetURL());
 }
 
 bool DoesInputFieldTypeSupportEmoji(
@@ -307,7 +308,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
     base::TrimWhitespace(params_.selection_text, base::TRIM_ALL,
                          &params_.selection_text);
     base::ReplaceChars(params_.selection_text, AutocompleteMatch::kInvalidChars,
-                       base::ASCIIToUTF16(" "), &params_.selection_text);
+                       u" ", &params_.selection_text);
     std::u16string printable_selection_text = PrintableSelectionText();
     EscapeAmpersands(&printable_selection_text);
     request.printableselection = base::UTF16ToUTF8(printable_selection_text);
@@ -695,7 +696,9 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
 bool VivaldiRenderViewContextMenu::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
-
+  if (menu_delegate_ && !menu_delegate_->GetShowShortcuts()) {
+    return false;
+  }
   // Prefer accelerators from delegate as those can be configured in JS.
   if (model_delegate_ &&
       model_delegate_->GetAcceleratorForCommandId(command_id, accelerator)) {
@@ -991,9 +994,9 @@ void VivaldiRenderViewContextMenu::PopulateContainer(const Container& container,
       std::u16string text = PrintableSelectionText();
       EscapeAmpersands(&text);
       extensions_controller_.reset(new ExtensionsMenuController(this));
-      extensions_controller_->Populate(menu_model, this, VivaldiGetExtension(),
-                            source_web_contents_, text,
-                            base::Bind(VivaldiMenuItemMatchesParams, params_));
+      extensions_controller_->Populate(
+          menu_model, this, VivaldiGetExtension(), source_web_contents_, text,
+          base::BindRepeating(VivaldiMenuItemMatchesParams, params_));
       break;
     }
     case context_menu::CONTAINER_CONTENT_SENDPAGETODEVICES:

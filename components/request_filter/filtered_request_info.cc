@@ -12,7 +12,7 @@ FilteredRequestInfo::FilteredRequestInfo(
     const network::ResourceRequest& request,
     content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
     bool is_async,
-    base::Optional<int64_t> navigation_id)
+    absl::optional<int64_t> navigation_id)
     : id(request_id),
       request(request),
       view_routing_id(view_routing_id),

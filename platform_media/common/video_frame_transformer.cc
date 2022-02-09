@@ -69,7 +69,7 @@ scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
       const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kUPlane].offset),
       const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kVPlane].offset),
       buffer->timestamp());
-  frame->AddDestructionObserver(base::Bind(&BufferHolder, buffer));
+  frame->AddDestructionObserver(base::BindOnce(&BufferHolder, buffer));
   return frame;
 }
 

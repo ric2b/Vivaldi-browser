@@ -30,18 +30,18 @@ class ATCodecHelper {
 
   // Invoked when there is enough information about the audio stream to
   // determine the exact format.  Returns false on failure.
-  using InputFormatKnownCB =
-      base::Callback<bool(const AudioStreamBasicDescription& format,
-                          ScopedAudioChannelLayoutPtr input_channel_layout)>;
+  using InputFormatKnownCB = base::RepeatingCallback<bool(
+      const AudioStreamBasicDescription& format,
+      ScopedAudioChannelLayoutPtr input_channel_layout)>;
 
   // Invoked every time a DecoderBuffer should be converted to an AudioBuffer.
   // |header_size| is the number of bytes to be discarded from the beginning of
   // |input|.  |max_output_frame_count| specifies the maximum expected number
   // of frames of decoded audio.  Returns false on failure.
   using ConvertAudioCB =
-      base::Callback<bool(const scoped_refptr<DecoderBuffer>& input,
-                          size_t header_size,
-                          size_t max_output_frame_count)>;
+      base::RepeatingCallback<bool(const scoped_refptr<DecoderBuffer>& input,
+                                   size_t header_size,
+                                   size_t max_output_frame_count)>;
 
   virtual ~ATCodecHelper() {}
 

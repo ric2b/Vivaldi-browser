@@ -96,6 +96,11 @@
             "optional": true,
             "description": "A shortcut displayed next to the name. No binding is added."
           },
+          "showshortcut": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Controls if a shortcut shall be shown. Needed for elements where shortcut is set up in C++ code"
+          },
           "icons": {
             "$ref": "Icons",
             "optional": true,

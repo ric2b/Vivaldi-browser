@@ -45,6 +45,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -241,7 +242,7 @@ developer::LoadError CreateLoadError(
   return response;
 }
 
-base::Optional<URLPattern> ParseRuntimePermissionsPattern(
+absl::optional<URLPattern> ParseRuntimePermissionsPattern(
     const std::string& pattern_str) {
   constexpr int kValidRuntimePermissionSchemes = URLPattern::SCHEME_HTTP |
                                                  URLPattern::SCHEME_HTTPS |
@@ -249,13 +250,13 @@ base::Optional<URLPattern> ParseRuntimePermissionsPattern(
 
   URLPattern pattern(kValidRuntimePermissionSchemes);
   if (pattern.Parse(pattern_str) != URLPattern::ParseResult::kSuccess)
-    return base::nullopt;
+    return absl::nullopt;
 
   // We don't allow adding paths for permissions, because they aren't meaningful
   // in terms of origin access. The frontend should validate this, but there's
   // a chance something can slip through, so we should fail gracefully.
   if (pattern.path() != "/*")
-    return base::nullopt;
+    return absl::nullopt;
 
   return pattern;
 }
@@ -511,8 +512,9 @@ void DeveloperPrivateEventRouter::OnExtensionAllowlistWarningStateChanged(
 }
 
 void DeveloperPrivateEventRouter::OnExtensionManagementSettingsChanged() {
-  std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue());
+  std::vector<base::Value> args;
+  args.push_back(base::Value::FromUniquePtrValue(
+      DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue()));
 
   std::unique_ptr<Event> event(
       new Event(events::DEVELOPER_PRIVATE_ON_PROFILE_STATE_CHANGED,
@@ -539,8 +541,9 @@ void DeveloperPrivateEventRouter::Observe(
 }
 
 void DeveloperPrivateEventRouter::OnProfilePrefChanged() {
-  std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue());
+  std::vector<base::Value> args;
+  args.push_back(base::Value::FromUniquePtrValue(
+      DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue()));
   std::unique_ptr<Event> event(
       new Event(events::DEVELOPER_PRIVATE_ON_PROFILE_STATE_CHANGED,
                 developer::OnProfileStateChanged::kEventName, std::move(args)));
@@ -593,8 +596,8 @@ void DeveloperPrivateEventRouter::BroadcastItemStateChangedHelper(
         std::make_unique<developer::ExtensionInfo>(std::move(infos[0]));
   }
 
-  std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(event_data.ToValue());
+  std::vector<base::Value> args;
+  args.push_back(base::Value::FromUniquePtrValue(event_data.ToValue()));
   std::unique_ptr<Event> event(
       new Event(events::DEVELOPER_PRIVATE_ON_ITEM_STATE_CHANGED,
                 developer::OnItemStateChanged::kEventName, std::move(args)));
@@ -1410,8 +1413,8 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadDirectoryFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(1, &filesystem_path));
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(2, &directory_url_str));
 
-  context_ = content::BrowserContext::GetStoragePartition(
-                 browser_context(), render_frame_host()->GetSiteInstance())
+  context_ = browser_context()
+                 ->GetStoragePartition(render_frame_host()->GetSiteInstance())
                  ->GetFileSystemContext();
 
   // Directory url is non empty only for syncfilesystem.
@@ -1780,7 +1783,7 @@ DeveloperPrivateOpenDevToolsFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (properties.incognito && *properties.incognito)
-    profile = profile->GetPrimaryOTRProfile();
+    profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
 
   const Extension* extension =
       properties.extension_id
@@ -2029,7 +2032,7 @@ DeveloperPrivateAddHostPermissionFunction::Run() {
       developer::AddHostPermission::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  base::Optional<URLPattern> pattern =
+  absl::optional<URLPattern> pattern =
       ParseRuntimePermissionsPattern(params->host);
   if (!pattern)
     return RespondNow(Error(kInvalidHost));
@@ -2072,7 +2075,7 @@ DeveloperPrivateRemoveHostPermissionFunction::Run() {
       developer::RemoveHostPermission::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  base::Optional<URLPattern> pattern =
+  absl::optional<URLPattern> pattern =
       ParseRuntimePermissionsPattern(params->host);
   if (!pattern)
     return RespondNow(Error(kInvalidHost));

@@ -21,7 +21,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
-#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -33,7 +32,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
-#include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter_test_utils.h"
@@ -66,6 +64,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "url/gurl.h"
 
 using subresource_filter::ActivationList;
@@ -121,9 +120,6 @@ class VivaldiSubresourceFilterBrowserTest
         Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
     adblock_->ClearSiteList();
     adblock_->AddBlockItem(url.host());
-  }
-  VivaldiSubresourceFilterClient* GetClient() {
-    return VivaldiSubresourceFilterClient::FromWebContents(web_contents());
   }
 
  private:
@@ -478,7 +474,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents(),
       content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   browser()->OpenURL(content::OpenURLParams(
-      GURL(content::kChromeUICrashURL), content::Referrer(),
+      GURL(blink::kChromeUICrashURL), content::Referrer(),
       WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false));
   crash_observer.Wait();
 }

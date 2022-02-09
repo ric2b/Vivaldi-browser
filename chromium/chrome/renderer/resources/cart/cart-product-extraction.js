@@ -12,15 +12,21 @@ var priceRegexTemplate = '((reg|regular|orig|from|' + priceCleanupPrefix +
     ')\\s+)?' +
     '(\\d+\\s*/\\s*)?(US(D)?\\s*)?' +
     '\\$[\\d.,]+(\\s+(to|-|–)\\s+(\\$)?[\\d.,]+)?' + priceCleanupPostfix + '?';
-var priceRegexFull = new RegExp('^' + priceRegexTemplate + '$', 'i');
+var priceRegexFull = new RegExp('^' + priceRegexTemplate + '( ea)?$', 'i');
 var priceRegex = new RegExp(priceRegexTemplate, 'i');
 var priceCleanupRegex = new RegExp(
     '^((' + priceCleanupPrefix + ')\\s+)|' + priceCleanupPostfix + '$', 'i');
-var cartItemHTMLRegex = new RegExp('(cart|basket|bundle)[-_]?item', 'i')
+var cartItemHTMLRegex = new RegExp(
+    '(cart|basket|bundle)[-_]?(item|product)', 'i');
 var cartItemTextContentRegex = new RegExp(
     'remove|delete|save for later|move to (favo(u?)rite|list|wish( ?)list)s?',
-    'i')
-var notCartItemTextContentRegex = new RegExp('move to cart', 'i')
+    'i');
+var moveToCartRegex = new RegExp('move to (cart|bag)', 'i');
+var addToCartRegex = new RegExp('add to cart', 'i');
+var productIdHTMLRegex = new RegExp('<a href="#modal-(\\w+)', 'i');
+var productIdURLRegex = new RegExp(
+    '((\\w+)-\\d+-medium)|(images.cymax.com/Images/\\d+/(\\w+)-)', 'i');
+var saveForLaterRegex = new RegExp('save for later', 'i');
 
 function getLazyLoadingURL(image) {
   // FIXME: some lazy images in Nordstrom and Staples don't have URLs in the
@@ -91,7 +97,8 @@ function multipleImagesSupported() {
   // When saving target.com to mhtml, the color selecting images become very
   // large and are picked up. Adding in hostname.endsWith('target.com') is a
   // workaround for this problem. In target we only get one image per product.
-  return hostname.endsWith('craigslist.org') || hostname.endsWith('target.com');
+  return hostname.endsWith('craigslist.org') || hostname.endsWith('target.com')
+      || hostname.endsWith('zazzle.com');
 }
 
 function extractImage(item) {
@@ -160,6 +167,13 @@ function getAbsoluteUrlOfSrcSet(image) {
 }
 
 function extractUrl(item) {
+  // Some sites doesn't use <a> tag or explicitly state href. E.g. samsclub.com
+  // triggers JS to initiate navigation instead of <a>, and ae.com shows side
+  // panel after clicking on each item instead of directing to product page.
+  if (document.URL.includes("samsclub.com")
+      || document.URL.includes("ae.com")) {
+    return "";
+  }
   let anchors;
   if (item.tagName == 'A') {
     anchors = [item];
@@ -443,6 +457,11 @@ function choosePrice(priceArray) {
 }
 
 function extractPrice(item) {
+  // shein.com shows price by one element per digit and it's challenging
+  // to decide based on textContent.
+  if (document.URL.includes("shein.com")) {
+    return "";
+  }
   // Etsy mobile
   const prices = item.querySelectorAll(`
       .currency-value
@@ -493,6 +512,22 @@ function extractPrice(item) {
   return choosePrice(captured_prices);
 }
 
+function extractProductId(item, imageUrl) {
+  productIdMatches = item.outerHTML.match(productIdHTMLRegex);
+  if (productIdMatches === null) {
+    productIdMatches = imageUrl.match(productIdURLRegex);
+  }
+  // Return the last valid match result.
+  if (productIdMatches !== null) {
+    for (var i = productIdMatches.length - 1; i >= 0; i--) {
+      if (productIdMatches[i] !== undefined) {
+        return productIdMatches[i];
+      }
+    }
+  }
+  return null;
+}
+
 function extractItem(item) {
   imageUrl = extractImage(item);
   if (imageUrl == null) {
@@ -523,7 +558,14 @@ function extractItem(item) {
       console.warn('no price found', item);
     return null;
   }
-  return {'url': url, 'imageUrl': imageUrl, 'title': title, 'price': price};
+  let extractionResult =
+      {'url': url, 'imageUrl': imageUrl, 'title': title, 'price': price};
+  // productId is an optional field for extraction.
+  const productId = extractProductId(item, imageUrl);
+  if (productId !== null) {
+    extractionResult['productId'] = productId;
+  }
+  return extractionResult;
 }
 
 function commonAncestor(a, b) {
@@ -548,22 +590,28 @@ function hasOverlap(target, list) {
   return false;
 }
 
-function isCartItem(item) {
-  // TODO: Improve the heuristic here to accommodate more formats of cart item.
+function matchNonCartPattern(item, pattern) {
   if (item.parentElement) {
     // Walmart has 'move to cart' outside of the div.cart-item.
-    if (item.parentElement.textContent.toLowerCase().match(
-            notCartItemTextContentRegex))
-      return false;
-  } else {
-    if (item.textContent.toLowerCase().match(notCartItemTextContentRegex))
-      return false;
+    if (item.parentElement.textContent.toLowerCase().match(pattern))
+      return true;
   }
-  return item.textContent.toLowerCase().match(cartItemTextContentRegex) ||
-      item.innerHTML.toLowerCase().match(cartItemHTMLRegex);
+  return item.textContent.toLowerCase().match(pattern);
 }
 
-function extractOneItem(item, extracted_items, processed, output) {
+function isCartItem(item) {
+  // TODO: Improve the heuristic here to accommodate more formats of cart item.
+  if (matchNonCartPattern(item, moveToCartRegex)) return false;
+  // Item element in bestbuy.com contains "add to cart" for things
+  // like protection plans.
+  if (!document.URL.includes("bestbuy.com")
+    && matchNonCartPattern(item, addToCartRegex)) return false;
+  return item.textContent.toLowerCase().match(cartItemTextContentRegex) ||
+      item.outerHTML.toLowerCase().match(cartItemHTMLRegex);
+}
+
+function extractOneItem(item, extracted_items, processed, output,
+  savedForLaterSection) {
   if (!isCartItem(item))
     return;
   if (verbose > 1)
@@ -608,6 +656,8 @@ function extractOneItem(item, extracted_items, processed, output) {
   }
   if (processed.has(item))
     return;
+  if (isInSavedForLater(item, savedForLaterSection))
+    return;
   processed.add(item);
   if (verbose > 0)
     console.log('trying', item);
@@ -616,6 +666,47 @@ function extractOneItem(item, extracted_items, processed, output) {
     output.set(item, extraction);
     extracted_items.push(item);
   }
+}
+
+function isInSavedForLater(item, savedForLaterSection) {
+  return savedForLaterSection !== null
+    && savedForLaterSection.getBoundingClientRect().top
+    < item.getBoundingClientRect().top
+    && !item.textContent.toLowerCase().match(saveForLaterRegex);
+}
+
+function getSavedForLaterSection() {
+  const nodes = document.evaluate(
+    "//*[contains(translate(" +
+    "text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'), " +
+    "'your saved items')" +
+    "or contains(translate(" +
+    "text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), " +
+    "'saved for later')" +
+    "or contains(translate(" +
+    "text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), " +
+    "'my saved items')" +
+    "or contains(translate(" +
+    "text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), " +
+    "'wishlist items')]", document,
+  null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+  let node = nodes.iterateNext();
+  let section = null;
+  while (node) {
+    if (node!= null && node.offsetHeight >= 1 && node.offsetWidth >= 1) {
+      section = node;
+    }
+    node = nodes.iterateNext();
+  }
+  return section
+}
+
+function isHeuristicsImprovementEnabled() {
+  if (typeof isImprovementEnabled === 'undefined'
+    || typeof isImprovementEnabled !== 'boolean') {
+    return false;
+  }
+  return isImprovementEnabled;
 }
 
 function documentPositionComparator(a, b) {
@@ -648,48 +739,64 @@ function extractAllItems(root) {
     }
   }
 
-  // Generic pattern
-  const candidates = new Set();
-  items = root.querySelectorAll('a');
+  if (document.URL.includes("samsclub.com")) {
+    items = root.querySelectorAll(".sc-cart-item-shipping");
+  } else if (document.URL.includes("zazzle.com")) {
+    // TODO(yuezhanggg@): This is a workaround due to that zazzle.com
+    // has two images in cart item. Remove this when we support cart
+    // with multiple images for one product.
+    items = root.getElementsByClassName("CartItem CartLineItem");
+  } else {
+    // Generic pattern
+    const candidates = new Set();
+    items = root.querySelectorAll('a');
 
-  const urlMap = new Map();
-  for (const item of items) {
-    if (!urlMap.has(item.href)) {
-      urlMap.set(item.href, new Set());
-    }
-    urlMap.get(item.href).add(item);
-  }
-
-  for (const [key, value] of urlMap) {
-    const ancestor = commonAncestorList(Array.from(value));
-    if (!candidates.has(ancestor))
-      candidates.add(ancestor);
-  }
-  for (const item of items) {
-    candidates.add(item);
-  }
-  const ancestors = new Set();
-  // TODO: optimize this part.
-  for (let depth = 0; depth < 8; depth++) {
-    for (let item of candidates) {
-      for (let i = 0; i < depth; i++) {
-        item = item.parentElement;
-        if (!item)
-          break;
+    const urlMap = new Map();
+    for (const item of items) {
+      if (!urlMap.has(item.href)) {
+        urlMap.set(item.href, new Set());
       }
-      if (item)
-        ancestors.add(item);
+      urlMap.get(item.href).add(item);
     }
+
+    for (const [key, value] of urlMap) {
+      const ancestor = commonAncestorList(Array.from(value));
+      if (!candidates.has(ancestor))
+        candidates.add(ancestor);
+    }
+    for (const item of items) {
+      candidates.add(item);
+    }
+    const ancestors = new Set();
+    // TODO: optimize this part.
+    for (let depth = 0; depth < 8; depth++) {
+      for (let item of candidates) {
+        for (let i = 0; i < depth; i++) {
+          item = item.parentElement;
+          if (!item)
+            break;
+        }
+        if (item)
+          ancestors.add(item);
+      }
+    }
+    items = Array.from(ancestors);
   }
-  items = Array.from(ancestors);
 
   if (verbose > 0)
     console.log(items);
   const outputMap = new Map();
   const processed = new Set();
   const extracted_items = [];
+  let savedForLaterSection = null;
+  if (isHeuristicsImprovementEnabled()) {
+    savedForLaterSection = getSavedForLaterSection();
+    if (verbose > 0)
+      console.log(savedForLaterSection);
+  }
   for (const item of items) {
-    extractOneItem(item, extracted_items, processed, outputMap);
+    extractOneItem(item, extracted_items, processed, outputMap,
+      savedForLaterSection);
   }
   const keysInDocOrder =
       Array.from(outputMap.keys()).sort(documentPositionComparator);

@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Invia Link tramite mail</translation>
 <translation id="1454726940098520109">Non Chiedere Conferma Di Nuovo</translation>
 <translation id="1462666970065907900">Vuoi davvero chiudere questa finestra?</translation>
+<translation id="1480046233931937785">Riconoscimenti</translation>
 <translation id="1526344461589023948">Si è verificato un errore durante il salvataggio di un aggiornamento. Verifica che il computer abbia spazio su disco sufficiente e riprova.</translation>
 <translation id="1657174850639146440">Mostro 9</translation>
 <translation id="1676595396635191120">Nuova finestra privata</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Apri in una nuova scheda</translation>
 <translation id="3027988479108856431">Purtroppo le impostazioni di Yandex non sono disponibili mentre il browser è in uso. Per importare queste impostazioni in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Yandex. Poi clicca su Continua.</translation>
 <translation id="3084011186245865060">Paesaggio 6</translation>
+<translation id="3093931836425623631">Vivaldi è reso possibile dal progetto open source Chromium e da altri programmi open source.</translation>
 <translation id="3127383884976966729">Animale 7</translation>
 <translation id="3156398087075132709">Nuovo segnalibro</translation>
 <translation id="3255747772218936245">Installa aggiornamento</translation>
@@ -81,7 +83,7 @@
 <translation id="4512900838580567989">Apri link in una nuova scheda in secondo piano</translation>
 <translation id="4515472507709384008">Opera versione 15+</translation>
 <translation id="4548358047305717967">Apri immagine in una nuova scheda in secondo piano</translation>
-<translation id="4582480609585453144">Apri Link in una Scheda in Secondo Piano</translation>
+<translation id="4582480609585453144">Apri link in una scheda in secondo piano</translation>
 <translation id="4636708767492582204">Invia per posta</translation>
 <translation id="4677434526832593569">Animale 8</translation>
 <translation id="474217410105706308">Silenzia scheda</translation>
@@ -127,7 +129,6 @@
 <translation id="7086554968911045110">Paesaggio 7</translation>
 <translation id="7111492742514999492">Paesaggio 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi è reso possibile dal progetto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e da altri <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Impossibile avviare l'installazione dell'aggiornamento. Verifica che il computer abbia memoria o spazio su disco sufficienti e riprova.</translation>
 <translation id="7658239707568436148">Annulla</translation>
 <translation id="7715497554424665066">&amp;Ignora aggiornamento</translation>

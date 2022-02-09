@@ -24,27 +24,30 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.browserservices.intents.WebDisplayMode;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.init.SingleWindowKeyboardVisibilityDelegate;
-import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.BackKeyBehaviorDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.OverrideUrlLoadingDelegate;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
+import org.chromium.chrome.browser.toolbar.VoiceToolbarButtonController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
@@ -93,7 +96,7 @@ public class SearchActivity extends AsyncInitializationActivity
          */
         void showSearchEngineDialogIfNeeded(
                 Activity activity, Callback<Boolean> onSearchEngineFinalized) {
-            LocaleManager.getInstance().showSearchEnginePromoIfNeeded(
+            AppHooks.get().getLocaleManager().showSearchEnginePromoIfNeeded(
                     activity, onSearchEngineFinalized);
         }
 
@@ -181,14 +184,21 @@ public class SearchActivity extends AsyncInitializationActivity
             loadUrl(url, transition, postDataType, postData);
             return true;
         };
+        // clang-format off
         mLocationBarCoordinator = new LocationBarCoordinator(mSearchBox, anchorView,
-                mProfileSupplier, mSearchBoxDataProvider, null, new WindowDelegate(getWindow()),
-                getWindowAndroid(), /*activityTabSupplier=*/() -> null,
-                getModalDialogManagerSupplier(), /*shareDelegateSupplier=*/null,
-                /*incognitoStateProvider=*/null, getLifecycleDispatcher(),
-                overrideUrlLoadingDelegate, /*backKeyBehavior=*/this,
+                mProfileSupplier, PrivacyPreferencesManagerImpl.getInstance(),
+                mSearchBoxDataProvider, null, new WindowDelegate(getWindow()), getWindowAndroid(),
+                /*activityTabSupplier=*/() -> null, getModalDialogManagerSupplier(),
+                /*shareDelegateSupplier=*/null, /*incognitoStateProvider=*/null,
+                getLifecycleDispatcher(), overrideUrlLoadingDelegate, /*backKeyBehavior=*/this,
                 SearchEngineLogoUtils.getInstance(), /*launchAssistanceSettingsAction=*/() -> {},
-                /*pageInfoAction=*/(tab, permission) -> {});
+                /*pageInfoAction=*/(tab, permission) -> {},
+                IntentHandler::bringTabToFront,
+                /*saveOfflineButtonState=*/(tab) -> false, /*omniboxUma*/(url, transition) -> {},
+                TabWindowManagerSingleton::getInstance, /*bookmarkState=*/(url) -> false,
+                VoiceToolbarButtonController::isToolbarMicEnabled,
+                /*ExploreIconState*/(pixelSize, callback) ->{});
+        // clang-format on
         mLocationBarCoordinator.setUrlBarFocusable(true);
         mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
         mLocationBarCoordinator.getOmniboxStub().addUrlFocusChangeListener(this);
@@ -369,6 +379,8 @@ public class SearchActivity extends AsyncInitializationActivity
         if (mTab != null && mTab.isInitialized()) mTab.destroy();
         if (mLocationBarCoordinator != null && mLocationBarCoordinator.getOmniboxStub() != null) {
             mLocationBarCoordinator.getOmniboxStub().removeUrlFocusChangeListener(this);
+            mLocationBarCoordinator.destroy();
+            mLocationBarCoordinator = null;
         }
         mHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
@@ -405,7 +417,7 @@ public class SearchActivity extends AsyncInitializationActivity
                         .makeCustomAnimation(this, android.R.anim.fade_in, android.R.anim.fade_out)
                         .toBundle());
         RecordUserAction.record("SearchWidget.SearchMade");
-        LocaleManager.getInstance().recordLocaleBasedSearchMetrics(true, url, transition);
+        AppHooks.get().getLocaleManager().recordLocaleBasedSearchMetrics(true, url, transition);
         finish();
     }
 

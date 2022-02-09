@@ -18,6 +18,7 @@
 #include "components/bookmarks/browser/titled_url_index.h"
 #include "components/bookmarks/browser/url_index.h"
 
+#include "app/vivaldi_apptools.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/vivaldi_partners.h"
 
@@ -147,9 +148,11 @@ scoped_refptr<ModelLoader> ModelLoader::Create(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
 
-  model_loader->backend_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&vivaldi_partners::LoadOnWorkerThread,
-                                base::ThreadTaskRunnerHandle::Get()));
+  if (vivaldi::IsVivaldiRunning()) {
+    model_loader->backend_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&vivaldi_partners::LoadOnWorkerThread,
+                                  base::ThreadTaskRunnerHandle::Get()));
+  }
 
   model_loader->backend_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,

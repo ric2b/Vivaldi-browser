@@ -12,8 +12,26 @@
             "type": "string",
             "name": "command",
             "description": "The command to be executed."
+          },
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0,
+            "optional": true,
+            "description": "Used to target a tab directly."
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters":  [
+            {
+              "name": "success",
+              "type": "boolean",
+              "optional": true,
+              "description": "true on success, false on failure. success only measures the extension call, not the operation on the page."
+            }
+          ]
+        }
       }
     ]
   }

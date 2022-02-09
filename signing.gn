@@ -4,6 +4,7 @@ assert(is_vivaldi)
 
 declare_overrides() {
   is_full_signer = true
+  sign_executables = true
 }
 
 import("//vivaldi/gn/config/stored_version.gni")
@@ -17,10 +18,6 @@ import("//vivaldi/gn/source_updates.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
 if (is_win) {
-  update_template_instance(
-      "//chrome/installer/mini_installer:mini_installer_archive") {
-    sign_executables = true
-  }
   update_target(
       "//chrome/installer/mini_installer:mini_installer_archive") {
     deps = []

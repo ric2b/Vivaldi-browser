@@ -39,6 +39,10 @@ class HistoryService;
 class URLDatabase;
 }
 
+namespace history_clusters {
+class HistoryClustersService;
+}
+
 namespace network {
 class SharedURLLoaderFactory;
 }
@@ -55,6 +59,10 @@ namespace query_tiles {
 class TileService;
 }
 
+namespace ntp_tiles {
+class MostVisitedSites;
+}
+
 class TemplateURLService;
 
 class AutocompleteProviderClient {
@@ -68,7 +76,9 @@ class AutocompleteProviderClient {
   virtual const AutocompleteSchemeClassifier& GetSchemeClassifier() const = 0;
   virtual AutocompleteClassifier* GetAutocompleteClassifier() = 0;
   virtual history::HistoryService* GetHistoryService() = 0;
+  virtual history_clusters::HistoryClustersService* GetHistoryClustersService();
   virtual scoped_refptr<history::TopSites> GetTopSites() = 0;
+  virtual ntp_tiles::MostVisitedSites* GetNtpMostVisitedSites();
   virtual bookmarks::BookmarkModel* GetBookmarkModel() = 0;
   virtual history::URLDatabase* GetInMemoryDatabase() = 0;
   virtual InMemoryURLIndex* GetInMemoryURLIndex() = 0;

@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Pokračovať</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Spustiť diagnostiku siete<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Upozornenia</translation>
+<translation id="2491414235131909199">Táto stránka bola zablokovaná rozšírením</translation>
 <translation id="2501278716633472235">Prejsť späť</translation>
 <translation id="2539524384386349900">Rozpoznávať</translation>
 <translation id="255002559098805027">Web <ph name="HOST_NAME" /> odoslal neplatnú odpoveď.</translation>
@@ -140,7 +141,6 @@
 <translation id="5838278095973806738">Na tejto stránke by ste nemali zadávať citlivé informácie (napríklad heslá alebo čísla kreditných kariet), pretože by ich mohli ukradnúť útočníci.</translation>
 <translation id="5869405914158311789">K tomuto webu sa nedá pripojiť</translation>
 <translation id="5932224571077948991">Stránka zobrazuje obťažujúce alebo zavádzajúce reklamy</translation>
-<translation id="5990559369517809815">Žiadosti odoslané serveru boli zablokované rozšírením.</translation>
 <translation id="6051221802930200923">Web <ph name="SITE" /> momentálne nemôžete navštíviť, pretože používa pripínanie certifikátov. Chyby siete a útoky sú zvyčajne dočasné, takže by táto stránka mala neskôr pravdepodobne fungovať.</translation>
 <translation id="6146055958333702838">Skontrolujte všetky káble a reštartujte všetky používané smerovače, modemy alebo iné sieťové zariadenia.</translation>
 <translation id="614940544461990577">Vyskúšajte:</translation>

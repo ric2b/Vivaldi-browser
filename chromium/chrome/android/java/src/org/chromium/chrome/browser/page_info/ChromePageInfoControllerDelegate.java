@@ -23,15 +23,12 @@ import org.chromium.base.Consumer;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils.OfflinePageLoadUrlDelegate;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.paint_preview.TabbedPaintPreview;
-import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver;
-import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.PerformanceClass;
 import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
 import org.chromium.chrome.browser.previews.PreviewsUma;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -52,13 +49,16 @@ import org.chromium.components.page_info.PageInfoControllerDelegate;
 import org.chromium.components.page_info.PageInfoMainController;
 import org.chromium.components.page_info.PageInfoRowView;
 import org.chromium.components.page_info.PageInfoSubpageController;
-import org.chromium.components.page_info.PageInfoView.PageInfoViewParams;
+import org.chromium.components.page_info.PageInfoView;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.GURL;
 
 import java.text.DateFormat;
 import java.util.Date;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Chrome's customization of PageInfoControllerDelegate. This class provides Chrome-specific info to
@@ -157,7 +157,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      */
     @Override
     public void initOfflinePageUiParams(
-            PageInfoViewParams viewParams, Consumer<Runnable> runAfterDismiss) {
+            PageInfoView.Params viewParams, Consumer<Runnable> runAfterDismiss) {
         if (isShowingOfflinePage() && OfflinePageUtils.isConnected()) {
             viewParams.openOnlineButtonClickCallback = () -> {
                 runAfterDismiss.accept(() -> {
@@ -214,28 +214,6 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         return mContext.getString(R.string.page_info_connection_paint_preview);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean shouldShowPerformanceBadge(GURL url) {
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PAGE_INFO_PERFORMANCE_HINTS)) {
-            return false;
-        }
-        @PerformanceClass
-        int pagePerformanceClass =
-                PerformanceHintsObserver.getPerformanceClassForURL(mWebContents, url);
-        return pagePerformanceClass == PerformanceClass.PERFORMANCE_FAST;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void showSiteSettings(String url) {
-        SiteSettingsHelper.showSiteSettings(mContext, url);
-    }
-
     @Override
     public void showCookieSettings() {
         SiteSettingsHelper.showCategorySettings(mContext, SiteSettingsCategory.Type.COOKIES);
@@ -277,13 +255,24 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
 
     @NonNull
     @Override
-    public void getFavicon(String url, Callback<Drawable> callback) {
+    public void getFavicon(GURL url, Callback<Drawable> callback) {
         Resources resources = mContext.getResources();
         int size = resources.getDimensionPixelSize(R.dimen.page_info_favicon_size);
         new FaviconHelper().getLocalFaviconImageForURL(mProfile, url, size, (image, iconUrl) -> {
             if (image != null) {
                 callback.onResult(new BitmapDrawable(resources, image));
-            } else if (UrlUtilities.isInternalScheme(new GURL(url))) {
+            } else if (UrlUtilities.isInternalScheme(url)) {
+                // Vivaldi
+                if (BuildConfig.IS_VIVALDI) {
+                    int vivaldiLogo = R.drawable.vivaldi_welcome_icon_stable;
+                    if (mContext.getPackageName().contains("sopranos"))
+                        vivaldiLogo = R.drawable.vivaldi_welcome_icon_sopranos;
+                    else if (mContext.getPackageName().contains("snapshot"))
+                        vivaldiLogo = R.drawable.vivaldi_welcome_icon_snapshot;
+                    callback.onResult(
+                            AppCompatResources.getDrawable(mContext, vivaldiLogo));
+                    return;
+                }
                 callback.onResult(
                         AppCompatResources.getDrawable(mContext, R.drawable.chromelogo16));
             } else {

@@ -10,6 +10,8 @@
 
 #include "platform_media/common/feature_toggles.h"
 
+#include <array>
+
 #include "media/base/sample_format.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_transformation.h"
@@ -18,13 +20,32 @@
 
 namespace media {
 
-// Order is important, be careful when adding new values.
-enum PlatformMediaDataType {
-  PLATFORM_MEDIA_AUDIO,
-  PLATFORM_MEDIA_VIDEO,
+// Type of a particular stream in a media container.
+enum class PlatformStreamType {
+  kAudio,
+  kVideo,
 };
 
-constexpr int kPlatformMediaDataTypeCount = PLATFORM_MEDIA_VIDEO + 1;
+constexpr size_t kPlatformStreamTypeCount =
+    static_cast<size_t>(PlatformStreamType::kVideo) + 1;
+
+constexpr const char* GetStreamTypeName(PlatformStreamType stream_type) {
+  return (stream_type == PlatformStreamType::kAudio) ? "Audio" : "Video";
+}
+
+// Use this to loop over stream types like
+// for (PlatformStreamType stream_type : AllStreamTypes()) {...}
+constexpr std::array<PlatformStreamType, kPlatformStreamTypeCount>
+AllStreamTypes() {
+  return {PlatformStreamType::kAudio, PlatformStreamType::kVideo};
+}
+
+// Helper to access plain arrays with media kind indexes.
+template <typename T>
+constexpr T& GetElem(T (&array)[kPlatformStreamTypeCount],
+                     PlatformStreamType stream_type) {
+  return array[static_cast<size_t>(stream_type)];
+}
 
 enum class MediaDataStatus {
   kOk,
@@ -42,6 +63,7 @@ struct PlatformMediaTimeInfo {
 };
 
 struct PlatformAudioConfig {
+  static constexpr PlatformStreamType kStreamType = PlatformStreamType::kAudio;
   PlatformAudioConfig()
       : format(kUnknownSampleFormat),
         channel_count(-1),
@@ -58,6 +80,7 @@ struct PlatformAudioConfig {
 };
 
 struct PlatformVideoConfig {
+  static constexpr PlatformStreamType kStreamType = PlatformStreamType::kVideo;
   struct Plane {
     Plane() : stride(-1), offset(-1), size(-1) {}
 
@@ -68,8 +91,7 @@ struct PlatformVideoConfig {
     int size;
   };
 
-  PlatformVideoConfig()
-      : rotation(VideoRotation::VIDEO_ROTATION_0) {}
+  PlatformVideoConfig() : rotation(VideoRotation::VIDEO_ROTATION_0) {}
   PlatformVideoConfig(const PlatformVideoConfig& other) = default;
   ~PlatformVideoConfig() {}
 

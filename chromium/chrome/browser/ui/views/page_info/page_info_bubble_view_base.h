@@ -7,9 +7,9 @@
 
 #include "components/page_info/page_info_ui.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/metadata/metadata_header_macros.h"
 
 namespace content {
 class WebContents;
@@ -65,6 +65,7 @@ class PageInfoBubbleViewBase : public views::BubbleDialogDelegateView,
   void OnVisibilityChanged(content::Visibility visibility) override;
   void DidStartNavigation(content::NavigationHandle* handle) override;
   void DidChangeVisibleSecurityState() override;
+  void WebContentsDestroyed() override;
 
   DISALLOW_COPY_AND_ASSIGN(PageInfoBubbleViewBase);
 };

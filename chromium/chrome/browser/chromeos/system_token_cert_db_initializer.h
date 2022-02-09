@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_CHROMEOS_SYSTEM_TOKEN_CERT_DB_INITIALIZER_H_
 #define CHROME_BROWSER_CHROMEOS_SYSTEM_TOKEN_CERT_DB_INITIALIZER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "crypto/scoped_nss_types.h"
@@ -29,7 +30,7 @@ class SystemTokenCertDBInitializer : public TpmManagerClient::Observer {
  public:
   // It is stated in cryptohome implementation that 5 minutes is enough time to
   // wait for any TPM operations. For more information, please refer to:
-  // https://chromium.googlesource.com/chromiumos/platform2/+/master/cryptohome/cryptohome.cc
+  // https://chromium.googlesource.com/chromiumos/platform2/+/main/cryptohome/cryptohome.cc
   static constexpr base::TimeDelta kMaxCertDbRetrievalDelay =
       base::TimeDelta::FromMinutes(5);
 
@@ -38,9 +39,6 @@ class SystemTokenCertDBInitializer : public TpmManagerClient::Observer {
   // SystemTokenCertDbStorage to retrieve the database.
   SystemTokenCertDBInitializer();
   ~SystemTokenCertDBInitializer() override;
-
-  // Stops making new requests to D-Bus services.
-  void ShutDown();
 
   // TpmManagerClient::Observer overrides.
   void OnOwnershipTaken() override;
@@ -88,6 +86,9 @@ class SystemTokenCertDBInitializer : public TpmManagerClient::Observer {
 
   // The flag that determines if the system slot can use software fallback.
   bool is_system_slot_software_fallback_allowed_;
+
+  // Global NSSCertDatabase which sees the system token.
+  std::unique_ptr<net::NSSCertDatabase> system_token_cert_database_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

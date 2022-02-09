@@ -26,10 +26,10 @@ const char kOldThumbnailFormatPrefix[] = "/http://bookmark_thumbnail/";
 
 }  // namespace
 
-base::Optional<PathType> ParsePath(base::StringPiece path,
+absl::optional<PathType> ParsePath(base::StringPiece path,
                                    std::string* data) {
   if (path.length() < 2 || path[0] != '/')
-    return base::nullopt;
+    return absl::nullopt;
 
   base::StringPiece type_piece;
   base::StringPiece data_piece;
@@ -55,7 +55,7 @@ base::Optional<PathType> ParsePath(base::StringPiece path,
       type = PathType::kThumbnail;
       data_piece = path.substr(prefix.length());
     } else {
-      return base::nullopt;
+      return absl::nullopt;
     }
   }
 
@@ -80,35 +80,35 @@ base::Optional<PathType> ParsePath(base::StringPiece path,
 }
 
 // Parse the full url.
-base::Optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
+absl::optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
   if (url.empty())
-    return base::nullopt;
+    return absl::nullopt;
 
   // Short-circuit relative resource URLs to avoid the warning below.
   if (base::StartsWith(url, "/resources/"))
-    return base::nullopt;
+    return absl::nullopt;
 
   GURL gurl(url);
   if (!gurl.is_valid()) {
     LOG(WARNING) << "The url argument is not a valid URL - " << url;
-    return base::nullopt;
+    return absl::nullopt;
   }
 
   if (!gurl.SchemeIs(VIVALDI_DATA_URL_SCHEME))
-    return base::nullopt;
+    return absl::nullopt;
 
   // Treat the old format chrome://thumb/ as an alias to chrome://vivaldi-data/
   // as the path alone allows to uniquely parse it, see ParsePath().
   base::StringPiece host = gurl.host_piece();
   if (host != VIVALDI_DATA_URL_HOST && host != VIVALDI_THUMB_URL_HOST)
-    return base::nullopt;
+    return absl::nullopt;
 
   return ParsePath(gurl.path_piece(), data);
 }
 
 std::string GetPathMimeType(base::StringPiece path) {
   std::string data;
-  base::Optional<PathType> type = ParsePath(path, &data);
+  absl::optional<PathType> type = ParsePath(path, &data);
   if (type == PathType::kCSSMod) {
     if (data == kCSSModsData ||
         base::EndsWith(data, kCSSModsExtension))
@@ -124,7 +124,7 @@ bool isOldFormatThumbnailId(base::StringPiece id) {
 }
 
 bool IsBookmarkCapureUrl(base::StringPiece url) {
-  base::Optional<PathType> type = ParseUrl(url);
+  absl::optional<PathType> type = ParseUrl(url);
   return type == PathType::kThumbnail;
 }
 

@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
@@ -21,6 +20,7 @@
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 using content::NavigationSimulator;
@@ -59,7 +59,7 @@ class AMPPageLoadMetricsObserverTest
 
   void ValidateHistogramsFor(const std::string& histogram,
                              const char* view_type,
-                             const base::Optional<base::TimeDelta>& event,
+                             const absl::optional<base::TimeDelta>& event,
                              bool expect_histograms) {
     const size_t kTypeOffset = strlen("PageLoad.Clients.AMP.");
     std::string view_type_histogram = histogram;
@@ -398,7 +398,7 @@ TEST_F(AMPPageLoadMetricsObserverTest, SubFrameMetrics_LayoutInstability) {
   tester()->SimulateMetadataUpdate(metadata, subframe);
 
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 0.5, 0, 0, 0,
-                                                              0, {}, {});
+                                                              0, 0, 0, {}, {});
   tester()->SimulateRenderDataUpdate(render_data, subframe);
 
   // Navigate the main frame to trigger metrics recording.
@@ -446,7 +446,7 @@ TEST_F(AMPPageLoadMetricsObserverTest,
 
   base::TimeTicks current_time = base::TimeTicks::Now();
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(
-      0.65, 0.65, 0, 0, 0, 0, {},
+      0.65, 0.65, 0, 0, 0, 0, 0, 0, {},
       {current_time - base::TimeDelta::FromMilliseconds(2500)});
 
   render_data.new_layout_shifts.emplace_back(
@@ -507,20 +507,10 @@ TEST_F(AMPPageLoadMetricsObserverTest,
       "SubFrame.LayoutInstability.MaxCumulativeShiftScore.SlidingWindow."
       "Duration300ms",
       25);
-  tester()->test_ukm_recorder().ExpectEntryMetric(
-      entry.get(),
-      "SubFrame.LayoutInstability.MaxCumulativeShiftScore."
-      "SessionWindowByInputs."
-      "Gap1000ms.Max5000ms",
-      25);
   tester()->histogram_tester().ExpectUniqueSample(
       "PageLoad.Clients.AMP.LayoutInstability.MaxCumulativeShiftScore."
       "Subframe.SessionWindow.Gap1000ms.Max5000ms",
       4, 1);
-  tester()->histogram_tester().ExpectUniqueSample(
-      "PageLoad.Clients.AMP.LayoutInstability.MaxCumulativeShiftScore."
-      "Subframe.SessionWindowByInputs.Gap1000ms.Max5000ms",
-      3, 1);
 }
 
 TEST_F(AMPPageLoadMetricsObserverTest, SubFrameMetricsFullNavigation) {

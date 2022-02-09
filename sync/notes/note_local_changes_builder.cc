@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/time.h"
@@ -49,18 +50,24 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
       DCHECK(!metadata->client_tag_hash().empty());
       data->client_tag_hash =
           syncer::ClientTagHash::FromHashed(metadata->client_tag_hash());
+      // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to
+      // verify the type, so we temporarily produce tags using the BOOKMARKS
+      // type. Change this to NOTES in a few version. 07-2021
       DCHECK(metadata->is_deleted() ||
              data->client_tag_hash ==
                  syncer::ClientTagHash::FromUnhashed(
-                     syncer::NOTES,
+                     syncer::BOOKMARKS,
                      entity->note_node()->guid().AsLowercaseString()));
     }
 
     if (!metadata->is_deleted()) {
       const vivaldi::NoteNode* node = entity->note_node();
       DCHECK(node);
+      // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to
+      // verify the type, so we temporarily produce tags using the BOOKMARKS
+      // type. Change this to NOTES in a few version. 07-2021
       DCHECK_EQ(syncer::ClientTagHash::FromUnhashed(
-                    syncer::NOTES, node->guid().AsLowercaseString()),
+                    syncer::BOOKMARKS, node->guid().AsLowercaseString()),
                 syncer::ClientTagHash::FromHashed(metadata->client_tag_hash()));
 
       const vivaldi::NoteNode* parent = node->parent();
@@ -69,7 +76,8 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
       DCHECK(parent_entity);
       data->parent_id = parent_entity->metadata()->server_id();
       data->is_folder = node->is_folder();
-      data->unique_position = metadata->unique_position();
+      data->unique_position =
+          syncer::UniquePosition::FromProto(metadata->unique_position());
       // Assign specifics only for the non-deletion case. In case of deletion,
       // EntityData should contain empty specifics to indicate deletion.
       data->specifics = CreateSpecificsFromNoteNode(node, notes_model_);

@@ -11,6 +11,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "content/public/browser/notification_observer.h"
 #include "ui/base/models/tree_node_model.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
@@ -81,6 +82,9 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
       {has_custom_title_ = has_custom_title;}
   bool hasCustomTitle() const { return has_custom_title_;}
 
+  void SetShowShortcut(absl::optional<bool> show_shortcut);
+  absl::optional<bool> showShortcut() const { return show_shortcut_;}
+
   // Returns the node in the tree of nodes that match the id.
   Menu_Node* GetById(int64_t id);
   // Returns the node in the tree of nodes that match the guid.
@@ -121,6 +125,8 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   std::string container_mode_;
   std::string container_edge_;
   std::string guid_;
+  // Optional to avoid writing data to file/sync when not needed.
+  absl::optional<bool> show_shortcut_;
   int64_t id_;
   bool has_custom_title_ = false;
 

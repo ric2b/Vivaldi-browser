@@ -182,6 +182,9 @@
     Local Account
   </message>
   <!-- Version UI -->
+  <message name="IDS_VIVALDI_VERSION_UI_PENDING_VERSION" desc="This is shown when there a pending update that waits for the browser restart to complete the installation.">
+    Pending update <ph name="VERSION">$1<ex>4.2.1.12345</ex></ph>
+  </message>
   <message name="IDS_VIVALDI_VERSION_UI_LICENSE_NEW" desc="The label below the copyright message.">
     Vivaldi is made possible by the Chromium open source project and other open source software.
   </message>

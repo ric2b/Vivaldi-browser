@@ -39,26 +39,37 @@ public class SingleActionMessage implements MessageStateHandler {
     private final Supplier<Integer> mMaxTranslationSupplier;
     private final Callback<Animator> mAnimatorStartCallback;
 
+    // The timestamp when the message was shown. Used for reproting visible duration.
+    private long mMessageShownTime;
+
     /**
      * @param container The container holding messages.
      * @param model The PropertyModel with {@link MessageBannerProperties#ALL_KEYS}.
      * @param dismissHandler The {@link DismissCallback} able to dismiss a message by given property
      *         model.
-     * @param autodismissDurationMs A {@link Supplier} providing autodismiss duration for message
-     *         banner.
+     * @param autodismissDurationMs A {@link MessageAutodismissDurationProvider} providing
+     *         autodismiss duration for message banner. The actual duration can be extended by
+     *         clients.
      * @param maxTranslationSupplier A {@link Supplier} that supplies the maximum translation Y
      * @param animatorStartCallback The {@link Callback} that will be used by the message banner to
      *         delegate starting the animations to the {@link WindowAndroid}.
      */
     public SingleActionMessage(MessageContainer container, PropertyModel model,
             DismissCallback dismissHandler, Supplier<Integer> maxTranslationSupplier,
-            Supplier<Long> autodismissDurationMs, Callback<Animator> animatorStartCallback) {
+            MessageAutodismissDurationProvider autodismissDurationProvider,
+            Callback<Animator> animatorStartCallback) {
         mModel = model;
         mContainer = container;
         mDismissHandler = dismissHandler;
-        mAutodismissDurationMs = autodismissDurationMs;
         mMaxTranslationSupplier = maxTranslationSupplier;
         mAnimatorStartCallback = animatorStartCallback;
+
+        long dismissalDuration =
+                mModel.getAllSetProperties().contains(MessageBannerProperties.DISMISSAL_DURATION)
+                ? mModel.get(MessageBannerProperties.DISMISSAL_DURATION)
+                : 0;
+
+        mAutodismissDurationMs = () -> autodismissDurationProvider.get(dismissalDuration);
 
         mModel.set(
                 MessageBannerProperties.PRIMARY_BUTTON_CLICK_LISTENER, this::handlePrimaryAction);
@@ -87,6 +98,7 @@ public class SingleActionMessage implements MessageStateHandler {
         // is required in case the animation set-up requires the height of the container, e.g.
         // showing messages without the top controls visible.
         mContainer.runAfterInitialMessageLayout(mMessageBanner::show);
+        mMessageShownTime = MessagesMetrics.now();
     }
 
     /**
@@ -110,6 +122,13 @@ public class SingleActionMessage implements MessageStateHandler {
         if (mMessageBanner != null) mMessageBanner.dismiss();
         Callback<Integer> onDismissed = mModel.get(MessageBannerProperties.ON_DISMISSED);
         if (onDismissed != null) onDismissed.onResult(dismissReason);
+        if (dismissReason == DismissReason.PRIMARY_ACTION
+                || dismissReason == DismissReason.SECONDARY_ACTION
+                || dismissReason == DismissReason.GESTURE) {
+            // Only record time to dismiss when the user explicitly dismissed the message.
+            MessagesMetrics.recordTimeToAction(
+                    getMessageIdentifier(), MessagesMetrics.now() - mMessageShownTime);
+        }
     }
 
     private void handlePrimaryAction(View v) {
@@ -130,5 +149,13 @@ public class SingleActionMessage implements MessageStateHandler {
     @VisibleForTesting
     void setViewForTesting(MessageBannerView view) {
         mView = view;
+    }
+
+    @Override
+    @MessageIdentifier
+    public int getMessageIdentifier() {
+        Integer messageIdentifier = mModel.get(MessageBannerProperties.MESSAGE_IDENTIFIER);
+        assert messageIdentifier != null;
+        return messageIdentifier;
     }
 }

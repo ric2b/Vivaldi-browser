@@ -69,7 +69,6 @@
 <translation id="215753907730220065">Ukončiť zobrazenie na celú obrazovku</translation>
 <translation id="2177950615300672361">Súkromný list: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul miestneho klienta: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Skryť tlačidlo</translation>
 <translation id="2218515861914035131">Prilepiť ako obyčajný text</translation>
 <translation id="2249605167705922988">napr. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Povoliť identifikátory chráneného obsahu (môže byť vyžadované opätovné spustenie počítača)</translation>
@@ -137,7 +136,6 @@
 <translation id="3222066309010235055">Predbežne vykresliť: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofón</translation>
 <translation id="3241680850019875542">Vyberte koreňový adresár rozšírenia, ktoré chcete zbaliť. Ak chcete rozšírenie aktualizovať, vyberte tiež súbor súkromného kľúča, ktorý sa má znova použiť.</translation>
-<translation id="3266179261140759675">Blokovať zavreté stránky, aby nemohli odosielať ani prijímať údaje</translation>
 <translation id="3280237271814976245">Uložiť &amp;ako...</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
 <translation id="3288047731229977326">Rozšírenia spustené v režime pre vývojárov môžu poškodiť váš počítač. Ak nie ste vývojár, mali by ste v záujme bezpečnosti rozšírenia spustené v režime vývojára zakázať.</translation>
@@ -160,13 +158,13 @@
 <translation id="354068948465830244">Môže čítať údaje stránok a meniť ich</translation>
 <translation id="3560034655160545939">&amp;Kontrola pravopisu</translation>
 <translation id="3574917942258583917">Aj tak ukončiť súkromný režim?</translation>
-<translation id="357886715122934472">Používateľ &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce zdieľať tlačiareň &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; so skupinou, ktorú vlastníte: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Ak žiadosť prijmete, tlačiareň budú môcť využívať všetci členovia skupiny.</translation>
 <translation id="3587482841069643663">Všetko</translation>
 <translation id="3627588569887975815">Otvoriť odkaz v novom &amp;súkromnom okne</translation>
 <translation id="3627879631695760395">Inštalovať aplikáciu <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Obslužné nástroje</translation>
 <translation id="3678156199662914018">Rozšírenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Žiadosť o zdieľanie obrazovky s aplikáciou <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Nepovoliť zavretým webom dokončovať odosielanie alebo prijímanie údajov</translation>
 <translation id="3711931198657368127">Prilepiť a prejsť na <ph name="URL" /></translation>
 <translation id="3727187387656390258">Preskúmať vyskakovacie okno</translation>
 <translation id="3744111561329211289">Synchronizácia na pozadí</translation>
@@ -194,7 +192,6 @@
 <translation id="4087089424473531098">Bolo vytvorené rozšírenie:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Prijať pozvanie pre skupinu</translation>
 <translation id="4096508467498758490">Zakázať rozšírenia v režime pre vývojárov</translation>
 <translation id="4100839878934973028">Iný program v počítači pridal aplikáciu, ktorá môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="4109898769411476438">Zatvoriť prehliadač pred importovaním</translation>
@@ -230,7 +227,6 @@
 <translation id="488785315393301722">Zobraziť podrobnosti</translation>
 <translation id="4907306957610201395">Kategória povolení</translation>
 <translation id="4912643508233590958">Prebudenia z nečinnosti</translation>
-<translation id="4918086044614829423">Prijať</translation>
 <translation id="4927753642311223124">Nie je tu nič k videniu, všetko v poriadku.</translation>
 <translation id="4930714375720679147">Zapnúť</translation>
 <translation id="4988526792673242964">Stránky</translation>
@@ -260,7 +256,7 @@
 <translation id="5317780077021120954">Uložiť</translation>
 <translation id="5334142896108694079">Vyrovnávacia pamäť skriptov</translation>
 <translation id="5355926466126177564">Rozšírenie „<ph name="EXTENSION_NAME" />“ zmenilo stránku, ktorá sa zobrazí pri vyhľadávaní pomocou všeobecného poľa.</translation>
-<translation id="5360150013186312835">Zobraziť na paneli s nástrojmi</translation>
+<translation id="5360150013186312835">Zobraziť v paneli nástrojov</translation>
 <translation id="5362741141255528695">Vybrať súbor súkromného kľúča.</translation>
 <translation id="536638840841140142">Žiadne</translation>
 <translation id="5370819323174483825">&amp;Znova načítať</translation>
@@ -306,7 +302,6 @@
 <translation id="6011449291337289699">Vymazanie údajov stránky</translation>
 <translation id="6042308850641462728">Viac</translation>
 <translation id="6059925163896151826">Zariadenia USB</translation>
-<translation id="6082651258230788217">Zobraziť v paneli nástrojov</translation>
 <translation id="6086846494333236931">Nainštalované správcom</translation>
 <translation id="6101226222197207147">Bola pridaná nová aplikácia (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Vaše internetové pripojenie je ovládané</translation>
@@ -333,7 +328,6 @@
 <translation id="6406303162637086258">Simulovať reštartovanie prehliadača</translation>
 <translation id="6445450263907939268">Ak ste tieto zmeny nechceli, môžete obnoviť predchádzajúce nastavenia.</translation>
 <translation id="6447842834002726250">Súbory cookie</translation>
-<translation id="6452181791372256707">Odmietnuť</translation>
 <translation id="6498249116389603658">&amp;Všetky vaše jazyky</translation>
 <translation id="6503077044568424649">Najviac navštívené</translation>
 <translation id="6508261954199872201">Aplikácia: <ph name="APP_NAME" /></translation>
@@ -364,7 +358,7 @@
 <translation id="7070484045139057854">Môže čítať údaje stránok a meniť ich</translation>
 <translation id="708060913198414444">K&amp;opírovať adresu zvuku</translation>
 <translation id="7175353351958621980">Načítané z:</translation>
-<translation id="7186088072322679094">Ponechať na paneli s nástrojmi</translation>
+<translation id="7186088072322679094">Zachovať v paneli nástrojov</translation>
 <translation id="7270858098575133036">Opýtať sa, keď bude chcieť stránka použiť na prístup k zariadeniam MIDI správy exkluzívne pre systém</translation>
 <translation id="7287143125007575591">Prístup bol odmietnutý.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
@@ -403,7 +397,6 @@
 <translation id="7857949311770343000">Je toto stránka v novom liste, ktorú ste čakali?</translation>
 <translation id="786073089922909430">Služba: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Nedávne ciele</translation>
-<translation id="7898627924844766532">Zachovať v paneli nástrojov</translation>
 <translation id="7903925330883316394">Nástroj: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Momentálne offline</translation>
 <translation id="7947962633355574091">K&amp;opírovať adresu videa</translation>
@@ -451,7 +444,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8725066075913043281">Skúsiť znova</translation>
 <translation id="8757090071857742562">Plochu sa nepodarilo prenášať. Skontrolujte, či ste potvrdili výzvu na zdieľanie obrazovky.</translation>
 <translation id="8774934320277480003">Horný okraj</translation>
-<translation id="8783093612333542422">Používateľ &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce s vami zdieľať tlačiareň &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Predvolené</translation>
 <translation id="8800004011501252845">Zobrazujú sa ciele pre</translation>
 <translation id="8808478386290700967">Internetový obchod</translation>

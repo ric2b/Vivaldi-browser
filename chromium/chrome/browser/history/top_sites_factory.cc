@@ -121,7 +121,7 @@ scoped_refptr<history::TopSites> TopSitesFactory::BuildTopSites(
 #if !defined(OS_ANDROID)
   if (vivaldi::IsVivaldiRunning()) {
     top_sites->SetThumbnailConvertCallback(
-        base::Bind(&vivaldi::ConvertThumbnailDataImpl));
+        base::BindRepeating(&vivaldi::ConvertThumbnailDataImpl));
   }
 #endif
 

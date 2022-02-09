@@ -13,7 +13,7 @@
 #import <Foundation/Foundation.h>
 
 // -----------------------------------------------------------------------------
-//	Misc:
+// Misc:
 // -----------------------------------------------------------------------------
 
 extern const NSTimeInterval SUMinimumUpdateCheckInterval;
@@ -24,13 +24,13 @@ extern NSString *const SUBundleIdentifier;
 extern NSString *const SUAppcastAttributeValueMacOS;
 
 // -----------------------------------------------------------------------------
-//	Notifications:
+// Notifications:
 // -----------------------------------------------------------------------------
 
 extern NSString *const SUTechnicalErrorInformationKey;
 
 // -----------------------------------------------------------------------------
-//	PList keys::
+// PList keys::
 // -----------------------------------------------------------------------------
 
 extern NSString *const SUFeedURLKey;
@@ -62,7 +62,7 @@ extern NSString *const SUNormalizeInstalledApplicationNameKey __attribute__((dep
 extern NSString *const SURelaunchToolNameKey __attribute__((deprecated("This key is obsolete. SPARKLE_RELAUNCH_TOOL_NAME.")));
 
 // -----------------------------------------------------------------------------
-//	Appcast keys::
+// Appcast keys::
 // -----------------------------------------------------------------------------
 
 extern NSString *const SUAppcastAttributeDeltaFrom;
@@ -71,14 +71,15 @@ extern NSString *const SUAppcastAttributeEDSignature;
 extern NSString *const SUAppcastAttributeShortVersionString;
 extern NSString *const SUAppcastAttributeVersion;
 extern NSString *const SUAppcastAttributeOsType;
-extern NSString *const SUAppcastAttributePhasedRolloutInterval;
 
 extern NSString *const SUAppcastElementCriticalUpdate;
 extern NSString *const SUAppcastElementDeltas;
+extern NSString *const SUAppcastElementMinimumAutoupdateVersion;
 extern NSString *const SUAppcastElementMinimumSystemVersion;
 extern NSString *const SUAppcastElementMaximumSystemVersion;
 extern NSString *const SUAppcastElementReleaseNotesLink;
 extern NSString *const SUAppcastElementTags;
+extern NSString *const SUAppcastElementPhasedRolloutInterval;
 
 extern NSString *const SURSSAttributeURL;
 extern NSString *const SURSSAttributeLength;

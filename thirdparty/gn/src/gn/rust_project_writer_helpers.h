@@ -9,6 +9,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -104,7 +105,7 @@ using SysrootIndexMap =
 // Add all of the crates for a sysroot (path) to the rust_project ostream.
 // Add the given sysroot to the project, if it hasn't already been added.
 void AddSysroot(const BuildSettings* build_settings,
-                const std::string_view sysroot,
+                std::string_view sysroot,
                 SysrootIndexMap& sysroot_lookup,
                 CrateList& crate_list);
 

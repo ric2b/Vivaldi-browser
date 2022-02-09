@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/time/default_tick_clock.h"
+#include "components/shared_highlighting/core/common/disabled_sites.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_metrics.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -196,7 +197,9 @@ void TextFragmentSelectorGenerator::UpdateSelection(
       ToPositionInDOMTree(selection_range.StartPosition()),
       ToPositionInDOMTree(selection_range.EndPosition()));
   if (base::FeatureList::IsEnabled(
-          shared_highlighting::kPreemptiveLinkToTextGeneration)) {
+          shared_highlighting::kPreemptiveLinkToTextGeneration) &&
+      shared_highlighting::ShouldOfferLinkToText(
+          selection_frame_->GetDocument()->Url())) {
     Reset();
     GenerateSelector();
   }
@@ -407,6 +410,9 @@ void TextFragmentSelectorGenerator::NoMatchFound() {
 
 void TextFragmentSelectorGenerator::OnSelectorReady(
     const TextFragmentSelector& selector) {
+  // Check that frame is not deattched and generator is still valid.
+  DCHECK(selection_frame_);
+
   RecordAllMetrics(selector);
   if (pending_generate_selector_callback_) {
     NotifyClientSelectorReady(selector);
@@ -430,6 +436,7 @@ void TextFragmentSelectorGenerator::ClearSelection() {
 }
 
 void TextFragmentSelectorGenerator::Detach() {
+  Reset();
   selection_frame_ = nullptr;
 }
 
@@ -596,13 +603,17 @@ String TextFragmentSelectorGenerator::GetPreviousTextBlock(
   }
 
   // The furthest node within same block without crossing block boundaries would
-  // be the suffix end.
+  // be the prefix start.
   Node* prefix_start = LastVisibleTextNodeWithinBlock(prefix_end);
   if (!prefix_start)
     return "";
 
   auto range_start = Position(prefix_start, 0);
   auto range_end = Position(prefix_end, prefix_end_offset);
+  // TODO(gayane): Find test case when this happens, seems related to shadow
+  // root. See crbug.com/1220830
+  if (range_start >= range_end)
+    return "";
   return PlainText(EphemeralRange(range_start, range_end)).StripWhiteSpace();
 }
 
@@ -611,7 +622,6 @@ String TextFragmentSelectorGenerator::GetNextTextBlock(
   Node* suffix_start = suffix_start_position.ComputeContainerNode();
   unsigned suffix_start_offset =
       suffix_start_position.ComputeOffsetInContainerNode();
-
   // If given position point to the last visible text in its containiner node,
   // use the following visible node for the suffix.
   if (IsLastVisiblePosition(suffix_start, suffix_start_offset)) {
@@ -630,6 +640,11 @@ String TextFragmentSelectorGenerator::GetNextTextBlock(
 
   auto range_start = Position(suffix_start, suffix_start_offset);
   auto range_end = Position(suffix_end, suffix_end->textContent().length());
+
+  // TODO(gayane): Find test case when this happens, seems related to shadow
+  // root. See crbug.com/1220830
+  if (range_start >= range_end)
+    return "";
   return PlainText(EphemeralRange(range_start, range_end)).StripWhiteSpace();
 }
 

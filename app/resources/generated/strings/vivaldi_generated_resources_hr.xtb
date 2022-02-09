@@ -43,7 +43,6 @@
 <translation id="215753907730220065">Izlaz iz cijelog zaslona</translation>
 <translation id="2177950615300672361">Anonimna kartica: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Sakrij gumb</translation>
 <translation id="225240747099314620">Dozvoli generiranje identifikatora trenutnog uređaja za pristup zaštićenom sadržaju (možda je potrebno ponovno pokretanje računala)</translation>
 <translation id="2277255602909579701">Svi kolačići i podaci web-lokacije</translation>
 <translation id="2282146716419988068">GPU proces</translation>
@@ -91,7 +90,6 @@
 <translation id="3288047731229977326">Proširenja pokrenuta u načinu rada razvojnog programera mogu naštetiti vašem računalu. Ako niste razvojni programer, trebali biste onemogućiti proširenja koja su pokrenuta u načinu rada razvojnog programera radi svoje zaštite.</translation>
 <translation id="33022249435934718">Rukuje GDI</translation>
 <translation id="3303818374450886607">Kopije</translation>
-<translation id="3308134619352333507">Gumb za skrivanje</translation>
 <translation id="3341703758641437857">Omogući pristup URL datotekama</translation>
 <translation id="3347086966102161372">K&amp;opiraj adresu slike</translation>
 <translation id="3378572629723696641">Ovo proširenje možda je oštećeno.</translation>
@@ -100,7 +98,6 @@
 <translation id="3511307672085573050">Kopiraj adresu &amp;veze</translation>
 <translation id="3560034655160545939">&amp;Provjera pravopisa</translation>
 <translation id="3574917942258583917">Želite li svejedno zatvoriti anonimni način?</translation>
-<translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; želi dijeliti pisač &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; s grupom čiji ste vlasnik: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Ako prihvatite, svi članovi grupe moći će ispisivati putem pisača.</translation>
 <translation id="3587482841069643663">Sve</translation>
 <translation id="3668823961463113931">Rukovatelji protokola</translation>
 <translation id="3678156199662914018">Proširenje: <ph name="EXTENSION_NAME" /></translation>
@@ -124,7 +121,6 @@
 <translation id="4087089424473531098">Stvoreno je proširenje:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">Prihvati za grupu</translation>
 <translation id="4096508467498758490">Onemogućivanje proširenja u načinu rada razvojnog programera</translation>
 <translation id="4100839878934973028">Drugi program na vašem računalu dodao je aplikaciju koja može promijeniti način na koji radi Vivaldi.</translation>
 <translation id="4109898769411476438">Prije uvoza zatvorite preglednik</translation>
@@ -147,7 +143,6 @@
 <translation id="4677772697204437347">Memorija grafičkog procesora</translation>
 <translation id="488785315393301722">Pokaži pojedinosti</translation>
 <translation id="4912643508233590958">Buđenja iz stanja mirovanja</translation>
-<translation id="4918086044614829423">Prihvati</translation>
 <translation id="4994474651455208930">Dopusti web-lokacijama traženje dopuštenja da postanu zadani rukovatelji za protokole</translation>
 <translation id="5000922062037820727">Blokirano (preporučeno)</translation>
 <translation id="5027562294707732951">Dodaj proširenje</translation>
@@ -277,7 +272,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8708000541097332489">Izbriši pri izlazu</translation>
 <translation id="8714838604780058252">Pozadinska grafika</translation>
 <translation id="8757090071857742562">Nije moguće emitirati radnu površinu.  Provjerite jeste li potvrdili upit za početak dijeljenja zaslona.</translation>
-<translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; želi dijeliti pisač &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; s vama.</translation>
 <translation id="8798099450830957504">Zadano</translation>
 <translation id="8808478386290700967">Internet trgovina</translation>
 <translation id="8823514049557262177">Kopiraj te&amp;kst veze</translation>

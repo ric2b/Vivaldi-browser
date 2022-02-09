@@ -9,6 +9,7 @@
 #include <memory>
 #include <streambuf>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace base {
@@ -64,6 +65,10 @@ class StringOutputBuffer : public std::streambuf {
 
   // Write the contents of this instance to a file at |file_path|.
   bool WriteToFile(const base::FilePath& file_path, Err* err) const;
+
+  // Write the contents of this instance to a file at |file_path| unless the
+  // file already exists and the contents are equal.
+  bool WriteToFileIfChanged(const base::FilePath& file_path, Err* err) const;
 
   static size_t GetPageSizeForTesting() { return kPageSize; }
 

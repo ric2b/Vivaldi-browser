@@ -11,9 +11,36 @@
 
 namespace save_address_profile_infobar_modal_responses {
 
-// Response info used to create dispatched OverlayResponses that notify the
-// save address profile infobar to present the address profile settings.
-DEFINE_STATELESS_OVERLAY_RESPONSE_INFO(PresentAddressProfileSettings);
+// Response info used to create dispatched OverlayResponses once the user
+// presses "Save" action on the Edit Modal.
+class EditedProfileSaveAction
+    : public OverlayResponseInfo<EditedProfileSaveAction> {
+ public:
+  ~EditedProfileSaveAction() override;
+
+  NSDictionary* profile_data() const { return profile_data_; }
+
+ private:
+  OVERLAY_USER_DATA_SETUP(EditedProfileSaveAction);
+  EditedProfileSaveAction(NSDictionary* profileData);
+
+  NSDictionary* profile_data_;
+};
+
+// Response info used to create dispatched OverlayResponses once the user
+// cancels the modal.
+class CancelViewAction : public OverlayResponseInfo<CancelViewAction> {
+ public:
+  ~CancelViewAction() override;
+
+  BOOL edit_view_is_dismissed() const { return edit_view_is_dismissed_; }
+
+ private:
+  OVERLAY_USER_DATA_SETUP(CancelViewAction);
+  CancelViewAction(BOOL edit_view_is_dismissed);
+
+  BOOL edit_view_is_dismissed_;
+};
 
 }  // namespace save_address_profile_infobar_modal_responses
 

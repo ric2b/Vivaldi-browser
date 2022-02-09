@@ -10,6 +10,7 @@
 
 #include "base/containers/contains.h"
 #include "base/guid.h"
+#include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -259,8 +260,7 @@ bool IsValidUpdate(const UpdateResponseData& update) {
   DCHECK(!update_entity.is_deleted());
   DCHECK(update_entity.server_defined_unique_tag.empty());
 
-  if (!syncer::UniquePosition::FromProto(update_entity.unique_position)
-           .IsValid()) {
+  if (!update_entity.unique_position.IsValid()) {
     // Ignore updates with invalid positions.
     DLOG(ERROR) << "Remote update with invalid position: "
                 << update_entity.specifics.notes().legacy_canonicalized_title();
@@ -349,11 +349,7 @@ void NoteModelMerger::RemoteTreeNode::EmplaceSelfAndDescendantsByGUID(
 bool NoteModelMerger::RemoteTreeNode::UniquePositionLessThan(
     const RemoteTreeNode& lhs,
     const RemoteTreeNode& rhs) {
-  const syncer::UniquePosition a_pos =
-      syncer::UniquePosition::FromProto(lhs.entity().unique_position);
-  const syncer::UniquePosition b_pos =
-      syncer::UniquePosition::FromProto(rhs.entity().unique_position);
-  return a_pos.LessThan(b_pos);
+  return lhs.entity().unique_position.LessThan(rhs.entity().unique_position);
 }
 
 // static
@@ -769,7 +765,7 @@ void NoteModelMerger::ProcessLocalCreation(const vivaldi::NoteNode* parent,
   const sync_pb::EntitySpecifics specifics =
       CreateSpecificsFromNoteNode(node, notes_model_);
   const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
-      node, sync_id, server_version, creation_time, pos.ToProto(), specifics);
+      node, sync_id, server_version, creation_time, pos, specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   for (size_t i = 0; i < node->children().size(); ++i) {

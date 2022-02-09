@@ -58,11 +58,10 @@ bool VivaldiEventHooks::HandleKeyboardEvent(
 
 bool VivaldiEventHooks::HandleDragEnd(content::WebContents* web_contents,
                                       ui::mojom::DragOperation operation,
-                                      bool cancelled,
                                       int screen_x,
                                       int screen_y) {
   if (!web_contents || !instance_)
     return false;
-  return instance_->DoHandleDragEnd(web_contents, operation, cancelled,
-                                    screen_x, screen_y);
+  return instance_->DoHandleDragEnd(web_contents, operation, screen_x,
+                                    screen_y);
 }

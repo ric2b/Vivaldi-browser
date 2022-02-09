@@ -24,6 +24,11 @@ struct InstallParams;
 
 namespace vivaldi {
 
+#if !defined(OFFICIAL_BUILD)
+// Check if invocation of setup.exe should be replaced with debug one.
+void CheckForDebugSetupCommand(int show_command);
+#endif
+
 bool PrepareSetupConfig(HINSTANCE instance);
 
 bool BeginInstallOrUninstall(HINSTANCE instance,
@@ -56,12 +61,6 @@ bool IsInstallUpdate();
 bool IsInstallStandalone();
 bool IsInstallRegisterStandalone();
 bool IsInstallSilentUpdate();
-
-#if !defined(OFFICIAL_BUILD)
-// Path to use for all following setup.exe invocations instead of the setup.exe
-// from the installation directory.
-extern base::FilePath* debug_subprocesses_exe;
-#endif
 
 }  // namespace vivaldi
 

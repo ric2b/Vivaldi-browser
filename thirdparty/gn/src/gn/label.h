@@ -5,6 +5,7 @@
 #ifndef TOOLS_GN_LABEL_H_
 #define TOOLS_GN_LABEL_H_
 
+#include <string_view>
 #include <tuple>
 
 #include <stddef.h>
@@ -25,18 +26,18 @@ class Label {
   // Makes a label given an already-separated out path and name.
   // See also Resolve().
   Label(const SourceDir& dir,
-        const std::string_view& name,
+        std::string_view name,
         const SourceDir& toolchain_dir,
-        const std::string_view& toolchain_name);
+        std::string_view toolchain_name);
 
   // Makes a label with an empty toolchain.
-  Label(const SourceDir& dir, const std::string_view& name);
+  Label(const SourceDir& dir, std::string_view name);
 
   // Resolves a string from a build file that may be relative to the
   // current directory into a fully qualified label. On failure returns an
   // is_null() label and sets the error.
   static Label Resolve(const SourceDir& current_dir,
-                       const std::string_view& source_root,
+                       std::string_view source_root,
                        const Label& current_toolchain,
                        const Value& input,
                        Err* err);

@@ -9,6 +9,7 @@
     *   [args: Display or configure arguments declared by the build.](#cmd_args)
     *   [check: Check header dependencies.](#cmd_check)
     *   [clean: Cleans the output directory.](#cmd_clean)
+    *   [clean_stale: Cleans the stale output files from the output directory.](#cmd_clean_stale)
     *   [desc: Show lots of insightful information about a target or config.](#cmd_desc)
     *   [format: Format .gn files.](#cmd_format)
     *   [gen: Generate ninja files.](#cmd_gen)
@@ -59,7 +60,6 @@
     *   [set_default_toolchain: Sets the default toolchain name.](#func_set_default_toolchain)
     *   [set_defaults: Set default values for a target type.](#func_set_defaults)
     *   [set_path_map: Set a path override map.](#set_path_map)
-    *   [set_sources_assignment_filter: Set a pattern to filter source files.](#func_set_sources_assignment_filter)
     *   [split_list: Splits a list into N different sub-lists.](#func_split_list)
     *   [string_join: Concatenates a list of strings with a separator.](#func_string_join)
     *   [string_replace: Replaces substring in the given string.](#func_string_replace)
@@ -95,7 +95,7 @@
     *   [arflags: [string list] Arguments passed to static_library archiver.](#var_arflags)
     *   [args: [string list] Arguments passed to an action.](#var_args)
     *   [asmflags: [string list] Flags passed to the assembler.](#var_asmflags)
-    *   [assert_no_deps: [label pattern list] Ensure no deps on these targets.](#var_assert_no_deps)
+    *   [assert_no_deps:Â [label pattern list] Ensure no deps on these targets.](#var_assert_no_deps)
     *   [bridge_header: [string] Path to C/Objective-C compatibility header.](#var_bridge_header)
     *   [bundle_contents_dir: Expansion of {{bundle_contents_dir}} in create_bundle.](#var_bundle_contents_dir)
     *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#var_bundle_deps_filter)
@@ -199,10 +199,10 @@
    - "test_targets": A list of the labels for targets that are needed to run
      the tests we wish to run.
 
-   - "additional_compile_targets": A list of the labels for targets that we
-     wish to rebuild, but aren't necessarily needed for testing. The important
-     difference between this field and "test_targets" is that if an item in
-     the additional_compile_targets list refers to a group, then any
+   - "additional_compile_targets" (optional): A list of the labels for targets
+     that we wish to rebuild, but aren't necessarily needed for testing. The
+     important difference between this field and "test_targets" is that if an
+     item in the additional_compile_targets list refers to a group, then any
      dependencies of that group will be returned if they are out of date, but
      the group itself does not need to be. If the dependencies themselves are
      groups, the same filtering is repeated. This filtering can be used to
@@ -212,6 +212,8 @@
 
      This filtering behavior is also known as "pruning" the list of compile
      targets.
+
+     If "additional_compile_targets" is absent, it defaults to the empty list.
 
   If input_path is -, input is read from stdin.
 
@@ -490,6 +492,24 @@
   Deletes the contents of the output directory except for args.gn and
   creates a Ninja build environment sufficient to regenerate the build.
 ```
+### <a name="cmd_clean_stale"></a>**gn clean_stale [\--ninja-executable=...] &lt;out_dir&gt;...**
+
+```
+  Removes the no longer needed output files from the build directory and prunes
+  their records from the ninja build log and dependency database. These are
+  output files that were generated from previous builds, but the current build
+  graph no longer references them.
+
+  This command requires a ninja executable of at least version 1.10.0. The
+  executable must be provided by the --ninja-executable switch.
+```
+
+#### **Options**
+
+```
+  --ninja-executable=<string>
+      Can be used to specify the ninja executable to use.
+```
 ### <a name="cmd_desc"></a>**gn desc**
 
 ```
@@ -682,9 +702,8 @@
 
 ```
   --dry-run
-      Does not change or output anything, but sets the process exit code based
-      on whether output would be different than what's on disk. This is useful
-      for presubmit/lint-type checks.
+      Prints the list of files that would be reformatted but does not write
+      anything to disk. This is useful for presubmit/lint-type checks.
       - Exit code 0: successful format, matches on disk.
       - Exit code 1: general failure (parse error, etc.)
       - Exit code 2: successful format, but differs from on disk.
@@ -696,6 +715,12 @@
   --stdin
       Read input from stdin and write to stdout rather than update a file
       in-place.
+
+  --read-tree=json
+      Reads an AST from stdin in the format output by --dump-tree=json and
+      uses that as the parse tree. (The only read-tree format currently
+      supported is json.) The given .gn file will be overwritten. This can be
+      used to programmatically transform .gn files.
 ```
 
 #### **Examples**
@@ -704,6 +729,7 @@
   gn format some\\BUILD.gn
   gn format /abspath/some/BUILD.gn
   gn format --stdin
+  gn format --read-tree=json //rewritten/BUILD.gn
 ```
 ### <a name="cmd_gen"></a>**gn gen [\--check] [&lt;ide options&gt;] &lt;out_dir&gt;**
 
@@ -721,6 +747,23 @@
   documentation on that mode.
 
   See "gn help switches" for the common command-line switches.
+```
+
+#### **General options**
+
+```
+  --ninja-executable=<string>
+      Can be used to specify the ninja executable to use. This executable will
+      be used as an IDE option to indicate which ninja to use for building. This
+      executable will also be used as part of the gen process for triggering a
+      restat on generated ninja files and for use with --clean-stale.
+
+  --clean-stale
+      This option will cause no longer needed output files to be removed from
+      the build directory, and their records pruned from the ninja build log and
+      dependency database after the ninja build graph has been generated. This
+      option requires a ninja executable of at least version 1.10.0. It can be
+      provided by the --ninja-executable switch. Also see "gn help clean_stale".
 ```
 
 #### **IDE options**
@@ -774,7 +817,7 @@
 
 ```
   --xcode-project=<file_name>
-      Override defaut Xcode project file name ("all"). The project file is
+      Override default Xcode project file name ("all"). The project file is
       written to the root build directory.
 
   --xcode-build-system=<value>
@@ -790,7 +833,7 @@
       This string is passed without any quoting to the ninja invocation
       command-line. Can be used to configure ninja flags, like "-j".
 
-  --root-target=<target_name>
+  --ide-root-target=<target_name>
       Name of the target corresponding to "All" target in Xcode. If unset,
       "All" invokes ninja without any target and builds everything.
 ```
@@ -798,7 +841,7 @@
 #### **QtCreator Flags**
 
 ```
-  --root-target=<target_name>
+  --ide-root-target=<target_name>
       Name of the root target for which the QtCreator project will be generated
       to contain files of it and its dependencies. If unset, the whole build
       graph will be emitted.
@@ -848,10 +891,19 @@
 
   --export-compile-commands[=<target_name1,target_name2...>]
       Produces a compile_commands.json file in the root of the build directory
-      containing an array of “command objects�?, where each command object
-      specifies one way a translation unit is compiled in the project. This is
-      used for various Clang-based tooling, allowing for the replay of individual
-      compilations independent of the build system.
+      containing an array of “command objects”, where each command object
+      specifies one way a translation unit is compiled in the project. If a list
+      of target_name is supplied, only targets that are reachable from any
+      target in any build file whose name is target_name will be used for
+      “command objects” generation, otherwise all available targets will be used.
+      This is used for various Clang-based tooling, allowing for the replay of
+      individual compilations independent of the build system.
+      e.g. "foo" will match:
+      - "//path/to/src:foo"
+      - "//other/path:foo"
+      - "//foo:foo"
+      and not match:
+      - "//foo:bar"
 ```
 ### <a name="cmd_help"></a>**gn help &lt;anything&gt;**
 
@@ -1000,7 +1052,7 @@
       target and all of its dependency tree, rebasing the strings in the `files`
       key onto the source directory of the target's declaration relative to "/".
 ```
-### <a name="cmd_outputs"></a>**gn outputs &lt;out_dir&gt; &lt;list of target or file names...&gt; ***
+### <a name="cmd_outputs"></a>**gn outputs &lt;out_dir&gt; &lt;list of target or file names...&gt;**
 
 ```
   Lists the output files corresponding to the given target(s) or file name(s).
@@ -1102,8 +1154,8 @@
 ### <a name="cmd_refs"></a>**gn refs**
 
 ```
-  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*
-          [--all] [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
+  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)* [--all]
+          [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
 
   Finds reverse dependencies (which targets reference something). The input is
   a list containing:
@@ -1417,14 +1469,14 @@
     args = [
       "{{source}}",
       "-o",
-      rebase_path(relative_target_gen_dir, root_build_dir) +
+      rebase_path(target_gen_dir, root_build_dir) +
         "/{{source_name_part}}.h" ]
   }
 ```
 ### <a name="func_bundle_data"></a>**bundle_data**: [iOS/macOS] Declare a target without output.
 
 ```
-  This target type allows to declare data that is required at runtime. It is
+  This target type allows one to declare data that is required at runtime. It is
   used to inform "create_bundle" targets of the files to copy into generated
   bundle, see "gn help create_bundle" for help.
 
@@ -2492,10 +2544,6 @@
   important because most targets have an implicit configs list, which means it
   wouldn't work at all if it didn't clobber).
 
-  The sources assignment filter (see "gn help set_sources_assignment_filter")
-  is never applied by this function. It's assumed than any desired filtering
-  was already done when sources was set on the from_scope.
-
   If variables_to_not_forward_list is non-empty, then it must contains a list
   of variable names that will not be forwarded. This is mostly useful when
   variable_list_or_star has a value of "*".
@@ -3162,37 +3210,6 @@
     //beta/d/e/f      //beta/d/e/f
     //foo/g/h/i       //gamma/foo/g/h/i
 ```
-### <a name="func_set_sources_assignment_filter"></a>**set_sources_assignment_filter**: Set a pattern to filter source files.
-
-```
-  The sources assignment filter is a list of patterns that remove files from
-  the list implicitly whenever the "sources" variable is assigned to. This will
-  do nothing for non-lists.
-
-  This is intended to be used to globally filter out files with
-  platform-specific naming schemes when they don't apply, for example you may
-  want to filter out all "*_win.cc" files on non-Windows platforms.
-
-  Typically this will be called once in the master build config script to set
-  up the filter for the current platform. Subsequent calls will overwrite the
-  previous values.
-
-  If you want to bypass the filter and add a file even if it might be filtered
-  out, call set_sources_assignment_filter([]) to clear the list of filters.
-  This will apply until the current scope exits.
-
-  See "gn help file_pattern" for more information on file pattern.
-```
-
-#### **Sources assignment example**
-
-```
-  # Filter out all _win files.
-  set_sources_assignment_filter([ "*_win.cc", "*_win.h" ])
-  sources = [ "a.cc", "b_win.cc" ]
-  print(sources)
-  # Will print [ "a.cc" ]. b_win one was filtered out.
-```
 ### <a name="func_split_list"></a>**split_list**: Splits a list into N different sub-lists.
 
 ```
@@ -3647,8 +3664,7 @@
         {{target_output_name}}, {{output_extension}} and {{output_dir}} allows
         the target to override these values.
           outputs = [
-            "{{output_dir}}/{{target_output_name}}"
-                "{{output_extension}}",
+            "{{output_dir}}/{{target_output_name}}{{output_extension}}",
             "{{output_dir}}/{{target_output_name}}.lib",
           ]
 
@@ -3781,6 +3797,11 @@
         {{target_output_name}}, this is not affected by the "output_prefix" in
         the tool or the "output_name" set on the target.
 
+    {{label_no_toolchain}}
+        The label of the current target, never including the toolchain
+        (otherwise, this is identical to {{label}}). This is used as the module
+        name when using .modulemap files.
+
     {{output}}
         The relative path and name of the output(s) of the current build step.
         If there is more than one output, this will expand to a list of all of
@@ -3819,6 +3840,13 @@
         Defines will be prefixed by "-D" and include directories will be
         prefixed by "-I" (these work with Posix tools as well as Microsoft
         ones).
+
+    {{module_deps}}
+    {{module_deps_no_self}}
+        Strings that correspond to the flags necessary to depend upon the Clang
+        modules referenced by the current target. The "_no_self" version doesn't
+        include the module for the current target, and can be used to compile
+        the pcm itself.
 
     {{source}}
         The relative path and name of the current input file.
@@ -3958,7 +3986,7 @@
 
   The Swift tool has multiple input and outputs. It must have exactly one
   output of .swiftmodule type, but can have one or more object file outputs,
-  in addition to other type of ouputs. The following expansions are available:
+  in addition to other type of outputs. The following expansions are available:
 
     {{module_name}}
         Expands to the string representing the module name of target under
@@ -4021,14 +4049,12 @@
       command = "..."
       outputs = [
         "{{output_dir}}/{{target_output_name}}{{output_extension}}",
-        "{{output_dir}}/{{target_output_name}}"
-            "{{output_extension}}.TOC",
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC",
       ]
       link_output =
         "{{output_dir}}/{{target_output_name}}{{output_extension}}"
       depend_output =
-        "{{output_dir}}/{{target_output_name}}"
-            "{{output_extension}}.TOC"
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC"
       restat = true
     }
 ```
@@ -4425,7 +4451,7 @@
   This is value is exposed so that cross-compile toolchains can access the host
   architecture when needed.
 
-  The value should generally be considered read-only, but it can be overriden
+  The value should generally be considered read-only, but it can be overridden
   in order to handle unusual cases where there might be multiple plausible
   values for the host architecture (e.g., if you can do either 32-bit or 64-bit
   builds). The value is not used internally by GN for any purpose.
@@ -4592,7 +4618,7 @@
 ```
   action("myscript") {
     # Pass the generated output dir to the script.
-    args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]"
+    args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]
   }
 ```
 ### <a name="var_target_name"></a>**target_name**: [string] The name of the current target.
@@ -4695,7 +4721,7 @@
 ```
   action("myscript") {
     # Pass the output dir to the script.
-    args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]"
+    args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]
   }
 ```
 ## <a name="target_variables"></a>Variables you set in targets
@@ -4761,7 +4787,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -4867,7 +4893,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -4902,7 +4928,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5081,7 +5107,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5115,7 +5141,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5149,7 +5175,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5183,7 +5209,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5217,7 +5243,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5379,7 +5405,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5447,7 +5473,7 @@
 
   Options for this field are "cdylib", "staticlib", "proc-macro", and "dylib".
   This field sets the `crate-type` attribute for the `rustc` tool on static
-  libraries, as well as the appropiate output extension in the
+  libraries, as well as the appropriate output extension in the
   `rust_output_extension` attribute. Since outputs must be explicit, the `lib`
   crate type (where the Rust compiler produces what it thinks is the
   appropriate library type) is not supported.
@@ -5544,7 +5570,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5569,7 +5595,7 @@
   The .d file should go in the target output directory. If you have more than
   one source file that the script is being run over, you can use the output
   file expansions described in "gn help action_foreach" to name the .d file
-  according to the input."
+  according to the input.
 
   The format is that of a Makefile and all paths must be relative to the root
   build directory. Only one output may be listed and it must match the first
@@ -5672,7 +5698,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5704,7 +5730,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5797,7 +5823,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5905,7 +5931,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -5938,7 +5964,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -6001,7 +6027,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -6028,7 +6054,7 @@
   Generally, these keys will include three types of lists: lists of ordinary
   strings, lists of filenames intended to be rebased according to their
   particular source directory, and lists of target labels intended to be used
-  as barriers to the walk. Verfication of these categories occurs at walk time,
+  as barriers to the walk. Verification of these categories occurs at walk time,
   not creation time (since it is not clear until the walk which values are
   intended for which purpose).
 ```
@@ -6378,7 +6404,7 @@
 
 ```
   Public configs are applied to all targets that depend directly on this one.
-  These dependant targets can further push this target's public configs
+  These dependent targets can further push this target's public configs
   higher in the dependency tree by depending on it via public_deps (see "gn
   help public_deps").
 
@@ -6447,7 +6473,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -6627,7 +6653,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -6747,7 +6773,7 @@
      those configs appear in the list.
   5. all_dependent_configs pulled from dependencies, in the order of
      the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurence will be used.
+     more than once, only the first occurrence will be used.
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
@@ -6962,6 +6988,9 @@
       cause the file //BUILD.gn to be loaded. Note that build_file_extension
       applies to the default case as well.
 
+      The command-line switch --root-target will override this value (see "gn
+      help --root-target").
+
   script_executable [optional]
       Path to specific Python executable or other interpreter to use in
       action targets and exec_script calls. By default GN searches the
@@ -6985,7 +7014,7 @@
   default_args [optional]
       Scope containing the default overrides for declared arguments. These
       overrides take precedence over the default values specified in the
-      declare_args() block, but can be overriden using --args or the
+      declare_args() block, but can be overridden using --args or the
       args.gn file.
 
       This is intended to be used when subprojects declare arguments with
@@ -7173,12 +7202,10 @@
 
       string           = `"` { char | escape | expansion } `"` .
       escape           = `\` ( "$" | `"` | char ) .
-      BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess "
-                         ") "}" .
+      BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess ) "}" .
       Hex              = "0x" [0-9A-Fa-f][0-9A-Fa-f]
       expansion        = "$" ( identifier | BracketExpansion | Hex ) .
-      char             = /* any character except "$", `"`, or newline "
-                        "*/ .
+      char             = /* any character except "$", `"`, or newline */ .
 
   After a backslash, certain sequences represent special characters:
 
@@ -7299,10 +7326,6 @@
 
     mylist = []
     mylist = otherlist
-
-  When assigning to a list named 'sources' using '=' or '+=', list items may be
-  automatically filtered out. See "gn help set_sources_assignment_filter" for
-  more.
 ```
 
 #### **Scopes**
@@ -8010,9 +8033,11 @@
     *   --dotfile: Override the name of the ".gn" file.
     *   --fail-on-unused-args: Treat unused build args as fatal errors.
     *   --markdown: Write help output in the Markdown format.
+    *   --ninja-executable: Set the Ninja executable.
     *   --nocolor: Force non-colored output.
     *   -q: Quiet mode. Don't print output on success.
     *   --root: Explicitly specify source root.
+    *   --root-target: Override the root target.
     *   --runtime-deps-list-file: Save runtime dependencies for targets in file.
     *   --script-executable: Set the executable used to execute scripts.
     *   --threads: Specify number of worker threads.

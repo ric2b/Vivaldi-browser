@@ -8,6 +8,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <string_view>
 #include <unordered_map>
 
 #include "base/macros.h"

@@ -225,17 +225,17 @@ void OSCrypt::UseLockedMockKeychainForTesting(bool use_locked) {
 
 namespace {
 
-static bool import_key_is_cached = false;
+bool import_key_is_cached = false;
+crypto::SymmetricKey* import_cached_encryption_key = nullptr;
+base::LazyInstance<base::Lock>::Leaky importLock = LAZY_INSTANCE_INITIALIZER;
 
-// Same as GetEncrytpionKey(), but used by vivaldi during import of passwords.
+// Same as GetEncryptionKey(), but used by vivaldi during import of passwords.
 crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
                                        const std::string& account_name) {
-  static std::unique_ptr<crypto::SymmetricKey> import_cached_encryption_key;
-  static base::Lock importLock;
-  base::AutoLock auto_lock(importLock);
+  base::AutoLock auto_lock(importLock.Get());
 
   if (import_key_is_cached)
-    return import_cached_encryption_key.get();
+    return import_cached_encryption_key;
 
   std::string password;
   AppleKeychain keychain;
@@ -247,7 +247,7 @@ crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
   import_key_is_cached = true;
 
   if (password.empty())
-    return import_cached_encryption_key.get();
+    return import_cached_encryption_key;
 
   std::string salt(kSalt);
 
@@ -256,10 +256,10 @@ crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
   import_cached_encryption_key =
     crypto::SymmetricKey::DeriveKeyFromPasswordUsingPbkdf2(
         crypto::SymmetricKey::AES, password, salt, kEncryptionIterations,
-        kDerivedKeySizeInBits);
+        kDerivedKeySizeInBits).release();
   ANNOTATE_LEAKING_OBJECT_PTR(import_cached_encryption_key);
   DCHECK(import_cached_encryption_key);
-  return import_cached_encryption_key.get();
+  return import_cached_encryption_key;
 }
 
 } // namespace

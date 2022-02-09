@@ -22,6 +22,10 @@
 #include "chrome/app/chrome_main_mac.h"
 #endif
 
+#if defined(OS_WIN) || defined(OS_LINUX)
+#include "base/base_switches.h"
+#endif
+
 // DO NOT move this further down in the file
 #if defined(VIVALDI_BUILD)
 #if defined(OS_WIN)
@@ -39,7 +43,6 @@
 
 #include <timeapi.h>
 
-#include "base/base_switches.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
@@ -158,6 +161,13 @@ int ChromeMain(int argc, const char** argv) {
   }
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) ||
         // defined(OS_WIN)
+
+#if defined(OS_LINUX)
+  // TODO(https://crbug.com/1176772): Remove when Chrome Linux is fully migrated
+  // to Crashpad.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ::switches::kEnableCrashpad);
+#endif
 
   int rv = content::ContentMain(params);
 

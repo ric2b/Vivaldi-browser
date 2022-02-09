@@ -46,6 +46,13 @@ namespace {
 // Defines a flags_ui::FeatureEntry::FeatureParam for each feature.
 DEFINE_VARIATION_PARAM(kIPHDummyFeature, "IPH_Dummy");
 #if defined(OS_ANDROID)
+DEFINE_VARIATION_PARAM(kIPHAdaptiveButtonInTopToolbarCustomizationNewTabFeature,
+                       "IPH_AdaptiveButtonInTopToolbarCustomization_NewTab");
+DEFINE_VARIATION_PARAM(kIPHAdaptiveButtonInTopToolbarCustomizationShareFeature,
+                       "IPH_AdaptiveButtonInTopToolbarCustomization_Share");
+DEFINE_VARIATION_PARAM(
+    kIPHAdaptiveButtonInTopToolbarCustomizationVoiceSearchFeature,
+    "IPH_AdaptiveButtonInTopToolbarCustomization_VoiceSearch");
 DEFINE_VARIATION_PARAM(kIPHAddToHomescreenMessageFeature,
                        "IPH_AddToHomescreenMessage");
 DEFINE_VARIATION_PARAM(kIPHAddToHomescreenTextBubbleFeature,
@@ -141,6 +148,11 @@ DEFINE_VARIATION_PARAM(kIPHVideoTutorialNTPSummaryFeature,
 DEFINE_VARIATION_PARAM(kIPHExploreSitesTileFeature, "IPH_ExploreSitesTile");
 DEFINE_VARIATION_PARAM(kIPHFeedHeaderMenuFeature, "IPH_FeedHeaderMenu");
 DEFINE_VARIATION_PARAM(kIPHShareScreenshotFeature, "IPH_ShareScreenshot");
+DEFINE_VARIATION_PARAM(kIPHWebFeedFollowFeature, "IPH_WebFeedFollow");
+DEFINE_VARIATION_PARAM(kIPHWebFeedPostFollowDialogFeature,
+                       "IPH_WebFeedPostFollowDialog");
+DEFINE_VARIATION_PARAM(kIPHSharedHighlightingBuilder,
+                       "IPH_SharedHighlightingBuilder");
 #endif  // defined(OS_ANDROID)
 #if defined(OS_IOS)
 DEFINE_VARIATION_PARAM(kIPHBottomToolbarTipFeature, "IPH_BottomToolbarTip");
@@ -172,6 +184,8 @@ DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
 DEFINE_VARIATION_PARAM(kIPHWebUITabStripFeature, "IPH_WebUITabStrip");
 DEFINE_VARIATION_PARAM(kIPHDesktopPwaInstallFeature, "IPH_DesktopPwaInstall");
 DEFINE_VARIATION_PARAM(kIPHProfileSwitchFeature, "IPH_ProfileSwitch");
+DEFINE_VARIATION_PARAM(kIPHUpdatedConnectionSecurityIndicatorsFeature,
+                       "IPH_UpdatedConnectionSecurityIndicators");
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
@@ -183,6 +197,12 @@ DEFINE_VARIATION_PARAM(kIPHProfileSwitchFeature, "IPH_ProfileSwitch");
 constexpr flags_ui::FeatureEntry::FeatureVariation
     kIPHDemoModeChoiceVariations[] = {
 #if defined(OS_ANDROID)
+        VARIATION_ENTRY(
+            kIPHAdaptiveButtonInTopToolbarCustomizationNewTabFeature),
+        VARIATION_ENTRY(
+            kIPHAdaptiveButtonInTopToolbarCustomizationShareFeature),
+        VARIATION_ENTRY(
+            kIPHAdaptiveButtonInTopToolbarCustomizationVoiceSearchFeature),
         VARIATION_ENTRY(kIPHAddToHomescreenMessageFeature),
         VARIATION_ENTRY(kIPHAddToHomescreenTextBubbleFeature),
         VARIATION_ENTRY(kIPHDataSaverDetailFeature),
@@ -240,6 +260,9 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHExploreSitesTileFeature),
         VARIATION_ENTRY(kIPHFeedHeaderMenuFeature),
         VARIATION_ENTRY(kIPHShareScreenshotFeature),
+        VARIATION_ENTRY(kIPHWebFeedFollowFeature),
+        VARIATION_ENTRY(kIPHWebFeedPostFollowDialogFeature),
+        VARIATION_ENTRY(kIPHSharedHighlightingBuilder),
 #elif defined(OS_IOS)
         VARIATION_ENTRY(kIPHBottomToolbarTipFeature),
         VARIATION_ENTRY(kIPHLongPressToolbarTipFeature),
@@ -248,7 +271,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHBadgedReadingListFeature),
         VARIATION_ENTRY(kIPHBadgedTranslateManualTriggerFeature),
         VARIATION_ENTRY(kIPHDiscoverFeedHeaderFeature),
-#elif defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
+#elif defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
         VARIATION_ENTRY(kIPHDesktopTabGroupsNewGroupFeature),
         VARIATION_ENTRY(kIPHFocusModeFeature),
@@ -261,7 +284,8 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHWebUITabStripFeature),
         VARIATION_ENTRY(kIPHDesktopPwaInstallFeature),
         VARIATION_ENTRY(kIPHProfileSwitchFeature),
-#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
+        VARIATION_ENTRY(kIPHUpdatedConnectionSecurityIndicatorsFeature),
+#endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 };
 

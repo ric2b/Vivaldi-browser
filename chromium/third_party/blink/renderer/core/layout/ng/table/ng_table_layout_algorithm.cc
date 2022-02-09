@@ -276,6 +276,8 @@ scoped_refptr<const NGTableConstraintSpaceData> CreateConstraintSpaceData(
         data->cells.emplace_back(
             cell_block_constraints[cell_index].border_box_borders,
             cell_block_size, cell_block_constraints[cell_index].column_index,
+            /* has_grown */ cell_block_size >
+                cell_block_constraints[cell_index].min_block_size,
             cell_block_constraints[cell_index].is_constrained);
       }
     }
@@ -288,6 +290,7 @@ scoped_refptr<const NGTableConstraintSpaceData> CreateConstraintSpaceData(
 // in NGTableFragmentData. Geometry data is also copied
 // back to LayoutObject.
 class ColumnGeometriesBuilder {
+  STACK_ALLOCATED();
  public:
   void VisitCol(const NGLayoutInputNode& col,
                 wtf_size_t start_column_index,
@@ -383,7 +386,7 @@ LayoutUnit NGTableLayoutAlgorithm::ComputeTableInlineSize(
     const NGBoxStrut& table_border_padding) {
   const bool is_fixed_layout = table.Style().IsFixedTableLayout();
   // Tables need autosizer.
-  base::Optional<TextAutosizer::TableLayoutScope> text_autosizer;
+  absl::optional<TextAutosizer::TableLayoutScope> text_autosizer;
   if (!is_fixed_layout)
     text_autosizer.emplace(To<LayoutNGTable>(table.GetLayoutBox()));
 
@@ -526,10 +529,14 @@ scoped_refptr<const NGLayoutResult> NGTableLayoutAlgorithm::Layout() {
         /* shrink_collapsed */ true, &column_locations, &has_collapsed_columns);
   }
 #if DCHECK_IS_ON()
+  // To avoid number rounding issues, instead of comparing sizes
+  // equality, we check whether sizes differ in less than a pixel.
   if (!has_collapsed_columns) {
-    // Colums define table whose inline size equals InitialFragmentGeometry.
-    DCHECK_EQ(table_inline_size_before_collapse,
-              container_builder_.InlineSize());
+    // Columns define table whose inline size equals InitialFragmentGeometry.
+    DCHECK_LT(
+        (table_inline_size_before_collapse - container_builder_.InlineSize())
+            .Abs(),
+        LayoutUnit(1));
   } else if (ConstraintSpace().IsFixedInlineSize()) {
     // Collapsed columns + fixed inline size: columns define table whose
     // inline size is less or equal InitialFragmentGeometry.
@@ -543,7 +550,8 @@ scoped_refptr<const NGLayoutResult> NGTableLayoutAlgorithm::Layout() {
         std::max(ComputeTableSizeFromColumns(column_locations, border_padding,
                                              border_spacing),
                  caption_constraint.min_size);
-    DCHECK_EQ(table_inline_size, container_builder_.InlineSize());
+    DCHECK_LT((table_inline_size - container_builder_.InlineSize()).Abs(),
+              LayoutUnit(1));
   }
 #endif
 
@@ -558,7 +566,7 @@ MinMaxSizesResult NGTableLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) const {
   const bool is_fixed_layout = Style().IsFixedTableLayout();
   // Tables need autosizer.
-  base::Optional<TextAutosizer::TableLayoutScope> text_autosizer;
+  absl::optional<TextAutosizer::TableLayoutScope> text_autosizer;
   if (!is_fixed_layout)
     text_autosizer.emplace(To<LayoutNGTable>(Node().GetLayoutBox()));
 
@@ -810,7 +818,7 @@ scoped_refptr<const NGLayoutResult> NGTableLayoutAlgorithm::GenerateFragment(
       border_padding.inline_start + border_spacing.inline_size;
   section_offset.block_offset = block_offset + border_padding.block_start;
 
-  base::Optional<LayoutUnit> table_baseline;
+  absl::optional<LayoutUnit> table_baseline;
   wtf_size_t section_index = 0;
   bool needs_end_border_spacing = false;
   for (NGBlockNode section : grouped_children) {

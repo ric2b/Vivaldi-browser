@@ -23,9 +23,9 @@ class TestingNinjaTargetWriter : public NinjaTargetWriter {
 
   // Make this public so the test can call it.
   std::vector<OutputFile> WriteInputDepsStampAndGetDep(
-      const std::vector<const Target*>& extra_hard_deps,
+      const std::vector<const Target*>& additional_hard_deps,
       size_t num_stamp_uses) {
-    return NinjaTargetWriter::WriteInputDepsStampAndGetDep(extra_hard_deps,
+    return NinjaTargetWriter::WriteInputDepsStampAndGetDep(additional_hard_deps,
                                                            num_stamp_uses);
   }
 };

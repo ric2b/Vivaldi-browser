@@ -1,4 +1,20 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sq">
+<translation id="2306442503286132111">Regjistroi faqen interesante në dosjen <ph name="FOLDER_NAME" /></translation>
+<translation id="2433507940547922241">Paraqitja</translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> faqeshënues}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> faqeshënues}}</translation>
+<translation id="3518985090088779359">Pranoj dhe vazhdoj</translation>
+<translation id="385051799172605136">Prapa</translation>
+<translation id="4759238208242260848">Shkarkimet</translation>
+<translation id="49576331685473090">Bllokuesi i materialeve</translation>
+<translation id="6150320133806434356">Regjistroi faqen interesante</translation>
+<translation id="6610147964972079463">Mbyll skedat private</translation>
+<translation id="706339621163631076">Politikat e konfidencialitetit të shfletuesit</translation>
+<translation id="732145680195464316">Regjistroi faqen interesante në <ph name="PRODUCT_NAME" /></translation>
+<translation id="7427132068601343474">Për Vivaldin</translation>
+<translation id="7465104139234185284">Mbyll të gjitha skedat private</translation>
+<translation id="8820817407110198400">Faqet interesante</translation>
 </translationbundle>

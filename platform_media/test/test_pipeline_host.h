@@ -25,7 +25,6 @@ namespace media {
 class DataBuffer;
 
 class PlatformMediaPipeline;
-class PlatformMediaPipelineFactory;
 
 // A trivial implementation of IPCMediaPipelineHost that just delegates to
 // PlatformMediaPipeline directly, no IPC involved.
@@ -42,7 +41,7 @@ class TestPipelineHost : public IPCMediaPipelineHost {
   void Seek(base::TimeDelta time,
             PipelineStatusCallback status_cb) override;
 
-  void ReadDecodedData(PlatformMediaDataType type,
+  void ReadDecodedData(PlatformStreamType stream_type,
                        DemuxerStream::ReadCB read_cb) override;
 
  private:
@@ -63,12 +62,11 @@ class TestPipelineHost : public IPCMediaPipelineHost {
                          base::WritableSharedMemoryMapping raw_data_mapping,
                          int size);
 
-  std::unique_ptr<PlatformMediaPipelineFactory> platform_pipeline_factory_;
   std::unique_ptr<PlatformMediaPipeline> platform_pipeline_;
   base::WritableSharedMemoryMapping raw_data_mapping_;
 
   InitializeCB init_cb_;
-  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];
+  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformStreamTypeCount];
 
   base::WeakPtrFactory<TestPipelineHost> weak_ptr_factory_;
 };

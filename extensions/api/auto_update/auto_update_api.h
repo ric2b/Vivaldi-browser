@@ -6,9 +6,11 @@
 #include <memory>
 
 #include "base/version.h"
+#include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/browser/extension_function.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
-#include "extensions/schema/autoupdate.h"
+#include "vivaldi/extensions/schema/autoupdate.h"
 
 namespace extensions {
 
@@ -140,6 +142,40 @@ class AutoUpdateSetAutoInstallUpdatesFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateSetAutoInstallUpdatesFunction);
+};
+
+class AutoUpdateGetUpdateStatusFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.getUpdateStatus",
+                             AUTOUPDATE_GETUPDATESTATUS)
+
+  AutoUpdateGetUpdateStatusFunction() = default;
+
+  // Wrap the status for delivery to JS. Use nullopt for status on errors.
+  void SendResult(absl::optional<AutoUpdateStatus> status,
+                  std::string version,
+                  std::string release_notes_url);
+
+ private:
+  ~AutoUpdateGetUpdateStatusFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(AutoUpdateGetUpdateStatusFunction);
+};
+
+class AutoUpdateHasAutoUpdatesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.hasAutoUpdates",
+                             AUTOUPDATE_HASAUTOUPDATES)
+  AutoUpdateHasAutoUpdatesFunction() = default;
+
+ private:
+  ~AutoUpdateHasAutoUpdatesFunction() override = default;
+  ResponseAction Run() override;
+
+  bool HasAutoUpdates();
+
+  DISALLOW_COPY_AND_ASSIGN(AutoUpdateHasAutoUpdatesFunction);
 };
 
 }  // namespace extensions

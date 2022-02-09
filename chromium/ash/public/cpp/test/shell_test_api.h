@@ -21,6 +21,10 @@ namespace display {
 class DisplayManager;
 }
 
+namespace ui {
+class Accelerator;
+}
+
 namespace ash {
 enum class AppListViewState;
 class DragDropController;
@@ -50,6 +54,11 @@ class ASH_EXPORT ShellTestApi {
   // set this to enabled, the test is responsible for setting it back to
   // disabled to prevent failing subsequent tests.
   static void SetUseLoginNotificationDelayForTest(bool use_delay);
+
+  // Whether a notification is shown at startup about new shortcuts. This
+  // can interfere with tests that expect a certain window to be active,
+  // that count notifications, or that test ChromeVox output.
+  static void SetShouldShowShortcutNotificationForTest(bool show_notification);
 
   MessageCenterController* message_center_controller();
   WorkspaceController* workspace_controller();
@@ -125,6 +134,13 @@ class ASH_EXPORT ShellTestApi {
   // Returns true if the context menu associated with the primary root window is
   // shown.
   bool IsContextMenuShown() const;
+
+  // Sends accelerator directly to AcceleratorController.
+  bool IsActionForAcceleratorEnabled(const ui::Accelerator& accelerator) const;
+  bool PressAccelerator(const ui::Accelerator& accelerator);
+
+  // Returns true when Ash HUD is shown.
+  bool IsHUDShown();
 
  private:
   Shell* shell_;  // not owned

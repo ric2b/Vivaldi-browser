@@ -21,7 +21,7 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
-import org.chromium.chrome.browser.lifecycle.Destroyable;
+import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
@@ -47,7 +47,7 @@ import org.vivaldi.browser.speeddial.SpeedDialPage;
  * Maintains the status bar color for a {@link Window}.
  */
 public class StatusBarColorController
-        implements Destroyable, TopToolbarCoordinator.UrlExpansionObserver,
+        implements DestroyObserver, TopToolbarCoordinator.UrlExpansionObserver,
                    StatusIndicatorCoordinator.StatusIndicatorObserver {
     public static final @ColorInt int UNDEFINED_STATUS_BAR_COLOR = Color.TRANSPARENT;
     public static final @ColorInt int DEFAULT_STATUS_BAR_COLOR = Color.argb(0x01, 0, 0, 0);
@@ -221,9 +221,9 @@ public class StatusBarColorController
         mTopUiThemeColor = topUiThemeColorProvider;
     }
 
-    // Destroyable implementation.
+    // DestroyObserver implementation.
     @Override
-    public void destroy() {
+    public void onDestroy() {
         mStatusBarColorTabObserver.destroy();
         if (mOverviewModeBehavior != null) {
             mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
@@ -318,7 +318,9 @@ public class StatusBarColorController
         if (mIsInOverviewMode) {
             if (shouldDarkenStatusBarColor()) return Color.BLACK;
 
-            return (mIsIncognito && ToolbarColors.canUseIncognitoToolbarThemeColorInOverview())
+            return (mIsIncognito
+                           && ToolbarColors.canUseIncognitoToolbarThemeColorInOverview(
+                                   mWindow.getContext()))
                     ? mIncognitoPrimaryBgColor
                     : mStandardPrimaryBgColor;
         }
@@ -393,7 +395,7 @@ public class StatusBarColorController
         if (mScrimColor == 0) {
             final View root = mWindow.getDecorView().getRootView();
             final Resources resources = root.getResources();
-            mScrimColor = ApiCompatibilityUtils.getColor(resources, R.color.black_alpha_65);
+            mScrimColor = ApiCompatibilityUtils.getColor(resources, R.color.default_scrim_color);
         }
         // Apply a color overlay if the scrim is showing.
         float scrimColorAlpha = (mScrimColor >>> 24) / 255f;

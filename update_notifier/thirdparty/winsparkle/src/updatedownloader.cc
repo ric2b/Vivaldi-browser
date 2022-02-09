@@ -53,13 +53,14 @@
 #include <Softpub.h>
 #include <WinTrust.h>
 #include <io.h>
+#include <lmcons.h>
 #include <wincrypt.h>
 
 // Link with Windows libraries
 #pragma comment(lib, "wintrust")
 #pragma comment(lib, "crypt32.lib")
 
-namespace winsparkle {
+namespace vivaldi_update_notifier {
 
 /*--------------------------------------------------------------------------*
                                   helpers
@@ -75,6 +76,16 @@ const wchar_t kExpandExe[] = L"expand.exe";
 const wchar_t kChromeArchive[] = L"vivaldi.7z";
 
 const wchar_t kSetupExe[] = L"setup.exe";
+
+#ifndef OFFICIAL_BUILD
+// To avoid asking for a HTTP password for Soprano builds we download them from
+// a special location with an extra HTTP header. Without  the header HTTP
+// reports a not-found error.
+const char kSopranoDownloadUrlPrefix[] = "https://vivaldi.com/sopranos/";
+const char kSopranoRemappedFolder[] = "https://vivaldi.com/sopranos-update/";
+const char kSopranoHeaderName[] = "X-Vivaldi-Update";
+const char kSopranoHeaderValue[] = "soprano";
+#endif
 
 // We cancel the delta and switch to the full download if delta extraction and
 // setup reconstruction runs over this time limit.
@@ -95,13 +106,17 @@ base::FilePath GetTempDirHolder(Error& error) {
   }
 
   std::wstring temp_subdir;
-  if (g_install_mode) {
+  if (g_mode == UpdateMode::kNetworkInstall) {
     temp_subdir = L"VivaldiInstall";
   } else {
     // Generate a stable name using a hash of the installation directory.
     base::FilePath temp_dir_holder;
-    std::wstring hash = GetExeDirHash(true);
-    temp_subdir = L"VivaldiUpdate-" + hash;
+    std::wstring install_hash = GetInstallHash(/*for_task_scheduler=*/false);
+    if (install_hash.empty()) {
+      error.set(Error::kStorage, "Failed to derive the installation hash");
+      return base::FilePath();
+    }
+    temp_subdir = L"VivaldiUpdate-" + install_hash;
   }
   return os_tmp_dir.Append(temp_subdir);
 }
@@ -122,12 +137,23 @@ base::FilePath CreateUniqueDownloadDir(Error& error) {
   return tmp_dir;
 }
 
-base::FilePath DownloadUrl(const GURL& url,
+base::FilePath DownloadUrl(GURL url,
                            const base::FilePath& tmpdir,
                            DownloadReport& report,
                            DownloadUpdateDelegate& delegate,
                            Error& error) {
-  FileDownloader downloader(url, 0, error);
+  FileDownloader downloader;
+#ifndef OFFICIAL_BUILD
+  if (base::StartsWith(url.spec(), kSopranoDownloadUrlPrefix)) {
+    size_t nprefix = strlen(kSopranoDownloadUrlPrefix);
+    std::string remapped_url = kSopranoRemappedFolder;
+    remapped_url.append(url.spec().data() + nprefix,
+                        url.spec().length() - nprefix);
+    url = GURL(remapped_url);
+    downloader.SetHeader(kSopranoHeaderName, kSopranoHeaderValue);
+  }
+#endif
+  downloader.Connect(url, error);
   if (error)
     return base::FilePath();
   report.kind = DownloadReport::kConnected;
@@ -206,14 +232,7 @@ GURL FindDeltaURL(const Appcast& appcast) {
 
 // Check that the file is signed by some party and that signature is trusted by
 // Windows. The party can be an arbitrary entity that can sign.
-void CheckTrustedSignature(const std::wstring& file_path,
-                           bool show_ui_for_untrusted_certificate,
-                           Error& error) {
-  if (error)
-    return;
-
-  DWORD ui_choice =
-      show_ui_for_untrusted_certificate ? WTD_UI_NOGOOD : WTD_UI_NONE;
+LONG CheckTrustedSignature(const std::wstring& file_path) {
   GUID WVTPolicyGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
   WINTRUST_FILE_INFO FileData;
   memset(&FileData, 0, sizeof(FileData));
@@ -227,7 +246,7 @@ void CheckTrustedSignature(const std::wstring& file_path,
   WinTrustData.cbStruct = sizeof(WinTrustData);
   WinTrustData.pPolicyCallbackData = NULL;
   WinTrustData.pSIPClientData = NULL;
-  WinTrustData.dwUIChoice = ui_choice;
+  WinTrustData.dwUIChoice = WTD_UI_NONE;
   WinTrustData.fdwRevocationChecks = WTD_REVOKE_NONE;
   WinTrustData.dwUnionChoice = WTD_CHOICE_FILE;
   WinTrustData.dwStateAction = WTD_STATEACTION_VERIFY;
@@ -237,17 +256,12 @@ void CheckTrustedSignature(const std::wstring& file_path,
   WinTrustData.pFile = &FileData;
 
   LONG lStatus = WinVerifyTrust(NULL, &WVTPolicyGUID, &WinTrustData);
-  bool is_trusted = (lStatus == ERROR_SUCCESS);
 
   // Any hWVTStateData must be released by a call with close.
   WinTrustData.dwStateAction = WTD_STATEACTION_CLOSE;
   WinVerifyTrust(NULL, &WVTPolicyGUID, &WinTrustData);
 
-  if (!is_trusted) {
-    error.set(Error::kVerify,
-              "Failed to verify a downloaded file signature, status=" +
-                  std::to_string(lStatus));
-  }
+  return lStatus;
 }
 
 // Read the name of the subject that signs the build.
@@ -359,13 +373,15 @@ void VerifyEmbeddedSignature(const base::FilePath& file_path,
   if (error)
     return;
 
-  // For sopranos we need to support self-signed installer in non-official
-  // builds.
-  bool show_ui_for_untrusted_certificate = false;
+    // For sopranos we need to support self-signed installer in non-official
+    // builds.
+#if !defined(OFFICIAL_BUILD)
+  bool self_signed = false;
+#endif
   if (subject != vivaldi_update_notifier::kVivaldiSubjectName) {
 #if !defined(OFFICIAL_BUILD)
     if (subject == vivaldi_update_notifier::kVivaldiTestSubjectName) {
-      show_ui_for_untrusted_certificate = true;
+      self_signed = true;
     } else
 #endif
     {
@@ -377,8 +393,29 @@ void VerifyEmbeddedSignature(const base::FilePath& file_path,
     }
   }
 
-  CheckTrustedSignature(file_path.value(), show_ui_for_untrusted_certificate,
-                        error);
+  LONG status = CheckTrustedSignature(file_path.value());
+  if (status == ERROR_SUCCESS)
+    return;
+#if !defined(OFFICIAL_BUILD)
+  if (self_signed) {
+    constexpr LONG kUntrustedRoot = 0x800B0109;
+    if (status == kUntrustedRoot) {
+      LOG(INFO) << "The expected untrusted root certificate when "
+                   "checking the signature of a self-signed build.";
+
+    } else {
+      LOG(WARNING) << base::StringPrintf(
+          "An unexpected signature verification error for a self-signed build, "
+          "error=0x%lx",
+          status);
+    }
+    return;
+  }
+#endif
+  error.set(Error::kVerify,
+            base::StringPrintf(
+                "Failed to verify a downloaded file signature, status=0x%lx",
+                status));
 }
 
 // Run a helper process until it exits
@@ -554,9 +591,9 @@ void AddInstallArguments(base::CommandLine& cmdline) {
   if (!language.empty()) {
     cmdline.AppendSwitchNative(vivaldi::constants::kVivaldiLanguage, language);
   }
-  if (!g_install_mode) {
+  if (g_mode != UpdateMode::kNetworkInstall) {
     cmdline.AppendSwitch(vivaldi::constants::kVivaldiUpdate);
-    if (g_silent_update) {
+    if (g_mode == UpdateMode::kSilentUpdate) {
       cmdline.AppendSwitch(switches::kVivaldiSilentUpdate);
     }
   }
@@ -613,16 +650,6 @@ std::unique_ptr<InstallerLaunchData> TryDeltaDownload(
   cmdline.AppendSwitchASCII(installer::switches::kPreviousVersion,
                             g_app_version.GetString());
   cmdline.AppendSwitchPath(installer::switches::kInstallArchive, vivaldi_delta);
-#if !defined(OFFICIAL_BUILD)
-  base::FilePath debug_setup_exe =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          vivaldi_update_notifier::kDebugSetupExe);
-  if (!debug_setup_exe.empty()) {
-    cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
-                             cmdline.GetProgram());
-    cmdline.SetProgram(debug_setup_exe);
-  }
-#endif
   return std::make_unique<InstallerLaunchData>(true, appcast.Version,
                                                std::move(cmdline));
 }
@@ -646,45 +673,6 @@ std::unique_ptr<InstallerLaunchData> DownloadFullInstaller(
 
   base::CommandLine cmdline(full_update_path);
   AddInstallArguments(cmdline);
-#if !defined(OFFICIAL_BUILD)
-  base::FilePath debug_setup_exe =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          vivaldi_update_notifier::kDebugSetupExe);
-  if (!debug_setup_exe.empty()) {
-    // We need to extract files from the installer to pass them to the debug
-    // setup.exe. First use tar to get setup.exe to copy to the installation
-    // folder.
-    base::LaunchOptions launch_options;
-    launch_options.current_directory = tmpdir;
-    launch_options.start_hidden = true;
-    base::Time timeout_time = base::Time::Now() + kDeltaExtractionLimit;
-    std::wstring installer_exe = full_update_path.BaseName().value();
-    RunHelperProcess(base::CommandLine({L"tar.exe", L"xf", installer_exe}),
-                     launch_options, timeout_time, report, delegate, error);
-    // Now get the main vivaldi archive using 7zip. Redirect to nul to avoid a
-    // lot of printouts from 7z.exe as it does not have a silent mode.
-    base::win::ScopedHandle nul_handle(
-        ::CreateFile(L"NUL", GENERIC_READ | GENERIC_WRITE,
-                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                     nullptr, OPEN_EXISTING, 0, nullptr));
-    if (nul_handle.IsValid()) {
-      launch_options.handles_to_inherit.push_back(nul_handle.Get());
-      launch_options.stdin_handle = nul_handle.Get();
-      launch_options.stdout_handle = nul_handle.Get();
-      launch_options.stderr_handle = nul_handle.Get();
-    }
-    RunHelperProcess(base::CommandLine({L"7z.exe", L"e", L"-y", installer_exe}),
-                     launch_options, timeout_time, report, delegate, error);
-
-    cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
-                             tmpdir.Append(kSetupExe));
-    // Simulate the call to the mini installer.
-    cmdline.AppendSwitch(vivaldi::constants::kVivaldiMini);
-    cmdline.SetProgram(debug_setup_exe);
-    if (error)
-      return nullptr;
-  }
-#endif
   return std::make_unique<InstallerLaunchData>(false, appcast.Version,
                                                std::move(cmdline));
 }
@@ -700,7 +688,7 @@ std::unique_ptr<InstallerLaunchData> DownloadUpdate(
   base::FilePath tmpdir = CreateUniqueDownloadDir(error);
 
   std::unique_ptr<InstallerLaunchData> launch_data;
-  if (!winsparkle::g_install_mode) {
+  if (g_mode != UpdateMode::kNetworkInstall) {
     launch_data = TryDeltaDownload(appcast, tmpdir, delegate, error);
   }
   if (!launch_data) {
@@ -755,23 +743,44 @@ void CleanDownloadLeftovers() {
   base::DeletePathRecursively(temp_dir_holder);
 }
 
-std::wstring GetExeDirHash(bool base64) {
-  std::string exe_dir_sha256 =
-      crypto::SHA256HashString(GetExeDir().AsUTF8Unsafe());
-  DCHECK_EQ(exe_dir_sha256.length(), 32U);
+std::wstring GetInstallHash(bool for_task_scheduler) {
+  std::wstring install_string;
+  if (for_task_scheduler &&
+      g_install_type == vivaldi::InstallType::kForAllUsers &&
+      !DoesRunAsSystemService()) {
+    // Windows Task Scheduler entries are shared among all users. Thus for
+    // system installs with checks running from an ordinary user account we
+    // derive the hash both from the user name and the installation path to
+    // ensure hash uniqueness.
+    wchar_t user_name[UNLEN + 1];
+    DWORD n = base::size(user_name);
+    if (!::GetUserName(user_name, &n)) {
+      LOG(ERROR) << LastWin32Error("GetUserName");
+      return std::wstring();
+    }
+    install_string += user_name;
+
+    // Separate with a character that cannot present in user and file paths.
+    install_string += L"|";
+  }
+  install_string += GetExeDir().value();
+  std::string install_sha256 =
+      crypto::SHA256HashString(base::WideToUTF8(install_string));
+  DCHECK_EQ(install_sha256.length(), 32U);
 
   // We do not need cryptographically strong hash here, we just need to ensure
   // that the probability of a collision is small enough for non-deliberate
-  // cases as things should not crash even when the hash coinsides. Thus we use
-  // just few initial bytes of the hash to keep strings small.
+  // cases as things should not crash even when the hash coinsides. With 8 bytes
+  // that probability is about 5.4E-20.
   //
   // TODO(igor@vivaldi.com): Remove base64 form. As it used for the persistent
   // path that is removed after the update downloader is restarted after an
   // update, it is no just a matter of removing the code.
   std::string hash;
+  bool base64 = !for_task_scheduler;
   if (base64) {
     hash = base::Base64Encode(
-        base::as_bytes(base::make_span(exe_dir_sha256.data(), 16)));
+        base::as_bytes(base::make_span(install_sha256.data(), 16)));
     // Use URL-safe encoding to avoid +/=
     DCHECK_EQ(hash.length(), 24U);
     hash.resize(22);  // strip '='
@@ -779,7 +788,7 @@ std::wstring GetExeDirHash(bool base64) {
     base::ReplaceChars(hash, "/", "_", &hash);
   } else {
     hash = base::HexEncode(
-        base::as_bytes(base::make_span(exe_dir_sha256.data(), 8)));
+        base::as_bytes(base::make_span(install_sha256.data(), 8)));
   }
   return base::ASCIIToWide(base::ToLowerASCII(hash));
 }
@@ -795,4 +804,4 @@ InstallerLaunchData::~InstallerLaunchData() {
   }
 }
 
-}  // namespace winsparkle
+}  // namespace vivaldi_update_notifier
