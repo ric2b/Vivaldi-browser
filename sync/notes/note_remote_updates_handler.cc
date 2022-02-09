@@ -244,7 +244,7 @@ void NoteRemoteUpdatesHandler::Process(
     // better to update to the latest server ID.
     if (tracked_entity) {
       note_tracker_->UpdateSyncIdIfNeeded(tracked_entity,
-                                              /*sync_id=*/update_entity.id);
+                                          /*sync_id=*/update_entity.id);
     }
 
     if (tracked_entity && tracked_entity->IsUnsynced()) {

@@ -27,15 +27,15 @@ namespace test {
 // A friend of SadTabView that's able to call RecordFirstPaint.
 class SadTabViewTestApi {
  public:
+  SadTabViewTestApi(const SadTabViewTestApi&) = delete;
+  SadTabViewTestApi& operator=(const SadTabViewTestApi&) = delete;
+
   static void RecordFirstPaintForTesting(SadTabView* sad_tab_view) {
     if (!sad_tab_view->painted_) {
       sad_tab_view->RecordFirstPaint();
       sad_tab_view->painted_ = true;
     }
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SadTabViewTestApi);
 };
 
 }  // namespace test
@@ -43,6 +43,10 @@ class SadTabViewTestApi {
 class SadTabViewInteractiveUITest : public InProcessBrowserTest {
  public:
   SadTabViewInteractiveUITest() {}
+
+  SadTabViewInteractiveUITest(const SadTabViewInteractiveUITest&) = delete;
+  SadTabViewInteractiveUITest& operator=(const SadTabViewInteractiveUITest&) =
+      delete;
 
  protected:
   void KillRendererForActiveWebContentsSync() {
@@ -124,9 +128,6 @@ class SadTabViewInteractiveUITest : public InProcessBrowserTest {
     test::SadTabViewTestApi::RecordFirstPaintForTesting(sad_tab_view);
     PressSpacebar();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SadTabViewInteractiveUITest);
 };
 
 #if defined(OS_MAC)
@@ -139,7 +140,7 @@ IN_PROC_BROWSER_TEST_F(SadTabViewInteractiveUITest,
                        MAYBE_SadTabKeyboardAccessibility) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/links.html"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   // Start with focus in the location bar.
   chrome::FocusLocationBar(browser());
@@ -175,7 +176,7 @@ IN_PROC_BROWSER_TEST_F(SadTabViewInteractiveUITest,
                        DISABLED_ReloadMultipleSadTabs) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/links.html"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   // Kill the renderer process, resulting in a sad tab.
   KillRendererForActiveWebContentsSync();
@@ -183,7 +184,7 @@ IN_PROC_BROWSER_TEST_F(SadTabViewInteractiveUITest,
   // Create a second tab, navigate to a second url.
   chrome::NewTab(browser());
   GURL url2(embedded_test_server()->GetURL("/simple.html"));
-  ui_test_utils::NavigateToURL(browser(), url2);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url2));
 
   // Kill that one too.
   KillRendererForActiveWebContentsSync();

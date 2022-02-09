@@ -30,6 +30,8 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "net/base/features.h"
+#include "net/base/proxy_server.h"
+#include "net/base/proxy_string_util.h"
 #include "net/base/url_util.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verify_result.h"
@@ -284,7 +286,7 @@ base::Value NetLogSpdySessionCloseParams(int net_error,
 base::Value NetLogSpdySessionParams(const HostPortProxyPair& host_pair) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetStringKey("host", host_pair.first.ToString());
-  dict.SetStringKey("proxy", host_pair.second.ToPacString());
+  dict.SetStringKey("proxy", ProxyServerToPacResultElement(host_pair.second));
   return dict;
 }
 
@@ -797,10 +799,6 @@ base::WeakPtr<SpdyStream> SpdyStreamRequest::ReleaseStream() {
   return stream;
 }
 
-size_t SpdyStreamRequest::EstimateMemoryUsage() const {
-  return base::trace_event::EstimateItemMemoryUsage(url_);
-}
-
 void SpdyStreamRequest::SetPriority(RequestPriority priority) {
   if (priority_ == priority)
     return;
@@ -860,6 +858,11 @@ void SpdyStreamRequest::OnConfirmHandshakeComplete(int rv) {
   // ConfirmHandshake() completed asynchronously. Record the time so the caller
   // can adjust LoadTimingInfo.
   confirm_handshake_end_ = base::TimeTicks::Now();
+
+  if (!session_) {
+    OnRequestCompleteFailure(ERR_CONNECTION_CLOSED);
+    return;
+  }
 
   base::WeakPtr<SpdyStream> stream;
   rv = session_->TryCreateStream(weak_ptr_factory_.GetWeakPtr(), &stream);
@@ -1008,8 +1011,8 @@ SpdySession::SpdySession(
       enable_push_(IsPushEnabled(initial_settings)),
       support_websocket_(false),
       connection_at_risk_of_loss_time_(
-          base::TimeDelta::FromSeconds(kDefaultConnectionAtRiskOfLossSeconds)),
-      hung_interval_(base::TimeDelta::FromSeconds(kHungIntervalSeconds)),
+          base::Seconds(kDefaultConnectionAtRiskOfLossSeconds)),
+      hung_interval_(base::Seconds(kHungIntervalSeconds)),
       time_func_(time_func),
       network_quality_estimator_(network_quality_estimator) {
   net_log_.BeginEvent(NetLogEventType::HTTP2_SESSION, [&] {
@@ -1626,7 +1629,8 @@ base::Value SpdySession::GetInfoAsValue() const {
     }
     dict.SetKey("aliases", std::move(alias_list));
   }
-  dict.SetStringKey("proxy", host_port_proxy_pair().second.ToURI());
+  dict.SetStringKey("proxy",
+                    ProxyServerToProxyUri(host_port_proxy_pair().second));
   dict.SetStringKey("network_isolation_key",
                     spdy_session_key_.network_isolation_key().ToDebugString());
 
@@ -1789,26 +1793,6 @@ bool SpdySession::ValidatePushedStream(spdy::SpdyStreamId stream_id,
 
 base::WeakPtr<SpdySession> SpdySession::GetWeakPtrToSession() {
   return GetWeakPtr();
-}
-
-size_t SpdySession::DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
-                                    bool* is_session_active) const {
-  // TODO(xunjieli): Include |pending_create_stream_queues_| when WeakPtr is
-  // supported in memory_usage_estimator.h.
-  *is_session_active = is_active();
-  socket_->DumpMemoryStats(stats);
-
-  // |connection_| is estimated in stats->total_size. |read_buffer_| is
-  // estimated in |read_buffer_size|. TODO(xunjieli): Make them use EMU().
-  size_t read_buffer_size = read_buffer_ ? kReadBufferSize : 0;
-  return stats->total_size + read_buffer_size +
-         base::trace_event::EstimateMemoryUsage(spdy_session_key_) +
-         base::trace_event::EstimateMemoryUsage(pooled_aliases_) +
-         base::trace_event::EstimateMemoryUsage(active_streams_) +
-         base::trace_event::EstimateMemoryUsage(created_streams_) +
-         base::trace_event::EstimateMemoryUsage(initial_settings_) +
-         base::trace_event::EstimateMemoryUsage(stream_send_unstall_queue_) +
-         base::trace_event::EstimateMemoryUsage(priority_dependency_state_);
 }
 
 bool SpdySession::ChangeSocketTag(const SocketTag& new_tag) {
@@ -2161,7 +2145,7 @@ void SpdySession::TryCreatePushStream(spdy::SpdyStreamId stream_id,
       FROM_HERE,
       base::BindOnce(&SpdySession::CancelPushedStreamIfUnclaimed, GetWeakPtr(),
                      stream_id),
-      base::TimeDelta::FromSeconds(kPushedStreamLifetimeSeconds));
+      base::Seconds(kPushedStreamLifetimeSeconds));
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("spdy_push_stream", R"(
@@ -2357,8 +2341,7 @@ int SpdySession::DoReadLoop(ReadState expected_read_state, int result) {
 
   int bytes_read_without_yielding = 0;
   const base::TimeTicks yield_after_time =
-      time_func_() +
-      base::TimeDelta::FromMilliseconds(kYieldAfterDurationMilliseconds);
+      time_func_() + base::Milliseconds(kYieldAfterDurationMilliseconds);
 
   // Loop until the session is draining, the read becomes blocked, or
   // the read limit is exceeded.

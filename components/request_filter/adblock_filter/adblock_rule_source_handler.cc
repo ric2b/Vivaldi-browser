@@ -155,6 +155,8 @@ uint16_t ResourceTypesFromRequestFilterRule(const RequestFilterRule& rule) {
     resource_types |= flat::ResourceType_WEBRTC;
   if (rule.resource_types.test(RequestFilterRule::kPing))
     resource_types |= flat::ResourceType_PING;
+  if (rule.resource_types.test(RequestFilterRule::kWebTransport))
+    resource_types |= flat::ResourceType_WEBTRANSPORT;
   if (rule.resource_types.test(RequestFilterRule::kOther))
     resource_types |= flat::ResourceType_OTHER;
   return resource_types;
@@ -333,14 +335,14 @@ struct RuleSourceHandler::RulesReadResult {
  public:
   RulesReadResult() = default;
   ~RulesReadResult() = default;
+  RulesReadResult(const RulesReadResult&) = delete;
+  RulesReadResult& operator=(const RulesReadResult&) = delete;
 
   AdBlockMetadata metadata;
   FetchResult fetch_result = FetchResult::kSuccess;
   RulesInfo rules_info;
   std::string checksum;
   base::Value tracker_infos;
-
-  DISALLOW_COPY_AND_ASSIGN(RulesReadResult);
 };
 
 class RuleSourceHandler::RulesReader {
@@ -362,13 +364,14 @@ class RuleSourceHandler::RulesReader {
               bool allow_abp_snippets,
               bool delete_after_read);
   ~RulesReader();
+  RulesReader(const RulesReader&) = delete;
+  RulesReader& operator=(const RulesReader&) = delete;
 
   base::FilePath source_path_;
   base::FilePath output_path_;
   base::FilePath tracker_info_output_path_;
   bool allow_abp_snippets_;
   bool delete_after_read_;
-  DISALLOW_COPY_AND_ASSIGN(RulesReader);
 };
 
 void RuleSourceHandler::RulesReader::Start(

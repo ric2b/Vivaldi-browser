@@ -12,12 +12,12 @@ class Menu_Model;
 class MenuModelLoadedObserver : public MenuModelObserver {
  public:
   MenuModelLoadedObserver();
+  MenuModelLoadedObserver(const MenuModelLoadedObserver&) = delete;
+  MenuModelLoadedObserver& operator=(const MenuModelLoadedObserver&) = delete;
 
  private:
   void MenuModelLoaded(Menu_Model* model) override;
   void MenuModelBeingDeleted(Menu_Model* model) override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuModelLoadedObserver);
 };
 
 }  // namespace menus

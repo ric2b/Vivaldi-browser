@@ -55,17 +55,22 @@ void PaintChunker::StopMarkingClientsForValidation() {
 }
 
 void PaintChunker::UpdateCurrentPaintChunkProperties(
-    const PaintChunk::Id* chunk_id,
+    const PropertyTreeStateOrAlias& properties) {
+  if (current_properties_ != properties) {
+    next_chunk_id_ = absl::nullopt;
+    current_properties_ = properties;
+  }
+}
+
+void PaintChunker::UpdateCurrentPaintChunkProperties(
+    const PaintChunk::Id& chunk_id,
+    const DisplayItemClient& client,
     const PropertyTreeStateOrAlias& properties) {
   // If properties are the same, continue to use the previously set
   // |next_chunk_id_| because the id of the outer painting is likely to be
   // more stable to reduce invalidation because of chunk id changes.
-  if (!next_chunk_id_ || current_properties_ != properties) {
-    if (chunk_id)
-      next_chunk_id_.emplace(*chunk_id);
-    else
-      next_chunk_id_ = absl::nullopt;
-  }
+  if (!next_chunk_id_ || current_properties_ != properties)
+    next_chunk_id_.emplace(chunk_id, client);
   current_properties_ = properties;
 }
 
@@ -75,13 +80,10 @@ void PaintChunker::AppendByMoving(PaintChunk&& chunk) {
   wtf_size_t next_chunk_begin_index =
       chunks_->IsEmpty() ? 0 : chunks_->back().end_index;
   chunks_->emplace_back(next_chunk_begin_index, std::move(chunk));
-  // This chunk was copied from the cache, so it should already be valid; hence
-  // we don't call MarkClientForValidation().
-  DCHECK(!chunks_->back().id.client.IsCacheable() ||
-         chunks_->back().id.client.IsValid());
 }
 
-bool PaintChunker::EnsureCurrentChunk(const PaintChunk::Id& id) {
+bool PaintChunker::EnsureCurrentChunk(const PaintChunk::Id& id,
+                                      const DisplayItemClient& client) {
 #if DCHECK_IS_ON()
   DCHECK(chunks_);
   // If this DCHECKs are hit we are missing a call to update the properties.
@@ -93,12 +95,14 @@ bool PaintChunker::EnsureCurrentChunk(const PaintChunk::Id& id) {
 
   if (WillForceNewChunk() ||
       current_properties_ != chunks_->back().properties) {
-    if (!next_chunk_id_)
-      next_chunk_id_.emplace(id);
+    if (!next_chunk_id_) {
+      next_chunk_id_.emplace(id, client);
+    }
     FinalizeLastChunkProperties();
     wtf_size_t begin = chunks_->IsEmpty() ? 0 : chunks_->back().end_index;
-    MarkClientForValidation(next_chunk_id_->client);
-    chunks_->emplace_back(begin, begin, *next_chunk_id_, current_properties_,
+    MarkClientForValidation(next_chunk_id_->second);
+    chunks_->emplace_back(begin, begin, next_chunk_id_->second,
+                          next_chunk_id_->first, current_properties_,
                           current_effectively_invisible_);
     next_chunk_id_ = absl::nullopt;
     will_force_new_chunk_ = false;
@@ -107,32 +111,34 @@ bool PaintChunker::EnsureCurrentChunk(const PaintChunk::Id& id) {
   return false;
 }
 
-bool PaintChunker::IncrementDisplayItemIndex(const DisplayItem& item) {
+bool PaintChunker::IncrementDisplayItemIndex(const DisplayItemClient& client,
+                                             const DisplayItem& item) {
   DCHECK(chunks_);
 
   bool item_forces_new_chunk = item.IsForeignLayer() || item.IsScrollbar();
   if (item_forces_new_chunk)
     SetWillForceNewChunk(true);
 
-  bool created_new_chunk = EnsureCurrentChunk(item.GetId());
+  bool created_new_chunk = EnsureCurrentChunk(item.GetId(), client);
   auto& chunk = chunks_->back();
 
-  chunk.bounds.Unite(item.VisualRect());
+  chunk.bounds.Union(item.VisualRect());
   if (item.DrawsContent())
-    chunk.drawable_bounds.Unite(item.VisualRect());
+    chunk.drawable_bounds.Union(item.VisualRect());
 
   // If this paints the background and it's larger than our current candidate,
   // set the candidate to be this item.
   if (item.IsDrawing() && item.DrawsContent()) {
     float item_area;
     Color item_color = To<DrawingDisplayItem>(item).BackgroundColor(item_area);
-    ProcessBackgroundColorCandidate(chunk.id, item_color, item_area);
+    ProcessBackgroundColorCandidate(chunk.id, client, item_color, item_area);
   }
 
   if (should_compute_contents_opaque_ && item.IsDrawing()) {
     const DrawingDisplayItem& drawing = To<DrawingDisplayItem>(item);
-    chunk.rect_known_to_be_opaque = MaximumCoveredRect(
-        chunk.rect_known_to_be_opaque, drawing.RectKnownToBeOpaque());
+    chunk.rect_known_to_be_opaque =
+        gfx::Rect(MaximumCoveredRect(IntRect(chunk.rect_known_to_be_opaque),
+                                     IntRect(drawing.RectKnownToBeOpaque())));
     if (chunk.text_known_to_be_on_opaque_background) {
       if (const auto* paint_record = drawing.GetPaintRecord().get()) {
         if (paint_record->has_draw_text_ops()) {
@@ -165,7 +171,8 @@ bool PaintChunker::IncrementDisplayItemIndex(const DisplayItem& item) {
 }
 
 bool PaintChunker::AddHitTestDataToCurrentChunk(const PaintChunk::Id& id,
-                                                const IntRect& rect,
+                                                const DisplayItemClient& client,
+                                                const gfx::Rect& rect,
                                                 TouchAction touch_action,
                                                 bool blocking_wheel) {
   // In CompositeAfterPaint, we ensure a paint chunk for correct composited
@@ -178,9 +185,9 @@ bool PaintChunker::AddHitTestDataToCurrentChunk(const PaintChunk::Id& id,
       &current_properties_.Effect() == &EffectPaintPropertyNode::Root())
     return false;
 
-  bool created_new_chunk = EnsureCurrentChunk(id);
+  bool created_new_chunk = EnsureCurrentChunk(id, client);
   auto& chunk = chunks_->back();
-  chunk.bounds.Unite(rect);
+  chunk.bounds.Union(rect);
   if (touch_action != TouchAction::kAuto) {
     chunk.EnsureHitTestData().touch_action_rects.push_back(
         TouchActionRect{rect, touch_action});
@@ -203,12 +210,12 @@ void PaintChunker::AddSelectionToCurrentChunk(
 
 #if DCHECK_IS_ON()
   if (start) {
-    IntRect edge_rect(start->edge_start, start->edge_end - start->edge_start);
+    gfx::Rect edge_rect = gfx::BoundingRect(start->edge_start, start->edge_end);
     DCHECK(chunk.bounds.Contains(edge_rect));
   }
 
   if (end) {
-    IntRect edge_rect(end->edge_start, end->edge_end - end->edge_start);
+    gfx::Rect edge_rect = gfx::BoundingRect(end->edge_start, end->edge_end);
     DCHECK(chunk.bounds.Contains(edge_rect));
   }
 #endif
@@ -227,8 +234,9 @@ void PaintChunker::AddSelectionToCurrentChunk(
 
 void PaintChunker::CreateScrollHitTestChunk(
     const PaintChunk::Id& id,
+    const DisplayItemClient& client,
     const TransformPaintPropertyNode* scroll_translation,
-    const IntRect& rect) {
+    const gfx::Rect& rect) {
 #if DCHECK_IS_ON()
   if (id.type == DisplayItem::Type::kResizerScrollHitTest ||
       id.type == DisplayItem::Type::kPluginScrollHitTest ||
@@ -246,27 +254,29 @@ void PaintChunker::CreateScrollHitTestChunk(
 #endif
 
   SetWillForceNewChunk(true);
-  bool created_new_chunk = EnsureCurrentChunk(id);
+  bool created_new_chunk = EnsureCurrentChunk(id, client);
   DCHECK(created_new_chunk);
 
   auto& chunk = chunks_->back();
-  chunk.bounds.Unite(rect);
+  chunk.bounds.Union(rect);
   auto& hit_test_data = chunk.EnsureHitTestData();
   hit_test_data.scroll_translation = scroll_translation;
   hit_test_data.scroll_hit_test_rect = rect;
   SetWillForceNewChunk(true);
 }
 
-bool PaintChunker::ProcessBackgroundColorCandidate(const PaintChunk::Id& id,
-                                                   Color color,
-                                                   float area) {
+bool PaintChunker::ProcessBackgroundColorCandidate(
+    const PaintChunk::Id& id,
+    const DisplayItemClient& client,
+    Color color,
+    float area) {
   if (color == Color::kTransparent)
     return false;
 
-  bool created_new_chunk = EnsureCurrentChunk(id);
+  bool created_new_chunk = EnsureCurrentChunk(id, client);
   float min_background_area = kMinBackgroundColorCoverageRatio *
-                              chunks_->back().bounds.Width() *
-                              chunks_->back().bounds.Height();
+                              chunks_->back().bounds.width() *
+                              chunks_->back().bounds.height();
   if (created_new_chunk || area >= candidate_background_area_ ||
       area >= min_background_area) {
     candidate_background_color_ =

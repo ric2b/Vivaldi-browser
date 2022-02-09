@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_DOWNLOADS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_DOWNLOADS_HANDLER_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
@@ -20,6 +21,10 @@ class DownloadsHandler : public SettingsPageUIHandler,
                          public ui::SelectFileDialog::Listener {
  public:
   explicit DownloadsHandler(Profile* profile);
+
+  DownloadsHandler(const DownloadsHandler&) = delete;
+  DownloadsHandler& operator=(const DownloadsHandler&) = delete;
+
   ~DownloadsHandler() override;
 
   // SettingsPageUIHandler implementation.
@@ -79,8 +84,6 @@ class DownloadsHandler : public SettingsPageUIHandler,
   scoped_refptr<ui::SelectFileDialog> select_folder_dialog_;
 
   base::WeakPtrFactory<DownloadsHandler> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadsHandler);
 };
 
 }  // namespace settings

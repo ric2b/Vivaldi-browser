@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="DevTools.ActionTaken" enum="DevToolsAction"
-    expires_after="2022-02-06">
+    expires_after="2022-04-10">
   <owner>alph@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
@@ -30,7 +30,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.BackgroundService.ClearEvents"
-    enum="ServiceWorkerStatusCode" expires_after="M92">
+    enum="ServiceWorkerStatusCode" expires_after="M99">
   <owner>yangguo@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
@@ -42,7 +42,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.BackgroundService.GetEvents"
-    enum="ServiceWorkerStatusCode" expires_after="M92">
+    enum="ServiceWorkerStatusCode" expires_after="M99">
   <owner>rayankans@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
@@ -53,7 +53,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.BackgroundService.LogEvent"
-    enum="ServiceWorkerStatusCode" expires_after="M92">
+    enum="ServiceWorkerStatusCode" expires_after="M99">
   <owner>rayankans@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
@@ -65,7 +65,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.BackgroundService.StartRecording"
-    enum="DevToolsBackgroundService" expires_after="2021-08-09">
+    enum="DevToolsBackgroundService" expires_after="2022-07-09">
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
@@ -78,6 +78,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="DevTools.ColorPicker.FixedColor"
     enum="DevToolsColorPickerFixedColor" expires_after="2021-10-04">
+  <obsolete>
+    Removed in M95 because it is no longer needed for analysis.
+  </obsolete>
   <owner>yangguo@chromium.org</owner>
   <owner>mathias@chromium.org</owner>
   <owner>alexrudenko@chromium.org</owner>
@@ -98,6 +101,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Records state changes for DevTools computed style grouping toggled from the
     Computed pane.
+  </summary>
+</histogram>
+
+<histogram name="DevTools.ConsoleShowsCorsErrors"
+    enum="DevToolsConsoleShowsCorsErrors" expires_after="2022-03-20">
+  <owner>dsv@chromium.org</owner>
+  <owner>bmeurer@chromium.org</owner>
+  <owner>yangguo@chromium.org</owner>
+  <summary>
+    Records if showing CORS erros in DevTools Console is enabled.
   </summary>
 </histogram>
 
@@ -202,7 +215,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.ExperimentEnabled" enum="DevtoolsExperiments"
-    expires_after="2021-12-05">
+    expires_after="2022-04-24">
   <owner>yangguo@chromium.org</owner>
   <owner>brgoddar@microsoft.com</owner>
   <owner>shanejc@microsoft.com</owner>
@@ -212,7 +225,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.ExperimentEnabledAtLaunch" enum="DevtoolsExperiments"
-    expires_after="2021-12-05">
+    expires_after="2022-04-24">
   <owner>yangguo@chromium.org</owner>
   <owner>brgoddar@microsoft.com</owner>
   <owner>shanejc@microsoft.com</owner>
@@ -248,7 +261,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="DevTools.InspectElement" units="ms" expires_after="2021-12-05">
+<histogram name="DevTools.InspectElement" units="ms" expires_after="2022-05-01">
   <owner>alph@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
@@ -259,7 +272,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.IssueCreated" enum="DevToolsIssueCreated"
-    expires_after="2022-01-02">
+    expires_after="2022-04-10">
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
   <summary>
@@ -268,7 +281,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.IssuesPanelIssueExpanded"
-    enum="DevToolsIssuesPanelIssueExpanded" expires_after="2022-01-02">
+    enum="DevToolsIssuesPanelIssueExpanded" expires_after="2022-04-17">
   <owner>yangguo@chromium.org</owner>
   <owner>jegarc@microsoft.com</owner>
   <summary>
@@ -277,7 +290,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.IssuesPanelOpenedFrom"
-    enum="DevToolsIssuesPanelOpenedFrom" expires_after="2021-12-05">
+    enum="DevToolsIssuesPanelOpenedFrom" expires_after="2022-05-01">
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
   <summary>
@@ -286,7 +299,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.IssuesPanelResourceOpened"
-    enum="DevToolsIssuesPanelResourceOpened" expires_after="2022-01-02">
+    enum="DevToolsIssuesPanelResourceOpened" expires_after="2022-04-17">
   <owner>yangguo@chromium.org</owner>
   <owner>jegarc@microsoft.com</owner>
   <summary>
@@ -296,7 +309,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.KeybindSetSettingChanged" enum="DevToolsKeybindSets"
-    expires_after="2021-10-31">
+    expires_after="2022-09-21">
   <owner>yangguo@chromium.org</owner>
   <owner>jalyn@microsoft.com</owner>
   <owner>leo.lee@microsoft.com</owner>
@@ -307,7 +320,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.KeyboardShortcutFired"
-    enum="DevToolsKeyboardShortcutAction" expires_after="2021-10-31">
+    enum="DevToolsKeyboardShortcutAction" expires_after="2022-09-21">
   <owner>yangguo@chromium.org</owner>
   <owner>jalyn@microsoft.com</owner>
   <owner>leo.lee@microsoft.com</owner>
@@ -317,19 +330,31 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram base="true" name="DevTools.Launch" units="ms" expires_after="M94">
+<histogram name="DevTools.Language" enum="DevToolsLanguage"
+    expires_after="2022-02-06">
+  <owner>bmeurer@chromium.org</owner>
+  <owner>szuend@chromium.org</owner>
+  <owner>yangguo@chromium.org</owner>
+  <summary>
+    The actual display language used for the DevTools UI. Logged once per
+    DevTools session when DevTools is booted up.
+  </summary>
+</histogram>
+
+<histogram base="true" name="DevTools.Launch" units="ms"
+    expires_after="2022-05-01">
 <!-- Name completed by histogram_suffixes name="DevToolsLaunchPanels" -->
 
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
   <summary>
     Measures the time until a given tool is interactive during a cold start of
-    the DevTools.
+    DevTools.
   </summary>
 </histogram>
 
 <histogram name="DevTools.LinearMemoryInspector.RevealedFrom"
-    enum="DevToolsLinearMemoryInspectorRevealedFrom" expires_after="M96">
+    enum="DevToolsLinearMemoryInspectorRevealedFrom" expires_after="2022-04-10">
   <owner>sawallner@chromium.org</owner>
   <owner>kimanh@chromium.org</owner>
   <summary>
@@ -338,7 +363,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.LinearMemoryInspector.Target"
-    enum="DevToolsLinearMemoryInspectorTarget" expires_after="M96">
+    enum="DevToolsLinearMemoryInspectorTarget" expires_after="2022-04-17">
   <owner>sawallner@chromium.org</owner>
   <owner>kimanh@chromium.org</owner>
   <summary>
@@ -356,15 +381,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="DevTools.PanelClosed" enum="DevToolsPanel" expires_after="M94">
+<histogram name="DevTools.PanelClosed" enum="DevToolsPanel"
+    expires_after="2021-12-05">
   <owner>yangguo@chromium.org</owner>
   <owner>joselea@microsoft.com</owner>
-  <owner>shanejc@microsoft.com</owner>
-  <summary>Specified DevTools panel was closed.</summary>
+  <summary>
+    Specified DevTools panel was closed. Fires immediately after closing a panel
+    using the &quot;x&quot; button in the panel title.
+  </summary>
 </histogram>
 
 <histogram name="DevTools.PanelShown" enum="DevToolsPanel"
-    expires_after="2022-02-06">
+    expires_after="2022-04-10">
   <owner>alph@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>
@@ -380,7 +408,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="DevTools.SidebarPaneShown" enum="DevToolsSidebarPane"
-    expires_after="2022-02-06">
+    expires_after="2022-05-01">
   <owner>changhaohan@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>bmeurer@chromium.org</owner>

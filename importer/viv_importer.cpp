@@ -12,7 +12,7 @@
 static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
 static const char OPERA_SPEEDDIAL_NAME[] = "speeddial.ini";
 
-bool ReadOperaIniFile(const base::FilePath &profile_dir,
+bool ReadOperaIniFile(const base::FilePath& profile_dir,
                       DictionaryValueINIParser* target) {
   // profile_dir is likely not a directory but the prefs file, so check before
   // appending and breaking import.
@@ -39,8 +39,7 @@ base::FilePath::StringType StringToPath(const std::string* str) {
 #else
   return *str;
 #endif
- }
-
+}
 
 OperaImporter::OperaImporter()
     : wand_version_(0), master_password_required_(false) {}
@@ -71,7 +70,8 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
 
       bookmarkfilename_ =
           StringToPath(inifile.FindStringPath("User Prefs.Hot List File Ver2"));
-      notesfilename_ = StringToPath(inifile.FindStringPath("MailBox.NotesFile"));
+      notesfilename_ =
+          StringToPath(inifile.FindStringPath("MailBox.NotesFile"));
       std::string temp_val;
       master_password_required_ =
           (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",

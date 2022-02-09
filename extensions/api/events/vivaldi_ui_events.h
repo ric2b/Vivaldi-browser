@@ -24,6 +24,7 @@ class VivaldiUIEvents : public VivaldiEventHooks {
   static void InitSingleton();
 
   static void SendKeyboardShortcutEvent(
+      SessionID::id_type window_id,
       content::BrowserContext* browser_context,
       const content::NativeWebKeyboardEvent& event,
       bool is_auto_repeat);
@@ -119,7 +120,6 @@ class VivaldiUIEvents : public VivaldiEventHooks {
   WheelGestures wheel_gestures_;
   RockerGestures rocker_gestures_;
 };
-
 
 }  // namespace extensions
 

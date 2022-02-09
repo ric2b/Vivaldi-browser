@@ -98,9 +98,15 @@ class BuilderList(object):
         for b in self._builders:
             builder_specifiers = _lower_specifiers(
                 self._builders[b].get('specifiers', {}))
-            if flag_specific and self._builders[b].get('flag_specific',
-                                                       None) != flag_specific:
-                continue
+            if flag_specific:
+                if (flag_specific == '*' and
+                        not self._builders[b].get('flag_specific', None)):
+                    # Skip non flag_specific builders
+                    continue
+                if (flag_specific != '*' and
+                        self._builders[b].get('flag_specific', None) != flag_specific):
+                    # Skip if not an exact match
+                    continue
             if is_try and self._builders[b].get('is_try_builder', False) != is_try:
                 continue
             if is_cq and self._builders[b].get('is_cq_builder', False) != is_cq:
@@ -132,6 +138,9 @@ class BuilderList(object):
 
     def specifiers_for_builder(self, builder_name):
         return self._builders[builder_name]['specifiers']
+
+    def step_name_for_builder(self, builder_name):
+        return self._builders[builder_name].get('step_name', None)
 
     def is_try_server_builder(self, builder_name):
         return self._builders[builder_name].get('is_try_builder', False)

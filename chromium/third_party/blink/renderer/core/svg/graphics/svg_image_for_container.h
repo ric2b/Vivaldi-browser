@@ -74,15 +74,15 @@ class CORE_EXPORT SVGImageForContainer final : public Image {
 
   bool HasIntrinsicSize() const override { return image_->HasIntrinsicSize(); }
 
-  bool ApplyShader(cc::PaintFlags&, const SkMatrix& local_matrix) override;
+  bool ApplyShader(cc::PaintFlags&,
+                   const SkMatrix& local_matrix,
+                   const ImageDrawOptions& draw_options) override;
 
   void Draw(cc::PaintCanvas*,
             const cc::PaintFlags&,
-            const FloatRect&,
-            const FloatRect&,
-            const ImageDrawOptions& draw_options,
-            ImageClampingMode,
-            ImageDecodingMode) override;
+            const FloatRect& dest_rect,
+            const FloatRect& src_rect,
+            const ImageDrawOptions&) override;
 
   // FIXME: Implement this to be less conservative.
   bool CurrentFrameKnownToBeOpaque() override { return false; }

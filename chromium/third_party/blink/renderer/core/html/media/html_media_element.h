@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace cc {
 class Layer;
@@ -153,8 +154,6 @@ class CORE_EXPORT HTMLMediaElement
     kLoadTextTrackResource = 1 << 1
   };
   void ScheduleTextTrackResourceLoad();
-
-  bool HasRemoteRoutes() const;
 
   // error state
   MediaError* error() const;
@@ -482,7 +481,7 @@ class CORE_EXPORT HTMLMediaElement
   WebRemotePlaybackClient* RemotePlaybackClient() final {
     return remote_playback_client_;
   }
-  std::vector<TextTrackMetadata> GetTextTrackMetadata() override;
+  Vector<TextTrackMetadata> GetTextTrackMetadata() override;
   gfx::ColorSpace TargetColorSpace() override;
   bool WasAutoplayInitiated() override;
   bool IsInAutoPIP() const override { return false; }
@@ -518,6 +517,7 @@ class CORE_EXPORT HTMLMediaElement
   void RequestSeekTo(base::TimeDelta seek_time) override;
   void RequestEnterPictureInPicture() override {}
   void RequestExitPictureInPicture() override {}
+  void RequestMute(bool mute) override;
   void SetVolumeMultiplier(double multiplier) override;
   void SetPersistentState(bool persistent) override {}
   void SetPowerExperimentState(bool enabled) override;

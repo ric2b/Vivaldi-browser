@@ -51,6 +51,10 @@ class ASH_EXPORT Desk {
   };
 
   explicit Desk(int associated_container_id, bool desk_being_restored = false);
+
+  Desk(const Desk&) = delete;
+  Desk& operator=(const Desk&) = delete;
+
   ~Desk();
 
   static void SetWeeklyActiveDesks(int weekly_active_desks);
@@ -136,11 +140,13 @@ class ASH_EXPORT Desk {
   void MoveWindowsToDesk(Desk* target_desk);
 
   // Moves a single |window| from this desk to |target_desk|, possibly moving it
-  // to a different display, depending on |target_root|. |window| must
-  // belong to this desk.
+  // to a different display, depending on |target_root|. |window| must belong to
+  // this desk. If |unminimize| is true, the window is unminimized after it has
+  // been moved.
   void MoveWindowToDesk(aura::Window* window,
                         Desk* target_desk,
-                        aura::Window* target_root);
+                        aura::Window* target_root,
+                        bool unminimize);
 
   aura::Window* GetDeskContainerForRoot(aura::Window* root) const;
 
@@ -246,8 +252,6 @@ class ASH_EXPORT Desk {
   // A timer for marking |this| as interacted with only if the user remains on
   // |this| for a brief period of time.
   base::OneShotTimer active_desk_timer_;
-
-  DISALLOW_COPY_AND_ASSIGN(Desk);
 };
 
 }  // namespace ash

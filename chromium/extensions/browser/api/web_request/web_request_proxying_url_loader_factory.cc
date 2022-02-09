@@ -64,6 +64,9 @@ constexpr char kWebRequestProxyingURLLoaderFactoryScope[] =
 class ShutdownNotifierFactory
     : public BrowserContextKeyedServiceShutdownNotifierFactory {
  public:
+  ShutdownNotifierFactory(const ShutdownNotifierFactory&) = delete;
+  ShutdownNotifierFactory& operator=(const ShutdownNotifierFactory&) = delete;
+
   static ShutdownNotifierFactory* GetInstance() {
     static base::NoDestructor<ShutdownNotifierFactory> factory;
     return factory.get();
@@ -78,8 +81,6 @@ class ShutdownNotifierFactory
     DependsOn(PermissionHelper::GetFactoryInstance());
   }
   ~ShutdownNotifierFactory() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(ShutdownNotifierFactory);
 };
 
 // Creates simulated net::RedirectInfo when an extension redirects a request,
@@ -717,7 +718,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
     // intuitive), |onBeforeSendHeaders| is only dispatched for HTTP and HTTPS
     // and urn: requests.
 
-    const auto state_on_error = State::kRejectedByOnBeforeSendHeaders;
+    state_on_error = State::kRejectedByOnBeforeSendHeaders;
     auto continuation =
         base::BindRepeating(&InProgressRequest::ContinueToSendHeaders,
                             weak_factory_.GetWeakPtr(), state_on_error);

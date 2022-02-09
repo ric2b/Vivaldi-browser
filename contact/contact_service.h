@@ -47,6 +47,8 @@ class ContactService : public KeyedService {
  public:
   ContactService();
   ~ContactService() override;
+  ContactService(const ContactService&) = delete;
+  ContactService& operator=(const ContactService&) = delete;
 
   bool Init(bool no_db, const ContactDatabaseParams& contact_database_params);
 
@@ -186,8 +188,6 @@ class ContactService : public KeyedService {
 
   // All vended weak pointers are invalidated in Cleanup().
   base::WeakPtrFactory<ContactService> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactService);
 };
 
 }  // namespace contact

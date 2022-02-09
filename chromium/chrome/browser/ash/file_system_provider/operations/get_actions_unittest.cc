@@ -44,6 +44,10 @@ class CallbackLogger {
    public:
     Event(const Actions& actions, base::File::Error result)
         : actions_(actions), result_(result) {}
+
+    Event(const Event&) = delete;
+    Event& operator=(const Event&) = delete;
+
     virtual ~Event() {}
 
     const Actions& actions() const { return actions_; }
@@ -52,11 +56,13 @@ class CallbackLogger {
    private:
     Actions actions_;
     base::File::Error result_;
-
-    DISALLOW_COPY_AND_ASSIGN(Event);
   };
 
   CallbackLogger() {}
+
+  CallbackLogger(const CallbackLogger&) = delete;
+  CallbackLogger& operator=(const CallbackLogger&) = delete;
+
   virtual ~CallbackLogger() {}
 
   void OnGetActions(const Actions& actions, base::File::Error result) {
@@ -67,8 +73,6 @@ class CallbackLogger {
 
  private:
   std::vector<std::unique_ptr<Event>> events_;
-
-  DISALLOW_COPY_AND_ASSIGN(CallbackLogger);
 };
 
 // Returns the request value as |result| in case of successful parse.
@@ -81,9 +85,8 @@ void CreateRequestValueFromJSON(const std::string& json,
       base::JSONReader::ReadAndReturnValueWithError(json);
   ASSERT_TRUE(parsed_json.value) << parsed_json.error_message;
 
-  base::ListValue* value_as_list;
-  ASSERT_TRUE(parsed_json.value->GetAsList(&value_as_list));
-  std::unique_ptr<Params> params(Params::Create(*value_as_list));
+  ASSERT_TRUE(parsed_json.value->is_list());
+  std::unique_ptr<Params> params(Params::Create(parsed_json.value->GetList()));
   ASSERT_TRUE(params.get());
   *result = RequestValue::CreateForGetActionsSuccess(std::move(params));
   ASSERT_TRUE(result->get());
@@ -131,7 +134,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, Execute) {
       extensions::api::file_system_provider::OnGetActionsRequested::kEventName,
       event->event_name);
   base::ListValue* event_args = event->event_args.get();
-  ASSERT_EQ(1u, event_args->GetSize());
+  ASSERT_EQ(1u, event_args->GetList().size());
 
   const base::DictionaryValue* options_as_value = NULL;
   ASSERT_TRUE(event_args->GetDictionary(0, &options_as_value));

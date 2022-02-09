@@ -5,6 +5,7 @@
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/test/bind.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
 #include "chrome/browser/ash/file_manager/file_tasks.h"
@@ -13,14 +14,15 @@
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/web_applications/components/web_app_id_constants.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/profile_test_helper.h"
+#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/api/file_handlers/mime_util.h"
 #include "extensions/browser/entry_info.h"
+#include "extensions/common/constants.h"
 #include "net/base/mime_util.h"
 #include "third_party/blink/public/common/features.h"
 
@@ -95,7 +97,7 @@ class FileTasksBrowserTestBase
  public:
   void SetUpOnMainThread() override {
     test::AddDefaultComponentExtensionsOnMainThread(browser()->profile());
-    web_app::WebAppProvider::Get(browser()->profile())
+    web_app::WebAppProvider::GetForTest(browser()->profile())
         ->system_web_app_manager()
         .InstallSystemAppsForTesting();
   }
@@ -109,6 +111,7 @@ class FileTasksBrowserTestBase
 
     for (const Expectation& test : expectations) {
       std::vector<extensions::EntryInfo> entries;
+      std::vector<GURL> file_urls;
       std::vector<base::StringPiece> all_extensions =
           base::SplitStringPiece(test.file_extensions, "/",
                                  base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -125,8 +128,11 @@ class FileTasksBrowserTestBase
           EXPECT_FALSE(mime_type.empty()) << "No mime type for " << path;
         }
         entries.push_back({path, mime_type, false});
+        GURL url = GURL(base::JoinString(
+            {"filesystem:https://site.com/isolated/foo.", extension}, ""));
+        ASSERT_TRUE(url.is_valid());
+        file_urls.push_back(url);
       }
-      std::vector<GURL> file_urls{entries.size(), GURL()};
 
       // task_verifier callback is invoked synchronously from
       // FindAllTypesOfTasks.
@@ -338,6 +344,30 @@ IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, MultiSelectDefaultHandler) {
   TestExpectationsAgainstDefaultTasks(expectations);
 }
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Check that QuickOffice has a handler installed for common Office doc types.
+// This test only runs with the is_chrome_branded GN flag set because otherwise
+// QuickOffice is not installed.
+IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, QuickOffice) {
+  std::vector<Expectation> expectations = {
+      {"doc", extension_misc::kQuickOfficeComponentExtensionId,
+       "application/msword"},
+      {"docx", extension_misc::kQuickOfficeComponentExtensionId,
+       "application/"
+       "vnd.openxmlformats-officedocument.wordprocessingml.document"},
+      {"ppt", extension_misc::kQuickOfficeComponentExtensionId,
+       "application/vnd.ms-powerpoint"},
+      {"pptx", extension_misc::kQuickOfficeComponentExtensionId,
+       "application/"
+       "vnd.openxmlformats-officedocument.presentationml.presentation"},
+      {"xls", extension_misc::kQuickOfficeComponentExtensionId},
+      {"xlsx", extension_misc::kQuickOfficeComponentExtensionId},
+  };
+
+  TestExpectationsAgainstDefaultTasks(expectations);
+}
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
 // The Media App will be preferred over a chrome app with a specific extension,
 // unless that app is set default via prefs.
 IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, MediaAppPreferredOverChromeApps) {
@@ -356,8 +386,7 @@ IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, MediaAppPreferredOverChromeApps) {
       TaskDescriptor(extension->id(), StringToTaskType("app"), "tiffAction"),
       {"tiff"}, {"image/tiff"});
   if (profile_type() == TestProfileType::kIncognito) {
-    // In incognito, the provided file system can exist, but the file handler
-    // preference can't be changed.
+    // In incognito, the installed app is not enabled and we filter it out.
     TestExpectationsAgainstDefaultTasks({{"tiff", kMediaAppId}});
   } else {
     TestExpectationsAgainstDefaultTasks({{"tiff", extension->id().c_str()}});

@@ -56,6 +56,7 @@ class ASH_EXPORT LoginMetricsRecorder {
     kImeTray,
     kEnterpriseEnrollmentButton,
     kSignIn,
+    kOsInstallButton,
     kTargetCount,
   };
 
@@ -88,6 +89,10 @@ class ASH_EXPORT LoginMetricsRecorder {
   };
 
   LoginMetricsRecorder();
+
+  LoginMetricsRecorder(const LoginMetricsRecorder&) = delete;
+  LoginMetricsRecorder& operator=(const LoginMetricsRecorder&) = delete;
+
   ~LoginMetricsRecorder();
 
   // Methods used to record UMA stats.
@@ -95,10 +100,6 @@ class ASH_EXPORT LoginMetricsRecorder {
   void RecordNumLoginAttempts(bool success, int* num_attempt);
   void RecordUserTrayClick(TrayClickTarget target);
   void RecordUserShelfButtonClick(ShelfButtonClickTarget target);
-
- private:
-
-  DISALLOW_COPY_AND_ASSIGN(LoginMetricsRecorder);
 };
 
 }  // namespace ash

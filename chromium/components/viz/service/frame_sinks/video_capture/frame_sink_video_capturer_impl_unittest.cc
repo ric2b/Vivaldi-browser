@@ -77,7 +77,7 @@ bool CompareVarsInCompositorFrameMetadata(
 constexpr FrameSinkId kFrameSinkId = FrameSinkId(1, 1);
 
 // The compositor frame interval.
-constexpr auto kVsyncInterval = base::TimeDelta::FromSeconds(1) / 60;
+constexpr auto kVsyncInterval = base::Seconds(1) / 60;
 
 const struct SizeSet {
   // The size of the compositor frame sink's Surface.
@@ -364,7 +364,7 @@ MATCHER_P2(IsLetterboxedFrame, color, content_rect, "") {
   const VideoFrame& frame = *arg;
   const gfx::Rect kContentRect = content_rect;
   const auto IsLetterboxedPlane = [&frame, kContentRect](int plane,
-                                                         uint8_t color) {
+                                                         uint8_t component) {
     gfx::Rect content_rect_copy = kContentRect;
     if (plane != VideoFrame::kYPlane) {
       content_rect_copy = gfx::Rect(
@@ -375,7 +375,7 @@ MATCHER_P2(IsLetterboxedFrame, color, content_rect, "") {
       const uint8_t* p = frame.visible_data(plane) + row * frame.stride(plane);
       for (int col = 0; col < frame.row_bytes(plane); ++col) {
         if (content_rect_copy.Contains(gfx::Point(col, row))) {
-          if (p[col] != color) {
+          if (p[col] != component) {
             return false;
           }
         } else {  // Letterbox border around content.
@@ -409,7 +409,7 @@ class FrameSinkVideoCapturerTest : public testing::Test {
     // Override the capturer's TickClock with a virtual clock managed by a
     // manually-driven task runner.
     task_runner_ = new base::TestMockTimeTaskRunner(
-        base::Time::Now(), base::TimeTicks() + base::TimeDelta::FromSeconds(1),
+        base::Time::Now(), base::TimeTicks() + base::Seconds(1),
         base::TestMockTimeTaskRunner::Type::kStandalone);
     start_time_ = task_runner_->NowTicks();
     capturer_->clock_ = task_runner_->GetMockTickClock();

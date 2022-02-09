@@ -56,8 +56,8 @@ content::BrowserContext* ContextMenuServiceFactory::GetBrowserContextToUse(
 
 KeyedService* ContextMenuServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  std::unique_ptr<Menu_Model> service(new Menu_Model(context,
-                                                     Menu_Model::kContextMenu));
+  std::unique_ptr<Menu_Model> service(
+      new Menu_Model(context, Menu_Model::kContextMenu));
   return service.release();
 }
 

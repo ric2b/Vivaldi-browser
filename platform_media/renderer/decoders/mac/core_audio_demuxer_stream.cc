@@ -175,17 +175,12 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
     channel_layout = CHANNEL_LAYOUT_MONO;
 
   std::vector<uint8> extra_data;
-  audio_config_.Initialize(AudioCodec::kCodecPCM,
-                           SampleFormat::kSampleFormatS16,
-                           channel_layout,
-                           input_format_.mSampleRate,
-                           extra_data,
-                           EncryptionScheme::kUnencrypted,
-                           base::TimeDelta(),
-                           0);
+  audio_config_.Initialize(AudioCodec::kPCM, SampleFormat::kSampleFormatS16,
+                           channel_layout, input_format_.mSampleRate,
+                           extra_data, EncryptionScheme::kUnencrypted,
+                           base::TimeDelta(), 0);
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " New AudioDecoderConfig :"
-          << Loggable(audio_config_);
+          << " New AudioDecoderConfig :" << Loggable(audio_config_);
 }
 
 void CoreAudioDemuxerStream::Read(ReadCB read_cb) {
@@ -217,8 +212,8 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
   }
 
   int flags = pending_seek_ ? kAudioFileStreamParseFlag_Discontinuity : 0;
-  OSStatus err = AudioFileStreamParseBytes(
-      audio_file_stream_, read_size, read_data, flags);
+  OSStatus err = AudioFileStreamParseBytes(audio_file_stream_, read_size,
+                                           read_data, flags);
   pending_seek_ = false;
   if (err != noErr) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -265,7 +260,9 @@ DemuxerStream::Type CoreAudioDemuxerStream::type() const {
 
 void CoreAudioDemuxerStream::EnableBitstreamConverter() {}
 
-bool CoreAudioDemuxerStream::SupportsConfigChanges() { return false; }
+bool CoreAudioDemuxerStream::SupportsConfigChanges() {
+  return false;
+}
 
 void CoreAudioDemuxerStream::Stop() {
   if (!read_cb_.is_null()) {
@@ -301,13 +298,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
   if (!is_enqueue_running_) {
     is_enqueue_running_ = true;
     // |output_format_| should be something similar to |input_format_|.
-    FillOutASBDForLPCM(output_format_,
-                       input_format_.mSampleRate,
-                       input_format_.mChannelsPerFrame,
-                       16,
-                       16,
-                       false,
-                       false,
+    FillOutASBDForLPCM(output_format_, input_format_.mSampleRate,
+                       input_format_.mChannelsPerFrame, 16, 16, false, false,
                        false);
 
     AudioChannelLayout acl = {0};
@@ -341,8 +333,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
       decoded_data_buffer_size_ = 45 * CoreAudioDemuxer::kStreamInfoBufferSize;
     }
 
-    err = AudioQueueAllocateBuffer(
-        audio_queue_, decoded_data_buffer_size_, &output_buffer_);
+    err = AudioQueueAllocateBuffer(audio_queue_, decoded_data_buffer_size_,
+                                   &output_buffer_);
     if (err) {
       LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " AudioQueueAllocateBuffer, error = "
@@ -368,8 +360,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
     }
   }
 
-  err = AudioQueueEnqueueBuffer(
-        audio_queue_, fill_buf, packets_filled_, packet_descs_->data());
+  err = AudioQueueEnqueueBuffer(audio_queue_, fill_buf, packets_filled_,
+                                packet_descs_->data());
   if (err) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " AudioQueueEnqueueBuffer, error = "
@@ -379,8 +371,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
 
   UInt32 req_frames = decoded_data_buffer_size_ / output_format_.mBytesPerFrame;
 
-  err = AudioQueueOfflineRender(
-      audio_queue_, &time_stamp_, output_buffer_, req_frames);
+  err = AudioQueueOfflineRender(audio_queue_, &time_stamp_, output_buffer_,
+                                req_frames);
 
   if (err) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -428,8 +420,7 @@ void CoreAudioDemuxerStream::AudioPacketsProc(
     AudioQueueBufferRef fill_buf = stream->audio_queue_buffer_;
     memcpy(
         reinterpret_cast<char*>(fill_buf->mAudioData) + stream->bytes_filled_,
-        (const char*)input_data + packet_offset,
-        packet_size);
+        (const char*)input_data + packet_offset, packet_size);
 
     // fill out packet description
     stream->packet_descs_->data()[stream->packets_filled_] =

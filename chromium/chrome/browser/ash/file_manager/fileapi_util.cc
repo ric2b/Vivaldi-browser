@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/webui/file_manager/url_constants.h"
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -337,6 +339,11 @@ class ConvertSelectedFileInfoListToFileChooserFileInfoListImpl {
     NotifyComplete(std::move(lifetime));
   }
 
+  ConvertSelectedFileInfoListToFileChooserFileInfoListImpl(
+      const ConvertSelectedFileInfoListToFileChooserFileInfoListImpl&) = delete;
+  ConvertSelectedFileInfoListToFileChooserFileInfoListImpl& operator=(
+      const ConvertSelectedFileInfoListToFileChooserFileInfoListImpl&) = delete;
+
   ~ConvertSelectedFileInfoListToFileChooserFileInfoListImpl() {
     for (const auto& info : chooser_info_list_) {
       if (info && info->is_file_system()) {
@@ -419,9 +426,6 @@ class ConvertSelectedFileInfoListToFileChooserFileInfoListImpl {
   scoped_refptr<storage::FileSystemContext> context_;
   FileChooserFileInfoList chooser_info_list_;
   FileChooserFileInfoListCallback callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(
-      ConvertSelectedFileInfoListToFileChooserFileInfoListImpl);
 };
 
 void CheckIfDirectoryExistsOnIoThread(
@@ -452,7 +456,14 @@ EntryDefinition::EntryDefinition(const EntryDefinition& other) = default;
 EntryDefinition::~EntryDefinition() = default;
 
 const GURL GetFileManagerURL() {
+  if (ash::features::IsFileManagerSwaEnabled()) {
+    return GURL(ash::file_manager::kChromeUIFileManagerURL);
+  }
   return extensions::Extension::GetBaseURLFromExtensionId(kFileManagerAppId);
+}
+
+bool IsFileManagerURL(const GURL& source_url) {
+  return GetFileManagerURL() == source_url.GetOrigin();
 }
 
 storage::FileSystemContext* GetFileManagerFileSystemContext(Profile* profile) {

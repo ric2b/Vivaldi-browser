@@ -23,8 +23,7 @@
 #include "chromeos/settings/cros_settings_provider.h"
 #include "content/public/test/test_utils.h"
 
-namespace chromeos {
-
+namespace ash {
 namespace {
 
 const test::UIPath kOfflineLoginLink = {"error-message",
@@ -50,7 +49,7 @@ void SetExpectedCredentials(const AccountId& test_account_id,
   session_manager_test_api.InjectStubUserContext(user_context);
 }
 
-}  // anonymous namespace
+}  // namespace
 
 OfflineLoginTestMixin::OfflineLoginTestMixin(
     InProcessBrowserTestMixinHost* host)
@@ -80,10 +79,13 @@ void OfflineLoginTestMixin::GoOffline() {
           false /*use_default_devices_and_services*/);
   network_state_test_helper_->ClearServices();
   // Notify NetworkStateInformer explicitly
-  LoginDisplayHost::default_host()
-      ->GetOobeUI()
-      ->network_state_informer_for_test()
-      ->DefaultNetworkChanged(nullptr /* network */);
+  if (LoginDisplayHost::default_host() &&
+      LoginDisplayHost::default_host()->GetOobeUI()) {
+    LoginDisplayHost::default_host()
+        ->GetOobeUI()
+        ->network_state_informer_for_test()
+        ->DefaultNetworkChanged(nullptr /* network */);
+  }
 }
 
 void OfflineLoginTestMixin::GoOnline() {
@@ -142,4 +144,4 @@ void OfflineLoginTestMixin::SubmitLoginAuthOfflineForm(
   }
 }
 
-}  // namespace chromeos
+}  // namespace ash

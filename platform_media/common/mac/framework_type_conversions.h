@@ -18,13 +18,11 @@
 
 namespace media {
 
-inline const CMTime& CoreMediaGlueCMTimeToCMTime(
-    const CMTime& time) {
+inline const CMTime& CoreMediaGlueCMTimeToCMTime(const CMTime& time) {
   return reinterpret_cast<const CMTime&>(time);
 }
 
-inline const CMTime& CMTimeToCoreMediaGlueCMTime(
-    const CMTime& time) {
+inline const CMTime& CMTimeToCoreMediaGlueCMTime(const CMTime& time) {
   return reinterpret_cast<const CMTime&>(time);
 }
 

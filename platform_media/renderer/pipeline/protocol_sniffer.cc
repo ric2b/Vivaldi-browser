@@ -99,7 +99,7 @@ std::string GetContainerName(container_names::MediaContainerName container) {
       return "DASH (MPEG-DASH)";
     case container_names::CONTAINER_SMOOTHSTREAM:
       return "SmoothStreaming";
-    }
+  }
   NOTREACHED();
   return "";
 }
@@ -156,9 +156,8 @@ bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
     should_sniff = true;
   }
 #endif
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " sniff MimeType : '" << content_type << "' : "
-          << (should_sniff ? "Yes" : "No");
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " sniff MimeType : '"
+          << content_type << "' : " << (should_sniff ? "Yes" : "No");
 
   return should_sniff;
 }
@@ -176,10 +175,9 @@ void ProtocolSniffer::SniffProtocol(DataSource* data_source,
   // before base::BindOnce() can be evaluated and call the move constructor for
   // data_holder.
   uint8_t* data = data_holder.get();
-  data_source->Read(
-      0, kDataSize, data,
-      base::BindOnce(
-          &SniffReadDone, std::move(data_holder), std::move(callback)));
+  data_source->Read(0, kDataSize, data,
+                    base::BindOnce(&SniffReadDone, std::move(data_holder),
+                                   std::move(callback)));
 }
 
 }  // namespace media

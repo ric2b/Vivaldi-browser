@@ -5,8 +5,8 @@
 
 #include "browser/shell_integration/vivaldi_shell_integration.h"
 
-#include <string>
 #include <windows.h>
+#include <string>
 
 #include "base/strings/string_util.h"
 #include "base/win/registry.h"

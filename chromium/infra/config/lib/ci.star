@@ -112,7 +112,7 @@ def ci_builder(
         branches.value({branches.STANDARD_BRANCHES: "chrome_browser_release"}),
     )
 
-    experiments = experiments or {}
+    experiments = dict(experiments or {})
 
     # TODO(crbug.com/1135718): Promote out of experiment for all builders.
     experiments.setdefault("chromium.chromium_tests.use_rdb_results", 100)
@@ -293,13 +293,18 @@ def chromium_builder(*, name, tree_closing = True, **kwargs):
         **kwargs
     )
 
-def chromiumos_builder(*, name, tree_closing = True, **kwargs):
+def chromiumos_builder(
+        *,
+        name,
+        tree_closing = True,
+        sheriff_rotations = builders.sheriff_rotations.CHROMIUM,
+        **kwargs):
     kwargs.setdefault("os", os.LINUX_BIONIC_REMOVE)
     return ci_builder(
         name = name,
         builder_group = "chromium.chromiumos",
         goma_backend = builders.goma.backend.RBE_PROD,
-        sheriff_rotations = builders.sheriff_rotations.CHROMIUM,
+        sheriff_rotations = sheriff_rotations,
         tree_closing = tree_closing,
         **kwargs
     )
@@ -418,6 +423,10 @@ def fyi_builder(
         goma_backend = builders.goma.backend.RBE_PROD,
         **kwargs):
     kwargs.setdefault("os", os.LINUX_BIONIC_REMOVE)
+
+    # TODO(crbug.com/1135718): Promote out of experiment for all builders.
+    kwargs.setdefault("experiments", {})
+    kwargs["experiments"].setdefault("chromium.chromium_tests.use_rdb_results", 100)
     return ci.builder(
         name = name,
         builder_group = "chromium.fyi",
@@ -480,10 +489,11 @@ def fyi_mac_builder(
         cores = 4,
         os = builders.os.MAC_DEFAULT,
         **kwargs):
+    if not "goma_backend" in kwargs:
+        kwargs["goma_backend"] = builders.goma.backend.RBE_PROD
     return fyi_builder(
         name = name,
         cores = cores,
-        goma_backend = builders.goma.backend.RBE_PROD,
         os = os,
         **kwargs
     )
@@ -746,6 +756,17 @@ def mojo_builder(
         **kwargs
     )
 
+def rust_builder(
+        *,
+        name,
+        **kwargs):
+    return ci.builder(
+        name = name,
+        builder_group = "chromium.rust",
+        goma_backend = builders.goma.backend.RBE_PROD,
+        **kwargs
+    )
+
 def swangle_builder(*, name, builderless = True, pinned = True, **kwargs):
     builder_args = dict(kwargs)
     builder_args.update(
@@ -896,6 +917,7 @@ ci = struct(
     mac_thin_tester = mac_thin_tester,
     memory_builder = memory_builder,
     mojo_builder = mojo_builder,
+    rust_builder = rust_builder,
     swangle_linux_builder = swangle_linux_builder,
     swangle_mac_builder = swangle_mac_builder,
     swangle_windows_builder = swangle_windows_builder,

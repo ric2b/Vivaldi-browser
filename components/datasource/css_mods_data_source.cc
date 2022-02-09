@@ -53,7 +53,7 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
     std::string data;
     std::vector<base::FilePath::StringType> files;
     base::FileEnumerator it(dir_path, false, base::FileEnumerator::FILES,
-      FILE_PATH_LITERAL("*.css"));
+                            FILE_PATH_LITERAL("*.css"));
     for (base::FilePath name = it.Next(); !name.empty(); name = it.Next()) {
       files.emplace_back(name.value());
     }
@@ -63,13 +63,14 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
       base::FilePath path(file);
       // TODO(pettern): Using file urls would be best but is not allowed
       // in our app, investigate if and how it can be done.
-      std::string import_statement = base::StringPrintf("@import url('%s');\n",
+      std::string import_statement =
+          base::StringPrintf("@import url('%s');\n",
 #if defined(OS_POSIX)
-        path.BaseName().value().c_str()
+                             path.BaseName().value().c_str()
 #elif defined(OS_WIN)
-        base::WideToUTF8(path.BaseName().value()).c_str()
+                             base::WideToUTF8(path.BaseName().value()).c_str()
 #endif
-      );
+          );
       data.append(import_statement);
     }
     if (data.empty()) {

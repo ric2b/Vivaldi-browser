@@ -7,9 +7,12 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <mutex>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 #include "base/allocator/partition_allocator/starscan/metadata_allocator.h"
 #include "base/allocator/partition_allocator/starscan/starscan_fwd.h"
@@ -123,6 +126,10 @@ class StatsCollector final {
   void IncreaseSweptSize(size_t size) { swept_size_ += size; }
   size_t swept_size() const { return swept_size_; }
 
+  void IncreaseDiscardedQuarantineSize(size_t size) {
+    discarded_quarantine_size_ += size;
+  }
+
   base::TimeDelta GetOverallTime() const;
   void ReportTracesAndHists() const;
 
@@ -165,6 +172,7 @@ class StatsCollector final {
 
   std::atomic<size_t> survived_quarantine_size_{0u};
   size_t swept_size_ = 0u;
+  size_t discarded_quarantine_size_ = 0u;
   const char* process_name_ = nullptr;
   const size_t quarantine_last_size_ = 0u;
 };

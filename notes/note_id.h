@@ -11,16 +11,15 @@ namespace notes {
 namespace android {
 
 // See NoteId#getId
-long JavaNoteIdGetId(JNIEnv* env,
-                         const base::android::JavaRef<jobject>& obj);
+long JavaNoteIdGetId(JNIEnv* env, const base::android::JavaRef<jobject>& obj);
 
 // See NoteId#getType
-int JavaNoteIdGetType(JNIEnv* env,
-                          const base::android::JavaRef<jobject>& obj);
+int JavaNoteIdGetType(JNIEnv* env, const base::android::JavaRef<jobject>& obj);
 
 // See NoteId#createNoteId
-base::android::ScopedJavaLocalRef<jobject> JavaNoteIdCreateNoteId(
-    JNIEnv* env, jlong id, jint type);
+base::android::ScopedJavaLocalRef<jobject> JavaNoteIdCreateNoteId(JNIEnv* env,
+                                                                  jlong id,
+                                                                  jint type);
 
 }  // namespace android
 }  // namespace notes

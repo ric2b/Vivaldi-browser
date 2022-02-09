@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.Action;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.FooterCommand;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.OptionToggle;
+import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.PromoCodeInfo;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.UserInfo;
 import org.chromium.chrome.browser.keyboard_accessory.data.PropertyProvider;
 import org.chromium.chrome.browser.keyboard_accessory.data.UserInfoField;
@@ -104,9 +105,11 @@ class ManualFillingComponentBridge {
 
     @CalledByNative
     void showWhenKeyboardIsVisible() {
+        try { // Vivaldi: Catch potential exceptions here to avoid native crash, ref. VAB-4732.
         if (getManualFillingComponent() != null) {
             getManualFillingComponent().showWhenKeyboardIsVisible();
         }
+        } catch (Exception ignored) {}
     }
 
     @CalledByNative
@@ -197,6 +200,32 @@ class ManualFillingComponentBridge {
                                 .setIsObfuscated(isObfuscated)
                                 .setCallback(callback)
                                 .build());
+    }
+
+    @CalledByNative
+    private void addPromoCodeInfoToAccessorySheetData(Object objAccessorySheetData,
+            @AccessoryTabType int sheetType, String displayText, String textToFill,
+            String a11yDescription, String guid, boolean isObfuscated, String detailsText) {
+        PromoCodeInfo promoCodeInfo = new PromoCodeInfo();
+        ((AccessorySheetData) objAccessorySheetData).getPromoCodeInfoList().add(promoCodeInfo);
+
+        Callback<UserInfoField> callback = null;
+        callback = (field) -> {
+            assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
+            ManualFillingMetricsRecorder.recordSuggestionSelected(sheetType, field.isObfuscated());
+            ManualFillingComponentBridgeJni.get().onFillingTriggered(
+                    mNativeView, ManualFillingComponentBridge.this, sheetType, field);
+        };
+        ((PromoCodeInfo) promoCodeInfo)
+                .setPromoCode(new UserInfoField.Builder()
+                                      .setDisplayText(displayText)
+                                      .setTextToFill(textToFill)
+                                      .setA11yDescription(a11yDescription)
+                                      .setId(guid)
+                                      .setIsObfuscated(isObfuscated)
+                                      .setCallback(callback)
+                                      .build());
+        ((PromoCodeInfo) promoCodeInfo).setDetailsText(detailsText);
     }
 
     @CalledByNative

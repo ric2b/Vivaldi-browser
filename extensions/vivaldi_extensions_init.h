@@ -11,6 +11,8 @@ class VivaldiExtensionInit : public BrowserContextKeyedAPI {
  public:
   explicit VivaldiExtensionInit(content::BrowserContext* context);
   ~VivaldiExtensionInit() override;
+  VivaldiExtensionInit(const VivaldiExtensionInit&) = delete;
+  VivaldiExtensionInit& operator=(const VivaldiExtensionInit&) = delete;
 
   // Convenience method to get the instance for a profile.
   static VivaldiExtensionInit* Get(content::BrowserContext* context);
@@ -23,8 +25,6 @@ class VivaldiExtensionInit : public BrowserContextKeyedAPI {
 
   static const char* service_name() { return "VivaldiExtensionInit"; }
   static const bool kServiceRedirectedInIncognito = true;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionInit);
 };
 
 }  // namespace extensions

@@ -8,7 +8,7 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "chrome/browser/chromeos/printing/printers_sync_bridge.h"
+#include "chrome/browser/ash/printing/printers_sync_bridge.h"
 #include "chrome/browser/sync/test/integration/printers_helper.h"
 #include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
@@ -38,10 +38,12 @@ constexpr char kLatestDescription[] = "YAY!  More recent changes win!";
 class TwoClientPrintersSyncTest : public SyncTest {
  public:
   TwoClientPrintersSyncTest() : SyncTest(TWO_CLIENT) {}
-  ~TwoClientPrintersSyncTest() override {}
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(TwoClientPrintersSyncTest);
+  TwoClientPrintersSyncTest(const TwoClientPrintersSyncTest&) = delete;
+  TwoClientPrintersSyncTest& operator=(const TwoClientPrintersSyncTest&) =
+      delete;
+
+  ~TwoClientPrintersSyncTest() override {}
 };
 
 }  // namespace
@@ -134,7 +136,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPrintersSyncTest, ConflictResolution) {
       EditPrinterDescription(GetPrinterStore(1), 0, kOverwrittenDescription));
 
   // Wait for a non-zero period (200ms) for modification timestamps to differ.
-  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(200));
+  base::PlatformThread::Sleep(base::Milliseconds(200));
 
   // Client 0 goes offline, to make this test deterministic (client 1 commits
   // first).
@@ -183,7 +185,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPrintersSyncTest,
       EditPrinterDescription(GetPrinterStore(1), 0, kOverwrittenDescription));
 
   // Wait for a non-zero period (200ms) for modification timestamps to differ.
-  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(200));
+  base::PlatformThread::Sleep(base::Milliseconds(200));
 
   // Client 0 makes a change to the same printer.
   ASSERT_TRUE(

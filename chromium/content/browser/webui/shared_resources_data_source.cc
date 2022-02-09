@@ -41,6 +41,7 @@ const std::set<int> GetContentResourceIds() {
       IDR_ORIGIN_MOJO_HTML,
       IDR_ORIGIN_MOJO_JS,
       IDR_ORIGIN_MOJO_WEBUI_JS,
+      IDR_RANGE_MOJOM_WEBUI_JS,
       IDR_TOKEN_MOJO_WEBUI_JS,
       IDR_UI_WINDOW_OPEN_DISPOSITION_MOJO_JS,
       IDR_UI_WINDOW_OPEN_DISPOSITION_MOJO_WEBUI_JS,
@@ -136,6 +137,21 @@ WebUIDataSource* CreateSharedResourcesDataSource() {
 
   source->AddString("fontFamily", webui::GetFontFamily());
   source->AddString("fontSize", webui::GetFontSize());
+
+  return source;
+}
+
+WebUIDataSource* CreateUntrustedSharedResourcesDataSource() {
+  // This data source only serves resources used by all chrome-untrusted://
+  // WebUI pages.
+  //
+  // Don't put generated Mojo bindings here. Please explicitly add them to each
+  // WebUI's own data source.
+  WebUIDataSource* source =
+      content::WebUIDataSource::Create(kChromeUIUntrustedResourcesURL);
+
+  source->AddResourcePaths(
+      base::make_span(kMojoBindingsResources, kMojoBindingsResourcesSize));
 
   return source;
 }

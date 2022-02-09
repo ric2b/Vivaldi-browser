@@ -4,7 +4,7 @@
 <translation id="1089894737218087497">Instal·la independentment</translation>
 <translation id="1682285232070778125">Estableix Vivaldi com a navegador predeterminat</translation>
 <translation id="1974060860693918893">Avançat</translation>
-<translation id="2134216661302048561">L'instal·lador de Vivaldi no ha acabat d'instal·lar el navegador. Esteu segurs que voleu sortir?</translation>
+<translation id="2134216661302048561">L'instal·lador de Vivaldi no ha acabat d'instal·lar el navegador. Està segur que vol sortir?</translation>
 <translation id="2286454467119466181">Simple</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tots els drets reservats. &lt;a&gt;Política de privacitat&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tots els drets reservats.</translation>
@@ -25,14 +25,15 @@
 <translation id="4619978527973181021">Accepta i instal·la</translation>
 <translation id="479976146866774527">Instal·lant Vivaldi</translation>
 <translation id="5051728323101947360">Incloure la instal·lació independent de Vivaldi com a aplicació predeterminada</translation>
-<translation id="5167047459440711824">Advertiment: Vivaldi no pot evitar que les extensions registrin l'historial de navegació. Per desactivar aquesta extensió en mode d'incògnit, desselecciona aquesta opció.</translation>
+<translation id="5167047459440711824">Advertiment: Vivaldi no pot evitar que les extensions registrin l'historial de navegació. Per desactivar aquesta extensió en mode d'incògnit, desseleccioni aquesta opció.</translation>
 <translation id="5247376421371319618">Accepta i actualitza</translation>
 <translation id="5288672417093782294">Ves a la configuració de notificacions de Vivaldi</translation>
 <translation id="5302048478445481009">Idioma</translation>
 <translation id="5743878272102782872">Gestor de tasques - Vivaldi</translation>
-<translation id="6569282126279967574">Vivaldi s'ha bloquejat. Voleu tornar-lo a iniciar?</translation>
+<translation id="6569282126279967574">Vivaldi s'ha bloquejat. Vol tornar-lo a iniciar?</translation>
 <translation id="694714344624446243">Instal·lador de Vivaldi</translation>
 <translation id="7658239707568436148">Cancel·la</translation>
+<translation id="8031581238030785388">Aplicacions de Vivaldi</translation>
 <translation id="8773751185824654197">Nota: Si s'actualitza Vivaldi mentre funciona, aquesta instància es tancarà i es tornarà a obrir</translation>
 <translation id="933060950687965486">Tipus d'instal·lació</translation>
 </translationbundle>

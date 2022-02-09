@@ -28,7 +28,8 @@ void ClearBookmarkMenu();
 
 void GetBookmarkNodes(const bookmarks::BookmarkNode* node,
                       std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
+void AddExtraBookmarkMenuItems(NSMenu* menu,
+                               unsigned int* menu_index,
                                const bookmarks::BookmarkNode* node,
                                bool on_top);
 void OnClearBookmarkMenu(NSMenu* menu, NSMenuItem* item);

@@ -33,6 +33,11 @@ class CONTENT_EXPORT FramelessMediaInterfaceProxy final
     : public media::mojom::InterfaceFactory {
  public:
   FramelessMediaInterfaceProxy();
+
+  FramelessMediaInterfaceProxy(const FramelessMediaInterfaceProxy&) = delete;
+  FramelessMediaInterfaceProxy& operator=(const FramelessMediaInterfaceProxy&) =
+      delete;
+
   ~FramelessMediaInterfaceProxy() final;
 
   void Add(mojo::PendingReceiver<media::mojom::InterfaceFactory> receiver);
@@ -65,6 +70,7 @@ class CONTENT_EXPORT FramelessMediaInterfaceProxy final
 #endif  // defined(OS_ANDROID)
 #if defined(OS_WIN)
   void CreateMediaFoundationRenderer(
+      mojo::PendingRemote<media::mojom::MediaLog> media_log_remote,
       mojo::PendingReceiver<media::mojom::Renderer> receiver,
       mojo::PendingReceiver<media::mojom::MediaFoundationRendererExtension>
           renderer_extension_receiver) final;
@@ -85,7 +91,6 @@ class CONTENT_EXPORT FramelessMediaInterfaceProxy final
   mojo::ReceiverSet<media::mojom::InterfaceFactory> receivers_;
 
   THREAD_CHECKER(thread_checker_);
-  DISALLOW_COPY_AND_ASSIGN(FramelessMediaInterfaceProxy);
 };
 
 }  // namespace content

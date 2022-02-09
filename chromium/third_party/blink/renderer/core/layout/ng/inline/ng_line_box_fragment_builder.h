@@ -76,14 +76,18 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
 
   // Set the break token for the fragment to build.
   // Is nullptr if we didn't break.
-  void SetBreakToken(scoped_refptr<NGInlineBreakToken> break_token) {
-    break_token_ = std::move(break_token);
+  void SetBreakToken(const NGInlineBreakToken* break_token) {
+    break_token_ = break_token;
   }
 
   // Propagate data in |ChildList| without adding them to this builder. When
   // adding children as fragment items, they appear in the container, but there
   // are some data that should be propagated through line box fragments.
   void PropagateChildrenData(NGLogicalLineItems&);
+
+  void SetClearanceAfterLine(LayoutUnit clearance) {
+    clearance_after_line_ = clearance;
+  }
 
   // Creates the fragment. Can only be called once.
   scoped_refptr<const NGLayoutResult> ToLineBoxFragment();
@@ -92,6 +96,7 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
   absl::optional<LayoutUnit> line_box_bfc_block_offset_;
   FontHeight metrics_ = FontHeight::Empty();
   LayoutUnit hang_inline_size_;
+  LayoutUnit clearance_after_line_;
   NGPhysicalLineBoxFragment::NGLineBoxType line_box_type_;
   TextDirection base_direction_;
 

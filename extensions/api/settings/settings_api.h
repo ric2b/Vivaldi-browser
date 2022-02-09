@@ -6,12 +6,8 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/singleton.h"
-#include "chrome/browser/profiles/profile.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
-#include "components/prefs/pref_change_registrar.h"
-#include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_function.h"
+
 #include "extensions/schema/settings.h"
 
 namespace extensions {
@@ -25,8 +21,6 @@ class SettingsSetContentSettingFunction : public ExtensionFunction {
  private:
   ~SettingsSetContentSettingFunction() override;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SettingsSetContentSettingFunction);
 };
 
 }  // namespace extensions

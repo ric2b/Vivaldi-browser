@@ -159,6 +159,7 @@ group("vivaldi") {
   if (is_android) {
     deps -= [ "//chrome" ]
     deps += [ "//chrome/android:chrome_public_apk" ]
+    deps += [ "//chrome/android:chrome_modern_public_bundle" ]
   }
   if (is_mac || is_win) {
     deps += [ "//third_party/crashpad/crashpad/handler:crashpad_handler" ]

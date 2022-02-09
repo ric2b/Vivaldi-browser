@@ -224,6 +224,10 @@ static_assert(13 == spdy::SpdyErrorCode::ERROR_CODE_MAX,
 class NET_EXPORT_PRIVATE SpdyStreamRequest {
  public:
   SpdyStreamRequest();
+
+  SpdyStreamRequest(const SpdyStreamRequest&) = delete;
+  SpdyStreamRequest& operator=(const SpdyStreamRequest&) = delete;
+
   // Calls CancelRequest().
   ~SpdyStreamRequest();
 
@@ -272,9 +276,6 @@ class NET_EXPORT_PRIVATE SpdyStreamRequest {
   // request in the session.
   void SetPriority(RequestPriority priority);
 
-  // Returns the estimate of dynamically allocated memory in bytes.
-  size_t EstimateMemoryUsage() const;
-
   const NetworkTrafficAnnotationTag traffic_annotation() const {
     return NetworkTrafficAnnotationTag(traffic_annotation_);
   }
@@ -313,8 +314,6 @@ class NET_EXPORT_PRIVATE SpdyStreamRequest {
   base::TimeTicks confirm_handshake_end_;
 
   base::WeakPtrFactory<SpdyStreamRequest> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SpdyStreamRequest);
 };
 
 class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
@@ -635,15 +634,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
                             const HttpRequestInfo& request_info,
                             const SpdySessionKey& key) const override;
   base::WeakPtr<SpdySession> GetWeakPtrToSession() override;
-
-  // Dumps memory allocation stats to |stats|. Sets |*is_session_active| to
-  // indicate whether session is active.
-  // |stats| can be assumed as being default initialized upon entry.
-  // Implementation overrides fields in |stats|.
-  // Returns the estimate of dynamically allocated memory in bytes, which
-  // includes the size attributed to the underlying socket.
-  size_t DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
-                         bool* is_session_active) const;
 
   // Change this session's socket tag to |new_tag|. Returns true on success.
   bool ChangeSocketTag(const SocketTag& new_tag);

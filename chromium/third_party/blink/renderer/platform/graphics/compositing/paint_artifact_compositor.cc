@@ -135,13 +135,13 @@ scoped_refptr<cc::Layer> PaintArtifactCompositor::WrappedCcLayerForPendingLayer(
     return nullptr;
 
   cc::Layer* layer = nullptr;
-  FloatPoint layer_offset;
+  gfx::Vector2dF layer_offset;
   if (pending_layer.GetCompositingType() == PendingLayer::kPreCompositedLayer) {
     DCHECK(pending_layer.GetGraphicsLayer());
     DCHECK(!pending_layer.GetGraphicsLayer()->ShouldCreateLayersAfterPaint());
     layer = &pending_layer.GetGraphicsLayer()->CcLayer();
-    layer_offset = FloatPoint(
-        pending_layer.GetGraphicsLayer()->GetOffsetFromTransformNode());
+    layer_offset = gfx::Vector2dF(gfx::Vector2d(
+        pending_layer.GetGraphicsLayer()->GetOffsetFromTransformNode()));
   } else {
     DCHECK_EQ(pending_layer.GetCompositingType(), PendingLayer::kForeignLayer);
     // UpdateTouchActionRects() depends on the layer's offset, but when the
@@ -152,11 +152,11 @@ scoped_refptr<cc::Layer> PaintArtifactCompositor::WrappedCcLayerForPendingLayer(
     const auto& foreign_layer_display_item =
         To<ForeignLayerDisplayItem>(pending_layer.FirstDisplayItem());
     layer = foreign_layer_display_item.GetLayer();
-    layer_offset =
-        FloatPoint(foreign_layer_display_item.VisualRect().Location());
+    layer_offset = gfx::Vector2dF(
+        foreign_layer_display_item.VisualRect().OffsetFromOrigin());
   }
-  layer->SetOffsetToTransformParent(gfx::Vector2dF(
-      layer_offset + pending_layer.OffsetOfDecompositedTransforms()));
+  layer->SetOffsetToTransformParent(
+      layer_offset + pending_layer.OffsetOfDecompositedTransforms());
   return layer;
 }
 
@@ -180,7 +180,7 @@ PaintArtifactCompositor::ScrollHitTestLayerForPendingLayer(
     return nullptr;
 
   // We shouldn't decomposite scroll transform nodes.
-  DCHECK_EQ(FloatPoint(), pending_layer.OffsetOfDecompositedTransforms());
+  DCHECK_EQ(gfx::Vector2dF(), pending_layer.OffsetOfDecompositedTransforms());
 
   const auto& scroll_node =
       *pending_layer.ScrollTranslationForScrollHitTestLayer().ScrollNode();
@@ -203,16 +203,14 @@ PaintArtifactCompositor::ScrollHitTestLayerForPendingLayer(
   }
 
   scroll_layer->SetOffsetToTransformParent(
-      gfx::Vector2dF(FloatPoint(scroll_node.ContainerRect().Location())));
+      gfx::Vector2dF(scroll_node.ContainerRect().OffsetFromOrigin()));
   // TODO(pdr): The scroll layer's bounds are currently set to the clipped
   // container bounds but this does not include the border. We may want to
   // change this behavior to make non-composited and composited hit testing
   // match (see: crbug.com/753124). To do this, use
-  // |scroll_hit_test->scroll_container_bounds|.
-  auto bounds = scroll_node.ContainerRect().Size();
-  // Set the layer's bounds equal to the container because the scroll layer
-  // does not scroll.
-  scroll_layer->SetBounds(static_cast<gfx::Size>(bounds));
+  // |scroll_hit_test->scroll_container_bounds|. Set the layer's bounds equal
+  // to the container because the scroll layer does not scroll.
+  scroll_layer->SetBounds(scroll_node.ContainerRect().size());
 
   if (scroll_node.NodeChanged() != PaintPropertyChangeType::kUnchanged) {
     scroll_layer->SetNeedsPushProperties();
@@ -289,8 +287,8 @@ PaintArtifactCompositor::CompositedLayerForPendingLayer(
   std::unique_ptr<ContentLayerClientImpl> content_layer_client =
       ClientForPaintChunk(pending_layer.FirstPaintChunk());
 
-  FloatPoint layer_offset = pending_layer.LayerOffset();
-  IntSize layer_bounds = pending_layer.LayerBounds();
+  gfx::Vector2dF layer_offset = pending_layer.LayerOffset();
+  gfx::Size layer_bounds = pending_layer.LayerBounds();
   auto cc_layer = content_layer_client->UpdateCcPictureLayer(
       pending_layer.Chunks(), layer_offset, layer_bounds,
       pending_layer.GetPropertyTreeState());
@@ -301,7 +299,8 @@ PaintArtifactCompositor::CompositedLayerForPendingLayer(
   // here to avoid changing foreign layers. This includes things set by
   // GraphicsLayer on the ContentsLayer() or by video clients etc.
   bool contents_opaque = pending_layer.RectKnownToBeOpaque().Contains(
-      FloatRect(layer_offset, FloatSize(layer_bounds)));
+      gfx::RectF(gfx::PointAtOffsetFromOrigin(layer_offset),
+                 gfx::SizeF(layer_bounds)));
   cc_layer->SetContentsOpaque(contents_opaque);
   if (!contents_opaque) {
     cc_layer->SetContentsOpaqueForText(
@@ -625,8 +624,8 @@ void SynthesizedClip::UpdateLayer(bool needs_layer,
   }
 
   const RefCountedPath* path = clip.ClipPath();
-  SkRRect new_rrect = clip.PixelSnappedClipRect();
-  IntRect layer_bounds = EnclosingIntRect(clip.PixelSnappedClipRect().Rect());
+  SkRRect new_rrect = clip.PaintClipRect();
+  IntRect layer_bounds = EnclosingIntRect(clip.PaintClipRect().Rect());
   bool needs_display = false;
 
   auto new_translation_2d_or_matrix =
@@ -638,7 +637,7 @@ void SynthesizedClip::UpdateLayer(bool needs_layer,
 
   if (!path && new_translation_2d_or_matrix.IsIdentityOr2DTranslation()) {
     const auto& translation = new_translation_2d_or_matrix.Translation2D();
-    new_rrect.offset(translation.Width(), translation.Height());
+    new_rrect.offset(translation.x(), translation.y());
     needs_display = !rrect_is_local_ || new_rrect != rrect_;
     translation_2d_or_matrix_ = GeometryMapper::Translation2DOrMatrix();
     rrect_is_local_ = true;
@@ -673,7 +672,7 @@ SynthesizedClip::PaintContentsToDisplayList() {
     cc_list->push<cc::SaveOp>();
     if (translation_2d_or_matrix_.IsIdentityOr2DTranslation()) {
       const auto& translation = translation_2d_or_matrix_.Translation2D();
-      cc_list->push<cc::TranslateOp>(translation.Width(), translation.Height());
+      cc_list->push<cc::TranslateOp>(translation.x(), translation.y());
     } else {
       cc_list->push<cc::ConcatOp>(
           TransformationMatrix::ToSkM44(translation_2d_or_matrix_.Matrix()));
@@ -1235,9 +1234,9 @@ bool PaintArtifactCompositor::DirectlySetScrollOffset(
   auto* property_trees = root_layer_->layer_tree_host()->property_trees();
   if (!property_trees->element_id_to_scroll_node_index.contains(element_id))
     return false;
-  PropertyTreeManager::DirectlySetScrollOffset(
-      *root_layer_->layer_tree_host(), element_id,
-      gfx::ScrollOffset(scroll_offset));
+  PropertyTreeManager::DirectlySetScrollOffset(*root_layer_->layer_tree_host(),
+                                               element_id,
+                                               gfx::Vector2dF(scroll_offset));
   return true;
 }
 
@@ -1337,11 +1336,13 @@ void PaintArtifactCompositor::SetLayerDebugInfoEnabled(bool enabled) {
 static void UpdateLayerDebugInfo(
     cc::Layer& layer,
     const PaintChunk::Id& id,
+    const String& name,
+    DOMNodeId owner_node_id,
     CompositingReasons compositing_reasons,
     RasterInvalidationTracking* raster_invalidation_tracking) {
   cc::LayerDebugInfo& debug_info = layer.EnsureDebugInfo();
 
-  debug_info.name = id.client.DebugName().Utf8();
+  debug_info.name = name.Utf8();
   if (id.type == DisplayItem::kForeignLayerContentsWrapper) {
     // This is for backward compatibility in pre-CompositeAfterPaint mode.
     DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
@@ -1352,13 +1353,24 @@ static void UpdateLayerDebugInfo(
       CompositingReason::Descriptions(compositing_reasons);
   debug_info.compositing_reason_ids =
       CompositingReason::ShortNames(compositing_reasons);
-  debug_info.owner_node_id = id.client.OwnerNodeId();
+  debug_info.owner_node_id = owner_node_id;
 
   if (RasterInvalidationTracking::IsTracingRasterInvalidations() &&
       raster_invalidation_tracking) {
     raster_invalidation_tracking->AddToLayerDebugInfo(debug_info);
     raster_invalidation_tracking->ClearInvalidations();
   }
+}
+
+static void UpdateLayerDebugInfo(
+    cc::Layer& layer,
+    const PaintChunk::Id& id,
+    const PaintArtifact& paint_artifact,
+    CompositingReasons compositing_reasons,
+    RasterInvalidationTracking* raster_invalidation_tracking) {
+  UpdateLayerDebugInfo(layer, id, paint_artifact.ClientDebugName(id.client_id),
+                       paint_artifact.ClientOwnerNodeId(id.client_id),
+                       compositing_reasons, raster_invalidation_tracking);
 }
 
 void PaintArtifactCompositor::UpdateDebugInfo() const {
@@ -1397,13 +1409,22 @@ void PaintArtifactCompositor::UpdateDebugInfo() const {
         ++content_layer_client_it;
         break;
     }
-    UpdateLayerDebugInfo(
-        *layer,
-        pending_layer.GetGraphicsLayer()
-            ? PaintChunk::Id(*pending_layer.GetGraphicsLayer(),
-                             DisplayItem::kUninitializedType)
-            : pending_layer.FirstPaintChunk().id,
-        GetCompositingReasons(pending_layer, previous_pending_layer), tracking);
+    if (pending_layer.GetGraphicsLayer()) {
+      UpdateLayerDebugInfo(
+          *layer,
+          PaintChunk::Id(pending_layer.GetGraphicsLayer()->Id(),
+                         DisplayItem::kUninitializedType),
+          pending_layer.GetGraphicsLayer()->DebugName(),
+          pending_layer.GetGraphicsLayer()->OwnerNodeId(),
+          GetCompositingReasons(pending_layer, previous_pending_layer),
+          tracking);
+    } else {
+      UpdateLayerDebugInfo(
+          *layer, pending_layer.FirstPaintChunk().id,
+          pending_layer.Chunks().GetPaintArtifact(),
+          GetCompositingReasons(pending_layer, previous_pending_layer),
+          tracking);
+    }
     previous_pending_layer = &pending_layer;
   }
 }

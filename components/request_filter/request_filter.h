@@ -29,9 +29,6 @@ class RequestFilter {
 
     net::HttpRequestHeaders headers_to_modify;
     std::set<std::string> headers_to_remove;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(RequestHeaderChanges);
   };
 
   using ResponseHeader = std::pair<std::string, std::string>;
@@ -45,9 +42,6 @@ class RequestFilter {
 
     ResponseHeaders headers_to_remove;
     ResponseHeaders headers_to_add;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(ResponseHeaderChanges);
   };
 
   // Types are sorted by order of priority. Higher value = higher priority;

@@ -6,12 +6,15 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "components/pdf/browser/pdf_web_contents_helper_client.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/referrer_type_converters.h"
+#include "pdf/pdf_features.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/pointer/touch_editing_controller.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -111,6 +114,21 @@ void PDFWebContentsHelper::SetPluginCanSave(bool can_save) {
   client_->SetPluginCanSave(web_contents(), can_save);
 }
 
+void PDFWebContentsHelper::GetPdfFindInPage(GetPdfFindInPageCallback callback) {
+  if (!base::FeatureList::IsEnabled(chrome_pdf::features::kPdfUnseasoned)) {
+    NOTREACHED();
+    return;
+  }
+
+  if (!find_factory_remote_) {
+    web_contents()
+        ->GetMainFrame()
+        ->GetRemoteAssociatedInterfaces()
+        ->GetInterface(&find_factory_remote_);
+  }
+  find_factory_remote_->GetPdfFindInPage(std::move(callback));
+}
+
 void PDFWebContentsHelper::DidScroll() {
   if (!touch_selection_controller_client_manager_)
     InitTouchSelectionClientManager();
@@ -196,10 +214,6 @@ void PDFWebContentsHelper::OnManagerWillDestroy(
   touch_selection_controller_client_manager_ = nullptr;
 }
 
-const char* PDFWebContentsHelper::GetType() {
-  return "PDFWebContentsHelper";
-}
-
 bool PDFWebContentsHelper::IsCommandIdEnabled(int command_id) const {
   // TODO(wjmaclean|dsinclair): Make PDFium send readability information in the
   // selection changed message?
@@ -225,10 +239,12 @@ void PDFWebContentsHelper::ExecuteCommand(int command_id, int event_flags) {
 }
 
 void PDFWebContentsHelper::RunContextMenu() {
-  content::RenderWidgetHostView* view =
-      web_contents()->GetRenderWidgetHostView();
+  content::RenderFrameHost* focused_frame = web_contents()->GetFocusedFrame();
+  if (!focused_frame)
+    return;
 
-  if (!view)
+  content::RenderWidgetHost* widget = focused_frame->GetRenderWidgetHost();
+  if (!widget || !widget->GetView())
     return;
 
   if (!touch_selection_controller_client_manager_)
@@ -244,10 +260,11 @@ void PDFWebContentsHelper::RunContextMenu() {
   gfx::PointF anchor_point =
       gfx::PointF(anchor_rect.CenterPoint().x(), anchor_rect.y());
 
-  gfx::PointF origin = view->TransformPointToRootCoordSpaceF(gfx::PointF());
+  gfx::PointF origin =
+      widget->GetView()->TransformPointToRootCoordSpaceF(gfx::PointF());
   anchor_point.Offset(-origin.x(), -origin.y());
-  view->GetRenderWidgetHost()->ShowContextMenuAtPoint(
-      gfx::ToRoundedPoint(anchor_point), ui::MENU_SOURCE_TOUCH_EDIT_MENU);
+  widget->ShowContextMenuAtPoint(gfx::ToRoundedPoint(anchor_point),
+                                 ui::MENU_SOURCE_TOUCH_EDIT_MENU);
 
   // Hide selection handles after getting rect-between-bounds from touch
   // selection controller; otherwise, rect would be empty and the above
@@ -299,6 +316,6 @@ void PDFWebContentsHelper::UpdateContentRestrictions(
   client_->UpdateContentRestrictions(web_contents(), content_restrictions);
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(PDFWebContentsHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PDFWebContentsHelper);
 
 }  // namespace pdf

@@ -108,7 +108,7 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
       } else if (IsWebGL()) {
         CreateCanvasResourceProviderWebGL();
       } else {
-        DCHECK(IsRenderingContext2D());
+        DCHECK(IsRenderingContext2D() || IsImageBitmapRenderingContext());
         CreateCanvasResourceProvider2D(hint);
       }
     }
@@ -393,9 +393,9 @@ IdentifiableToken CanvasRenderingContextHost::IdentifiabilityInputDigest(
     const CanvasRenderingContext* const context) const {
   const uint64_t context_digest =
       context ? context->IdentifiableTextToken().ToUkmMetricValue() : 0;
-  const uint64_t context_type =
-      context ? context->GetContextType()
-              : CanvasRenderingContext::kContextTypeUnknown;
+  const uint64_t context_type = static_cast<uint64_t>(
+      context ? context->GetRenderingAPI()
+              : CanvasRenderingContext::CanvasRenderingAPI::kUnknown);
   const bool encountered_skipped_ops =
       context && context->IdentifiabilityEncounteredSkippedOps();
   const bool encountered_sensitive_ops =

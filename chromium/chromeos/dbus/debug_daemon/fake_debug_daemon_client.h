@@ -27,6 +27,10 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) FakeDebugDaemonClient
     : public DebugDaemonClient {
  public:
   FakeDebugDaemonClient();
+
+  FakeDebugDaemonClient(const FakeDebugDaemonClient&) = delete;
+  FakeDebugDaemonClient& operator=(const FakeDebugDaemonClient&) = delete;
+
   ~FakeDebugDaemonClient() override;
 
   void Init(dbus::Bus* bus) override;
@@ -135,10 +139,13 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) FakeDebugDaemonClient
   std::string scheduler_configuration_name_;
   std::set<std::string> u2f_flags_;
   base::ObserverList<Observer> observers_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeDebugDaemonClient);
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when //chromeos/dbus moved to ash.
+namespace ash {
+using ::chromeos::FakeDebugDaemonClient;
+}  // namespace ash
 
 #endif  // CHROMEOS_DBUS_DEBUG_DAEMON_FAKE_DEBUG_DAEMON_CLIENT_H_

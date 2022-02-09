@@ -48,7 +48,6 @@ public class CachedFeatureFlags {
      */
     private static Map<String, Boolean> sDefaults =
             ImmutableMap.<String, Boolean>builder()
-                    .put(ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE, true)
                     .put(ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, false)
                     .put(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID, false)
                     .put(ChromeFeatureList.LENS_CAMERA_ASSISTED_SEARCH, false)
@@ -57,8 +56,13 @@ public class CachedFeatureFlags {
                     .put(ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED, false)
                     .put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE, true)
                     .put(ChromeFeatureList.EARLY_LIBRARY_LOAD, false)
-                    .put(ChromeFeatureList.ELASTIC_OVERSCROLL, false)
-                    .put(ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS, true)
+                    .put(ChromeFeatureList.ELASTIC_OVERSCROLL, true)
+                    .put(ChromeFeatureList.ELIDE_PRIORITIZATION_OF_PRE_NATIVE_BOOTSTRAP_TASKS,
+                            false)
+                    .put(ChromeFeatureList.ELIDE_TAB_PRELOAD_AT_STARTUP, false)
+                    .put(ChromeFeatureList
+                                    .GIVE_JAVA_UI_THREAD_DEFAULT_TASK_TRAITS_USER_BLOCKING_PRIORITY,
+                            false)
                     .put(ChromeFeatureList.IMMERSIVE_UI_MODE, false)
                     .put(ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT, true)
                     .put(ChromeFeatureList.START_SURFACE_ANDROID, false)
@@ -72,7 +76,7 @@ public class CachedFeatureFlags {
                     .put(ChromeFeatureList.TOOLBAR_USE_HARDWARE_BITMAP_DRAW, false)
                     .put(ChromeFeatureList.CLOSE_TAB_SUGGESTIONS, false)
                     .put(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA, false)
-                    .put(ChromeFeatureList.DYNAMIC_COLOR_ANDROID, false)
+                    .put(ChromeFeatureList.DYNAMIC_COLOR_ANDROID, true)
                     .put(ChromeFeatureList.INSTANT_START, false)
                     .put(ChromeFeatureList.TAB_TO_GTS_ANIMATION, true)
                     .put(ChromeFeatureList.TEST_DEFAULT_DISABLED, false)
@@ -87,13 +91,13 @@ public class CachedFeatureFlags {
                     .put(ChromeFeatureList.CCT_INCOGNITO, true)
                     .put(ChromeFeatureList.EXPERIMENTS_FOR_AGSA, true)
                     .put(ChromeFeatureList.APP_MENU_MOBILE_SITE_OPTION, false)
-                    .put(ChromeFeatureList.CLIPBOARD_SUGGESTION_CONTENT_HIDDEN, false)
                     .put(ChromeFeatureList.OPTIMIZATION_GUIDE_PUSH_NOTIFICATIONS, false)
                     .put(ChromeFeatureList.APP_TO_WEB_ATTRIBUTION, false)
                     .put(ChromeFeatureList.NEW_WINDOW_APP_MENU, true)
+                    .put(ChromeFeatureList.CCT_RESIZABLE_90_MAXIMUM_HEIGHT, false)
+                    .put(ChromeFeatureList.CCT_RESIZABLE_ALLOW_RESIZE_BY_USER_GESTURE, false)
                     .put(ChromeFeatureList.CCT_RESIZABLE_FOR_FIRST_PARTIES, true)
                     .put(ChromeFeatureList.CCT_RESIZABLE_FOR_THIRD_PARTIES, false)
-                    .put(ChromeFeatureList.CCT_RESIZABLE_90_MAXIMUM_HEIGHT, false)
                     .put(ChromeFeatureList.INSTANCE_SWITCHER, true)
                     .put(ChromeFeatureList.WEB_APK_TRAMPOLINE_ON_INITIAL_INTENT, true)
                     .build();
@@ -116,8 +120,6 @@ public class CachedFeatureFlags {
                             ChromePreferenceKeys.FLAGS_CACHED_COMMAND_LINE_ON_NON_ROOTED_ENABLED)
                     .put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE,
                             ChromePreferenceKeys.FLAGS_CACHED_DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE)
-                    .put(ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS,
-                            ChromePreferenceKeys.FLAGS_CACHED_PRIORITIZE_BOOTSTRAP_TASKS)
                     .put(ChromeFeatureList.IMMERSIVE_UI_MODE,
                             ChromePreferenceKeys.FLAGS_CACHED_IMMERSIVE_UI_MODE_ENABLED)
                     .put(ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT,
@@ -452,7 +454,7 @@ public class CachedFeatureFlags {
     public static void resetFlagsForTesting() {
         sValuesReturned = new ValuesReturned();
         sValuesOverridden.clear();
-        sSafeMode.clearForTesting();
+        sSafeMode.clearMemoryForTesting();
     }
 
     @VisibleForTesting

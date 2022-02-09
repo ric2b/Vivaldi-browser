@@ -26,7 +26,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gfx/transform.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace pdf {
 
@@ -59,6 +59,9 @@ class LineHelper {
       : text_runs_(text_runs) {
     StartNewLine(0);
   }
+
+  LineHelper(const LineHelper&) = delete;
+  LineHelper& operator=(const LineHelper&) = delete;
 
   void StartNewLine(size_t current_index) {
     DCHECK(current_index == 0 || current_index < text_runs_.size());
@@ -138,8 +141,6 @@ class LineHelper {
   float accumulated_weight_top_;
   float accumulated_weight_bottom_;
   float accumulated_width_;
-
-  DISALLOW_COPY_AND_ASSIGN(LineHelper);
 };
 
 void ComputeParagraphAndHeadingThresholds(
@@ -223,17 +224,17 @@ ui::AXNode* GetStaticTextNodeFromNode(ui::AXNode* node) {
     return nullptr;
   ui::AXNode* static_node = node;
   // Get the static text from the link node.
-  if (node->data().role == ax::mojom::Role::kLink &&
+  if (node->GetRole() == ax::mojom::Role::kLink &&
       node->children().size() == 1) {
     static_node = node->children()[0];
   }
   // Get the static text from the highlight node.
-  if (node->data().role == ax::mojom::Role::kPdfActionableHighlight &&
+  if (node->GetRole() == ax::mojom::Role::kPdfActionableHighlight &&
       !node->children().empty()) {
     static_node = node->children()[0];
   }
   // If it's static text node, then it holds text.
-  if (static_node && static_node->data().role == ax::mojom::Role::kStaticText)
+  if (static_node && static_node->GetRole() == ax::mojom::Role::kStaticText)
     return static_node;
   return nullptr;
 }
@@ -1135,6 +1136,7 @@ PdfAccessibilityTree::PdfAccessibilityTree(
     : content::RenderFrameObserver(render_frame),
       action_handler_(action_handler) {
   DCHECK(action_handler_);
+  MaybeHandleAccessibilityChange();
 }
 
 PdfAccessibilityTree::~PdfAccessibilityTree() {
@@ -1508,7 +1510,14 @@ PdfAccessibilityTree::GetRenderAccessibilityIfEnabled() {
   // If RenderAccessibility is unable to generate valid positive IDs,
   // we shouldn't use it. This can happen if Blink accessibility is disabled
   // after we started generating the accessible PDF.
+  base::WeakPtr<PdfAccessibilityTree> weak_this =
+      weak_ptr_factory_.GetWeakPtr();
   if (render_accessibility->GenerateAXID() <= 0)
+    return nullptr;
+
+  // GenerateAXID() above can cause self deletion. Returning nullptr will cause
+  // callers to stop doing work.
+  if (!weak_this)
     return nullptr;
 
   return render_accessibility;
@@ -1601,6 +1610,11 @@ std::unique_ptr<ui::AXActionTarget> PdfAccessibilityTree::CreateActionTarget(
   return std::make_unique<PdfAXActionTarget>(target_node, this);
 }
 
+void PdfAccessibilityTree::AccessibilityModeChanged(
+    const ui::AXMode& /*mode*/) {
+  MaybeHandleAccessibilityChange();
+}
+
 void PdfAccessibilityTree::OnDestruct() {}
 
 bool PdfAccessibilityTree::ShowContextMenu() {
@@ -1625,6 +1639,11 @@ PdfAccessibilityTree::GetPdfAnnotationInfoFromAXNode(int32_t ax_node_id) const {
     return absl::nullopt;
 
   return AnnotationInfo(iter->second.page_index, iter->second.annotation_index);
+}
+
+void PdfAccessibilityTree::MaybeHandleAccessibilityChange() {
+  if (GetRenderAccessibility())
+    action_handler_->EnableAccessibility();
 }
 
 }  // namespace pdf

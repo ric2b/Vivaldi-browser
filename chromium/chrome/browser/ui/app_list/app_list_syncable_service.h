@@ -32,6 +32,10 @@ class AppServiceAppModelBuilder;
 class ChromeAppListItem;
 class Profile;
 
+namespace ash {
+enum class AppListSortOrder;
+}
+
 namespace extensions {
 class ExtensionRegistry;
 class ExtensionSystem;
@@ -46,6 +50,7 @@ class PrefRegistrySyncable;
 }
 
 namespace app_list {
+class AppListReorderDelegate;
 
 // Keyed Service that owns, stores, and syncs an AppListModel for a profile.
 class AppListSyncableService : public syncer::SyncableService,
@@ -54,6 +59,8 @@ class AppListSyncableService : public syncer::SyncableService,
   struct SyncItem {
     SyncItem(const std::string& id,
              sync_pb::AppListSpecifics::AppListItemType type);
+    SyncItem(const SyncItem&) = delete;
+    SyncItem& operator=(const SyncItem&) = delete;
     ~SyncItem();
     const std::string item_id;
     sync_pb::AppListSpecifics::AppListItemType item_type;
@@ -98,6 +105,9 @@ class AppListSyncableService : public syncer::SyncableService,
 
   using SyncItemMap = std::map<std::string, std::unique_ptr<SyncItem>>;
 
+  // No-op constructor for tests.
+  AppListSyncableService();
+
   // Populates the model when |profile|'s extension system is ready.
   explicit AppListSyncableService(Profile* profile);
   AppListSyncableService(const AppListSyncableService&) = delete;
@@ -125,11 +135,14 @@ class AppListSyncableService : public syncer::SyncableService,
   // Removes sync item matching |id| after item uninstall.
   void RemoveUninstalledItem(const std::string& id);
 
+  // Sorts items following the given order.
+  void SortSyncItems(ash::AppListSortOrder order);
+
   // Called when properties of an item may have changed, e.g. default/oem state.
   void UpdateItem(const ChromeAppListItem* app_item);
 
   // Returns the existing sync item matching |id| or NULL.
-  const SyncItem* GetSyncItem(const std::string& id) const;
+  virtual const SyncItem* GetSyncItem(const std::string& id) const;
 
   // Transfers app attributes, such as parent folder id, position in App
   // Launcher and pin position on the shelf from one app to another app. Target
@@ -150,18 +163,19 @@ class AppListSyncableService : public syncer::SyncableService,
   // Returns optional pin position for the app specified by |app_id|. If app is
   // not synced or does not have associated pin position then empty ordinal is
   // returned.
-  syncer::StringOrdinal GetPinPosition(const std::string& app_id);
+  virtual syncer::StringOrdinal GetPinPosition(const std::string& app_id);
 
   // Sets pin position and how it is pinned for the app specified by |app_id|.
   // Empty |item_pin_ordinal| indicates that the app has no pin.
-  void SetPinPosition(const std::string& app_id,
-                      const syncer::StringOrdinal& item_pin_ordinal);
+  virtual void SetPinPosition(const std::string& app_id,
+                              const syncer::StringOrdinal& item_pin_ordinal);
 
   // Gets the app list model updater.
   AppListModelUpdater* GetModelUpdater();
 
   // Returns true if this service was initialized.
-  bool IsInitialized() const;
+  // Virtual for testing.
+  virtual bool IsInitialized() const;
 
   // Signalled when AppListSyncableService is Initialized.
   const base::OneShotEvent& on_initialized() const { return on_initialized_; }
@@ -181,7 +195,9 @@ class AppListSyncableService : public syncer::SyncableService,
 
   void InstallDefaultPageBreaksForTest();
 
-  const SyncItemMap& sync_items() const { return sync_items_; }
+  void PopulateSyncItemsForTest(std::vector<std::unique_ptr<SyncItem>>&& items);
+
+  virtual const SyncItemMap& sync_items() const;
 
   // syncer::SyncableService
   void WaitUntilReadyToSync(base::OnceClosure done) override;
@@ -359,6 +375,8 @@ class AppListSyncableService : public syncer::SyncableService,
   // Only set for first time user for tablet form devices.
   base::OnceClosure install_default_page_breaks_;
   base::OnceClosure wait_until_ready_to_sync_cb_;
+
+  std::unique_ptr<AppListReorderDelegate> reorder_delegate_;
 
   // List of observers.
   base::ObserverList<Observer> observer_list_;

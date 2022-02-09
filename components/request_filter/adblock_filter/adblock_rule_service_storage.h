@@ -7,9 +7,9 @@
 #include <string>
 
 #include "base/files/important_file_writer.h"
+#include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
-#include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 
 namespace base {
@@ -50,8 +50,9 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
   RuleServiceStorage(content::BrowserContext* context,
                      RuleService* rule_service,
                      base::SequencedTaskRunner* file_io_task_runner);
-
   ~RuleServiceStorage() override;
+  RuleServiceStorage(const RuleServiceStorage&) = delete;
+  RuleServiceStorage& operator=(const RuleServiceStorage&) = delete;
 
   // Save the state of the service's rule sources at the earliest opportunity.
   void ScheduleSave();
@@ -79,8 +80,6 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
   base::ImportantFileWriter writer_;
 
   base::WeakPtrFactory<RuleServiceStorage> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(RuleServiceStorage);
 };
 
 }  // namespace adblock_filter

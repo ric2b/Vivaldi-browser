@@ -12,6 +12,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -22,8 +23,6 @@
 #include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/policy/core/common/management/management_service.h"
-#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/core/common/policy_test_utils.h"
@@ -321,22 +320,6 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
   bool policy_hanging_ = false;
   int dice_helper_created_count_ = 0;
   int dice_helper_deleted_count_ = 0;
-
-  // The sync service and waits for policies to load before starting for
-  // enterprise users, managed devices and browsers. This means that services
-  // depending on it might have to wait too. By setting the management
-  // authorities to none by default, we assume that the default test is on an
-  // unmanaged device and browser thus we avoid unnecessarily waiting for
-  // policies to load. Tests expecting either an enterprise user, a managed
-  // device or browser should add the appropriate management authorities.
-  policy::ScopedManagementServiceOverrideForTesting browser_management_ =
-      policy::ScopedManagementServiceOverrideForTesting(
-          policy::ManagementTarget::BROWSER,
-          base::flat_set<policy::EnterpriseManagementAuthority>());
-  policy::ScopedManagementServiceOverrideForTesting platform_management_ =
-      policy::ScopedManagementServiceOverrideForTesting(
-          policy::ManagementTarget::PLATFORM,
-          base::flat_set<policy::EnterpriseManagementAuthority>());
 };
 
 TestDiceTurnSyncOnHelperDelegate::TestDiceTurnSyncOnHelperDelegate(
@@ -479,13 +462,14 @@ class UserPolicySigninServiceSyncNotRequiredTest
 };
 
 // crbug.com/1230268 not working on Lacros.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// TODO(crbug.com/1254962): flaky on Mac builders
+#if BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_MAC)
 #define MAYBE_AcceptManagementDeclineSync DISABLED_AcceptManagementDeclineSync
 #else
 #define MAYBE_AcceptManagementDeclineSync AcceptManagementDeclineSync
 #endif
 IN_PROC_BROWSER_TEST_F(UserPolicySigninServiceSyncNotRequiredTest,
-                       AcceptManagementDeclineSync) {
+                       MAYBE_AcceptManagementDeclineSync) {
   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kShowHomeButton));
 
   // Signin and show sync confirmation dialog.

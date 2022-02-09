@@ -16,9 +16,8 @@
 #include "chrome/browser/ui/views/frame/browser_frame_view_linux.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/extensions/x11_extension.h"
@@ -33,18 +32,11 @@
 
 namespace {
 
-#if defined(USE_DBUS_MENU)
 bool CreateGlobalMenuBar() {
-#if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform()) {
-    return ui::OzonePlatform::GetInstance()
-        ->GetPlatformProperties()
-        .supports_global_application_menus;
-  }
-#endif
-  return true;
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .supports_global_application_menus;
 }
-#endif
 
 }  // namespace
 
@@ -69,6 +61,10 @@ BrowserDesktopWindowTreeHostLinux::BrowserDesktopWindowTreeHostLinux(
   browser_frame->set_frame_type(browser_frame->UseCustomFrame()
                                     ? views::Widget::FrameType::kForceCustom
                                     : views::Widget::FrameType::kForceNative);
+
+  theme_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
+  if (auto* linux_ui = views::LinuxUI::instance())
+    scale_observation_.Observe(linux_ui);
 }
 
 BrowserDesktopWindowTreeHostLinux::~BrowserDesktopWindowTreeHostLinux() =
@@ -89,6 +85,11 @@ int BrowserDesktopWindowTreeHostLinux::GetMinimizeButtonOffset() const {
 
 bool BrowserDesktopWindowTreeHostLinux::UsesNativeSystemMenu() const {
   return false;
+}
+
+void BrowserDesktopWindowTreeHostLinux::FrameTypeChanged() {
+  DesktopWindowTreeHostPlatform::FrameTypeChanged();
+  UpdateFrameHints();
 }
 
 bool BrowserDesktopWindowTreeHostLinux::SupportsMouseLock() {
@@ -161,15 +162,14 @@ void BrowserDesktopWindowTreeHostLinux::UpdateFrameHints() {
   if (SupportsClientFrameShadow()) {
     // Set the frame decoration insets.
     auto insets = layout->MirroredFrameBorderInsets();
-    window->SetDecorationInsets(showing_frame
-                                    ? gfx::ScaleToCeiledInsets(insets, scale)
-                                    : gfx::Insets());
+    auto insets_px = gfx::ScaleToCeiledInsets(insets, scale);
+    window->SetDecorationInsets(showing_frame ? &insets_px : nullptr);
 
     // Set the input region.
     gfx::Rect input_bounds(widget_size);
-    if (showing_frame)
-      input_bounds.Inset(insets + layout->GetInputInsets());
-    window->SetInputRegion(gfx::ScaleToEnclosingRect(input_bounds, scale));
+    input_bounds.Inset(insets + layout->GetInputInsets());
+    input_bounds = gfx::ScaleToEnclosingRect(input_bounds, scale);
+    window->SetInputRegion(showing_frame ? &input_bounds : nullptr);
   }
 
   if (window->IsTranslucentWindowOpacitySupported()) {
@@ -215,13 +215,13 @@ void BrowserDesktopWindowTreeHostLinux::UpdateFrameHints() {
       std::vector<gfx::Rect> opaque_region;
       for (SkRegion::Iterator i(region); !i.done(); i.next())
         opaque_region.push_back(gfx::SkIRectToRect(i.rect()));
-      window->SetOpaqueRegion(opaque_region);
+      window->SetOpaqueRegion(&opaque_region);
     } else {
-      gfx::RectF opaque_bounds((gfx::Rect(widget_size)));
-      opaque_bounds.Scale(scale);
-      window->SetOpaqueRegion({gfx::ToEnclosedRect(opaque_bounds)});
+      window->SetOpaqueRegion(nullptr);
     }
   }
+
+  SizeConstraintsChanged();
 #endif
 }
 
@@ -285,6 +285,15 @@ void BrowserDesktopWindowTreeHostLinux::OnWindowStateChanged(
     browser_view_->FullscreenStateChanging();
   }
 
+  UpdateFrameHints();
+}
+
+void BrowserDesktopWindowTreeHostLinux::OnNativeThemeUpdated(
+    ui::NativeTheme* observed_theme) {
+  UpdateFrameHints();
+}
+
+void BrowserDesktopWindowTreeHostLinux::OnDeviceScaleFactorChanged() {
   UpdateFrameHints();
 }
 

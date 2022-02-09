@@ -46,10 +46,7 @@
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/hash_traits.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
-
-#if BUILDFLAG(USE_V8_OILPAN)
 #include "v8/include/cppgc/internal/api-constants.h"
-#endif
 
 namespace blink {
 
@@ -615,14 +612,10 @@ TEST_F(HeapTest, ThreadPersistent) {
 
 namespace {
 size_t GetOverallObjectSize() {
-#if BUILDFLAG(USE_V8_OILPAN)
   return ThreadState::Current()
       ->cpp_heap()
       .CollectStatistics(cppgc::HeapStatistics::DetailLevel::kDetailed)
       .used_size_bytes;
-#else   // !BUILDFLAG(USE_V8_OILPAN)
-  return ThreadState::Current()->Heap().ObjectPayloadSizeForTesting();
-#endif  // !BUILDFLAG(USE_V8_OILPAN)
 }
 }  // namespace
 
@@ -901,10 +894,8 @@ class Container final : public GarbageCollected<Container> {
 }  // namespace
 
 TEST_F(HeapTest, HeapVectorOnStackLargeObjectPageSized) {
-#if BUILDFLAG(USE_V8_OILPAN)
   static constexpr size_t kLargeObjectSizeThreshold =
       cppgc::internal::api_constants::kLargeObjectSizeThreshold;
-#endif  // !BUILDFLAG(USE_V8_OILPAN)
   ClearOutOldGarbage();
   using Container = HeapVector<Member<IntWrapper>>;
   Container vector;
@@ -1613,8 +1604,6 @@ void OrderedSetHelper(bool strong) {
 }  // namespace
 
 TEST_F(HeapTest, HeapWeakLinkedHashSet) {
-  ClearOutOldGarbage();
-  OrderedSetHelper<HeapListHashSet<Member<IntWrapper>>>(true);
   ClearOutOldGarbage();
   OrderedSetHelper<HeapLinkedHashSet<Member<IntWrapper>>>(true);
   ClearOutOldGarbage();
@@ -2719,10 +2708,12 @@ TEST_F(HeapTest, EphemeronsPointToEphemerons) {
   for (int i = 0; i < 100; i++) {
     EXPECT_EQ(1u, wrapper->GetMap().size());
 
+    EphemeronWrapper::Map::iterator it;
     if (i == 49)
-      wrapper = wrapper->GetMap().DeprecatedAtOrEmptyValue(key2);
+      it = wrapper->GetMap().find(key2);
     else
-      wrapper = wrapper->GetMap().DeprecatedAtOrEmptyValue(key);
+      it = wrapper->GetMap().find(key);
+    wrapper = it != wrapper->GetMap().end() ? it->value : nullptr;
   }
   EXPECT_EQ(nullptr, wrapper);
 
@@ -2732,7 +2723,8 @@ TEST_F(HeapTest, EphemeronsPointToEphemerons) {
   wrapper = chain;
   for (int i = 0; i < 50; i++) {
     EXPECT_EQ(i == 49 ? 0u : 1u, wrapper->GetMap().size());
-    wrapper = wrapper->GetMap().DeprecatedAtOrEmptyValue(key);
+    auto it = wrapper->GetMap().find(key);
+    wrapper = it != wrapper->GetMap().end() ? it->value : nullptr;
   }
   EXPECT_EQ(nullptr, wrapper);
 
@@ -2814,11 +2806,7 @@ TEST_F(HeapTest, IndirectStrongToWeak) {
 }
 
 class AllocatesOnAssignment : public GarbageCollected<AllocatesOnAssignment> {
-#if BUILDFLAG(USE_V8_OILPAN)
   static constexpr auto kHashTableDeletedValue = cppgc::kSentinelPointer;
-#else   // !USE_V8_OILPAN
-  static constexpr auto kHashTableDeletedValue = WTF::kHashTableDeletedValue;
-#endif  // !USE_V8_OILPAN
 
  public:
   AllocatesOnAssignment(std::nullptr_t) : value_(nullptr) {}
@@ -2833,9 +2821,6 @@ class AllocatesOnAssignment : public GarbageCollected<AllocatesOnAssignment> {
   enum DeletedMarker { kDeletedValue };
 
   AllocatesOnAssignment(const AllocatesOnAssignment& other) {
-#if !BUILDFLAG(USE_V8_OILPAN)
-    DCHECK(!ThreadState::Current()->IsGCForbidden());
-#endif
     TestSupportingGC::ConservativelyCollectGarbage();
     value_ = MakeGarbageCollected<IntWrapper>(other.value_->Value());
   }
@@ -2844,11 +2829,7 @@ class AllocatesOnAssignment : public GarbageCollected<AllocatesOnAssignment> {
       : value_(kHashTableDeletedValue) {}
 
   inline bool IsDeleted() const {
-#if BUILDFLAG(USE_V8_OILPAN)
     return value_ == cppgc::kSentinelPointer;
-#else   // !USE_V8_OILPAN
-    return value_.IsHashTableDeletedValue();
-#endif  // !USE_V8_OILPAN
   }
 
   void Trace(Visitor* visitor) const { visitor->Trace(value_); }
@@ -3196,14 +3177,6 @@ TEST_F(HeapTest, HeapHashMapCallsDestructor) {
 namespace {
 class FakeCSSValue : public GarbageCollected<FakeCSSValue> {
  public:
-#if !BUILDFLAG(USE_V8_OILPAN)
-  template <typename T>
-  static void* AllocateObject(size_t size) {
-    return ThreadState::Current()->Heap().AllocateOnArenaIndex(
-        ThreadState::Current(), size, BlinkGC::kCSSValueArenaIndex,
-        GCInfoTrait<GCInfoFoldedType<FakeCSSValue>>::Index(), "FakeCSSValue");
-  }
-#endif
   virtual void Trace(Visitor*) const {}
   char* Data() { return data_; }
 
@@ -3214,14 +3187,6 @@ class FakeCSSValue : public GarbageCollected<FakeCSSValue> {
 
 class FakeNode : public GarbageCollected<FakeNode> {
  public:
-#if !BUILDFLAG(USE_V8_OILPAN)
-  template <typename T>
-  static void* AllocateObject(size_t size) {
-    return ThreadState::Current()->Heap().AllocateOnArenaIndex(
-        ThreadState::Current(), size, BlinkGC::kNodeArenaIndex,
-        GCInfoTrait<GCInfoFoldedType<FakeNode>>::Index(), "FakeNode");
-  }
-#endif
   virtual void Trace(Visitor*) const {}
   char* Data() { return data_; }
 
@@ -3231,7 +3196,6 @@ class FakeNode : public GarbageCollected<FakeNode> {
 };
 }  // namespace
 
-#if BUILDFLAG(USE_V8_OILPAN)
 }  // namespace blink
 
 namespace cppgc {
@@ -3249,7 +3213,6 @@ struct SpaceTrait<blink::FakeNode> {
 }  // namespace cppgc
 
 namespace blink {
-#endif
 
 TEST_F(HeapTest, CollectNodeAndCssStatistics) {
   PreciselyCollectGarbage();

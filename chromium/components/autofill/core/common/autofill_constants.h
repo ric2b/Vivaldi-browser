@@ -32,7 +32,24 @@ constexpr size_t kMaxParseableFields = 200;
 
 // The maximum number of frames we are willing to parse, due to computational
 // costs.
-constexpr size_t kMaxParseableFrames = 20;
+constexpr size_t MaxParseableChildFrames(size_t frame_depth) {
+  switch (frame_depth) {
+    case 0:
+      return 20;
+    case 1:
+      return 10;
+    case 2:
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+// The maximum number of frames in an entire frame tree we are willing to parse,
+// due to computational costs.
+constexpr size_t kMaxParseableFramesInTree =
+    MaxParseableChildFrames(0) *
+    (1 + MaxParseableChildFrames(1) * (1 + MaxParseableChildFrames(2)));
 
 // The maximum number of allowed calls to CreditCard::GetMatchingTypes() and
 // AutofillProfile::GetMatchingTypeAndValidities().
@@ -57,14 +74,14 @@ constexpr int kCrossFrameFill = -2;
 // Options bitmask values for AutofillHostMsg_ShowPasswordSuggestions IPC
 enum ShowPasswordSuggestionsOptions {
   SHOW_ALL = 1 << 0 /* show all credentials, not just ones matching username */,
-  IS_PASSWORD_FIELD = 1 << 1 /* input field is a password field */
+  IS_PASSWORD_FIELD = 1 << 1 /* input field is a password field */,
+  ACCEPTS_WEBAUTHN_CREDENTIALS =
+      1 << 2 /* input field is marked to accept webauthn credentials */,
 };
 
 // Constants for the soft/hard deletion of Autofill data.
-constexpr base::TimeDelta kDisusedDataModelTimeDelta =
-    base::TimeDelta::FromDays(180);
-constexpr base::TimeDelta kDisusedDataModelDeletionTimeDelta =
-    base::TimeDelta::FromDays(395);
+constexpr base::TimeDelta kDisusedDataModelTimeDelta = base::Days(180);
+constexpr base::TimeDelta kDisusedDataModelDeletionTimeDelta = base::Days(395);
 
 // Returns if the entry with the given |use_date| is deletable? (i.e. has not
 // been used for a long time).

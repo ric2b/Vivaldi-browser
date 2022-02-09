@@ -60,7 +60,8 @@ class PluginVmManagerImplTest : public testing::Test {
         testing_profile_.get());
     shelf_model_ = std::make_unique<ash::ShelfModel>();
     chrome_shelf_controller_ = std::make_unique<ChromeShelfController>(
-        testing_profile_.get(), shelf_model_.get());
+        testing_profile_.get(), shelf_model_.get(),
+        /*shelf_item_factory=*/nullptr);
     chrome_shelf_controller_->SetProfileForTest(testing_profile_.get());
     chrome_shelf_controller_->SetShelfControllerHelperForTest(
         std::make_unique<ShelfControllerHelper>(testing_profile_.get()));
@@ -68,6 +69,9 @@ class PluginVmManagerImplTest : public testing::Test {
     histogram_tester_ = std::make_unique<base::HistogramTester>();
     chromeos::DlcserviceClient::InitializeFake();
   }
+
+  PluginVmManagerImplTest(const PluginVmManagerImplTest&) = delete;
+  PluginVmManagerImplTest& operator=(const PluginVmManagerImplTest&) = delete;
 
   ~PluginVmManagerImplTest() override {
     chromeos::DlcserviceClient::Shutdown();
@@ -142,9 +146,6 @@ class PluginVmManagerImplTest : public testing::Test {
   std::unique_ptr<ash::ShelfModel> shelf_model_;
   std::unique_ptr<ChromeShelfController> chrome_shelf_controller_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PluginVmManagerImplTest);
 };
 
 TEST_F(PluginVmManagerImplTest, LaunchPluginVmRequiresPluginVmAllowed) {

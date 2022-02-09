@@ -26,11 +26,11 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/account_manager_facade_factory.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/bad_message.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/printing/background_printing_manager.h"
+#include "chrome/browser/printing/prefs_util.h"
 #include "chrome/browser/printing/print_error_dialog.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
@@ -60,7 +60,6 @@
 #include "components/cloud_devices/common/cloud_devices_urls.h"
 #include "components/cloud_devices/common/printer_description.h"
 #include "components/prefs/pref_service.h"
-#include "components/printing/browser/prefs_util.h"
 #include "components/printing/common/cloud_print_cdd_conversion.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/browser_context.h"
@@ -82,6 +81,7 @@
 #if defined(OS_CHROMEOS)
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
 #include "components/account_manager_core/account_manager_facade.h"
+#include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -207,6 +207,10 @@ const char kIsDriveMounted[] = "isDriveMounted";
 // for a PDF job.
 const char kPrintPdfAsImageAvailability[] = "printPdfAsImageAvailability";
 #endif  // defined(OS_WIN) || defined(OS_MAC)
+// Name of dictionary pref holding policy value for whether the
+// "Print as image" option should default to set in Print Preview for
+// a PDF job.
+const char kPrintPdfAsImage[] = "printPdfAsImage";
 
 // Get the print job settings dictionary from |json_str|.
 // Returns |base::Value()| on failure.
@@ -342,6 +346,19 @@ base::Value PoliciesToValue(crosapi::mojom::PoliciesPtr ptr) {
   if (!pin_policy.DictEmpty())
     policies.SetKey(kPin, std::move(pin_policy));
 
+  base::Value print_as_image_for_pdf_default_policy(
+      base::Value::Type::DICTIONARY);
+  if (ptr->default_print_pdf_as_image !=
+      crosapi::mojom::Policies::OptionalBool::kUnset) {
+    print_as_image_for_pdf_default_policy.SetBoolKey(
+        kDefaultMode, ptr->default_print_pdf_as_image ==
+                          crosapi::mojom::Policies::OptionalBool::kTrue);
+  }
+  if (!print_as_image_for_pdf_default_policy.DictEmpty()) {
+    policies.SetKey(kPrintPdfAsImage,
+                    std::move(print_as_image_for_pdf_default_policy));
+  }
+
   return policies;
 }
 
@@ -402,6 +419,17 @@ base::Value GetPolicies(const PrefService& prefs) {
   }
 #endif  // defined(OS_WIN) || defined(OS_MAC)
 
+  base::Value print_as_image_for_pdf_default_policy(
+      base::Value::Type::DICTIONARY);
+  if (prefs.HasPrefPath(prefs::kPrintPdfAsImageDefault)) {
+    print_as_image_for_pdf_default_policy.SetBoolKey(
+        kDefaultMode, prefs.GetBoolean(prefs::kPrintPdfAsImageDefault));
+  }
+  if (!print_as_image_for_pdf_default_policy.DictEmpty()) {
+    policies.SetKey(kPrintPdfAsImage,
+                    std::move(print_as_image_for_pdf_default_policy));
+  }
+
   return policies;
 }
 #endif  // defined(OS_CHROMEOS)
@@ -436,50 +464,50 @@ PrintPreviewHandler::PrintPreviewHandler() {
 PrintPreviewHandler::~PrintPreviewHandler() = default;
 
 void PrintPreviewHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getPrinters",
       base::BindRepeating(&PrintPreviewHandler::HandleGetPrinters,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getPreview", base::BindRepeating(&PrintPreviewHandler::HandleGetPreview,
                                         base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "print", base::BindRepeating(&PrintPreviewHandler::HandlePrint,
                                    base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getPrinterCapabilities",
       base::BindRepeating(&PrintPreviewHandler::HandleGetPrinterCapabilities,
                           base::Unretained(this)));
 #if BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "showSystemDialog",
       base::BindRepeating(&PrintPreviewHandler::HandleShowSystemDialog,
                           base::Unretained(this)));
 #endif
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "signIn", base::BindRepeating(&PrintPreviewHandler::HandleSignin,
                                     base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "closePrintPreviewDialog",
       base::BindRepeating(&PrintPreviewHandler::HandleClosePreviewDialog,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "hidePreview",
       base::BindRepeating(&PrintPreviewHandler::HandleHidePreview,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "cancelPendingPrintRequest",
       base::BindRepeating(&PrintPreviewHandler::HandleCancelPendingPrintRequest,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "saveAppState",
       base::BindRepeating(&PrintPreviewHandler::HandleSaveAppState,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getInitialSettings",
       base::BindRepeating(&PrintPreviewHandler::HandleGetInitialSettings,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "managePrinters",
       base::BindRepeating(&PrintPreviewHandler::HandleManagePrinters,
                           base::Unretained(this)));
@@ -669,7 +697,7 @@ void PrintPreviewHandler::HandleGetPrinterCapabilities(
 }
 
 void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
-  DCHECK_EQ(2U, args->GetSize());
+  DCHECK_EQ(2U, args->GetList().size());
   std::string callback_id;
   std::string json_str;
 
@@ -783,9 +811,7 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
     PrintDocumentTypeBuckets doc_type =
         is_pdf ? PrintDocumentTypeBuckets::kPdfDocument
                : PrintDocumentTypeBuckets::kHtmlDocument;
-    size_t average_page_size_in_kb = data->size() / page_count;
-    average_page_size_in_kb /= 1024;
-    ReportPrintDocumentTypeAndSizeHistograms(doc_type, average_page_size_in_kb);
+    ReportPrintDocumentTypeHistograms(doc_type);
   }
   ReportUserActionHistogram(user_action);
 
@@ -1232,7 +1258,7 @@ void PrintPreviewHandler::OnAddedPrinters(mojom::PrinterType printer_type,
 
   if (printer_type == mojom::PrinterType::kLocal &&
       !has_logged_printers_count_) {
-    ReportNumberOfPrinters(printers.GetSize());
+    ReportNumberOfPrinters(printers.GetList().size());
     has_logged_printers_count_ = true;
   }
 }

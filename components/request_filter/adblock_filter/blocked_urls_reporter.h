@@ -36,6 +36,8 @@ class BlockedUrlsReporter {
   BlockedUrlsReporter(BlockedDomains blocked_domains,
                       base::RepeatingClosure schedule_save);
   ~BlockedUrlsReporter();
+  BlockedUrlsReporter(const BlockedUrlsReporter&) = delete;
+  BlockedUrlsReporter& operator=(const BlockedUrlsReporter&) = delete;
 
   base::WeakPtr<BlockedUrlsReporter> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -72,9 +74,8 @@ class BlockedUrlsReporter {
 
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<BlockedUrlsReporter> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(BlockedUrlsReporter);
 };
+
 }  // namespace adblock_filter
 
 #endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_BLOCKED_URLS_REPORTER_H_

@@ -67,6 +67,8 @@ class VivaldiWindowClientView : public views::ClientView {
                           views::View* contents_view,
                           VivaldiBrowserWindow* window)
       : views::ClientView(widget, contents_view), window_(window) {}
+  VivaldiWindowClientView(const VivaldiWindowClientView&) = delete;
+  VivaldiWindowClientView& operator=(const VivaldiWindowClientView&) = delete;
 
   // views::ClientView:
   views::CloseRequestResult OnWindowCloseRequested() override {
@@ -77,7 +79,6 @@ class VivaldiWindowClientView : public views::ClientView {
 
  private:
   VivaldiBrowserWindow* const window_;
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWindowClientView);
 };
 
 const int kLargeIconSizeViv = 256;

@@ -19,6 +19,8 @@ class VivaldiWebSource : public content::URLDataSource {
  public:
   explicit VivaldiWebSource(Profile* profile);
   ~VivaldiWebSource() override;
+  VivaldiWebSource(const VivaldiWebSource&) = delete;
+  VivaldiWebSource& operator=(const VivaldiWebSource&) = delete;
 
   // content::URLDataSource implementation.
   std::string GetSource() override;
@@ -35,8 +37,6 @@ class VivaldiWebSource : public content::URLDataSource {
                                  std::string& data);
 
   base::WeakPtrFactory<VivaldiWebSource> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWebSource);
 };
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_SOURCE_H_

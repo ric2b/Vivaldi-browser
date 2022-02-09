@@ -25,8 +25,10 @@
 
 class ChromeBookmarkReader : public ChromeBookmarkFileReader {
  public:
-  ChromeBookmarkReader() {}
-  ~ChromeBookmarkReader() override {}
+  ChromeBookmarkReader() = default;
+  ~ChromeBookmarkReader() override = default;
+  ChromeBookmarkReader(const ChromeBookmarkReader&) = delete;
+  ChromeBookmarkReader& operator=(const ChromeBookmarkReader&) = delete;
 
   void AddBookmark(const std::vector<std::u16string>& current_folder,
                    const base::DictionaryValue& entries,
@@ -49,8 +51,6 @@ class ChromeBookmarkReader : public ChromeBookmarkFileReader {
  private:
   std::vector<std::u16string> current_folder_;
   std::vector<ImportedBookmarkEntry> bookmarks_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeBookmarkReader);
 };
 
 void ChromeBookmarkReader::HandleEntry(const std::string& category,

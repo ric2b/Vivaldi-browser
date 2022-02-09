@@ -469,7 +469,7 @@ TEST_F(FrameNodeImplTest, FirstContentfulPaint) {
   MockObserver obs;
   graph()->AddFrameNodeObserver(&obs);
 
-  base::TimeDelta fcp = base::TimeDelta::FromMilliseconds(1364);
+  base::TimeDelta fcp = base::Milliseconds(1364);
   EXPECT_CALL(obs, OnFirstContentfulPaint(frame_node.get(), fcp));
   frame_node->OnFirstContentfulPaint(fcp);
 
@@ -501,10 +501,8 @@ TEST_F(FrameNodeImplTest, PublicInterface) {
             public_frame_node->GetSiteInstanceId());
 
   auto child_frame_nodes = public_frame_node->GetChildFrameNodes();
-  for (auto* child_frame_node : frame_node->child_frame_nodes()) {
-    const FrameNode* child = child_frame_node;
+  for (auto* child : frame_node->child_frame_nodes())
     EXPECT_TRUE(base::Contains(child_frame_nodes, child));
-  }
   EXPECT_EQ(child_frame_nodes.size(), frame_node->child_frame_nodes().size());
 
   EXPECT_EQ(frame_node->lifecycle_state(),

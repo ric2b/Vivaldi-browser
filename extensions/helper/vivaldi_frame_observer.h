@@ -22,6 +22,8 @@ class VivaldiFrameObserver
       public content::WebContentsObserver {
  public:
   ~VivaldiFrameObserver() override;
+  VivaldiFrameObserver(const VivaldiFrameObserver&) = delete;
+  VivaldiFrameObserver& operator=(const VivaldiFrameObserver&) = delete;
 
  private:
   explicit VivaldiFrameObserver(content::WebContents* contents);
@@ -34,8 +36,6 @@ class VivaldiFrameObserver
                               content::RenderFrameHost* new_host) override;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiFrameObserver);
 };
 
 }  // namespace vivaldi

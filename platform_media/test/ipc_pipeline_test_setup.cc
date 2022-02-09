@@ -12,7 +12,7 @@
 #include "platform_media/renderer/decoders/ipc_factory.h"
 
 #if defined(OS_WIN)
-#include "platform_media/common/win/mf_util.h"
+#include "platform_media/common/win/platform_media_init.h"
 #endif
 
 namespace media {
@@ -73,7 +73,6 @@ class RunnerDestructorObserver {
 IPCPipelineTestSetup::IPCPipelineTestSetup()
     : fields_(std::make_unique<Fields>()) {
   CHECK(!g_current_fields);
-  InitStatics();
 #if defined(OS_MAC)
   fields_->pipeline_runner = CreatePipelineRunner();
 #else
@@ -104,26 +103,6 @@ IPCPipelineTestSetup::~IPCPipelineTestSetup() {
   fields_->ipc_finished_event.Wait();
 
   g_current_fields = nullptr;
-}
-
-namespace {
-
-// Helper to ensure that LoadMFDecodingLibraries is called exactly once even if
-// InitStatics() is called multiple times via a static instance in the latter.
-class TestStaticInitializer {
- public:
-  TestStaticInitializer() {
-#if defined(OS_WIN)
-    LoadMFDecodingLibraries(/*demuxer_support=*/true);
-#endif
-  }
-};
-
-}  // namespace
-
-/* static */
-void IPCPipelineTestSetup::InitStatics() {
-  static TestStaticInitializer static_initializer;
 }
 
 }  // namespace media

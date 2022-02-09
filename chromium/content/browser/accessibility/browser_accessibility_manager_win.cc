@@ -385,7 +385,7 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       }
       // Only fire name changes when the name comes from an attribute, otherwise
       // name changes are redundant with text removed/inserted events.
-      if (node->GetData().GetNameFrom() != ax::mojom::NameFrom::kContents)
+      if (node->GetNameFrom() != ax::mojom::NameFrom::kContents)
         FireWinAccessibilityEvent(EVENT_OBJECT_NAMECHANGE, node);
       break;
     case ui::AXEventGenerator::Event::OBJECT_ATTRIBUTE_CHANGED:
@@ -492,6 +492,7 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
     // Currently unused events on this platform.
     case ui::AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
+    case ui::AXEventGenerator::Event::CARET_BOUNDS_CHANGED:
     case ui::AXEventGenerator::Event::CHECKED_STATE_DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::DETAILS_CHANGED:
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:

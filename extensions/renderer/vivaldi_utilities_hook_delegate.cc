@@ -2,6 +2,7 @@
 
 #include "extensions/renderer/vivaldi_utilities_hook_delegate.h"
 
+#include "base/guid.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/url_constants.h"
@@ -43,6 +44,8 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
     Handler handler;
     base::StringPiece method;
   } kHandlers[] = {
+      {&VivaldiUtilitiesHookDelegate::HandleGenerateGUID,
+       "utilities.generateGUID"},
       {&VivaldiUtilitiesHookDelegate::HandleGetUrlFragments,
        "utilities.getUrlFragments"},
       {&VivaldiUtilitiesHookDelegate::HandleGetVersion, "utilities.getVersion"},
@@ -69,6 +72,17 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
   }
 
   return (this->*handler)(std::move(context), *parse_result.arguments);
+}
+
+RequestResult VivaldiUtilitiesHookDelegate::HandleGenerateGUID(
+    v8::Local<v8::Context> context,
+    const std::vector<v8::Local<v8::Value>>& arguments) {
+  base::GUID guid = base::GUID::GenerateRandomV4();
+
+  v8::Isolate* isolate = context->GetIsolate();
+  RequestResult result(RequestResult::HANDLED);
+  result.return_value = gin::StringToV8(isolate, guid.AsLowercaseString());
+  return result;
 }
 
 RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
@@ -186,7 +200,7 @@ bool DoesBrowserHandleUrl(const GURL& url) {
   return url.IsAboutBlank();
 }
 
-}   //namespace
+}  // namespace
 RequestResult VivaldiUtilitiesHookDelegate::HandleIsUrlValid(
     v8::Local<v8::Context> context,
     const std::vector<v8::Local<v8::Value>>& arguments) {

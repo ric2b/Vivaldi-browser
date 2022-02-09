@@ -24,6 +24,7 @@ extern const base::Feature kAutofillEnableGoogleIssuedCard;
 extern const base::Feature kAutofillEnableMerchantBoundVirtualCards;
 extern const base::Feature kAutofillEnableOfferNotification;
 extern const base::Feature kAutofillEnableOfferNotificationCrossTabTracking;
+extern const base::Feature kAutofillEnableOfferNotificationForPromoCodes;
 extern const base::Feature kAutofillEnableOffersInClankKeyboardAccessory;
 extern const base::Feature kAutofillEnableOffersInDownstream;
 extern const base::Feature
@@ -31,6 +32,7 @@ extern const base::Feature
 extern const base::Feature kAutofillEnableStickyManualFallbackForCards;
 extern const base::Feature kAutofillEnableToolbarStatusChip;
 extern const base::Feature kAutofillEnableVirtualCard;
+extern const base::Feature kAutofillEnableVirtualCardsRiskBasedAuthentication;
 extern const base::Feature kAutofillFillMerchantPromoCodeFields;
 extern const base::Feature kAutofillFixOfferInIncognito;
 extern const base::FeatureParam<int>
@@ -41,7 +43,6 @@ extern const base::Feature kAutofillSaveCardInfobarEditSupport;
 extern const base::Feature kAutofillShowUnmaskedCachedCardInManualFillingView;
 extern const base::Feature kAutofillSortSuggestionsBasedOnOfferPresence;
 extern const base::Feature kAutofillSuggestVirtualCardsOnIncompleteForm;
-extern const base::Feature kAutofillSuppressCreditCardSaveForAssistant;
 extern const base::Feature kAutofillUpstream;
 extern const base::Feature kAutofillUpstreamAllowAllEmailDomains;
 

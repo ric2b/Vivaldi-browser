@@ -14,7 +14,7 @@ import {simulateStoredAccounts, simulateSyncStatus} from 'chrome://test/settings
 import {TestProfileInfoBrowserProxy} from 'chrome://test/settings/test_profile_info_browser_proxy.js';
 import {TestSyncBrowserProxy} from 'chrome://test/settings/test_sync_browser_proxy.js';
 import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.js';
-import {flushTasks, waitBeforeNextRender} from 'chrome://test/test_util.m.js';
+import {flushTasks, waitBeforeNextRender} from 'chrome://test/test_util.js';
 // clang-format on
 
 /** @implements {settings.PeopleBrowserProxy} */
@@ -50,7 +50,7 @@ suite('ProfileInfoTests', function() {
 
   setup(async function() {
     profileInfoBrowserProxy = new TestProfileInfoBrowserProxy();
-    ProfileInfoBrowserProxyImpl.instance_ = profileInfoBrowserProxy;
+    ProfileInfoBrowserProxyImpl.setInstance(profileInfoBrowserProxy);
 
     syncBrowserProxy = new TestSyncBrowserProxy();
     SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
@@ -103,7 +103,7 @@ if (!isChromeOS) {
       SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
 
       profileInfoBrowserProxy = new TestProfileInfoBrowserProxy();
-      ProfileInfoBrowserProxyImpl.instance_ = profileInfoBrowserProxy;
+      ProfileInfoBrowserProxyImpl.setInstance(profileInfoBrowserProxy);
 
       PolymerTest.clearBody();
       peoplePage = document.createElement('settings-people-page');
@@ -140,7 +140,7 @@ if (!isChromeOS) {
       SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
 
       profileInfoBrowserProxy = new TestProfileInfoBrowserProxy();
-      ProfileInfoBrowserProxyImpl.instance_ = profileInfoBrowserProxy;
+      ProfileInfoBrowserProxyImpl.setInstance(profileInfoBrowserProxy);
 
       PolymerTest.clearBody();
       peoplePage = document.createElement('settings-people-page');
@@ -415,7 +415,7 @@ suite('SyncSettings', function() {
     SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
 
     profileInfoBrowserProxy = new TestProfileInfoBrowserProxy();
-    ProfileInfoBrowserProxyImpl.instance_ = profileInfoBrowserProxy;
+    ProfileInfoBrowserProxyImpl.setInstance(profileInfoBrowserProxy);
 
     PolymerTest.clearBody();
     peoplePage = document.createElement('settings-people-page');

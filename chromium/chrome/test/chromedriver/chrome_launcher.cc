@@ -69,6 +69,8 @@
 #include <unistd.h>
 #elif defined(OS_WIN)
 #include "chrome/test/chromedriver/keycode_text_conversion.h"
+
+#include <windows.h>
 #endif
 
 namespace {
@@ -271,8 +273,7 @@ Status WaitForDevToolsAndCheckVersion(
   }
 
   const base::TimeTicks initial = base::TimeTicks::Now();
-  const base::TimeTicks deadline =
-      initial + base::TimeDelta::FromSeconds(wait_time);
+  const base::TimeTicks deadline = initial + base::Seconds(wait_time);
   Status status = client->Init(deadline - initial);
   if (status.IsError())
     return status;
@@ -334,7 +335,7 @@ Status WaitForDevToolsAndCheckVersion(
         return Status(kOk);
       }
     }
-    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(50));
+    base::PlatformThread::Sleep(base::Milliseconds(50));
   } while (base::TimeTicks::Now() < deadline);
 
   return Status(kUnknownError, "unable to discover open pages");
@@ -579,8 +580,7 @@ Status LaunchDesktopChrome(network::mojom::URLLoaderFactory* factory,
   int exit_code;
   base::TerminationStatus chrome_status =
       base::TERMINATION_STATUS_STILL_RUNNING;
-  base::TimeTicks deadline =
-      base::TimeTicks::Now() + base::TimeDelta::FromSeconds(60);
+  base::TimeTicks deadline = base::TimeTicks::Now() + base::Seconds(60);
   while (base::TimeTicks::Now() < deadline) {
     if (!devtools_port) {
       status =
@@ -643,14 +643,13 @@ Status LaunchDesktopChrome(network::mojom::URLLoaderFactory* factory,
           kChromeDriverProductShortName, kBrowserShortName));
       return failure_status;
     }
-    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(50));
+    base::PlatformThread::Sleep(base::Milliseconds(50));
   }
 
   if (status.IsError()) {
     VLOG(0) << "Failed to connect to " << kBrowserShortName
             << ". Attempting to kill it.";
     if (!process.Terminate(0, true)) {
-      int exit_code;
       if (base::GetTerminationStatus(process.Handle(), &exit_code) ==
           base::TERMINATION_STATUS_STILL_RUNNING)
         return Status(kUnknownError,
@@ -682,7 +681,7 @@ Status LaunchDesktopChrome(network::mojom::URLLoaderFactory* factory,
       VLOG(0) << "Waiting for extension bg page load: "
               << extension_bg_pages[i];
       std::unique_ptr<WebView> web_view;
-      Status status = chrome_desktop->WaitForPageToLoad(
+      status = chrome_desktop->WaitForPageToLoad(
           extension_bg_pages[i], capabilities.extension_load_timeout, &web_view,
           w3c_compliant);
       if (status.IsError()) {
@@ -821,7 +820,7 @@ Status LaunchReplayChrome(network::mojom::URLLoaderFactory* factory,
       VLOG(0) << "Waiting for extension bg page load: "
               << extension_bg_pages[i];
       std::unique_ptr<WebView> web_view;
-      Status status = chrome_impl->WaitForPageToLoad(
+      status = chrome_impl->WaitForPageToLoad(
           extension_bg_pages[i], capabilities.extension_load_timeout, &web_view,
           w3c_compliant);
       if (status.IsError()) {

@@ -11,6 +11,7 @@ source_set("pipeline_types") {
     "//ui/gfx/geometry:geometry",
     "//base",
     "//skia",
+    "//media/gpu:buildflags",
   ]
 }
 

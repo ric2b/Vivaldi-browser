@@ -124,8 +124,8 @@ set(ABSL_INTERNAL_DLL_FILES
   "hash/internal/hash.h"
   "hash/internal/hash.cc"
   "hash/internal/spy_hash_state.h"
-  "hash/internal/wyhash.h"
-  "hash/internal/wyhash.cc"
+  "hash/internal/low_level_hash.h"
+  "hash/internal/low_level_hash.cc"
   "memory/memory.h"
   "meta/type_traits.h"
   "numeric/bits.h"
@@ -133,6 +133,7 @@ set(ABSL_INTERNAL_DLL_FILES
   "numeric/int128.h"
   "numeric/internal/bits.h"
   "numeric/internal/representation.h"
+  "profiling/internal/sample_recorder.h"
   "random/bernoulli_distribution.h"
   "random/beta_distribution.h"
   "random/bit_gen_ref.h"
@@ -457,6 +458,7 @@ set(ABSL_INTERNAL_DLL_TARGETS
   "raw_hash_set"
   "layout"
   "tracked"
+  "sample_recorder"
 )
 
 function(absl_internal_dll_contains)

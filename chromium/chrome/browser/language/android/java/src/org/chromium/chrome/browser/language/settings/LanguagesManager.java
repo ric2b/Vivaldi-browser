@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.language.settings;
 
-import android.text.TextUtils;
-
 import androidx.annotation.IntDef;
 import androidx.core.util.Predicate;
 
@@ -221,13 +219,13 @@ public class LanguagesManager {
      * The current Accept-Languages are added to the front of the the list.
      * @return List of LanguageItems.
      */
-    public List<LanguageItem> getPotentialUiLanguages() {
+    private List<LanguageItem> getPotentialUiLanguages() {
         LinkedHashSet<LanguageItem> results = new LinkedHashSet<>();
         LanguageItem currentUiLanguage = getLanguageItem(AppLocaleUtils.getAppLanguagePref());
 
         // Add the system default language if an override language is set.
         if (!currentUiLanguage.isSystemDefault()) {
-            results.add(LanguageItem.makeSystemDefaultLanguageItem());
+            results.add(LanguageItem.makeFollowSystemLanguageItem());
         }
 
         // Filter for UI languages that are not the current UI language.
@@ -251,6 +249,19 @@ public class LanguagesManager {
                 vivaldiLanguageList.add(item);
         }
         return vivaldiLanguageList;
+    }
+
+    /**
+     * Get a list of all possible UI Languages ins alphabetical order.
+     * @return List of LanguageItems
+     */
+    public List<LanguageItem> getAllPossibleUiLanguages() {
+        LinkedHashSet<LanguageItem> results = new LinkedHashSet<>();
+        Predicate<LanguageItem> filter = (item) -> {
+            return item.isUISupported();
+        };
+        addItemsToResult(results, mLanguagesMap.values(), filter);
+        return new ArrayList<>(results);
     }
 
     /**
@@ -318,8 +329,8 @@ public class LanguagesManager {
      * @return LanguageItem or null if none found
      */
     public LanguageItem getLanguageItem(String localeCode) {
-        if (TextUtils.equals(localeCode, AppLocaleUtils.SYSTEM_LANGUAGE_VALUE)) {
-            return LanguageItem.makeSystemDefaultLanguageItem();
+        if (AppLocaleUtils.isFollowSystemLanguage(localeCode)) {
+            return LanguageItem.makeFollowSystemLanguageItem();
         }
         LanguageItem result = mLanguagesMap.get(localeCode);
         if (result != null) return result;

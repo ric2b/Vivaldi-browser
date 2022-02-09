@@ -30,6 +30,10 @@ class ProfileSyncComponentsFactoryImpl;
 class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
  public:
   explicit IOSChromeSyncClient(ChromeBrowserState* browser_state);
+
+  IOSChromeSyncClient(const IOSChromeSyncClient&) = delete;
+  IOSChromeSyncClient& operator=(const IOSChromeSyncClient&) = delete;
+
   ~IOSChromeSyncClient() override;
 
   // BrowserSyncClient implementation.
@@ -45,7 +49,6 @@ class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
   history::HistoryService* GetHistoryService() override;
   sync_preferences::PrefServiceSyncable* GetPrefServiceSyncable() override;
   sync_sessions::SessionSyncService* GetSessionSyncService() override;
-  base::RepeatingClosure GetPasswordStateChangedCallback() override;
   syncer::DataTypeController::TypeVector CreateDataTypeControllers(
       syncer::SyncService* sync_service) override;
   invalidation::InvalidationService* GetInvalidationService() override;
@@ -76,8 +79,6 @@ class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
 
   // The task runner for the |web_data_service_|, if any.
   scoped_refptr<base::SingleThreadTaskRunner> db_thread_;
-
-  DISALLOW_COPY_AND_ASSIGN(IOSChromeSyncClient);
 };
 
 #endif  // IOS_CHROME_BROWSER_SYNC_IOS_CHROME_SYNC_CLIENT_H__

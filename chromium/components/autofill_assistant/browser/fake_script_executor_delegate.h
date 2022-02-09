@@ -22,6 +22,11 @@ namespace autofill_assistant {
 class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
  public:
   FakeScriptExecutorDelegate();
+
+  FakeScriptExecutorDelegate(const FakeScriptExecutorDelegate&) = delete;
+  FakeScriptExecutorDelegate& operator=(const FakeScriptExecutorDelegate&) =
+      delete;
+
   ~FakeScriptExecutorDelegate() override;
 
   const ClientSettings& GetSettings() override;
@@ -35,13 +40,16 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   WebsiteLoginManager* GetWebsiteLoginManager() override;
   content::WebContents* GetWebContents() override;
   std::string GetEmailAddressForAccessTokenAccount() override;
-  std::string GetLocale() override;
   bool EnterState(AutofillAssistantState state) override;
   void SetTouchableElementArea(const ElementAreaProto& element) override;
   void SetStatusMessage(const std::string& message) override;
   std::string GetStatusMessage() const override;
   void SetBubbleMessage(const std::string& message) override;
   std::string GetBubbleMessage() const override;
+  void SetTtsMessage(const std::string& message) override;
+  std::string GetTtsMessage() const override;
+  TtsButtonState GetTtsButtonState() const override;
+  void MaybePlayTtsMessage() override;
   void SetDetails(std::unique_ptr<Details> details,
                   base::TimeDelta delay) override;
   void AppendDetails(std::unique_ptr<Details> details,
@@ -72,6 +80,7 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   ConfigureBottomSheetProto::PeekMode GetPeekMode() override;
   void ExpandBottomSheet() override;
   void CollapseBottomSheet() override;
+  void SetClientSettings(const ClientSettingsProto& client_settings) override;
   bool SetForm(
       std::unique_ptr<FormProto> form,
       base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
@@ -167,6 +176,7 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   std::unique_ptr<TriggerContext> trigger_context_;
   std::vector<AutofillAssistantState> state_history_;
   std::string status_message_;
+  std::string tts_message_;
   std::string bubble_message_;
   std::vector<Details> details_;
   std::unique_ptr<InfoBox> info_box_;
@@ -189,8 +199,6 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   std::unique_ptr<GenericUserInterfaceProto> persistent_generic_ui_;
 
   bool require_ui_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeScriptExecutorDelegate);
 };
 
 }  // namespace autofill_assistant

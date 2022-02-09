@@ -28,6 +28,8 @@ class MessageTable {
   // Must call CreateMessageTable() before to make sure the database is
   // initialized.
   MessageTable();
+  MessageTable(const MessageTable&) = delete;
+  MessageTable& operator=(const MessageTable&) = delete;
 
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
@@ -44,8 +46,6 @@ class MessageTable {
 
  protected:
   virtual sql::Database& GetDB() = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(MessageTable);
 };
 
 static const char MESSAGES_TRIGGER_AFTER_DELETE[] =

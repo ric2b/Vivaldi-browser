@@ -3,24 +3,25 @@
 #include "chrome/browser/ui/views/overlay/overlay_window_views.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/gfx/geometry/size.h"
 #include "ui/compositor/layer.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/mute_button.h"
 #include "ui/views/controls/video_progress.h"
 
 // The file contains the vivaldi specific code for the OverlayWindowViews class
 // used for the Picture-in-Picture window.
 
-constexpr int kVideoProgressHeight = 24;
+constexpr int kVideoProgressHeight = 8;
 constexpr SkColor kProgressBarForeground = gfx::kGoogleBlue300;
 constexpr SkColor kProgressBarBackground =
     SkColorSetA(gfx::kGoogleBlue300, 0x4C);  // 30%
-constexpr int hSeekInterval = 10; // seconds
+constexpr int hSeekInterval = 10;            // seconds
 constexpr gfx::Size kVivaldiButtonControlSize(20, 20);
 constexpr int kVideoControlsPadding = 5;
 
-class VideoPipControllerDelegate: public vivaldi::VideoPIPController::Delegate {
-public:
+class VideoPipControllerDelegate
+    : public vivaldi::VideoPIPController::Delegate {
+ public:
   VideoPipControllerDelegate(vivaldi::VideoProgress* progress_view,
                              vivaldi::MuteButton* mute_button)
       : vivaldi::VideoPIPController::Delegate(),
@@ -44,7 +45,7 @@ public:
     }
   }
 
-private:
+ private:
   // ownership tied to the OverlayWindowViews class
   vivaldi::VideoProgress* progress_view_ = nullptr;
   vivaldi::MuteButton* mute_button_ = nullptr;
@@ -67,9 +68,8 @@ void OverlayWindowViews::HandleVivaldiMuteButton() {
 
 void OverlayWindowViews::CreateVivaldiVideoControls() {
   auto mute_button = std::make_unique<vivaldi::MuteButton>(base::BindRepeating(
-      [](OverlayWindowViews* overlay) {
-        overlay->HandleVivaldiMuteButton();
-    }, base::Unretained(this)));
+      [](OverlayWindowViews* overlay) { overlay->HandleVivaldiMuteButton(); },
+      base::Unretained(this)));
 
   mute_button->SetPaintToLayer(ui::LAYER_TEXTURED);
   mute_button->layer()->SetFillsBoundsOpaquely(false);
@@ -108,8 +108,7 @@ void OverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
 
   mute_button_->SetSize(kVivaldiButtonControlSize);
   mute_button_->SetPosition(
-      gfx::Point(margin, primary_control_y - kVideoProgressHeight +
-                             (kVivaldiButtonControlSize.height() / 6)));
+      gfx::Point(margin, primary_control_y - (kVideoProgressHeight * 2)));
 
   progress_view_->SetSize(gfx::Size(
       window_width - (margin * 2) - offset_left - kVideoControlsPadding,
@@ -127,8 +126,8 @@ void OverlayWindowViews::CreateVivaldiVideoObserver() {
   // base::Unretained() here because both progress_view_ and
   // video_pip_controller_ lifetimes are tied to |this|.
   progress_view_->set_callback(
-    base::BindRepeating(&vivaldi::VideoPIPController::SeekTo,
-                 base::Unretained(video_pip_controller_.get())));
+      base::BindRepeating(&vivaldi::VideoPIPController::SeekTo,
+                          base::Unretained(video_pip_controller_.get())));
 }
 
 void OverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {

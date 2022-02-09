@@ -46,6 +46,9 @@ class GetStorageKeysTask
   GetStorageKeysTask(AwQuotaManagerBridge::GetOriginsCallback callback,
                      QuotaManager* quota_manager);
 
+  GetStorageKeysTask(const GetStorageKeysTask&) = delete;
+  GetStorageKeysTask& operator=(const GetStorageKeysTask&) = delete;
+
   void Run();
 
  private:
@@ -72,8 +75,6 @@ class GetStorageKeysTask
 
   size_t num_callbacks_to_wait_;
   size_t num_callbacks_received_;
-
-  DISALLOW_COPY_AND_ASSIGN(GetStorageKeysTask);
 };
 
 GetStorageKeysTask::GetStorageKeysTask(
@@ -227,7 +228,8 @@ void AwQuotaManagerBridge::DeleteOriginOnUiThread(
           StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS |
           StoragePartition::REMOVE_DATA_MASK_INDEXEDDB |
           StoragePartition::REMOVE_DATA_MASK_WEBSQL,
-      StoragePartition::QUOTA_MANAGED_STORAGE_MASK_TEMPORARY, GURL(origin));
+      StoragePartition::QUOTA_MANAGED_STORAGE_MASK_TEMPORARY, GURL(origin),
+      base::DoNothing());
 }
 
 void AwQuotaManagerBridge::GetOrigins(JNIEnv* env,

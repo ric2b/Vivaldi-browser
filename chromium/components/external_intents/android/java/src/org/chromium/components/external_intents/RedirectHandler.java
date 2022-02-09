@@ -19,6 +19,9 @@ import org.chromium.ui.base.PageTransition;
 import java.util.HashSet;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * This class contains the logic to determine effective navigation/redirect.
  */
@@ -100,6 +103,8 @@ public class RedirectHandler {
 
     private void clearIntentHistory() {
         mIsInitialIntentHeadingToChrome = false;
+        // Vivaldi needs to keep the custom tab intent flag a little bit longer. Ref. VAB-4585.
+        if (!BuildConfig.IS_VIVALDI)
         mIsCustomTabIntent = false;
         mInitialIntent = null;
         mExternalIntentStartedTask = false;
@@ -116,6 +121,9 @@ public class RedirectHandler {
         mLastCommittedEntryIndexBeforeStartingNavigation = 0;
         mShouldNotOverrideUrlLoadingOnCurrentRedirectChain = false;
         mShouldNotBlockOverrideUrlLoadingOnCurrentRedirectionChain = false;
+        // For Vivaldi it's ok to reset this value now. Ref. VAB-4585.
+        if (BuildConfig.IS_VIVALDI)
+            mIsCustomTabIntent = false;
     }
 
     /**

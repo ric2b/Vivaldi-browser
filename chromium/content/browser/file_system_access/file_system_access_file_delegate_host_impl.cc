@@ -14,6 +14,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_math.h"
 #include "components/services/storage/public/cpp/big_io_buffer.h"
+#include "content/browser/file_system_access/file_system_access_manager_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/base/big_buffer.h"
@@ -44,9 +45,9 @@ void ReadOnIOThread(scoped_refptr<storage::FileSystemContext> context,
       context->CreateFileStreamReader(
           url, offset, /*max_bytes_to_read=*/buffer->size(), base::Time());
 
-  // Create two copies of |wrapped_callback| though it can still only be
+  // Create two copies of `wrapped_callback` though it can still only be
   // called at most once. This is safe because Read() is guaranteed not to
-  // call |wrapped_callback| if it returns synchronously.
+  // call `wrapped_callback` if it returns synchronously.
   auto split_callback = base::SplitOnceCallback(std::move(wrapped_callback));
   // Keep the reader alive by binding it to its callback.
   storage::FileStreamReader* reader_ptr = reader.get();
@@ -140,7 +141,7 @@ void FileSystemAccessFileDelegateHostImpl::Write(
     WriteCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  DoFileSystemOperation(
+  manager()->DoFileSystemOperation(
       FROM_HERE, &storage::FileSystemOperationRunner::WriteStream,
       base::BindRepeating(&FileSystemAccessFileDelegateHostImpl::DidWrite,
                           weak_factory_.GetWeakPtr(),
@@ -168,7 +169,7 @@ void FileSystemAccessFileDelegateHostImpl::GetLength(
     GetLengthCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  DoFileSystemOperation(
+  manager()->DoFileSystemOperation(
       FROM_HERE, &storage::FileSystemOperationRunner::GetMetadata,
       base::BindOnce(
           [](GetLengthCallback callback, base::File::Error file_error,
@@ -188,7 +189,7 @@ void FileSystemAccessFileDelegateHostImpl::SetLength(
     SetLengthCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  DoFileSystemOperation(
+  manager()->DoFileSystemOperation(
       FROM_HERE, &storage::FileSystemOperationRunner::Truncate,
       base::BindOnce(
           [](SetLengthCallback callback, base::File::Error result) {

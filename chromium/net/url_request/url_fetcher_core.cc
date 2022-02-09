@@ -25,7 +25,9 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/upload_file_element_reader.h"
+#include "net/cert/x509_certificate.h"
 #include "net/http/http_response_headers.h"
+#include "net/ssl/ssl_private_key.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_fetcher_response_writer.h"
@@ -619,9 +621,7 @@ void URLFetcherCore::StartURLRequest() {
       //  layer and avoid using timer here.
       upload_progress_checker_timer_ = std::make_unique<base::RepeatingTimer>();
       upload_progress_checker_timer_->Start(
-          FROM_HERE,
-          base::TimeDelta::FromMilliseconds(kUploadProgressTimerInterval),
-          this,
+          FROM_HERE, base::Milliseconds(kUploadProgressTimerInterval), this,
           &URLFetcherCore::InformDelegateUploadProgress);
       break;
     }
@@ -680,7 +680,7 @@ void URLFetcherCore::StartURLRequestWhenAppropriate() {
       if (delay != 0) {
         network_task_runner_->PostDelayedTask(
             FROM_HERE, base::BindOnce(&URLFetcherCore::StartURLRequest, this),
-            base::TimeDelta::FromMilliseconds(delay));
+            base::Milliseconds(delay));
         return;
       }
     }

@@ -16,6 +16,18 @@ export let ExecutionProgress = {
   kRunning: 1,
   kCompleted: 2,
   kCancelled: 3,
+  kSkipped: 4,
+  kWarning: 5,
+};
+
+/**
+ * Represents the status of the test suite.
+ * @enum {number}
+ */
+export let TestSuiteStatus = {
+  kNotRunning: 0,
+  kRunning: 1,
+  kCompleted: 2,
 };
 
 /**

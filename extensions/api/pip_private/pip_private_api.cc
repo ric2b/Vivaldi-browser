@@ -2,7 +2,4 @@
 
 #include "extensions/api/pip_private/pip_private_api.h"
 
-namespace extensions {
-
-
-}  // namespace extensions
+namespace extensions {}  // namespace extensions

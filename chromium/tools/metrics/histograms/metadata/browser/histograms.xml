@@ -62,7 +62,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </variants>
 
 <histogram name="Browser.AnyWindowHasName" enum="Boolean"
-    expires_after="2021-09-30">
+    expires_after="2022-09-30">
   <owner>ellyjones@chromium.org</owner>
   <owner>lgrey@chromium.org</owner>
   <summary>
@@ -72,7 +72,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.BitmapFetcher.Decode" units="ms"
-    expires_after="2022-01-02">
+    expires_after="2022-03-06">
   <owner>manukh@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -80,7 +80,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.BitmapFetcher.Fetch" units="ms"
-    expires_after="2022-01-02">
+    expires_after="2022-03-06">
   <owner>manukh@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -101,6 +101,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <token key="Survey">
     <variant name=".General"/>
     <variant name=".OnboardingExperience"/>
+    <variant name=".SmartLock"/>
     <variant name=".Unlock"/>
   </token>
 </histogram>
@@ -156,7 +157,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.ContinuousSearch.NumberOfSearchResultsExtracted"
-    units="count" expires_after="2021-12-12">
+    units="count" expires_after="2022-04-17">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>yashard@chromium.org</owner>
@@ -168,7 +169,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.ContinuousSearch.SearchResultExtractionStatus"
-    enum="SearchResultExtractorClientStatus" expires_after="2021-12-20">
+    enum="SearchResultExtractorClientStatus" expires_after="2022-04-10">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>yashard@chromium.org</owner>
@@ -261,6 +262,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="Browser.ContinuousSearch.UI.ItemClickedAtLeastOnce{ExperimentCategory}"
+    enum="Boolean" expires_after="2021-12-20">
+  <owner>ckitagawa@chromium.org</owner>
+  <owner>fredmello@chromium.org</owner>
+  <owner>yashard@chromium.org</owner>
+  <summary>
+    Records whether any item was pressed while UI was being shown. It is emmited
+    when the CSN session is considered ended. Actions that can end the session
+    include closing the tab, navigating away from the CSN url list or dismissing
+    the UI.
+  </summary>
+  <token key="ExperimentCategory" variants="ContinuousSearchExperiment"/>
+</histogram>
+
+<histogram
     name="Browser.ContinuousSearch.UI.ProviderButtonClicked{ExperimentCategory}"
     enum="Boolean" expires_after="2021-12-20">
   <owner>ckitagawa@chromium.org</owner>
@@ -286,7 +302,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Capture.CompressedOnDiskSize" units="KB"
-    expires_after="2022-01-02">
+    expires_after="2022-04-03">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -297,7 +313,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Capture.NumberOfFramesCaptured"
-    units="units" expires_after="2022-01-02">
+    units="units" expires_after="2022-04-03">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -307,7 +323,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Capture.Success" enum="BooleanSuccess"
-    expires_after="2022-01-02">
+    expires_after="2022-04-03">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -317,7 +333,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Capture.TotalCaptureDuration" units="ms"
-    expires_after="2022-01-02">
+    expires_after="2022-04-03">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -369,7 +385,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Player.CompositorProcessStartedCorrectly"
-    units="BooleanSuccess" expires_after="2022-01-02">
+    units="BooleanSuccess" expires_after="2022-04-17">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -379,7 +395,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Player.CompositorProcessStartupTime"
-    units="ms" expires_after="2022-01-02">
+    units="ms" expires_after="2022-03-06">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -389,7 +405,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Player.LinkClicked"
-    units="BooleanSuccess" expires_after="2022-01-02">
+    units="BooleanSuccess" expires_after="2022-04-10">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -397,7 +413,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Player.TimeToFirstBitmap" units="ms"
-    expires_after="2022-01-02">
+    expires_after="2022-03-06">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -408,7 +424,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.CompositorFailureReason"
-    enum="TabbedPaintPreviewCompositorFailureReason" expires_after="2022-01-02">
+    enum="TabbedPaintPreviewCompositorFailureReason" expires_after="2022-04-10">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -420,7 +436,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.ExitCause"
-    enum="TabbedPaintPreviewExitCause" expires_after="2022-01-02">
+    enum="TabbedPaintPreviewExitCause" expires_after="2022-04-03">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -431,7 +447,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.FirstPaintBeforeTabLoad"
-    units="Boolean" expires_after="2022-01-09">
+    units="Boolean" expires_after="2022-04-10">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -442,7 +458,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.HadCapture" units="Boolean"
-    expires_after="2022-01-02">
+    expires_after="2022-04-10">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -454,7 +470,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.SnackbarCount" units="units"
-    expires_after="2022-01-02">
+    expires_after="2022-04-10">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -465,7 +481,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.TimeToFirstBitmap"
-    units="ms" expires_after="2022-01-02">
+    units="ms" expires_after="2022-03-06">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -509,7 +525,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabService.DiskUsageAtStartup" units="KB"
-    expires_after="2022-01-02">
+    expires_after="2022-03-06">
   <owner>ckitagawa@chromium.org</owner>
   <owner>mahmoudi@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
@@ -520,7 +536,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.Responsiveness.IOJanksTotalPerMinute" units="janks"
-    expires_after="2021-12-12">
+    expires_after="2022-04-17">
   <owner>gab@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -534,7 +550,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.Responsiveness.IOJankyIntervalsPerMinute"
-    units="janks" expires_after="2021-12-12">
+    units="janks" expires_after="2022-04-10">
   <owner>gab@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -553,7 +569,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.Responsiveness.JankyIntervalsPerThirtySeconds2"
-    units="janks" expires_after="2022-01-09">
+    units="janks" expires_after="2022-03-13">
 <!-- JankyIntervalsPerThirtySeconds3 is on probation to replace this -->
 
   <owner>erikchen@chromium.org</owner>
@@ -574,7 +590,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.Responsiveness.JankyIntervalsPerThirtySeconds3"
-    units="janks" expires_after="2021-09-30">
+    units="janks" expires_after="2022-04-03">
 <!-- on probation: expected to graduate as a go/chrome-browser-guiding-metrics -->
 
   <owner>etienneb@chromium.org</owner>
@@ -706,7 +722,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.Tabs.SelectionToVisibilityRequestTime"
-    units="microseconds" expires_after="2021-12-19">
+    units="microseconds" expires_after="2022-04-24">
   <owner>sadrul@chromium.org</owner>
   <owner>sky@chromium.org</owner>
   <summary>
@@ -769,7 +785,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.WindowCount.Guest" units="units"
-    expires_after="2022-02-06">
+    expires_after="2022-04-17">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -781,7 +797,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Browser.WindowCount.Incognito" units="units"
-    expires_after="2022-02-06">
+    expires_after="2022-04-17">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -945,7 +961,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserServices.ClientAppDataLoad" units="ms"
-    expires_after="M98">
+    expires_after="2022-04-24">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -956,7 +972,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserServices.ServiceTabResolveInfoQuery" units="ms"
-    expires_after="M98">
+    expires_after="2022-05-01">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -965,7 +981,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="BrowserServices.TwaOpenTime.V2" units="ms" expires_after="M98">
+<histogram name="BrowserServices.TwaOpenTime.V2" units="ms"
+    expires_after="2022-04-17">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -975,7 +992,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserServices.VerificationResult"
-    enum="BrowserServicesVerificationResult" expires_after="M98">
+    enum="BrowserServicesVerificationResult" expires_after="2022-05-01">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -1006,7 +1023,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.AlternativeBrowser" enum="BrowserType"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1018,7 +1035,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.CacheFile.MkDirSuccess" enum="BooleanSuccess"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1028,7 +1045,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.CacheFile.MkTempSuccess" enum="BooleanSuccess"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1039,7 +1056,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.CacheFile.MoveSuccess" enum="BooleanSuccess"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1051,7 +1068,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.Decision" enum="BooleanBrowserSwitch"
-    expires_after="2021-12-12">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1063,7 +1080,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.DecisionTime" units="ms"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1074,7 +1091,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.ExternalGreylistSize" units="rules"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1084,7 +1101,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.ExternalSitelistSize" units="rules"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1094,7 +1111,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.GreylistSize" units="rules"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1104,7 +1121,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.GreylistWildcard" enum="BooleanPresent"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1115,7 +1132,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.IeemSitelistSize" units="rules"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1145,7 +1162,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.UrlListSize" units="rules"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1155,7 +1172,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BrowserSwitcher.UrlListWildcard" enum="BooleanPresent"
-    expires_after="2021-10-04">
+    expires_after="2022-04-01">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>

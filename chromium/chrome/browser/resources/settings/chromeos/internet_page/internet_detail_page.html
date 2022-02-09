@@ -16,11 +16,11 @@
   }
 
   #networkState[connected] {
-    color: var(--google-green-500);
+    color: var(--cros-text-color-positive);
   }
 
   #networkState[error] {
-    color: var(--google-red-500);
+    color: var(--cros-text-color-alert);
   }
 
   #preferNetworkToggleContainer:hover {
@@ -160,9 +160,9 @@
               [[messagesDividerClass_('synced', managedProperties_,
                   globalPolicy, managedNetworkAvailable,
                   isSecondaryUser_, isWifiSyncEnabled_)]]">
-      <settings-localized-link
-        localized-string="[[syncedString_(managedProperties_)]]">
-      </settings-localized-link>
+      <localized-link
+          localized-string="[[syncedString_(managedProperties_)]]">
+      </localized-link>
   </div>
 </template>
 <!-- End of NOTICES section -->
@@ -242,6 +242,18 @@
         managed-properties="[[managedProperties_]]"
         prefs="{{prefs}}">
       </cellular-roaming-toggle-button>
+    </template>
+    <!-- Public Key (WireGuard VPN only). -->
+    <template is="dom-if" if="[[isWireGuard_(managedProperties_)]]">
+      <div id="wgPublicKeyField"
+          class="settings-box two-line single-column stretch settings-box-text">
+        <div aria-hidden="true" id="wgPublicKeyLabel">
+          $i18n{OncVPN-WireGuard-PublicKey}
+        </div>
+        <div class="secondary" aria-labelledby="wgPublicKeyLabel">
+          [[managedProperties_.typeProperties.vpn.wireguard.publicKey.activeValue]]
+        </div>
+      </div>
     </template>
     <!-- IP Address. -->
     <div
@@ -341,7 +353,7 @@
           </div>
           <template is="dom-if" if="[[showScanningSpinner_(
               managedProperties_, deviceState_)]]">
-            <paper-spinner-lite active 
+            <paper-spinner-lite active
                 title="$i18n{mobileNetworkScanningLabel}">
             </paper-spinner-lite>
           </template>

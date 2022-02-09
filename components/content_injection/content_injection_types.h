@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "base/strings/string_piece.h"
-#include "url/gurl.h"
 #include "components/content_injection/mojom/content_injection.mojom.h"
+#include "url/gurl.h"
 
 namespace content_injection {
 struct StaticInjectionItem {

@@ -396,6 +396,11 @@ class ReadableStream::PipeToEngine final
 
   v8::Local<v8::Value> ReadRejected(v8::Local<v8::Value>) {
     is_reading_ = false;
+    if (is_shutting_down_) {
+      // This function can be called during shutdown when the lock is released.
+      // Exit early in that case.
+      return Undefined();
+    }
     ReadableError(Readable()->GetStoredError(script_state_->GetIsolate()));
     return Undefined();
   }
@@ -1750,6 +1755,9 @@ v8::Local<v8::Promise> ReadableStream::Cancel(ScriptState* script_state,
 }
 
 void ReadableStream::Close(ScriptState* script_state, ReadableStream* stream) {
+  if (ExecutionContext::From(script_state)->IsContextDestroyed())
+    return;
+
   // https://streams.spec.whatwg.org/#readable-stream-close
   // 1. Assert: stream.[[state]] is "readable".
   CHECK_EQ(stream->state_, kReadable);

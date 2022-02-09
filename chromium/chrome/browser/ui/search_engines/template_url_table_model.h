@@ -32,6 +32,9 @@ class TemplateURLTableModel : public ui::TableModel,
  public:
   explicit TemplateURLTableModel(TemplateURLService* template_url_service);
 
+  TemplateURLTableModel(const TemplateURLTableModel&) = delete;
+  TemplateURLTableModel& operator=(const TemplateURLTableModel&) = delete;
+
   ~TemplateURLTableModel() override;
 
   // Reloads the entries from the TemplateURLService. This should ONLY be
@@ -73,6 +76,11 @@ class TemplateURLTableModel : public ui::TableModel,
   // if the index is invalid or it is already the default.
   void MakeDefaultTemplateURL(int index);
 
+  // Activates the TemplateURL at the specified index if `is_active` is true and
+  // deactivates if false. When the TemplateURL is active, it can be invoked by
+  // keyword via the omnibox.
+  void SetIsActiveTemplateURL(int index, bool is_active);
+
   // Returns the index of the last entry shown in the search engines group.
   int last_search_engine_index() const { return last_search_engine_index_; }
 
@@ -108,8 +116,6 @@ class TemplateURLTableModel : public ui::TableModel,
   // Index of the last other engine in entries_. This is used to determine the
   // group boundaries.
   int last_other_engine_index_;
-
-  DISALLOW_COPY_AND_ASSIGN(TemplateURLTableModel);
 };
 
 

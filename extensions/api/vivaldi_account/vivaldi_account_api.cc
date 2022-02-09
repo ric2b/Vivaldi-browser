@@ -171,7 +171,7 @@ void VivaldiAccountAPI::Shutdown() {
 
 ExtensionFunction::ResponseAction VivaldiAccountLoginFunction::Run() {
   std::unique_ptr<vivaldi::vivaldi_account::Login::Params> params(
-      vivaldi::vivaldi_account::Login::Params::Create(*args_));
+      vivaldi::vivaldi_account::Login::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -212,7 +212,7 @@ ExtensionFunction::ResponseAction
 VivaldiAccountSetPendingRegistrationFunction::Run() {
   std::unique_ptr<vivaldi::vivaldi_account::SetPendingRegistration::Params>
       params(vivaldi::vivaldi_account::SetPendingRegistration::Params::Create(
-          *args_));
+          args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 

@@ -33,7 +33,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_listener_info.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/csp/content_security_policy_violation_type.h"
 #include "third_party/blink/renderer/core/inspector/inspector_base_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
 #include "third_party/blink/renderer/core/inspector/protocol/DOMDebugger.h"
@@ -121,7 +121,7 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
   void DidResumeAudioContext();
   void DidSuspendAudioContext();
   void OnContentSecurityPolicyViolation(
-      const ContentSecurityPolicy::ContentSecurityPolicyViolationType);
+      const ContentSecurityPolicyViolationType);
 
   protocol::Response disable() override;
   void Restore() override;
@@ -162,7 +162,9 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
                               int breakpoint_type,
                               bool insertion);
   void UpdateSubtreeBreakpoints(Node*, uint32_t root_mask, bool set);
-  bool HasBreakpoint(Node*, int type);
+  bool HasBreakpoint(Node*, int type) const;
+  // Returns value if node is in `dom_breakpoints_`, otherwise zero.
+  uint32_t FindBreakpointMask(Node*) const;
   protocol::Response SetBreakpoint(const String& event_name,
                                    const String& target_name);
   protocol::Response RemoveBreakpoint(const String& event_name,

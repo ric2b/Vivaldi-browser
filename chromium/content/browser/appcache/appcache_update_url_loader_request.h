@@ -23,7 +23,8 @@
 
 namespace net {
 class HttpResponseInfo;
-}
+class SiteForCookies;
+}  // namespace net
 
 namespace content {
 
@@ -37,6 +38,10 @@ class AppCacheUpdateJob::UpdateURLLoaderRequest
                          const GURL& url,
                          int buffer_size,
                          URLFetcher* fetcher);
+
+  UpdateURLLoaderRequest(const UpdateURLLoaderRequest&) = delete;
+  UpdateURLLoaderRequest& operator=(const UpdateURLLoaderRequest&) = delete;
+
   ~UpdateURLLoaderRequest() override;
 
   // This method is called to start the request.
@@ -62,7 +67,7 @@ class AppCacheUpdateJob::UpdateURLLoaderRequest
   std::string GetMimeType() const;
 
   // Cookie policy.
-  void SetSiteForCookies(const GURL& site_for_cookies);
+  void SetSiteForCookies(const net::SiteForCookies& site_for_cookies);
 
   // Sets the origin of the context which initiated the request.
   void SetInitiator(const absl::optional<url::Origin>& initiator);
@@ -156,8 +161,6 @@ class AppCacheUpdateJob::UpdateURLLoaderRequest
   bool read_requested_;
   // Adapter for transferring data from a mojo data pipe to net.
   scoped_refptr<network::MojoToNetPendingBuffer> pending_read_;
-
-  DISALLOW_COPY_AND_ASSIGN(UpdateURLLoaderRequest);
 };
 
 }  // namespace content

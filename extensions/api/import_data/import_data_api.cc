@@ -34,6 +34,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_formatter/url_fixer.h"
 
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -338,7 +339,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   using vivaldi::import_data::StartImport::Params;
   namespace Results = vivaldi::import_data::StartImport::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<std::string>& ids = params->items_to_import;
@@ -386,37 +387,21 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 
   imported_items_ = (selected_items & supported_items);
 
-  SessionID::id_type window_id = params->window_id;
   std::u16string dialog_title;
-  if (importer_type_ == importer::TYPE_BOOKMARKS_FILE) {
-    dialog_title =
-        l10n_util::GetStringUTF16(IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE);
-    return HandleChooseBookmarksFileOrFolder(window_id, dialog_title, "html",
-                                             base::FilePath(), true);
-  } else if (importer_type_ == importer::TYPE_OPERA_BOOKMARK_FILE) {
-    dialog_title =
-        l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_BOOKMARKS_FILE_TITLE);
-    base::FilePath path(FILE_PATH_LITERAL("bookmarks.adr"));
-    return HandleChooseBookmarksFileOrFolder(window_id, dialog_title, "adr",
-                                             path, true);
-  } else if ((importer_type_ == importer::TYPE_OPERA ||
-              importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
-              importer_type_ == importer::TYPE_BRAVE ||
-              importer_type_ == importer::TYPE_VIVALDI) &&
-             ids[6] == "false") {
-    if (importer_type_ == importer::TYPE_OPERA) {
-      dialog_title = l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_PROFILE_TITLE);
-    } else if (importer_type_ == importer::TYPE_EDGE_CHROMIUM) {
-      dialog_title =
-          l10n_util::GetStringUTF16(IDS_IMPORT_EDGE_CHROMIUM_PROFILE_TITLE);
-    } else if (importer_type_ == importer::TYPE_BRAVE) {
-      dialog_title = l10n_util::GetStringUTF16(IDS_IMPORT_BRAVE_PROFILE_TITLE);
-    } else if (importer_type_ == importer::TYPE_VIVALDI) {
-      dialog_title =
-          l10n_util::GetStringUTF16(IDS_IMPORT_VIVALDI_PROFILE_TITLE);
-    }
-    return HandleChooseBookmarksFileOrFolder(window_id, dialog_title, "ini",
-                                             base::FilePath(), false);
+  if (importer_type_ == importer::TYPE_BOOKMARKS_FILE ||
+      importer_type_ == importer::TYPE_OPERA_BOOKMARK_FILE ||
+      ((importer_type_ == importer::TYPE_OPERA ||
+        importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
+        importer_type_ == importer::TYPE_BRAVE ||
+        importer_type_ == importer::TYPE_VIVALDI) &&
+       ids[6] == "false")) {
+    base::FilePath import_path =
+        base::FilePath::FromUTF8Unsafe(params->import_path->c_str());
+    source_profile.source_path = import_path;
+    source_profile.importer_type = importer_type_;
+
+    StartImport(source_profile);
+    return RespondNow(NoArguments());
   } else {
     if (imported_items_) {
       StartImport(source_profile);
@@ -424,65 +409,8 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
       LOG(WARNING) << "There were no settings to import from '"
                    << source_profile.importer_name << "'.";
     }
-    return RespondNow(ArgumentList(Results::Create("Ok", "")));
+    return RespondNow(NoArguments());
   }
-}
-
-ExtensionFunction::ResponseAction
-ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
-    SessionID::id_type window_id,
-    const std::u16string& title,
-    base::StringPiece extension,
-    const base::FilePath& default_file,
-    bool file_selection) {
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromId(window_id);
-  if (!window) {
-    return RespondNow(Error("No such window"));
-  }
-
-  AddRef();
-
-  select_file_dialog_ = ui::SelectFileDialog::Create(this, nullptr);
-
-  ui::SelectFileDialog::FileTypeInfo file_type_info;
-
-  if (file_selection) {
-    file_type_info.extensions.resize(1);
-
-    file_type_info.extensions[0].push_back(
-        base::FilePath::FromUTF8Unsafe(extension).value());
-  }
-  select_file_dialog_->SelectFile(
-      file_selection ? ui::SelectFileDialog::SELECT_OPEN_FILE
-                     : ui::SelectFileDialog::SELECT_FOLDER,
-      title, default_file, &file_type_info, 0, base::FilePath::StringType(),
-      window->GetNativeWindow(), nullptr);
-  return RespondLater();
-}
-
-void ImportDataStartImportFunction::FileSelectionCanceled(void* params) {
-  namespace Results = vivaldi::import_data::StartImport::Results;
-
-  DCHECK(!params);
-  Respond(ArgumentList(Results::Create("Cancel", "")));
-
-  Release();  // Balanced in HandleChooseBookmarksFileOrFolder()
-}
-
-void ImportDataStartImportFunction::FileSelected(const base::FilePath& path,
-                                                 int /*index*/,
-                                                 void* params) {
-  namespace Results = vivaldi::import_data::StartImport::Results;
-
-  DCHECK(!params);
-  importer::SourceProfile source_profile;
-  source_profile.source_path = path;
-  source_profile.importer_type = importer_type_;
-
-  StartImport(source_profile);
-  Respond(ArgumentList(Results::Create("Ok", path.AsUTF8Unsafe())));
-
-  Release();  // Balanced in HandleChooseBookmarksFileOrFolder()
 }
 
 void ImportDataStartImportFunction::StartImport(

@@ -42,6 +42,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
@@ -503,7 +504,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private void updateTopControlsProperties() {
         // If the Start surface is enabled, it will handle the margins and positioning of the tab
         // switcher. So, we shouldn't do it here.
-        if (ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled()) {
+        if (ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(mContext)) {
             mContainerViewModel.set(TOP_MARGIN, 0);
             mContainerViewModel.set(SHADOW_TOP_OFFSET, 0);
             return;
@@ -577,6 +578,14 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
                 RecordUserAction.record(
                         "MobileTabSwitched." + TabSwitcherCoordinator.COMPONENT_NAME);
             }
+        }
+        if (mMode == TabListCoordinator.TabListMode.GRID
+                && PriceTrackingUtilities.isTabModelPriceTrackingEligible(
+                        mTabModelSelector.getCurrentModel())
+                && PriceTrackingUtilities.isTrackPricesOnTabsEnabled()) {
+            RecordUserAction.record("Commerce.TabGridSwitched."
+                    + (ShoppingPersistedTabData.hasPriceDrop(tab) ? "HasPriceDrop"
+                                                                  : "NoPriceDrop"));
         }
     }
 
@@ -852,6 +861,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             Tab newlySelectedTab =
                     TabModelUtils.getTabById(mTabModelSelector.getCurrentModel(), tabId);
             StartSurfaceUserData.setKeepTab(newlySelectedTab, true);
+            if (mMode == TabListMode.CAROUSEL) {
+                StartSurfaceUserData.setOpenedFromStart(newlySelectedTab);
+            }
         }
         mIsSelectingInTabSwitcher = true;
         if (mOnTabSelectingListener != null) {

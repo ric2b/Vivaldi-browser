@@ -45,7 +45,8 @@ const int kCurrentVersionNumber = 2;
 const int kCompatibleVersionNumber = 2;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
-  LOG(ERROR) << "Mail Client DB failed to migrate from version " << from_version;
+  LOG(ERROR) << "Mail Client DB failed to migrate from version "
+             << from_version;
   return sql::INIT_FAILURE;
 }
 
@@ -176,7 +177,7 @@ sql::InitStatus MailClientDatabase::EnsureCurrentVersion() {
     cur_version = 2;
     meta_table_.SetVersionNumber(cur_version);
     meta_table_.SetCompatibleVersionNumber(
-      std::min(cur_version, kCompatibleVersionNumber));
+        std::min(cur_version, kCompatibleVersionNumber));
   }
 
   return sql::INIT_OK;

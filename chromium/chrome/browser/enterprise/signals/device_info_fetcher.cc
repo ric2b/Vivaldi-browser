@@ -18,6 +18,10 @@ namespace enterprise_signals {
 
 namespace {
 
+// When true, will force DeviceInfoFetcher::CreateInstance to return a stubbed
+// instance. Used for testing.
+bool force_stub_for_testing = false;
+
 // Stub implementation of DeviceInfoFetcher.
 class StubDeviceFetcher : public DeviceInfoFetcher {
  public:
@@ -37,6 +41,8 @@ class StubDeviceFetcher : public DeviceInfoFetcher {
     device_info.screen_lock_secured = SettingValue::ENABLED;
     device_info.disk_encrypted = SettingValue::DISABLED;
     device_info.mac_addresses.push_back("00:00:00:00:00:00");
+    device_info.windows_machine_domain = "MACHINE_DOMAIN";
+    device_info.windows_user_domain = "USER_DOMAIN";
     return device_info;
   }
 };
@@ -53,6 +59,10 @@ DeviceInfoFetcher::~DeviceInfoFetcher() = default;
 
 // static
 std::unique_ptr<DeviceInfoFetcher> DeviceInfoFetcher::CreateInstance() {
+  if (force_stub_for_testing) {
+    return std::make_unique<StubDeviceFetcher>();
+  }
+
 // TODO(pastarmovj): Instead of the if-defs implement the CreateInstance
 // function in the platform specific classes.
 #if defined(OS_MAC)
@@ -70,6 +80,11 @@ std::unique_ptr<DeviceInfoFetcher> DeviceInfoFetcher::CreateInstance() {
 std::unique_ptr<DeviceInfoFetcher>
 DeviceInfoFetcher::CreateStubInstanceForTesting() {
   return std::make_unique<StubDeviceFetcher>();
+}
+
+// static
+void DeviceInfoFetcher::SetForceStubForTesting(bool should_force) {
+  force_stub_for_testing = should_force;
 }
 
 }  // namespace enterprise_signals

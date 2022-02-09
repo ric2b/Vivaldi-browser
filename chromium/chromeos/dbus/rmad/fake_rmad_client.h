@@ -17,6 +17,8 @@ namespace chromeos {
 
 class COMPONENT_EXPORT(RMAD) FakeRmadClient : public RmadClient {
  public:
+  static void CreateWithState();
+
   FakeRmadClient();
   FakeRmadClient(const FakeRmadClient&) = delete;
   FakeRmadClient& operator=(const FakeRmadClient&) = delete;
@@ -44,13 +46,19 @@ class COMPONENT_EXPORT(RMAD) FakeRmadClient : public RmadClient {
 
   void TriggerErrorObservation(rmad::RmadErrorCode error);
   void TriggerCalibrationProgressObservation(
-      rmad::CheckCalibrationState::CalibrationStatus::Component component,
+      rmad::RmadComponent component,
+      rmad::CalibrationComponentStatus::CalibrationStatus status,
       double progress);
+  void TriggerCalibrationOverallProgressObservation(
+      rmad::CalibrationOverallStatus status);
   void TriggerProvisioningProgressObservation(
       rmad::ProvisionDeviceState::ProvisioningStep step,
       double progress);
   void TriggerHardwareWriteProtectionStateObservation(bool enabled);
   void TriggerPowerCableStateObservation(bool plugged_in);
+  void TriggerHardwareVerificationResultObservation(
+      bool is_compliant,
+      const std::string& error_str);
 
  private:
   const rmad::GetStateReply& GetStateReply() const;

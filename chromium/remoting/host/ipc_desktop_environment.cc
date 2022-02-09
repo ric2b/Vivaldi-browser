@@ -23,8 +23,8 @@
 #include "remoting/host/file_transfer/file_operations.h"
 #include "remoting/host/input_injector.h"
 #include "remoting/host/keyboard_layout_monitor.h"
+#include "remoting/host/remote_open_url/url_forwarder_configurator.h"
 #include "remoting/host/screen_controls.h"
-#include "remoting/host/url_forwarder_configurator.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
 
@@ -88,8 +88,7 @@ std::unique_ptr<FileOperations> IpcDesktopEnvironment::CreateFileOperations() {
 
 std::unique_ptr<UrlForwarderConfigurator>
 IpcDesktopEnvironment::CreateUrlForwarderConfigurator() {
-  // TODO(yuweih): Get it from |desktop_session_proxy_|.
-  return UrlForwarderConfigurator::Create();
+  return desktop_session_proxy_->CreateUrlForwarderConfigurator();
 }
 
 std::string IpcDesktopEnvironment::GetCapabilities() const {

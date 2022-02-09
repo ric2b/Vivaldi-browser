@@ -11,9 +11,8 @@ class VivaldiExtensionsClient : public ChromeExtensionsClient {
  public:
   VivaldiExtensionsClient();
   ~VivaldiExtensionsClient() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionsClient);
+  VivaldiExtensionsClient(const VivaldiExtensionsClient&) = delete;
+  VivaldiExtensionsClient& operator=(const VivaldiExtensionsClient&) = delete;
 };
 
 }  // namespace extensions

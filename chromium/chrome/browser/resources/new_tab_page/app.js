@@ -10,6 +10,8 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {ClickInfo, Command} from 'chrome://resources/js/browser_command/browser_command.mojom-webui.js';
+import {BrowserCommandProxy} from 'chrome://resources/js/browser_command/browser_command_proxy.js';
 import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
 import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
@@ -22,8 +24,6 @@ import {I18nBehavior, loadTimeData} from './i18n_setup.js';
 import {recordLoadDuration} from './metrics_utils.js';
 import {ModuleRegistry} from './modules/module_registry.js';
 import {NewTabPageProxy} from './new_tab_page_proxy.js';
-import {ClickInfo, Command} from './promo_browser_command.mojom-webui.js';
-import {PromoBrowserCommandProxy} from './promo_browser_command_proxy.js';
 import {$$} from './utils.js';
 import {Action as VoiceAction, recordVoiceAction} from './voice_search_overlay.js';
 import {WindowProxy} from './window_proxy.js';
@@ -53,6 +53,9 @@ export const NtpElement = {
   kModule: 7,
   kCustomize: 8,
 };
+
+/** @const {string} */
+const CUSTOMIZE_URL_PARAM = 'customize';
 
 /** @param {NtpElement} element */
 function recordClick(element) {
@@ -117,10 +120,18 @@ class AppElement extends mixinBehaviors
       },
 
       /** @private */
-      showCustomizeDialog_: Boolean,
+      showCustomizeDialog_: {
+        type: Boolean,
+        value: () =>
+            WindowProxy.getInstance().url.searchParams.has(CUSTOMIZE_URL_PARAM),
+      },
 
       /** @private {?string} */
-      selectedCustomizeDialogPage_: String,
+      selectedCustomizeDialogPage_: {
+        type: String,
+        value: () =>
+            WindowProxy.getInstance().url.searchParams.get(CUSTOMIZE_URL_PARAM),
+      },
 
       /** @private */
       showVoiceSearchOverlay_: Boolean,
@@ -189,6 +200,12 @@ class AppElement extends mixinBehaviors
       logoEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('logoEnabled'),
+      },
+
+      /** @private */
+      oneGoogleBarEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('oneGoogleBarEnabled'),
       },
 
       /** @private */
@@ -274,6 +291,16 @@ class AppElement extends mixinBehaviors
     this.backgroundImageLoadStartEpoch_ = performance.timeOrigin;
     /** @private {number} */
     this.backgroundImageLoadStart_ = 0;
+
+    chrome.metricsPrivate.recordValue(
+        {
+          metricName: 'NewTabPage.Height',
+          type: chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
+          min: 1,
+          max: 1000,
+          buckets: 200,
+        },
+        Math.floor(document.documentElement.clientHeight));
   }
 
   /** @override */
@@ -442,6 +469,9 @@ class AppElement extends mixinBehaviors
 
   /** @private */
   async onLazyRendered_() {
+    // Integration tests use this attribute to determine when lazy load has
+    // completed.
+    document.documentElement.setAttribute('lazy-loaded', true);
     // Instantiate modules even if |modulesEnabled| is false to counterfactually
     // trigger a HaTS survey in a potential control group.
     if (!loadTimeData.getBoolean('modulesLoadEnabled') ||
@@ -661,9 +691,8 @@ class AppElement extends mixinBehaviors
         messageData.commandId :
         Command.kUnknownCommand;
 
-    PromoBrowserCommandProxy.getInstance()
-        .handler.canExecuteCommand(commandId)
-        .then(({canExecute}) => {
+    BrowserCommandProxy.getInstance().handler.canExecuteCommand(commandId).then(
+        ({canExecute}) => {
           const response = {messageType: messageData.messageType};
           response[messageData.commandId] = canExecute;
           commandSource.postMessage(response, commandOrigin);
@@ -688,7 +717,7 @@ class AppElement extends mixinBehaviors
         commandData.commandId :
         Command.kUnknownCommand;
 
-    PromoBrowserCommandProxy.getInstance()
+    BrowserCommandProxy.getInstance()
         .handler
         .executeCommand(
             commandId,

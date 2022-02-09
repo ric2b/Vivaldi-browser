@@ -16,7 +16,6 @@
 
 namespace ash {
 
-class AppListItem;
 class AppListModel;
 class AppListView;
 class AppListViewDelegate;
@@ -33,6 +32,10 @@ class ASH_EXPORT AppListMainView : public views::View,
                                    public SearchBoxViewDelegate {
  public:
   AppListMainView(AppListViewDelegate* delegate, AppListView* app_list_view);
+
+  AppListMainView(const AppListMainView&) = delete;
+  AppListMainView& operator=(const AppListMainView&) = delete;
+
   ~AppListMainView() override;
 
   void Init(int initial_apps_page, SearchBoxView* search_box_view);
@@ -59,10 +62,6 @@ class ASH_EXPORT AppListMainView : public views::View,
   // Overridden from views::View:
   const char* GetClassName() const override;
   void Layout() override;
-
-  // Invoked when an item is activated on the grid view. |event_flags| contains
-  // the flags of the keyboard/mouse event that triggers the activation request.
-  void ActivateApp(AppListItem* item, int event_flags);
 
   // Called by the root grid view to cancel a drag that started inside a folder.
   // This can occur when the root grid is visible for a reparent and its model
@@ -98,8 +97,6 @@ class ASH_EXPORT AppListMainView : public views::View,
 
   ContentsView* contents_view_ = nullptr;  // Owned by views hierarchy.
   AppListView* const app_list_view_;       // Owned by views hierarchy.
-
-  DISALLOW_COPY_AND_ASSIGN(AppListMainView);
 };
 
 }  // namespace ash

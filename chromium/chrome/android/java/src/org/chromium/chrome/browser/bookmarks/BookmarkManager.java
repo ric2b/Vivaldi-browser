@@ -114,6 +114,16 @@ public class BookmarkManager
         }
 
         @Override
+        public void bookmarkNodeChanged(BookmarkItem node) {
+            if (getCurrentState() == BookmarkUIState.STATE_FOLDER && !mStateStack.isEmpty()
+                    && node.getId().equals(mStateStack.peek().mFolder)) {
+                notifyUI(mStateStack.peek());
+                return;
+            }
+            super.bookmarkNodeChanged(node);
+        }
+
+        @Override
         public void bookmarkModelChanged() {
             // If the folder no longer exists in folder mode, we need to fall back. Relying on the
             // default behavior by setting the folder mode again.
@@ -237,7 +247,7 @@ public class BookmarkManager
 
         mToolbar = (BookmarkActionBar) mSelectableListLayout.initializeToolbar(
                 R.layout.bookmark_action_bar, mSelectionDelegate, 0, R.id.normal_menu_group,
-                R.id.selection_mode_menu_group, null, true, isDialogUi);
+                R.id.selection_mode_menu_group, null, isDialogUi);
         mToolbar.initializeSearchView(
                 this, R.string.bookmark_action_bar_search, R.id.search_menu_id);
         if (ChromeApplicationImpl.isVivaldi())
@@ -402,15 +412,15 @@ public class BookmarkManager
     /**
      * This is the ultimate internal method that updates UI and controls backstack. And it is the
      * only method that pushes states to {@link #mStateStack}.
-     * <p>
-     * If the given state is not valid, all_bookmark state will be shown. Afterwards, this method
+     *
+     * <p>If the given state is not valid, all_bookmark state will be shown. Afterwards, this method
      * checks the current state: if currently in loading state, it pops it out and adds the new
      * state to the back stack. It also notifies the {@link #mNativePage} (if any) that the
      * url has changed.
-     * <p>
-     * Also note that even if we store states to {@link #mStateStack}, on tablet the back navigation
-     * and back button are not controlled by the manager: the tab handles back key and backstack
-     * navigation.
+     *
+     * <p>Also note that even if we store states to {@link #mStateStack}, on tablet the back
+     * navigation and back button are not controlled by the manager: the tab handles back key and
+     * backstack navigation.
      */
     private void setState(BookmarkUIState state) {
         if (!state.isValid(mBookmarkModel)) {
@@ -422,12 +432,14 @@ public class BookmarkManager
 
         // The loading state is not persisted in history stack and once we have a valid state it
         // shall be removed.
-        if (!mStateStack.isEmpty()
-                && mStateStack.peek().mState == BookmarkUIState.STATE_LOADING) {
+        if (!mStateStack.isEmpty() && mStateStack.peek().mState == BookmarkUIState.STATE_LOADING) {
             mStateStack.pop();
         }
         mStateStack.push(state);
+        notifyUI(state);
+    }
 
+    private void notifyUI(BookmarkUIState state) {
         if (state.mState == BookmarkUIState.STATE_FOLDER) {
             // Loading and searching states may be pushed to the stack but should never be stored in
             // preferences.
@@ -656,5 +668,16 @@ public class BookmarkManager
                         readString(PREF_BOOKMARKS_SORT_ORDER,
                 BookmarkItemsAdapter.SortOrder.MANUAL.name()));
         return sortOrder;
+    }
+
+    /** Vivaldi **/
+    public void clearSelection() {
+        mSelectionDelegate.clearSelection();
+    }
+    public BookmarkId getCurrentFolder() {
+        return mAdapter.getCurrentFolder();
+    }
+    public BookmarkActionBar getToolbarForVivaldi() {
+        return mToolbar;
     }
 }

@@ -110,8 +110,8 @@ public class AssistantPaymentMethodSection
         AutofillPaymentInstrument method = model.mOption;
         ImageView cardIssuerImageView = view.findViewById(R.id.credit_card_issuer_icon);
         try {
-            cardIssuerImageView.setImageDrawable(view.getContext().getResources().getDrawable(
-                    method.getCard().getIssuerIconDrawableId()));
+            cardIssuerImageView.setImageDrawable(
+                    view.getContext().getDrawable(method.getCard().getIssuerIconDrawableId()));
         } catch (Resources.NotFoundException e) {
             cardIssuerImageView.setImageDrawable(null);
         }
@@ -175,6 +175,11 @@ public class AssistantPaymentMethodSection
         // TODO(crbug.com/806868): Implement better check for the case where PDM is disabled, we
         //  won't have IDs.
         return TextUtils.equals(profileA.getGUID(), profileB.getGUID());
+    }
+
+    @Override
+    protected boolean shouldNotifySelectionWhenSettingItems() {
+        return false;
     }
 
     void onAddressesChanged(List<AutofillAddress> addresses) {

@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Képek gyorsítótára</translation>
 <translation id="1601560923496285236">Alkalmaz</translation>
 <translation id="1603914832182249871">(Inkognitó)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fájlleírók</translation>
 <translation id="1682548588986054654">Új inkognitó ablak</translation>
-<translation id="1706625117072057435">Nagyítási/kicsinyítési szintek</translation>
 <translation id="1708338024780164500">(Inaktív)</translation>
 <translation id="1723824996674794290">&amp;Új ablak</translation>
-<translation id="1725149567830788547">&amp;Vezérlők megjelenítése</translation>
 <translation id="1729533290416704613">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a cím- és keresősávban indított kereséskor.</translation>
 <translation id="174123615272205933">Egyéni</translation>
 <translation id="1744108098763830590">háttérbeli oldal</translation>
@@ -89,11 +86,9 @@
 <translation id="2445081178310039857">A bővítmény gyökérkönyvtárát kötelező megadni.</translation>
 <translation id="2470702053775288986">Nem támogatott kiterjesztések kikapcsolva</translation>
 <translation id="2476578072172137802">Webhelybeállítások</translation>
-<translation id="2482878487686419369">Értesítések</translation>
 <translation id="2498539833203011245">Kis méret</translation>
 <translation id="2509495747794740764">Az átméretezési értéknek 10 és 200 közötti számnak kell lennie.</translation>
 <translation id="253557089021624350">Életben tartási számláló</translation>
-<translation id="2546283357679194313">Sütik és webhelyadatok</translation>
 <translation id="2550212893339833758">Lapozómemória</translation>
 <translation id="2553440850688409052">A beépülő elrejtése</translation>
 <translation id="26224892172169984">A webhelyek nem kezelhetnek protokollokat</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">CSS-gyorsítótár</translation>
 <translation id="3008272652534848354">Engedélyek visszavonása</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">MIDI-eszközök</translation>
 <translation id="3021678814754966447">&amp;Keret forrásának megtekintése</translation>
 <translation id="3036546437875325427">Flash engedélyezése</translation>
 <translation id="3046910703532196514">Weboldal, teljes</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Hivatkozás megnyitása mint</translation>
 <translation id="3154429428035006212">Több mint egy hónapja offline</translation>
 <translation id="3222066309010235055">Előmegjelenítés: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Válassza ki a bővítmény gyökérkönyvtárát. A bővítmény frissítéséhez meg kell adni az ismét használandó privátkulcs-fájlt is.</translation>
 <translation id="3280237271814976245">Mentés &amp;másként...</translation>
 <translation id="3285322247471302225">Új &amp;lap</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">A bezárt webhelyek nem fejezhetik be az adatküldést és -fogadást</translation>
 <translation id="3711931198657368127"><ph name="URL" /> be&amp;illesztése és felkeresése</translation>
 <translation id="3727187387656390258">Felugró ablak vizsgálata</translation>
-<translation id="3744111561329211289">Szinkronizálás a háttérben</translation>
 <translation id="3760460896538743390">&amp;Háttéroldal vizsgálata</translation>
 <translation id="3797900183766075808">Keresé&amp;s a(z) <ph name="SEARCH_ENGINE" /> keresőmotorral a következőre: <ph name="SEARCH_TERMS" /></translation>
 <translation id="3800806661949714323">Összes megjelenítése (ajánlott)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Több mint egy éve offline</translation>
 <translation id="3905761538810670789">Alkalmazás javítása</translation>
 <translation id="3908501907586732282">Bővítmény engedélyezése</translation>
+<translation id="3909701002594999354">Az összes &amp;vezérlő megjelenítése</translation>
 <translation id="3909791450649380159">Ki&amp;vágás</translation>
 <translation id="3927932062596804919">Elutasítás</translation>
 <translation id="3936390757709632190">&amp;Hang megnyitása új lapon</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Kikapcsolás</translation>
 <translation id="4409697491990005945">Margók</translation>
 <translation id="4423376891418188461">A beállítások visszaállítása</translation>
-<translation id="4434045419905280838">Előugró ablakok és átirányítások</translation>
 <translation id="4478664379124702289">Hivatkozás mentése &amp;másként...</translation>
 <translation id="4579581181964204535">Nem lehet átküldeni a következőt: <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Ugrás: <ph name="URL" /></translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Napló</translation>
 <translation id="5627086634964711283">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a Kezdőlap gombra történő kattintáskor.</translation>
 <translation id="563535393368633106">Kérdezzen rá hozzáférés előtt (ajánlott)</translation>
-<translation id="5649053991847567735">Automatikus letöltések</translation>
 <translation id="5677928146339483299">Letiltva</translation>
-<translation id="5689516760719285838">Helyszín</translation>
 <translation id="5707185214361380026">Sikertelen bővítmény betöltés:</translation>
 <translation id="5715711091495208045">Beépülő modul közvetítője: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Mentés PDF-ként</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">Fordí&amp;tás <ph name="LANGUAGE" /> nyelvre</translation>
 <translation id="6011449291337289699">Webhelyadatok törlése</translation>
 <translation id="6042308850641462728">Több</translation>
-<translation id="6059925163896151826">USB-eszközök</translation>
 <translation id="6086846494333236931">Rendszergazda által telepítve</translation>
 <translation id="6101226222197207147">Új alkalmazás hozzáadva (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetkapcsolata felett más vette át az irányítást</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">Alkalmazás: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Ké&amp;p másolása</translation>
 <translation id="6550675742724504774">Beállítások</translation>
-<translation id="6612358246767739896">Védett tartalom</translation>
+<translation id="6579369886355986318">Az összes &amp;vezérlő megjelenítése</translation>
 <translation id="6639554308659482635">SQLite memória</translation>
 <translation id="6686817083349815241">Jelszó mentése</translation>
 <translation id="6691936601825168937">&amp;Következő</translation>
@@ -359,8 +348,6 @@
 <translation id="7270858098575133036">Kérdezzen meg, amikor egy webhely exkluzív rendszerüzenetekkel szeretné elérni a MIDI-eszközöket</translation>
 <translation id="7287143125007575591">Hozzáférés megtagadva.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">&amp;Vezérlők megjelenítése</translation>
-<translation id="7374461526650987610">Protokollkezelők</translation>
 <translation id="7385854874724088939">Valami nem sikerült a nyomtatás során. Ellenőrizd a nyomtatót, és próbáld újra.</translation>
 <translation id="7412226954991670867">GPU memória</translation>
 <translation id="7421925624202799674">&amp;Oldal forrásának megtekintése</translation>
@@ -368,7 +355,6 @@
 <translation id="7427348830195639090">Háttéroldal: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">A nyomtató kiválasztásával engedélyt adsz annak elérésére a következő bővítmény számára:</translation>
 <translation id="749028671485790643">Személy: <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Folyamat leállítása</translation>
 <translation id="7576690715254076113">Szétválogatás</translation>
 <translation id="7629827748548208700">Lap: <ph name="TAB_NAME" /></translation>
@@ -419,7 +405,6 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural, =1 {Letöltés folyamatban} other {Letöltések folyamatban}}</translation>
 <translation id="8230134520748321204">Szeretnéd elmenteni a(z) <ph name="ORIGIN" /> jelszavát?</translation>
 <translation id="8261378640211443080">A bővítmény nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származik, és előfordulhat, hogy az Ön tudta nélkül lett telepítve.</translation>
-<translation id="8270242299912238708">PDF-dokumentumok</translation>
 <translation id="8339059274628563283"><ph name="SITE" /> – helyben tárolt adatok</translation>
 <translation id="8351419472474436977">A bővítmény átvette az irányítást proxybeállításai felett, ami azt jelenti, hogy a bővítmény minden internetes tevékenységét módosíthatja, feltörheti vagy lehallgathatja. Ha nem biztos benne, hogy miért történt a változás, akkor valószínűleg nem is akarja azt.</translation>
 <translation id="8382913212082956454">&amp;E-mail cím másolása</translation>
@@ -467,8 +452,8 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="9170848237812810038">&amp;Visszavonás</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" hozzáadva</translation>
 <translation id="9218430445555521422">Beállítás alapértelmezettként</translation>
-<translation id="9219103736887031265">Képek</translation>
 <translation id="93766956588638423">Bővítmény javítása</translation>
+<translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Fekvő</translation>
 <translation id="994289308992179865">&amp;Ismétlés</translation>
 <translation id="998747458861718449">&amp;Vizsgálat</translation>

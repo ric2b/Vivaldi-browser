@@ -27,6 +27,7 @@
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "build/chromeos_buildflags.h"
+#include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/vaapi/va_surface.h"
 #include "media/gpu/vaapi/vaapi_utils.h"
@@ -35,9 +36,9 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 
-#if defined(USE_X11)
+#if BUILDFLAG(USE_VAAPI_X11)
 #include "ui/gfx/x/xproto.h"  // nogncheck
-#endif  // USE_X11
+#endif                        // BUILDFLAG(USE_VAAPI_X11)
 
 namespace gfx {
 enum class BufferFormat;
@@ -161,6 +162,11 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       EncryptionScheme encryption_scheme,
       const ReportErrorToUMACB& report_error_to_uma_cb);
 
+  // Returns the supported SVC scalability modes for specified profile.
+  static std::vector<SVCScalabilityMode> GetSupportedScalabilityModes(
+      VideoCodecProfile media_profile,
+      VAProfile va_profile);
+
   // Return the supported video encode profiles.
   static VideoEncodeAccelerator::SupportedProfiles GetSupportedEncodeProfiles();
 
@@ -212,6 +218,9 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Returns true if the VPP supports converting from/to |fourcc|.
   static bool IsVppFormatSupported(uint32_t fourcc);
 
+  // Returns the pixel formats supported by the VPP.
+  static std::vector<Fourcc> GetVppSupportedFormats();
+
   // Returns true if VPP supports the format conversion from a JPEG decoded
   // internal surface to a FOURCC. |rt_format| corresponds to the JPEG's
   // subsampling format. |fourcc| is the output surface's FOURCC.
@@ -235,7 +244,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   static VAEntrypoint GetDefaultVaEntryPoint(CodecMode mode, VAProfile profile);
 
   static uint32_t BufferFormatToVARTFormat(gfx::BufferFormat fmt);
-  static uint32_t BufferFormatToVAFourCC(gfx::BufferFormat fmt);
 
   // Returns the current instance identifier for the protected content system.
   // This can be used to detect when protected context loss has occurred, so any
@@ -285,6 +293,20 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // querying libva indicates that our protected session is no longer alive,
   // otherwise this will return false.
   bool IsProtectedSessionDead();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Returns true if and only if |va_protected_session_id| is not VA_INVALID_ID
+  // and querying libva indicates that the protected session identified by
+  // |va_protected_session_id| is no longer alive.
+  bool IsProtectedSessionDead(VAProtectedSessionID va_protected_session_id);
+
+  // Returns the ID of the current protected session or VA_INVALID_ID if there's
+  // none. This must be called on the same sequence as other methods that use
+  // the protected session ID internally.
+  //
+  // TODO(b/183515581): update this documentation once we force the VaapiWrapper
+  // to be used on a single sequence.
+  VAProtectedSessionID GetProtectedSessionID() const;
+#endif
   // If we have a protected session, destroys it immediately. This should be
   // used as part of recovering dead protected sessions.
   void DestroyProtectedSession();
@@ -404,13 +426,13 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       const std::vector<std::pair<VABufferID, VABufferDescriptor>>& va_buffers)
       WARN_UNUSED_RESULT;
 
-#if defined(USE_X11)
+#if BUILDFLAG(USE_VAAPI_X11)
   // Put data from |va_surface_id| into |x_pixmap| of size
   // |dest_size|, converting/scaling to it.
   bool PutSurfaceIntoPixmap(VASurfaceID va_surface_id,
                             x11::Pixmap x_pixmap,
                             gfx::Size dest_size) WARN_UNUSED_RESULT;
-#endif  // USE_X11
+#endif  // BUILDFLAG(USE_VAAPI_X11)
 
   // Creates a ScopedVAImage from a VASurface |va_surface_id| and map it into
   // memory with the given |format| and |size|. If |format| is not equal to the
@@ -462,19 +484,36 @@ class MEDIA_GPU_EXPORT VaapiWrapper
                                          size_t* max_ref_frames)
       WARN_UNUSED_RESULT;
 
+  // Gets packed headers are supported for encoding. This is called for
+  // H264 encoding. |packed_sps|, |packed_pps| and |packed_slice| stands for
+  // whether packed slice parameter set, packed picture parameter set and packed
+  // slice header is supported, respectively.
+  virtual bool GetSupportedPackedHeaders(VideoCodecProfile profile,
+                                         bool& packed_sps,
+                                         bool& packed_pps,
+                                         bool& packed_slice) WARN_UNUSED_RESULT;
+
   // Checks if the driver supports frame rotation.
   bool IsRotationSupported();
 
   // Blits a VASurface |va_surface_src| into another VASurface
   // |va_surface_dest| applying pixel format conversion, rotation, cropping
   // and scaling if needed. |src_rect| and |dest_rect| are optional. They can
-  // be used to specify the area used in the blit.
-  virtual bool BlitSurface(const VASurface& va_surface_src,
-                           const VASurface& va_surface_dest,
-                           absl::optional<gfx::Rect> src_rect = absl::nullopt,
-                           absl::optional<gfx::Rect> dest_rect = absl::nullopt,
-                           VideoRotation rotation = VIDEO_ROTATION_0)
-      WARN_UNUSED_RESULT;
+  // be used to specify the area used in the blit. If |va_protected_session_id|
+  // is provided and is not VA_INVALID_ID, the corresponding protected session
+  // is attached to the VPP context prior to submitting the VPP buffers and
+  // detached after submitting those buffers.
+  virtual bool BlitSurface(
+      const VASurface& va_surface_src,
+      const VASurface& va_surface_dest,
+      absl::optional<gfx::Rect> src_rect = absl::nullopt,
+      absl::optional<gfx::Rect> dest_rect = absl::nullopt,
+      VideoRotation rotation = VIDEO_ROTATION_0
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      ,
+      VAProtectedSessionID va_protected_session_id = VA_INVALID_ID
+#endif
+      ) WARN_UNUSED_RESULT;
 
   // Initialize static data before sandbox is enabled.
   static void PreSandboxInitialization();
@@ -495,6 +534,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   FRIEND_TEST_ALL_PREFIXES(VaapiUtilsTest, ScopedVAImage);
   FRIEND_TEST_ALL_PREFIXES(VaapiUtilsTest, BadScopedVAImage);
   FRIEND_TEST_ALL_PREFIXES(VaapiUtilsTest, BadScopedVABufferMapping);
+  FRIEND_TEST_ALL_PREFIXES(VaapiMinigbmTest, AllocateAndCompareWithMinigbm);
 
   bool Initialize(VAProfile va_profile,
                   EncryptionScheme encryption_scheme) WARN_UNUSED_RESULT;

@@ -192,6 +192,8 @@ public class ToolbarTablet extends ToolbarLayout
     @Override
     public void setLocationBarCoordinator(LocationBarCoordinator locationBarCoordinator) {
         mLocationBar = locationBarCoordinator;
+        final int color = ChromeColors.getSurfaceColor(getContext(), R.dimen.default_elevation_2);
+        mLocationBar.getTabletCoordinator().getBackground().setTint(color);
     }
 
     /**
@@ -810,6 +812,10 @@ public class ToolbarTablet extends ToolbarLayout
     @Override
     public void onUrlFocusChange(final boolean hasFocus) {
         super.onUrlFocusChange(hasFocus);
+        if (hasFocus) {
+            View v = mActivity.findViewById(R.id.panels_main);
+            if (v != null) v.setVisibility(View.GONE);
+        }
         mShieldButton.onUrlFocusChange(hasFocus);
     }
 

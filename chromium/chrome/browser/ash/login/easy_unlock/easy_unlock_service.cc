@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/smartlock_state.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -53,8 +54,6 @@
 namespace ash {
 namespace {
 
-using ::proximity_auth::SmartLockState;
-
 PrefService* GetLocalState() {
   return g_browser_process ? g_browser_process->local_state() : NULL;
 }
@@ -90,6 +89,9 @@ class EasyUnlockService::PowerMonitor : public PowerManagerClient::Observer {
     PowerManagerClient::Get()->AddObserver(this);
   }
 
+  PowerMonitor(const PowerMonitor&) = delete;
+  PowerMonitor& operator=(const PowerMonitor&) = delete;
+
   ~PowerMonitor() override { PowerManagerClient::Get()->RemoveObserver(this); }
 
  private:
@@ -103,7 +105,7 @@ class EasyUnlockService::PowerMonitor : public PowerManagerClient::Observer {
         FROM_HERE,
         base::BindOnce(&PowerMonitor::ResetWakingUp,
                        weak_ptr_factory_.GetWeakPtr()),
-        base::TimeDelta::FromSeconds(5));
+        base::Seconds(5));
     service_->OnSuspendDone();
     service_->UpdateAppState();
     // Note that `this` may get deleted after `UpdateAppState` is called.
@@ -113,8 +115,6 @@ class EasyUnlockService::PowerMonitor : public PowerManagerClient::Observer {
 
   EasyUnlockService* service_;
   base::WeakPtrFactory<PowerMonitor> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PowerMonitor);
 };
 
 EasyUnlockService::EasyUnlockService(
@@ -462,7 +462,7 @@ void EasyUnlockService::SetHardlockStateForUser(
   // forced.
   if (GetSmartLockStateHandler() &&
       GetSmartLockStateHandler()->state() ==
-          proximity_auth::SmartLockState::kPasswordReentryRequired) {
+          SmartLockState::kPasswordReentryRequired) {
     return;
   }
 

@@ -45,9 +45,14 @@ struct StartParams {
   };
 
   StartParams();
-  ~StartParams();
+
+  StartParams(const StartParams&) = delete;
+  StartParams& operator=(const StartParams&) = delete;
+
   StartParams(StartParams&& other);
   StartParams& operator=(StartParams&& other);
+
+  ~StartParams();
 
   bool native_bridge_experiment = false;
   int lcd_density = -1;
@@ -77,6 +82,9 @@ struct StartParams {
   // flakiness in tests.
   bool disable_download_provider = false;
 
+  // Flag to disable ureadahead completely, including host and guest parts.
+  bool disable_ureadahead = false;
+
   // The number of logical CPU cores that are currently disabled on the host.
   uint32_t num_cores_disabled = 0;
 
@@ -89,8 +97,8 @@ struct StartParams {
   // Flag to enable keyboard shortcut helper integration.
   bool enable_keyboard_shortcut_helper_integration = false;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(StartParams);
+  // Flag to enable notification refresh.
+  bool enable_notifications_refresh = false;
 };
 
 }  // namespace arc

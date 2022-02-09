@@ -92,22 +92,6 @@ base::FilePath GetUpdateNotifierPath(const base::FilePath& install_binary_dir);
 base::CommandLine GetCommonUpdateNotifierCommand(
     const base::FilePath& install_binary_dir = base::FilePath());
 
-// Return true if an update notifier autorun entry in the registry exists and
-// matches the given installation.
-bool IsUpdateNotifierEnabledAsAutorun(const base::FilePath& install_binary_dir);
-
-// Return true if an update notifier autorun entry in the registry exists and
-// points to some path.
-bool IsUpdateNotifierEnabledAsAutorunForAnyPath();
-
-// Create an update notifier autorun entry in the registry and launch the
-// notification process.
-bool EnableUpdateNotifierWithAutorun(const base::FilePath& install_binary_dir);
-
-// If an update notifier autorun entry in the registry exists and matches the
-// given installation, remove it and quit corresponding update notifier process.
-bool DisableUpdateNotifierAsAutorun(const base::FilePath& install_binary_dir);
-
 // Launch the update notifier using the given commnad line. This can block and
 // must not be called from the browser UI thread.
 bool LaunchNotifierProcess(const base::CommandLine& command);

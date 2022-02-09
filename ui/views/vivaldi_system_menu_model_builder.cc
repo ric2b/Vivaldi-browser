@@ -24,11 +24,9 @@
 VivaldiSystemMenuModelBuilder::VivaldiSystemMenuModelBuilder(
     ui::AcceleratorProvider* provider,
     Browser* browser)
-    : menu_delegate_(provider, browser) {
-}
+    : menu_delegate_(provider, browser) {}
 
-VivaldiSystemMenuModelBuilder::~VivaldiSystemMenuModelBuilder() {
-}
+VivaldiSystemMenuModelBuilder::~VivaldiSystemMenuModelBuilder() {}
 
 void VivaldiSystemMenuModelBuilder::Init() {
   ui::SimpleMenuModel* model = new ui::SimpleMenuModel(&menu_delegate_);
@@ -45,16 +43,16 @@ void VivaldiSystemMenuModelBuilder::BuildMenu(ui::SimpleMenuModel* model) {
   // We add the menu items in reverse order so that insertion_index never needs
   // to change.
   // TODO(pettern): Do we want a special menu for popups and settings?
-//  if (browser()->is_type_normal())
-    BuildSystemMenuForBrowserWindow(model);
-//  else
-//    BuildSystemMenuForAppOrPopupWindow(model);
+  //  if (browser()->is_type_normal())
+  BuildSystemMenuForBrowserWindow(model);
+  //  else
+  //    BuildSystemMenuForAppOrPopupWindow(model);
   AddFrameToggleItems(model);
 }
 
 void VivaldiSystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
     ui::SimpleMenuModel* model) {
-//  model->AddItemWithStringId(IDC_NEW_TAB, IDS_NEW_TAB);
+  //  model->AddItemWithStringId(IDC_NEW_TAB, IDS_NEW_TAB);
   model->AddItemWithStringId(IDC_RESTORE_TAB, IDS_RESTORE_TAB);
   if (chrome::CanOpenTaskManager()) {
     model->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -104,7 +102,6 @@ void VivaldiSystemMenuModelBuilder::AddFrameToggleItems(
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDebugEnableFrameToggle)) {
     model->AddSeparator(ui::NORMAL_SEPARATOR);
-    model->AddItem(IDC_DEBUG_FRAME_TOGGLE,
-                   u"Toggle Frame Type");
+    model->AddItem(IDC_DEBUG_FRAME_TOGGLE, u"Toggle Frame Type");
   }
 }

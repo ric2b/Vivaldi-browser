@@ -29,6 +29,11 @@ class LocalDeviceInfoProviderImpl : public MutableLocalDeviceInfoProvider {
   LocalDeviceInfoProviderImpl(version_info::Channel channel,
                               const std::string& version,
                               const DeviceInfoSyncClient* sync_client);
+
+  LocalDeviceInfoProviderImpl(const LocalDeviceInfoProviderImpl&) = delete;
+  LocalDeviceInfoProviderImpl& operator=(const LocalDeviceInfoProviderImpl&) =
+      delete;
+
   ~LocalDeviceInfoProviderImpl() override;
 
   // MutableLocalDeviceInfoProvider implementation.
@@ -77,8 +82,6 @@ class LocalDeviceInfoProviderImpl : public MutableLocalDeviceInfoProvider {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<LocalDeviceInfoProviderImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(LocalDeviceInfoProviderImpl);
 };
 
 }  // namespace syncer

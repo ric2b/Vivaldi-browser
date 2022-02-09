@@ -317,7 +317,7 @@ class PasswordManagerSyncTest : public SyncTest {
     ASSERT_EQ(web_contents,
               GetBrowser(0)->tab_strip_model()->GetActiveWebContents());
     NavigationObserver observer(web_contents);
-    ui_test_utils::NavigateToURL(GetBrowser(0), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(GetBrowser(0), url));
     observer.Wait();
     // After navigation, the password manager retrieves any matching credentials
     // from the store(s). So before doing anything else (like filling and
@@ -771,6 +771,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   EXPECT_TRUE(bubble_observer.IsUpdatePromptAvailable());
 }
 
+// Signing out on Lacros is not possible,
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
                        SignOutWithUnsyncedPasswordsOpensBubble) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -797,6 +799,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   SignOut();
   bubble_observer.WaitForSaveUnsyncedCredentialsPrompt();
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
                        PasswordDeletionsPropagateToServer) {

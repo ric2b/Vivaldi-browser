@@ -1,8 +1,8 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "importer/chromium_profile_importer.h"
-#include "base/files/file_util.h"
 
 using base::PathService;
 
@@ -27,12 +27,16 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
       profile_path = home_path.Append(".config").Append("opera");
       break;
     case importer::TYPE_BRAVE:
-      profile_path = home_path.Append(".config").Append("BraveSoftware")
-          .Append("Brave-Browser");
+      profile_path = home_path.Append(".config")
+                         .Append("BraveSoftware")
+                         .Append("Brave-Browser");
       if (!base::PathExists(profile_path)) {
-        profile_path = home_path.Append("snap").Append("brave")
-            .Append("current").Append(".config").Append("BraveSoftware")
-            .Append("Brave-Browser");
+        profile_path = home_path.Append("snap")
+                           .Append("brave")
+                           .Append("current")
+                           .Append(".config")
+                           .Append("BraveSoftware")
+                           .Append("Brave-Browser");
       }
       break;
 

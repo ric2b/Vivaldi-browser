@@ -21,12 +21,13 @@ namespace contact {
 class ContactModelLoadedObserver : public ContactModelObserver {
  public:
   ContactModelLoadedObserver();
+  ContactModelLoadedObserver(const ContactModelLoadedObserver&) = delete;
+  ContactModelLoadedObserver& operator=(const ContactModelLoadedObserver&) =
+      delete;
 
  private:
   void ContactModelLoaded(ContactService* service) override;
   void ContactModelBeingDeleted(ContactService* service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactModelLoadedObserver);
 };
 
 }  // namespace contact

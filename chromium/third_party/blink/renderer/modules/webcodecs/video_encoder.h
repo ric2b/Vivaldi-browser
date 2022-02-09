@@ -75,6 +75,8 @@ class MODULES_EXPORT VideoEncoder final
   static ScriptPromise isConfigSupported(ScriptState*,
                                          const VideoEncoderConfig*,
                                          ExceptionState&);
+  // ScriptWrappable override.
+  bool HasPendingActivity() const override;
 
  private:
   using Base = EncoderBase<VideoEncoderTraits>;
@@ -85,6 +87,7 @@ class MODULES_EXPORT VideoEncoder final
       uint32_t reset_count,
       media::VideoEncoderOutput output,
       absl::optional<media::VideoEncoder::CodecDescription> codec_desc);
+  bool ReadyToProcessNextRequest() override;
   void ProcessEncode(Request* request) override;
   void ProcessConfigure(Request* request) override;
   void ProcessReconfigure(Request* request) override;
@@ -101,6 +104,10 @@ class MODULES_EXPORT VideoEncoder final
 
   void ContinueConfigureWithGpuFactories(
       Request* request,
+      media::GpuVideoAcceleratorFactories* gpu_factories);
+  std::unique_ptr<media::VideoEncoder> CreateAcceleratedVideoEncoder(
+      media::VideoCodecProfile profile,
+      const media::VideoEncoder::Options& options,
       media::GpuVideoAcceleratorFactories* gpu_factories);
   std::unique_ptr<media::VideoEncoder> CreateMediaVideoEncoder(
       const ParsedConfig& config,

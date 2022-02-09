@@ -17,11 +17,8 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/common/chrome_paths.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/test/test_utils.h"
 #include "extensions/browser/entry_info.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/browser/notification_types.h"
 #include "net/base/mime_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -163,18 +160,16 @@ scoped_refptr<const extensions::Extension> InstallTestingChromeApp(
     Profile* profile,
     const char* test_path_ascii) {
   base::ScopedAllowBlockingForTesting allow_io;
-  content::WindowedNotificationObserver handler_ready(
-      extensions::NOTIFICATION_EXTENSION_BACKGROUND_PAGE_READY,
-      content::NotificationService::AllSources());
   extensions::ChromeTestExtensionLoader loader(profile);
 
   base::FilePath path;
   CHECK(base::PathService::Get(chrome::DIR_TEST_DATA, &path));
   path = path.AppendASCII(test_path_ascii);
 
+  // ChromeTestExtensionLoader waits for the background page to load before
+  // returning.
   auto extension = loader.LoadExtension(path);
   CHECK(extension);
-  handler_ready.Wait();
   return extension;
 }
 
@@ -210,10 +205,13 @@ std::vector<file_tasks::FullTaskDescriptor> GetTasksForFile(
   std::vector<extensions::EntryInfo> entries;
   entries.emplace_back(file, mime_type, false);
 
-  // Use empty URLs in this helper (i.e. only support files backed by volumes).
-  // FindExtensionAndAppTasks() does not pass them to FindWebTasks() or
-  // FindFileHandlerTasks() in any case.
-  std::vector<GURL> file_urls(entries.size(), GURL());
+  // Use fake URLs in this helper. This is needed because FindAppServiceTasks
+  // uses the file extension found in the URL to do file extension matching.
+  std::vector<GURL> file_urls;
+  GURL url = GURL(base::JoinString(
+      {"filesystem:https://site.com/isolated/foo", file.Extension()}, ""));
+  CHECK(url.is_valid());
+  file_urls.emplace_back(url);
 
   std::vector<file_tasks::FullTaskDescriptor> result;
   bool invoked_synchronously = false;

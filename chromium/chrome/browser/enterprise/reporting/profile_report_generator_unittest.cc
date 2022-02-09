@@ -6,15 +6,17 @@
 
 #include <string>
 
+#include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/json/values_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
 #include "chrome/browser/profiles/profile_attributes_init_params.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -27,6 +29,12 @@
 #include "extensions/browser/pref_names.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_android.h"
+#else
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
+#endif  // defined(OS_ANDROID)
+
 using ::testing::NiceMock;
 
 namespace em = enterprise_management;
@@ -34,15 +42,17 @@ namespace em = enterprise_management;
 namespace enterprise_reporting {
 namespace {
 
-const int kMaxNumberOfExtensionRequest = 1000;
-
 constexpr char kProfile[] = "Profile";
 constexpr char16_t kProfile16[] = u"Profile";
 constexpr char kIdleProfile[] = "IdleProfile";
 constexpr char16_t kIdleProfile16[] = u"IdleProfile";
+
+#if !defined(OS_ANDROID)
+const int kMaxNumberOfExtensionRequest = 1000;
 constexpr char kExtensionId[] = "abcdefghijklmnopabcdefghijklmnop";
 constexpr char kExtensionId2[] = "abcdefghijklmnopabcdefghijklmnpo";
 constexpr int kFakeTime = 123456;
+constexpr char kJustification[] = "I really need to change my boring cursor.";
 
 constexpr char kAllowedExtensionSettings[] = R"({
   "abcdefghijklmnopabcdefghijklmnop" : {
@@ -55,8 +65,15 @@ constexpr char kBlockedExtensionSettings[] = R"({
     "installation_mode": "blocked"
   }
 })";
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace
+
+#if defined(OS_ANDROID)
+typedef ReportingDelegateFactoryAndroid PlatformReportingDelegateFactory;
+#else
+typedef ReportingDelegateFactoryDesktop PlatformReportingDelegateFactory;
+#endif  // defined(OS_ANDROID)
 
 class ProfileReportGeneratorTest : public ::testing::Test {
  public:
@@ -117,6 +134,7 @@ class ProfileReportGeneratorTest : public ::testing::Test {
     return report;
   }
 
+#if !defined(OS_ANDROID)
   void SetExtensionToPendingList(const std::vector<std::string>& ids) {
     std::unique_ptr<base::Value> id_values =
         std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
@@ -125,6 +143,11 @@ class ProfileReportGeneratorTest : public ::testing::Test {
       request_data.SetKey(
           extension_misc::kExtensionRequestTimestamp,
           ::base::TimeToValue(base::Time::FromJavaTime(kFakeTime)));
+      if (base::FeatureList::IsEnabled(
+              features::kExtensionWorkflowJustification)) {
+        request_data.SetKey(extension_misc::kExtensionWorkflowJustification,
+                            base::Value(kJustification));
+      }
       id_values->SetKey(id, std::move(request_data));
     }
     profile()->GetTestingPrefService()->SetUserPref(
@@ -139,12 +162,15 @@ class ProfileReportGeneratorTest : public ::testing::Test {
         extensions::pref_names::kExtensionManagement,
         base::Value::ToUniquePtrValue(std::move(*settings)));
   }
+#endif  // !defined(OS_ANDROID)
 
   TestingProfile* profile() { return profile_; }
   TestingProfileManager* profile_manager() { return &profile_manager_; }
 
-  ReportingDelegateFactoryDesktop reporting_delegate_factory_;
+  PlatformReportingDelegateFactory reporting_delegate_factory_;
   ProfileReportGenerator generator_;
+
+  base::test::ScopedFeatureList feature_list_;
 
  private:
   content::BrowserTaskEnvironment task_environment_;
@@ -185,6 +211,7 @@ TEST_F(ProfileReportGeneratorTest, SignedInProfile) {
             report->chrome_signed_in_user().obfuscated_gaia_id());
 }
 
+#if !defined(OS_ANDROID)
 TEST_F(ProfileReportGeneratorTest, PoliciesDisabled) {
   // Users' profile info is collected by default.
   std::unique_ptr<em::ChromeUserProfileInfo> report = GenerateReport();
@@ -213,6 +240,23 @@ TEST_F(ProfileReportGeneratorTest, PendingRequest) {
   ASSERT_EQ(1, report->extension_requests_size());
   EXPECT_EQ(kExtensionId, report->extension_requests(0).id());
   EXPECT_EQ(kFakeTime, report->extension_requests(0).request_timestamp());
+  EXPECT_EQ(std::string(), report->extension_requests(0).justification());
+}
+
+TEST_F(ProfileReportGeneratorTest, PendingRequest_Justification) {
+  feature_list_.InitAndEnableFeature(features::kExtensionWorkflowJustification);
+
+  profile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kCloudExtensionRequestEnabled,
+      std::make_unique<base::Value>(true));
+  std::vector<std::string> ids = {kExtensionId};
+  SetExtensionToPendingList(ids);
+
+  auto report = GenerateReport();
+  ASSERT_EQ(1, report->extension_requests_size());
+  EXPECT_EQ(kExtensionId, report->extension_requests(0).id());
+  EXPECT_EQ(kFakeTime, report->extension_requests(0).request_timestamp());
+  EXPECT_EQ(kJustification, report->extension_requests(0).justification());
 }
 
 TEST_F(ProfileReportGeneratorTest, NoPendingRequestWhenItsDisabled) {
@@ -349,5 +393,6 @@ TEST_F(ProfileReportGeneratorTest,
   EXPECT_TRUE(report);
   EXPECT_EQ(0, report->extension_requests_size());
 }
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace enterprise_reporting

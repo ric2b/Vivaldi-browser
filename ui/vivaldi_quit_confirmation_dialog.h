@@ -49,6 +49,9 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
                                 gfx::NativeView view,
                                 VivaldiDialogDelegate* delegate);
   ~VivaldiQuitConfirmationDialog() override;
+  VivaldiQuitConfirmationDialog(const VivaldiQuitConfirmationDialog&) = delete;
+  VivaldiQuitConfirmationDialog& operator=(
+      const VivaldiQuitConfirmationDialog&) = delete;
 
   // views::DialogDelegateView:
   bool Accept() override;
@@ -74,8 +77,6 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
 
   // The dialog takes ownership of the delegate
   std::unique_ptr<VivaldiDialogDelegate> delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiQuitConfirmationDialog);
 };
 
 }  // namespace vivaldi

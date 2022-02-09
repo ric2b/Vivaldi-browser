@@ -31,15 +31,16 @@ class NoteSyncServiceFactory : public BrowserContextKeyedServiceFactory {
 
   NoteSyncServiceFactory();
   ~NoteSyncServiceFactory() override;
+  NoteSyncServiceFactory(const NoteSyncServiceFactory&) = delete;
+  NoteSyncServiceFactory& operator=(const NoteSyncServiceFactory&) = delete;
 
   // BrowserContextKeyedServiceFactory implementation.
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteSyncServiceFactory);
 };
-}
+
+}  // namespace vivaldi
 
 #endif  // SYNC_NOTE_SYNC_SERVICE_FACTORY_H_

@@ -108,14 +108,6 @@ bool IsSelectiveUIAEnablementEnabled() {
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-const base::Feature kMagnifierPanningImprovements{
-    "MagnifierPanningImprovements", base::FEATURE_ENABLED_BY_DEFAULT};
-
-bool IsMagnifierPanningImprovementsEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kMagnifierPanningImprovements);
-}
-
 const base::Feature kMagnifierContinuousMouseFollowingModeSetting{
     "MagnifierContinuousMouseFollowingModeSetting",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -125,25 +117,9 @@ bool IsMagnifierContinuousMouseFollowingModeSettingEnabled() {
       ::features::kMagnifierContinuousMouseFollowingModeSetting);
 }
 
-const base::Feature kMagnifierCaretFollowingFromJavascript{
-    "MagnifierCaretFollowingFromJavascript", base::FEATURE_DISABLED_BY_DEFAULT};
-
-bool IsMagnifierCaretFollowingFromJavascriptEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kMagnifierCaretFollowingFromJavascript);
-}
-
-const base::Feature kEnableSwitchAccessPointScanning{
-    "EnableSwitchAccessPointScanning", base::FEATURE_ENABLED_BY_DEFAULT};
-
-bool IsSwitchAccessPointScanningEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kEnableSwitchAccessPointScanning);
-}
-
 const base::Feature kExperimentalAccessibilityDictationOffline{
     "ExperimentalAccessibilityDictationOffline",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsExperimentalAccessibilityDictationOfflineEnabled() {
   return base::FeatureList::IsEnabled(
@@ -154,6 +130,24 @@ bool IsDictationOfflineAvailableAndEnabled() {
   return base::FeatureList::IsEnabled(
              ash::features::kOnDeviceSpeechRecognition) &&
          IsExperimentalAccessibilityDictationOfflineEnabled();
+}
+
+const base::Feature kExperimentalAccessibilityDictationCommands{
+    "ExperimentalAccessibilityDictationCommands",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsExperimentalAccessibilityDictationCommandsEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kExperimentalAccessibilityDictationCommands);
+}
+
+const base::Feature kExperimentalAccessibilitySwitchAccessSetupGuide{
+    "ExperimentalAccessibilitySwitchAccessSetupGuide",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+bool IsExperimentalAccessibilitySwitchAccessSetupGuideEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kExperimentalAccessibilitySwitchAccessSetupGuide);
 }
 
 const base::Feature kEnhancedNetworkVoices{"EnhancedNetworkVoices",

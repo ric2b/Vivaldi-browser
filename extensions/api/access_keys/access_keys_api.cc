@@ -15,7 +15,7 @@ ExtensionFunction::ResponseAction
 AccessKeysGetAccessKeysForPageFunction::Run() {
   using vivaldi::access_keys::GetAccessKeysForPage::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
@@ -24,9 +24,8 @@ AccessKeysGetAccessKeysForPageFunction::Run() {
   if (!tab_api)
     return RespondNow(Error(error));
 
-  tab_api->GetAccessKeys(
-      base::BindOnce(
-          &AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived, this));
+  tab_api->GetAccessKeys(base::BindOnce(
+      &AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived, this));
 
   return RespondLater();
 }
@@ -37,7 +36,7 @@ void AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived(
 
   std::vector<vivaldi::access_keys::AccessKeyDefinition> access_key_list;
 
-  for (auto& key: access_keys) {
+  for (auto& key : access_keys) {
     vivaldi::access_keys::AccessKeyDefinition entry;
 
     // The key elements will always be defined, but empty if the elements
@@ -58,7 +57,7 @@ void AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived(
 ExtensionFunction::ResponseAction AccessKeysActionFunction::Run() {
   using vivaldi::access_keys::Action::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string id = params->id;
@@ -74,4 +73,4 @@ ExtensionFunction::ResponseAction AccessKeysActionFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-} //extensions
+}  // namespace extensions

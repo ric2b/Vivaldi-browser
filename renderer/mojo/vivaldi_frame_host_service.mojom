@@ -3,4 +3,12 @@ module vivaldi.mojom;
 interface VivaldiFrameHostService {
   [EnableIfNot=is_android]
   NotifyMediaElementAdded();
+
+  // The call supply extra information for LocalFrameHost::DidChangeLoadProgress
+  [EnableIfNot=is_android]
+  DidChangeLoadProgressExtended(double load_progress,
+                                double loaded_bytes,
+                                int32 loaded_elements,
+                                int32 total_elements);
+
 };

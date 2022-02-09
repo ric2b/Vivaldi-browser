@@ -1,6 +1,5 @@
 // Copyright 2019 Vivaldi Technologies AS. All rights reserved.
 
-
 #ifndef VIVALDI_EXTENSION_HOST_H_
 #define VIVALDI_EXTENSION_HOST_H_
 
@@ -16,8 +15,8 @@
 #include "extensions/common/mojom/view_type.mojom.h"
 
 namespace content {
-  class WebContents;
-} // namespace content
+class WebContents;
+}  // namespace content
 
 namespace extensions {
 class ExtensionHostDelegate;
@@ -34,15 +33,15 @@ class VivaldiExtensionHost
                        content::WebContents* webcontents);
 
   ~VivaldiExtensionHost() override;
+  VivaldiExtensionHost(const VivaldiExtensionHost&) = delete;
+  VivaldiExtensionHost& operator=(const VivaldiExtensionHost&) = delete;
 
  private:
   std::unique_ptr<extensions::ExtensionHostDelegate> delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionHost);
 };
 
 }  // namespace vivaldi
 
-#endif // Extensions
+#endif  // Extensions
 
 #endif  // VIVALDI_EXTENSION_HOST_H_

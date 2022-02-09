@@ -429,7 +429,7 @@ ExtensionFunction::ResponseAction SyncStopFunction::Run() {
 
 ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
   std::unique_ptr<vivaldi::sync::SetEncryptionPassword::Params> params(
-      vivaldi::sync::SetEncryptionPassword::Params::Create(*args_));
+      vivaldi::sync::SetEncryptionPassword::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -451,7 +451,7 @@ ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
 
 ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
   std::unique_ptr<vivaldi::sync::BackupEncryptionToken::Params> params(
-      vivaldi::sync::BackupEncryptionToken::Params::Create(*args_));
+      vivaldi::sync::BackupEncryptionToken::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -491,7 +491,7 @@ void SyncBackupEncryptionTokenFunction::OnBackupDone(bool result) {
 
 ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
   std::unique_ptr<vivaldi::sync::RestoreEncryptionToken::Params> params(
-      vivaldi::sync::RestoreEncryptionToken::Params::Create(*args_));
+      vivaldi::sync::RestoreEncryptionToken::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -561,7 +561,7 @@ void SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName(
 
 ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
   std::unique_ptr<vivaldi::sync::SetTypes::Params> params(
-      vivaldi::sync::SetTypes::Params::Create(*args_));
+      vivaldi::sync::SetTypes::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 

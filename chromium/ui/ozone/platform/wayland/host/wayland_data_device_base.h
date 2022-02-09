@@ -10,9 +10,14 @@
 #include "base/callback.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_offer_base.h"
 #include "ui/ozone/public/platform_clipboard.h"
+
+namespace wl {
+struct Serial;
+}
 
 namespace ui {
 
@@ -32,6 +37,10 @@ class WaylandDataDeviceBase {
   };
 
   explicit WaylandDataDeviceBase(WaylandConnection* connection);
+
+  WaylandDataDeviceBase(const WaylandDataDeviceBase&) = delete;
+  WaylandDataDeviceBase& operator=(const WaylandDataDeviceBase&) = delete;
+
   virtual ~WaylandDataDeviceBase();
 
   // Sets the delegate instance responsible for handling section events.
@@ -69,6 +78,8 @@ class WaylandDataDeviceBase {
 
   SelectionDelegate* selection_delegate() { return selection_delegate_; }
 
+  absl::optional<wl::Serial> GetSerialForSelection() const;
+
  private:
   // wl_callback_listener callback
   static void DeferredReadCallback(void* data,
@@ -90,8 +101,6 @@ class WaylandDataDeviceBase {
   // Before blocking on read(), make sure server has written data on the pipe.
   base::OnceClosure deferred_read_closure_;
   wl::Object<wl_callback> deferred_read_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(WaylandDataDeviceBase);
 };
 
 }  // namespace ui

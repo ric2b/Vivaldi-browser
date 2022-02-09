@@ -30,7 +30,9 @@
 #include "components/crx_file/crx_verifier.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/browser/api/declarative_net_request/index_helper.h"
+#include "extensions/browser/api/declarative_net_request/file_backed_ruleset_source.h"
+#include "extensions/browser/api/declarative_net_request/install_index_helper.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_source.h"
 #include "extensions/browser/computed_hashes.h"
 #include "extensions/browser/content_verifier/content_verifier_key.h"
 #include "extensions/browser/extension_file_task_runner.h"
@@ -695,13 +697,22 @@ void SandboxedUnpacker::IndexAndPersistJSONRulesetsIfNeeded() {
   DCHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(extension_);
 
-  declarative_net_request::IndexHelper::IndexStaticRulesets(
-      *extension_,
+  // Defer ruleset indexing for disabled rulesets to speed up extension
+  // installation.
+  auto ruleset_filter = declarative_net_request::FileBackedRulesetSource::
+      RulesetFilter::kIncludeManifestEnabled;
+
+  // Ignore rule parsing errors since ruleset indexing (and therefore rule
+  // parsing) is deferred until the ruleset is enabled for packed extensions.
+  auto parse_flags = declarative_net_request::RulesetSource::kNone;
+
+  declarative_net_request::InstallIndexHelper::IndexStaticRulesets(
+      *extension_, ruleset_filter, parse_flags,
       base::BindOnce(&SandboxedUnpacker::OnJSONRulesetsIndexed, this));
 }
 
 void SandboxedUnpacker::OnJSONRulesetsIndexed(
-    declarative_net_request::IndexHelper::Result result) {
+    declarative_net_request::InstallIndexHelper::Result result) {
   if (result.error) {
     ReportFailure(
         SandboxedUnpackerFailureReason::ERROR_INDEXING_DNR_RULESET,

@@ -11,6 +11,7 @@
 #include <memory>
 #include <unordered_set>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
@@ -38,6 +39,9 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
       scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       ExtendedReportingLevelCallback extended_reporting_level_callback);
+
+  V4LocalDatabaseManager(const V4LocalDatabaseManager&) = delete;
+  V4LocalDatabaseManager& operator=(const V4LocalDatabaseManager&) = delete;
 
   // Populates the protobuf with the database data.
   void CollectDatabaseManagerInfo(
@@ -396,8 +400,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   std::unique_ptr<V4UpdateProtocolManager> v4_update_protocol_manager_;
 
   base::WeakPtrFactory<V4LocalDatabaseManager> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(V4LocalDatabaseManager);
 };  // class V4LocalDatabaseManager
 
 }  // namespace safe_browsing

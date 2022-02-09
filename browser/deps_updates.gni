@@ -52,6 +52,7 @@ if (is_android) {
 update_target("//chrome/browser:browser") {
   public_deps += [
     "//vivaldi/browser",
+    "//vivaldi/browser:internal_handlers"
   ]
   allow_circular_includes_from += [
     "//vivaldi/browser",

@@ -75,15 +75,16 @@ class FakeUser : public user_manager::User {
     set_display_email(kFakeUserEmail);
     set_username_hash(kFakeUsernameHash);
   }
+
+  FakeUser(const FakeUser&) = delete;
+  FakeUser& operator=(const FakeUser&) = delete;
+
   ~FakeUser() override {}
 
   // User overrides
   user_manager::UserType GetType() const override {
     return user_manager::USER_TYPE_REGULAR;
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FakeUser);
 };
 
 class MockPolicyProvidedCertsObserver
@@ -91,16 +92,21 @@ class MockPolicyProvidedCertsObserver
  public:
   MockPolicyProvidedCertsObserver() = default;
 
-  MOCK_METHOD0(OnPolicyProvidedCertsChanged, void());
+  MockPolicyProvidedCertsObserver(const MockPolicyProvidedCertsObserver&) =
+      delete;
+  MockPolicyProvidedCertsObserver& operator=(
+      const MockPolicyProvidedCertsObserver&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockPolicyProvidedCertsObserver);
+  MOCK_METHOD0(OnPolicyProvidedCertsChanged, void());
 };
 
 class FakeNetworkDeviceHandler : public chromeos::FakeNetworkDeviceHandler {
  public:
   FakeNetworkDeviceHandler()
       : allow_roaming_(false), mac_addr_randomization_(false) {}
+
+  FakeNetworkDeviceHandler(const FakeNetworkDeviceHandler&) = delete;
+  FakeNetworkDeviceHandler& operator=(const FakeNetworkDeviceHandler&) = delete;
 
   void SetCellularAllowRoaming(bool allow_roaming,
                                bool policy_allow_roaming) override {
@@ -115,9 +121,6 @@ class FakeNetworkDeviceHandler : public chromeos::FakeNetworkDeviceHandler {
   bool allow_roaming_ = false;
   bool policy_allow_roaming_ = true;
   bool mac_addr_randomization_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FakeNetworkDeviceHandler);
 };
 
 class FakeCertificateImporter : public chromeos::onc::CertificateImporter {
@@ -125,6 +128,10 @@ class FakeCertificateImporter : public chromeos::onc::CertificateImporter {
   using OncParsedCertificates = chromeos::onc::OncParsedCertificates;
 
   FakeCertificateImporter() : call_count_(0) {}
+
+  FakeCertificateImporter(const FakeCertificateImporter&) = delete;
+  FakeCertificateImporter& operator=(const FakeCertificateImporter&) = delete;
+
   ~FakeCertificateImporter() override {}
 
   void SetExpectedONCClientCertificates(
@@ -167,8 +174,6 @@ class FakeCertificateImporter : public chromeos::onc::CertificateImporter {
       expected_client_certificates_;
   net::ScopedCERTCertificateList onc_trusted_certificates_;
   unsigned int call_count_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeCertificateImporter);
 };
 
 // Note: HexSSID 737369642D6E6F6E65 maps to "ssid-none".
@@ -306,9 +311,10 @@ void SelectSingleClientCertificateFromOnc(
     size_t client_certificate_index,
     std::vector<chromeos::onc::OncParsedCertificates::ClientCertificate>*
         out_parsed_client_certificates) {
-  base::ListValue* certs = nullptr;
-  toplevel_onc->FindKey(onc::toplevel_config::kCertificates)->GetAsList(&certs);
+  base::Value* certs =
+      toplevel_onc->FindKey(onc::toplevel_config::kCertificates);
   ASSERT_TRUE(certs);
+  ASSERT_TRUE(certs->is_list());
   ASSERT_TRUE(certs->GetList().size() > client_certificate_index);
 
   base::ListValue selected_certs;
@@ -374,9 +380,10 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
         ->GetAsDictionary(&global_config);
     fake_global_network_config_.MergeDictionary(global_config);
 
-    base::ListValue* certs = nullptr;
-    fake_toplevel_onc.FindKey(onc::toplevel_config::kCertificates)
-        ->GetAsList(&certs);
+    base::Value* certs =
+        fake_toplevel_onc.FindKey(onc::toplevel_config::kCertificates);
+    ASSERT_TRUE(certs->is_list());
+
     fake_certificates_ =
         std::make_unique<chromeos::onc::OncParsedCertificates>(*certs);
 

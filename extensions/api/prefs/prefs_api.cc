@@ -106,8 +106,8 @@ VivaldiPrefsApiNotification::VivaldiPrefsApiNotification(Profile* profile)
       ::vivaldi::NativeSettingsObserver::Create(profile));
 }
 
-const ::vivaldi::PrefProperties*
-VivaldiPrefsApiNotification::GetPrefProperties(const std::string& path) {
+const ::vivaldi::PrefProperties* VivaldiPrefsApiNotification::GetPrefProperties(
+    const std::string& path) {
   const auto& item = pref_properties_map_.find(path);
   if (item == pref_properties_map_.end())
     return nullptr;
@@ -197,7 +197,7 @@ ExtensionFunction::ResponseAction PrefsGetFunction::Run() {
   using vivaldi::prefs::Get::Params;
   namespace Results = vivaldi::prefs::Get::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const std::string& path = params->path;
@@ -214,7 +214,7 @@ ExtensionFunction::ResponseAction PrefsGetFunction::Run() {
 ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
   using vivaldi::prefs::Set::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const std::string& path = params->new_value.path;
@@ -271,7 +271,7 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
 ExtensionFunction::ResponseAction PrefsResetFunction::Run() {
   using vivaldi::prefs::Reset::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const std::string& path = params->path;
@@ -289,7 +289,7 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
   using vivaldi::prefs::GetForCache::Params;
   namespace Results = vivaldi::prefs::GetForCache::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<vivaldi::prefs::PreferenceValueAndDefault> results;
@@ -347,7 +347,7 @@ PrefsSetLanguagePairToAlwaysTranslateFunction::Run() {
   using vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Params;
   namespace Results = vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -379,7 +379,7 @@ PrefsSetLanguageToNeverTranslateFunction::Run() {
   using vivaldi::prefs::SetLanguageToNeverTranslate::Params;
   namespace Results = vivaldi::prefs::SetLanguageToNeverTranslate::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -407,7 +407,7 @@ ExtensionFunction::ResponseAction PrefsGetTranslateSettingsFunction::Run() {
   using vivaldi::prefs::GetTranslateSettings::Params;
   namespace Results = vivaldi::prefs::GetTranslateSettings::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -438,7 +438,7 @@ ExtensionFunction::ResponseAction PrefsSetSiteToNeverTranslateFunction::Run() {
   using vivaldi::prefs::SetSiteToNeverTranslate::Params;
   namespace Results = vivaldi::prefs::SetSiteToNeverTranslate::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -464,7 +464,7 @@ ExtensionFunction::ResponseAction PrefsSetTranslationDeclinedFunction::Run() {
   using vivaldi::prefs::SetTranslationDeclined::Params;
   namespace Results = vivaldi::prefs::SetTranslationDeclined::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(

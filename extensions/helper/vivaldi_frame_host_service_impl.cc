@@ -3,6 +3,7 @@
 #include "extensions/helper/vivaldi_frame_host_service_impl.h"
 
 #include "components/sessions/content/session_tab_helper.h"
+#include "content/browser/renderer_host/page_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 
 #include "extensions/schema/pip_private.h"
@@ -16,7 +17,7 @@ const char kFrameHostServiceKey[1] = "";
 }  // namespace
 
 VivaldiFrameHostServiceImpl::VivaldiFrameHostServiceImpl(
-    content::RenderFrameHost* frame_host)
+    content::RenderFrameHostImpl* frame_host)
     : frame_host_(frame_host) {}
 
 VivaldiFrameHostServiceImpl::~VivaldiFrameHostServiceImpl() = default;
@@ -32,7 +33,7 @@ void VivaldiFrameHostServiceImpl::BindHandler(
           frame_host_impl->GetUserData(kFrameHostServiceKey));
   if (!service) {
     auto unique_service =
-        std::make_unique<VivaldiFrameHostServiceImpl>(frame_host);
+        std::make_unique<VivaldiFrameHostServiceImpl>(frame_host_impl);
     service = unique_service.get();
     frame_host_impl->SetUserData(kFrameHostServiceKey,
                                  std::move(unique_service));
@@ -63,4 +64,14 @@ void VivaldiFrameHostServiceImpl::NotifyMediaElementAdded() {
       extensions::vivaldi::pip_private::OnVideoElementCreated::kEventName,
       extensions::vivaldi::pip_private::OnVideoElementCreated::Create(tab_id),
       tab_contents->GetBrowserContext());
+}
+
+void VivaldiFrameHostServiceImpl::DidChangeLoadProgressExtended(
+    double load_progress,
+    double loaded_bytes,
+    int loaded_elements,
+    int total_elements) {
+  content::PageImpl& page = frame_host_->GetPage();
+  page.vivaldi_update_load_counters(loaded_bytes, loaded_elements,
+                                    total_elements);
 }

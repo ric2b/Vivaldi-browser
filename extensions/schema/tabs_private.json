@@ -666,6 +666,11 @@
         "description": "Fires when on a keystroke that hasn't been consumed by the browser",
         "parameters": [
           {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the browser window this keyboard event originates from."
+          },
+          {
             "type": "string",
             "name": "shortcutText",
             "description": "String representation of a keyboard shortcut"

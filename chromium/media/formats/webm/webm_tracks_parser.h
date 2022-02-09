@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder_config.h"
@@ -32,6 +33,10 @@ namespace media {
 class MEDIA_EXPORT WebMTracksParser : public WebMParserClient {
  public:
   WebMTracksParser(MediaLog* media_log, bool ignore_text_tracks);
+
+  WebMTracksParser(const WebMTracksParser&) = delete;
+  WebMTracksParser& operator=(const WebMTracksParser&) = delete;
+
   ~WebMTracksParser() override;
 
   // Parses a WebM Tracks element in |buf|.
@@ -150,8 +155,6 @@ class MEDIA_EXPORT WebMTracksParser : public WebMParserClient {
   int detected_video_track_count_;
   int detected_text_track_count_;
   std::unique_ptr<MediaTracks> media_tracks_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebMTracksParser);
 };
 
 }  // namespace media

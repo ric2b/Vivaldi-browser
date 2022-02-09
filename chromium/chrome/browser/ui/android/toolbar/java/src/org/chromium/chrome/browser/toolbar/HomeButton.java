@@ -45,7 +45,7 @@ public class HomeButton extends ChromeImageButton
         super(context, attrs);
 
         if (BuildConfig.IS_VIVALDI) {
-            final int homeButtonIcon = R.drawable.vivaldi_bottom_nav_speed_dial_56dp;
+            final int homeButtonIcon = R.drawable.main_toolbar_home;
             setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
         } else {
         final int homeButtonIcon = R.drawable.btn_toolbar_home;

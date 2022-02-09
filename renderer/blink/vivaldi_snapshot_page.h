@@ -10,7 +10,7 @@ class SkBitmap;
 namespace blink {
 class IntRect;
 class LocalFrame;
-}
+}  // namespace blink
 
 CORE_EXPORT bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
                                      bool full_page,

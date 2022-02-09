@@ -18,7 +18,7 @@ class BookmarkNode;
 namespace views {
 class MenuItemView;
 class Widget;
-}
+}  // namespace views
 
 namespace content {
 class PageNavigator;
@@ -35,6 +35,9 @@ class VivaldiBookmarkMenuViews : public VivaldiBookmarkMenu,
                            const bookmarks::BookmarkNode* node,
                            int offset,
                            const gfx::Rect& button_rect);
+  VivaldiBookmarkMenuViews(const VivaldiBookmarkMenuViews&) = delete;
+  VivaldiBookmarkMenuViews& operator=(const VivaldiBookmarkMenuViews&) = delete;
+
   bool CanShow() override;
   void Show() override;
 
@@ -56,8 +59,6 @@ class VivaldiBookmarkMenuViews : public VivaldiBookmarkMenu,
   // Returns WeakPtrs used in GetPageNavigatorGetter(). Used to ensure
   // safety if BookmarkBarView is deleted after getting the callback.
   base::WeakPtrFactory<VivaldiBookmarkMenuViews> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBookmarkMenuViews);
 };
 
 }  // namespace vivaldi

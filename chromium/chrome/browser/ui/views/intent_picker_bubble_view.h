@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -74,6 +75,10 @@ class IntentPickerBubbleView : public LocationBarBubbleDelegateView {
                          bool show_stay_in_chrome,
                          bool show_remember_selection,
                          const absl::optional<url::Origin>& initiating_origin);
+
+  IntentPickerBubbleView(const IntentPickerBubbleView&) = delete;
+  IntentPickerBubbleView& operator=(const IntentPickerBubbleView&) = delete;
+
   ~IntentPickerBubbleView() override;
 
   static views::Widget* ShowBubble(
@@ -245,8 +250,6 @@ class IntentPickerBubbleView : public LocationBarBubbleDelegateView {
 
   // The origin initiating this picker.
   const absl::optional<url::Origin> initiating_origin_;
-
-  DISALLOW_COPY_AND_ASSIGN(IntentPickerBubbleView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_INTENT_PICKER_BUBBLE_VIEW_H_

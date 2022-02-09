@@ -26,6 +26,10 @@ class NoteRemoteUpdatesHandler {
   // and must outlive this object.
   NoteRemoteUpdatesHandler(vivaldi::NotesModel* notes_model,
                            SyncedNoteTracker* note_tracker);
+
+  NoteRemoteUpdatesHandler(const NoteRemoteUpdatesHandler&) = delete;
+  NoteRemoteUpdatesHandler& operator=(const NoteRemoteUpdatesHandler&) = delete;
+
   // Processes the updates received from the sync server in |updates| and
   // updates the |notes_model_| and |note_tracker_| accordingly. If
   // |got_new_encryption_requirements| is true, it recommits all tracked
@@ -113,8 +117,6 @@ class NoteRemoteUpdatesHandler {
 
   vivaldi::NotesModel* const notes_model_;
   SyncedNoteTracker* const note_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteRemoteUpdatesHandler);
 };
 
 }  // namespace sync_notes

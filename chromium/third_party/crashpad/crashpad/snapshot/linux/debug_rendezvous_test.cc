@@ -83,8 +83,7 @@ void TestAgainstTarget(PtraceConnection* connection) {
   ASSERT_EQ(exe_mappings->Count(), 1u);
   LinuxVMAddress elf_address = exe_mappings->Next()->range.Base();
 
-  ProcessMemoryLinux memory;
-  ASSERT_TRUE(memory.Initialize(connection->GetProcessID()));
+  ProcessMemoryLinux memory(connection);
   ProcessMemoryRange range;
   ASSERT_TRUE(range.Initialize(&memory, connection->Is64Bit()));
 
@@ -240,6 +239,10 @@ TEST(DebugRendezvous, Self) {
 class ChildTest : public Multiprocess {
  public:
   ChildTest() {}
+
+  ChildTest(const ChildTest&) = delete;
+  ChildTest& operator=(const ChildTest&) = delete;
+
   ~ChildTest() {}
 
  private:
@@ -251,8 +254,6 @@ class ChildTest : public Multiprocess {
   }
 
   void MultiprocessChild() { CheckedReadFileAtEOF(ReadPipeHandle()); }
-
-  DISALLOW_COPY_AND_ASSIGN(ChildTest);
 };
 
 TEST(DebugRendezvous, Child) {

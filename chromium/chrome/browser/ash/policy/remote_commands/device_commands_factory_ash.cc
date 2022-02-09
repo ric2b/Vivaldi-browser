@@ -7,13 +7,13 @@
 #include "base/notreached.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_host_delegate.h"
-#include "chrome/browser/ash/policy/remote_commands/crd_lockout_strategy.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_fetch_status_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_get_available_routines_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_get_routine_update_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_reboot_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_refresh_machine_certificate_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_remote_powerwash_job.h"
+#include "chrome/browser/ash/policy/remote_commands/device_command_reset_euicc_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_run_routine_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_screenshot_job.h"
 #include "chrome/browser/ash/policy/remote_commands/device_command_set_volume_job.h"
@@ -47,8 +47,8 @@ std::unique_ptr<RemoteCommandJob> DeviceCommandsFactoryAsh::BuildJobForType(
     case em::RemoteCommand_Type_DEVICE_SET_VOLUME:
       return std::make_unique<DeviceCommandSetVolumeJob>();
     case em::RemoteCommand_Type_DEVICE_START_CRD_SESSION:
-      return std::make_unique<DeviceCommandStartCRDSessionJob>(
-          GetCRDHostDelegate(), GetCrdLockoutStrategy());
+      return std::make_unique<DeviceCommandStartCrdSessionJob>(
+          GetCrdHostDelegate());
     case em::RemoteCommand_Type_DEVICE_FETCH_STATUS:
       return std::make_unique<DeviceCommandFetchStatusJob>();
     case em::RemoteCommand_Type_DEVICE_WIPE_USERS:
@@ -64,6 +64,8 @@ std::unique_ptr<RemoteCommandJob> DeviceCommandsFactoryAsh::BuildJobForType(
       return std::make_unique<DeviceCommandRunRoutineJob>();
     case em::RemoteCommand_Type_DEVICE_GET_DIAGNOSTIC_ROUTINE_UPDATE:
       return std::make_unique<DeviceCommandGetRoutineUpdateJob>();
+    case em::RemoteCommand_Type_DEVICE_RESET_EUICC:
+      return std::make_unique<DeviceCommandResetEuiccJob>();
     default:
       // Other types of commands should be sent to UserCommandsFactoryAsh
       // instead of here.
@@ -72,19 +74,12 @@ std::unique_ptr<RemoteCommandJob> DeviceCommandsFactoryAsh::BuildJobForType(
   }
 }
 
-CRDHostDelegate* DeviceCommandsFactoryAsh::GetCRDHostDelegate() {
+DeviceCommandStartCrdSessionJob::Delegate*
+DeviceCommandsFactoryAsh::GetCrdHostDelegate() {
   if (!crd_host_delegate_) {
-    crd_host_delegate_ = std::make_unique<CRDHostDelegate>();
-    crd_host_delegate_->AddConnectionObserver(GetCrdLockoutStrategy());
+    crd_host_delegate_ = std::make_unique<CrdHostDelegate>();
   }
   return crd_host_delegate_.get();
-}
-
-CrdLockoutStrategy* DeviceCommandsFactoryAsh::GetCrdLockoutStrategy() {
-  if (!crd_lockout_strategy_)
-    crd_lockout_strategy_ = std::make_unique<CrdFixedTimeoutLockoutStrategy>();
-
-  return crd_lockout_strategy_.get();
 }
 
 }  // namespace policy

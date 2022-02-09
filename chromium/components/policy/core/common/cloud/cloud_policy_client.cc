@@ -16,6 +16,7 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/values.h"
+#include "components/policy/core/common/cloud/client_data_delegate.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
@@ -197,7 +198,7 @@ void CloudPolicyClient::SetupRegistration(
   request_jobs_.clear();
   app_install_report_request_job_ = nullptr;
   extension_install_report_request_job_ = nullptr;
-  policy_fetch_request_job_.reset();
+  unique_request_job_.reset();
   responses_.clear();
   if (device_dm_token_callback_) {
     device_dm_token_ = device_dm_token_callback_.Run(user_affiliation_ids);
@@ -238,7 +239,7 @@ void CloudPolicyClient::Register(const RegistrationParameters& parameters,
   if (requires_reregistration())
     request->set_reregistration_dm_token(reregistration_dm_token_);
 
-  policy_fetch_request_job_ = service_->CreateJob(std::move(config));
+  unique_request_job_ = service_->CreateJob(std::move(config));
 }
 
 void CloudPolicyClient::RegisterWithCertificate(
@@ -274,8 +275,10 @@ void CloudPolicyClient::RegisterWithCertificate(
                      weak_ptr_factory_.GetWeakPtr(), std::move(auth)));
 }
 
-void CloudPolicyClient::RegisterWithToken(const std::string& token,
-                                          const std::string& client_id) {
+void CloudPolicyClient::RegisterWithToken(
+    const std::string& token,
+    const std::string& client_id,
+    const ClientDataDelegate& client_data_delegate) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(service_);
   DCHECK(!token.empty());
@@ -294,24 +297,9 @@ void CloudPolicyClient::RegisterWithToken(const std::string& token,
 
   enterprise_management::RegisterBrowserRequest* request =
       config->request()->mutable_register_browser_request();
-#if !defined(OS_IOS)
-  // For iOS devices, the machine name is determined by server side logic using
-  // the client ID and / or the device model.
-  request->set_machine_name(GetMachineName());
-
-  if (base::FeatureList::IsEnabled(features::kUploadBrowserDeviceIdentifier)) {
-    request->set_allocated_browser_device_identifier(
-        GetBrowserDeviceIdentifier().release());
-  }
-#endif  // !defined(OS_IOS)
-  request->set_os_platform(GetOSPlatform());
-  request->set_os_version(GetOSVersion());
-#if defined(OS_IOS)
-  request->set_device_model(GetDeviceModel());
-  request->set_brand_name(GetDeviceManufacturer());
-#endif  // defined(OS_IOS)
-
-  policy_fetch_request_job_ = service_->CreateJob(std::move(config));
+  client_data_delegate.FillRegisterBrowserRequest(
+      request, base::BindOnce(&CloudPolicyClient::CreateUniqueRequestJob,
+                              base::Unretained(this), std::move(config)));
 }
 
 void CloudPolicyClient::OnRegisterWithCertificateRequestSigned(
@@ -340,7 +328,7 @@ void CloudPolicyClient::OnRegisterWithCertificateRequestSigned(
   signed_request->set_signature(signed_data.signature());
   signed_request->set_extra_data_bytes(signed_data.extra_data_bytes());
 
-  policy_fetch_request_job_ = service_->CreateJob(std::move(config));
+  unique_request_job_ = service_->CreateJob(std::move(config));
 }
 
 void CloudPolicyClient::SetInvalidationInfo(int64_t version,
@@ -433,7 +421,7 @@ void CloudPolicyClient::FetchPolicy() {
   // since it is now the invalidation version used for the latest fetch.
   fetched_invalidation_version_ = invalidation_version_;
 
-  policy_fetch_request_job_ = service_->CreateJob(std::move(config));
+  unique_request_job_ = service_->CreateJob(std::move(config));
 }
 
 void CloudPolicyClient::UploadPolicyValidationReport(
@@ -522,7 +510,7 @@ void CloudPolicyClient::Unregister() {
 
   config->request()->mutable_unregister_request();
 
-  policy_fetch_request_job_ = service_->CreateJob(std::move(config));
+  unique_request_job_ = service_->CreateJob(std::move(config));
 }
 
 void CloudPolicyClient::UploadEnterpriseMachineCertificate(
@@ -1162,9 +1150,10 @@ void CloudPolicyClient::OnPolicyFetchCompleted(
         response.policy_response();
     responses_.clear();
     for (int i = 0; i < policy_response.responses_size(); ++i) {
-      const em::PolicyFetchResponse& response = policy_response.responses(i);
+      const em::PolicyFetchResponse& fetch_response =
+          policy_response.responses(i);
       em::PolicyData policy_data;
-      if (!policy_data.ParseFromString(response.policy_data()) ||
+      if (!policy_data.ParseFromString(fetch_response.policy_data()) ||
           !policy_data.IsInitialized() || !policy_data.has_policy_type()) {
         LOG(WARNING) << "Invalid PolicyData received, ignoring";
         continue;
@@ -1179,7 +1168,7 @@ void CloudPolicyClient::OnPolicyFetchCompleted(
                      << ", entity: " << entity_id << ", ignoring";
         continue;
       }
-      responses_[key] = response;
+      responses_[key] = fetch_response;
     }
     state_keys_to_upload_.clear();
     NotifyPolicyFetched();
@@ -1646,6 +1635,11 @@ void CloudPolicyClient::CreateDeviceRegisterRequest(
     request->set_psm_determination_timestamp_ms(
         params.psm_determination_timestamp.value());
   }
+}
+
+void CloudPolicyClient::CreateUniqueRequestJob(
+    std::unique_ptr<RegistrationJobConfiguration> config) {
+  unique_request_job_ = service_->CreateJob(std::move(config));
 }
 
 }  // namespace policy

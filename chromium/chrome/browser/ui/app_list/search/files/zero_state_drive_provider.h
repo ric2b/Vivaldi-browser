@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -17,7 +18,6 @@
 #include "chrome/browser/ui/app_list/search/files/file_result.h"
 #include "chrome/browser/ui/app_list/search/files/item_suggest_cache.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
-#include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
@@ -67,8 +67,8 @@ class ZeroStateDriveProvider : public SearchProvider,
 
   base::TimeTicks query_start_time_;
 
-  // Whether suggested files feature is enabled. True if both the experiment is
-  // enabled, and the suggested content toggle is enabled.
+  // Whether the suggested files feature is enabled. True if both the experiment
+  // is enabled, and the suggested content toggle is enabled.
   const bool suggested_files_enabled_;
 
   // TODO(crbug.com/1247475): Score normalizers removed due to stability issues.

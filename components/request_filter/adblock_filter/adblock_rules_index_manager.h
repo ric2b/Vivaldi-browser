@@ -28,6 +28,8 @@ class RuleBufferHolder {
   RuleBufferHolder(std::unique_ptr<std::string> rule_buffer,
                    const std::string& checksum);
   ~RuleBufferHolder();
+  RuleBufferHolder(const RuleBufferHolder&) = delete;
+  RuleBufferHolder& operator=(const RuleBufferHolder&) = delete;
 
   const flat::RulesList* rules_list() const { return rules_list_; }
   const std::string& checksum() const { return checksum_; }
@@ -36,8 +38,6 @@ class RuleBufferHolder {
   std::string rule_buffer_;
   std::string checksum_;
   const flat::RulesList* const rules_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(RuleBufferHolder);
 };
 
 class RulesIndexManager : public RuleService::Observer {
@@ -56,6 +56,8 @@ class RulesIndexManager : public RuleService::Observer {
                     RulesBufferReadFailCallback rule_buffer_read_fail_callback,
                     scoped_refptr<base::SequencedTaskRunner> file_task_runner);
   ~RulesIndexManager() override;
+  RulesIndexManager(const RulesIndexManager&) = delete;
+  RulesIndexManager& operator=(const RulesIndexManager&) = delete;
 
   base::WeakPtr<RulesIndexManager> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -100,8 +102,6 @@ class RulesIndexManager : public RuleService::Observer {
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   base::WeakPtrFactory<RulesIndexManager> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(RulesIndexManager);
 };
 
 }  // namespace adblock_filter

@@ -799,6 +799,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kTabCapture);
   skip.insert(APIPermissionID::kWebRequest);
   skip.insert(APIPermissionID::kWebRequestBlocking);
+  skip.insert(APIPermissionID::kDeclarativeNetRequestWithHostAccess);
 
   // This permission requires explicit user action (context menu handler)
   // so we won't prompt for it for now.
@@ -846,6 +847,8 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kResourcesPrivate);
   skip.insert(APIPermissionID::kRtcPrivate);
   skip.insert(APIPermissionID::kSafeBrowsingPrivate);
+  // TODO(crbug.com/1220107): Add a permission for speechRecognitionPrivate.
+  skip.insert(APIPermissionID::kSpeechRecognitionPrivate);
   skip.insert(APIPermissionID::kSystemPrivate);
   skip.insert(APIPermissionID::kTabCaptureForTab);
   skip.insert(APIPermissionID::kTerminalPrivate);

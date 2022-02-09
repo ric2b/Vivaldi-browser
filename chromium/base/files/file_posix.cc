@@ -43,7 +43,13 @@ bool IsOpenAppend(PlatformFile file) {
 }
 
 int CallFtruncate(PlatformFile file, int64_t length) {
+#if defined(OS_BSD) || defined(OS_APPLE) || defined(OS_FUCHSIA)
+  static_assert(sizeof(off_t) >= sizeof(int64_t),
+                "off_t is not a 64-bit integer");
   return HANDLE_EINTR(ftruncate(file, length));
+#else
+  return HANDLE_EINTR(ftruncate64(file, length));
+#endif
 }
 
 int CallFutimes(PlatformFile file, const struct timeval times[2]) {
@@ -168,18 +174,15 @@ void File::Info::FromStat(const stat_wrapper_t& stat_info) {
 
   last_modified =
       Time::FromTimeT(last_modified_sec) +
-      TimeDelta::FromMicroseconds(last_modified_nsec /
-                                  Time::kNanosecondsPerMicrosecond);
+      Microseconds(last_modified_nsec / Time::kNanosecondsPerMicrosecond);
 
   last_accessed =
       Time::FromTimeT(last_accessed_sec) +
-      TimeDelta::FromMicroseconds(last_accessed_nsec /
-                                  Time::kNanosecondsPerMicrosecond);
+      Microseconds(last_accessed_nsec / Time::kNanosecondsPerMicrosecond);
 
   creation_time =
       Time::FromTimeT(creation_time_sec) +
-      TimeDelta::FromMicroseconds(creation_time_nsec /
-                                  Time::kNanosecondsPerMicrosecond);
+      Microseconds(creation_time_nsec / Time::kNanosecondsPerMicrosecond);
 }
 
 bool File::IsValid() const {
@@ -519,9 +522,6 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   if (flags & FLAG_OPEN_ALWAYS) {
     if (descriptor < 0) {
       open_flags |= O_CREAT;
-      if (flags & FLAG_EXCLUSIVE_READ || flags & FLAG_EXCLUSIVE_WRITE)
-        open_flags |= O_EXCL;   // together with O_CREAT implies O_NOFOLLOW
-
       descriptor = HANDLE_EINTR(open(path.value().c_str(), open_flags, mode));
       if (descriptor >= 0)
         created_ = true;

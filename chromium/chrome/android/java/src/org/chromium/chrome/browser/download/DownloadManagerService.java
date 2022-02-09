@@ -144,7 +144,7 @@ public class DownloadManagerService implements DownloadController.Observer,
 
     private OMADownloadHandler mOMADownloadHandler;
     private DownloadSnackbarController mDownloadSnackbarController;
-    private DownloadInfoBarController mInfoBarController;
+    private DownloadMessageUiController mInfoBarController;
     private HashMap<OTRProfileID, DownloadInfoBarController> mIncognitoInfoBarControllerMap =
             new HashMap<>();
     private DownloadMessageUiController mMessageUiController;
@@ -304,8 +304,12 @@ public class DownloadManagerService implements DownloadController.Observer,
     }
 
     /** For testing only. */
-    public void setInfoBarControllerForTesting(DownloadInfoBarController infoBarController) {
-        mInfoBarController = infoBarController;
+    public void setInfoBarControllerForTesting(DownloadMessageUiController infoBarController) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_PROGRESS_MESSAGE)) {
+            mMessageUiController = infoBarController;
+        } else {
+            mInfoBarController = infoBarController;
+        }
     }
 
     // Deprecated after new download backend.
@@ -580,7 +584,8 @@ public class DownloadManagerService implements DownloadController.Observer,
             @Override
             public Pair<Boolean, Boolean> doInBackground() {
                 boolean success = mDisableAddCompletedDownloadForTesting
-                        || ContentUriUtils.isContentUri(item.getDownloadInfo().getFilePath());
+                        || ContentUriUtils.isContentUri(item.getDownloadInfo().getFilePath())
+                        || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q);
                 boolean shouldAddCompletedDownload =
                         !ChromeFeatureList.isEnabled(
                                 ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER)

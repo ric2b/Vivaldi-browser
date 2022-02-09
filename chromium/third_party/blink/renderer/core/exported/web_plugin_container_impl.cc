@@ -186,12 +186,11 @@ void WebPluginContainerImpl::Paint(GraphicsContext& context,
     layer_->SetBounds(gfx::Size(Size()));
     layer_->SetIsDrawable(true);
     layer_->SetHitTestable(true);
-    auto offset = RoundedIntPoint(
-        GetLayoutEmbeddedContent()->ReplacedContentRect().offset);
     // When compositing is after paint, composited plugins should have their
     // layers inserted rather than invoking WebPlugin::paint.
     RecordForeignLayer(context, *element_->GetLayoutObject(),
-                       DisplayItem::kForeignLayerPlugin, layer_, offset);
+                       DisplayItem::kForeignLayerPlugin, layer_,
+                       FrameRect().Location() + paint_offset);
     return;
   }
 
@@ -211,7 +210,8 @@ void WebPluginContainerImpl::Paint(GraphicsContext& context,
 
   cc::PaintCanvas* canvas = context.Canvas();
 
-  IntRect window_rect = ParentFrameView()->ConvertToRootFrame(cull_rect.Rect());
+  IntRect window_rect =
+      ParentFrameView()->ConvertToRootFrame(IntRect(cull_rect.Rect()));
   web_plugin_->Paint(canvas, window_rect);
 
   context.Restore();

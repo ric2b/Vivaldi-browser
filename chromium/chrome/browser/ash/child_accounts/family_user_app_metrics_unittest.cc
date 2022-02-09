@@ -33,7 +33,7 @@ namespace ash {
 
 namespace {
 
-constexpr base::TimeDelta kOneDay = base::TimeDelta::FromDays(1);
+constexpr base::TimeDelta kOneDay = base::Days(1);
 constexpr char kStartTime[] = "1 Jan 2020 21:15";
 constexpr int kStart = static_cast<int>(apps::mojom::AppType::kUnknown);  // 0
 constexpr int kEnd =
@@ -201,7 +201,8 @@ class FamilyUserAppMetricsTest
     window_ = std::make_unique<aura::Window>(nullptr);
     window_->Init(ui::LAYER_NOT_DRAWN);
     instances.push_back(std::make_unique<apps::Instance>(
-        /*app_id=*/"a", apps::Instance::InstanceKey(window_.get())));
+        /*app_id=*/"a",
+        apps::Instance::InstanceKey::ForWindowBasedApp(window_.get())));
     instance_registry.OnInstances(instances);
   }
 

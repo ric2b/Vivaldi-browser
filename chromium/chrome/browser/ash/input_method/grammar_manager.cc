@@ -7,13 +7,14 @@
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/input_method/assistive_window_properties.h"
 #include "chrome/browser/ash/input_method/ui/suggestion_details.h"
-#include "ui/base/ime/chromeos/ime_bridge.h"
-#include "ui/base/ime/chromeos/ime_input_context_handler_interface.h"
+#include "ui/base/ime/ash/ime_bridge.h"
+#include "ui/base/ime/ash/ime_input_context_handler_interface.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 
@@ -21,8 +22,8 @@ namespace ash {
 namespace input_method {
 namespace {
 
-constexpr base::TimeDelta kCheckDelay = base::TimeDelta::FromSeconds(2);
-const int HashMultiplier = 1024;
+constexpr base::TimeDelta kCheckDelay = base::Seconds(2);
+const uint64_t HashMultiplier = 1LL << 32;
 
 const char16_t kShowGrammarSuggestionMessage[] =
     u"Grammar correction suggested. Press tab to access; escape to dismiss.";
@@ -35,9 +36,19 @@ const char16_t kIgnoreButtonMessage[] =
     u"Ignore suggestion. Button. Press enter to ignore the suggestion; escape "
     u"to dismiss.";
 
-void RecordGrammarAction(GrammarActions action) {
+void RecordGrammarAction(GrammarActions action,
+                         bool is_capitalization_correction) {
   base::UmaHistogramEnumeration("InputMethod.Assistive.Grammar.Actions",
                                 action);
+  if (is_capitalization_correction) {
+    base::UmaHistogramEnumeration(
+        "InputMethod.Assistive.Grammar.CapitalizationCorrection", action);
+  }
+}
+
+bool IsCapitalizationCorrection(const ui::GrammarFragment& fragment) {
+  return base::ToLowerASCII(fragment.suggestion) ==
+         base::ToLowerASCII(fragment.original_text);
 }
 
 bool IsValidSentence(const std::u16string& text, const Sentence& sentence) {
@@ -49,7 +60,7 @@ bool IsValidSentence(const std::u16string& text, const Sentence& sentence) {
   return FindCurrentSentence(text, start) == sentence;
 }
 
-int RangeHash(const gfx::Range& range) {
+uint64_t RangeHash(const gfx::Range& range) {
   return range.start() * HashMultiplier + range.end();
 }
 
@@ -86,6 +97,8 @@ void GrammarManager::OnFocus(int context_id, int text_input_flags) {
     last_sentence_ = Sentence();
     new_to_context_ = true;
     delay_timer_.Stop();
+    ignored_marker_hashes_.clear();
+    recorded_marker_hashes_.clear();
   }
   context_id_ = context_id;
   text_input_flags_ = text_input_flags;
@@ -202,7 +215,8 @@ void GrammarManager::OnSurroundingTextChanged(const std::u16string& text,
   if (grammar_fragment_opt) {
     if (current_fragment_ != grammar_fragment_opt.value()) {
       current_fragment_ = grammar_fragment_opt.value();
-      RecordGrammarAction(GrammarActions::kWindowShown);
+      RecordGrammarAction(GrammarActions::kWindowShown,
+                          IsCapitalizationCorrection(current_fragment_));
     }
     std::string error;
     AssistiveWindowProperties properties;
@@ -236,19 +250,22 @@ void GrammarManager::Check(const Sentence& sentence) {
 void GrammarManager::OnGrammarCheckDone(
     const Sentence& sentence,
     bool success,
-    const std::vector<ui::GrammarFragment>& results) const {
+    const std::vector<ui::GrammarFragment>& results) {
   if (!success || !IsValidSentence(current_text_, sentence) || results.empty())
     return;
 
   std::vector<ui::GrammarFragment> corrected_results;
-  auto it = ignored_markers_.find(sentence.text);
+  auto it = ignored_marker_hashes_.find(sentence.text);
   for (const ui::GrammarFragment& fragment : results) {
-    if (it == ignored_markers_.end() ||
+    if (it == ignored_marker_hashes_.end() ||
         it->second.find(RangeHash(fragment.range)) == it->second.end()) {
       corrected_results.emplace_back(
           gfx::Range(fragment.range.start() + sentence.original_range.start(),
                      fragment.range.end() + sentence.original_range.start()),
-          fragment.suggestion);
+          fragment.suggestion,
+          base::UTF16ToUTF8(current_text_.substr(
+              fragment.range.start() + sentence.original_range.start(),
+              fragment.range.length())));
     }
   }
 
@@ -257,8 +274,19 @@ void GrammarManager::OnGrammarCheckDone(
   if (!input_context)
     return;
 
-  input_context->AddGrammarFragments(corrected_results);
-  RecordGrammarAction(GrammarActions::kUnderlined);
+  if (input_context->AddGrammarFragments(corrected_results)) {
+    for (const ui::GrammarFragment& fragment : corrected_results) {
+      uint64_t hashValue = RangeHash(fragment.range);
+      // The de-dup could be incorrect in some cases but it is good enough for
+      // collecting metrics.
+      if (recorded_marker_hashes_.find(hashValue) ==
+          recorded_marker_hashes_.end()) {
+        recorded_marker_hashes_.insert(hashValue);
+        RecordGrammarAction(GrammarActions::kUnderlined,
+                            IsCapitalizationCorrection(fragment));
+      }
+    }
+  }
 }
 
 void GrammarManager::DismissSuggestion() {
@@ -311,7 +339,8 @@ void GrammarManager::AcceptSuggestion() {
   }
 
   suggestion_handler_->Announce(kAcceptGrammarSuggestionMessage);
-  RecordGrammarAction(GrammarActions::kAccepted);
+  RecordGrammarAction(GrammarActions::kAccepted,
+                      IsCapitalizationCorrection(current_fragment_));
 }
 
 void GrammarManager::IgnoreSuggestion() {
@@ -326,17 +355,20 @@ void GrammarManager::IgnoreSuggestion() {
     return;
 
   input_context->ClearGrammarFragments(current_fragment_.range);
-  if (ignored_markers_.find(current_sentence_.text) == ignored_markers_.end()) {
-    ignored_markers_[current_sentence_.text] = std::unordered_set<int>();
+  if (ignored_marker_hashes_.find(current_sentence_.text) ==
+      ignored_marker_hashes_.end()) {
+    ignored_marker_hashes_[current_sentence_.text] =
+        std::unordered_set<uint64_t>();
   }
-  ignored_markers_[current_sentence_.text].insert(
+  ignored_marker_hashes_[current_sentence_.text].insert(
       RangeHash(gfx::Range(current_fragment_.range.start() -
                                current_sentence_.original_range.start(),
                            current_fragment_.range.end() -
                                current_sentence_.original_range.start())));
 
   suggestion_handler_->Announce(kIgnoreGrammarSuggestionMessage);
-  RecordGrammarAction(GrammarActions::kIgnored);
+  RecordGrammarAction(GrammarActions::kIgnored,
+                      IsCapitalizationCorrection(current_fragment_));
 }
 
 void GrammarManager::SetButtonHighlighted(

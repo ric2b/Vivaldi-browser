@@ -69,6 +69,12 @@ class TestQuietNotificationPermissionUiSelector
   explicit TestQuietNotificationPermissionUiSelector(
       const Decision& canned_decision)
       : canned_decision_(canned_decision) {}
+
+  TestQuietNotificationPermissionUiSelector(
+      const TestQuietNotificationPermissionUiSelector&) = delete;
+  TestQuietNotificationPermissionUiSelector& operator=(
+      const TestQuietNotificationPermissionUiSelector&) = delete;
+
   ~TestQuietNotificationPermissionUiSelector() override = default;
 
  protected:
@@ -85,8 +91,6 @@ class TestQuietNotificationPermissionUiSelector
 
  private:
   Decision canned_decision_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestQuietNotificationPermissionUiSelector);
 };
 
 class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
@@ -95,6 +99,11 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
     scoped_feature_list_.InitAndEnableFeature(
         permissions::features::kBlockRepeatedNotificationPermissionPrompts);
   }
+
+  PermissionRequestManagerBrowserTest(
+      const PermissionRequestManagerBrowserTest&) = delete;
+  PermissionRequestManagerBrowserTest& operator=(
+      const PermissionRequestManagerBrowserTest&) = delete;
 
   ~PermissionRequestManagerBrowserTest() override = default;
 
@@ -147,7 +156,7 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
     const GURL kThirdURL = embedded_test_server()->GetURL(
         "c.localhost", "/permissions/killswitch_tester.html");
 
-    ui_test_utils::NavigateToURL(browser(), kInitialURL);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialURL));
     bubble_factory()->ResetCounts();
     bubble_factory()->set_response_type(
         permissions::PermissionRequestManager::AutoResponseType::DENY_ALL);
@@ -208,8 +217,6 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<permissions::MockPermissionPromptFactory>
       mock_permission_prompt_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(PermissionRequestManagerBrowserTest);
 };
 
 class PermissionRequestManagerWithBackForwardCacheBrowserTest
@@ -456,9 +463,9 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
                        KillSwitchGeolocation) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      embedded_test_server()->GetURL("/permissions/killswitch_tester.html"));
+      embedded_test_server()->GetURL("/permissions/killswitch_tester.html")));
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -472,9 +479,9 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
 
   // Reload the page to get around blink layer caching for geolocation
   // requests.
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      embedded_test_server()->GetURL("/permissions/killswitch_tester.html"));
+      embedded_test_server()->GetURL("/permissions/killswitch_tester.html")));
 
   std::string result;
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
@@ -494,7 +501,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
   const GURL kSecondURL = embedded_test_server()->GetURL(
       "b.localhost", "/permissions/killswitch_tester.html");
 
-  ui_test_utils::NavigateToURL(browser(), kInitialURL);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialURL));
   bubble_factory()->set_response_type(
       permissions::PermissionRequestManager::AutoResponseType::DENY_ALL);
 
@@ -595,9 +602,9 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
                        KillSwitchNotifications) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      embedded_test_server()->GetURL("/permissions/killswitch_tester.html"));
+      embedded_test_server()->GetURL("/permissions/killswitch_tester.html")));
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -861,10 +868,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithBackForwardCacheBrowserTest,
   GURL url_a = embedded_test_server()->GetURL("a.com", "/title1.html");
   GURL url_b = embedded_test_server()->GetURL("b.com", "/title1.html");
 
-  ui_test_utils::NavigateToURL(browser(), url_a);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_a));
   content::RenderFrameHostWrapper rfh_a(GetActiveMainFrame());
 
-  ui_test_utils::NavigateToURL(browser(), url_b);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_b));
   EXPECT_EQ(rfh_a->GetLifecycleState(),
             content::RenderFrameHost::LifecycleState::kInBackForwardCache);
 
@@ -886,10 +893,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithBackForwardCacheBrowserTest,
   GURL url_a = embedded_test_server()->GetURL("a.com", "/title1.html");
   GURL url_b = embedded_test_server()->GetURL("b.com", "/title1.html");
 
-  ui_test_utils::NavigateToURL(browser(), url_a);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_a));
   content::RenderFrameHostWrapper rfh_a(GetActiveMainFrame());
 
-  ui_test_utils::NavigateToURL(browser(), url_b);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_b));
   EXPECT_EQ(rfh_a->GetLifecycleState(),
             content::RenderFrameHost::LifecycleState::kInBackForwardCache);
   content::RenderFrameHostWrapper rfh_b(GetActiveMainFrame());

@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/lazy_background_page_test_util.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
@@ -32,6 +32,7 @@
 #include "chrome/browser/notifications/notification_permission_context.h"
 #include "chrome/browser/notifications/stub_notification_display_service.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
+#include "chrome/browser/push_messaging/push_messaging_features.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -74,7 +75,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/common/verifier_formats.h"
-#include "extensions/test/background_page_watcher.h"
+#include "extensions/test/extension_background_page_waiter.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "extensions/test/test_extension_dir.h"
@@ -99,6 +100,10 @@ class WebContentsLoadStopObserver : content::WebContentsObserver {
       : content::WebContentsObserver(web_contents),
         load_stop_observed_(false) {}
 
+  WebContentsLoadStopObserver(const WebContentsLoadStopObserver&) = delete;
+  WebContentsLoadStopObserver& operator=(const WebContentsLoadStopObserver&) =
+      delete;
+
   void WaitForLoadStop() {
     if (load_stop_observed_)
       return;
@@ -115,8 +120,6 @@ class WebContentsLoadStopObserver : content::WebContentsObserver {
 
   bool load_stop_observed_;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsLoadStopObserver);
 };
 
 // Extension ID for tests that use
@@ -159,6 +162,10 @@ class ErrorObserver : public ErrorConsole::Observer {
 };
 
 class ServiceWorkerTest : public ExtensionApiTest {
+ public:
+  ServiceWorkerTest(const ServiceWorkerTest&) = delete;
+  ServiceWorkerTest& operator=(const ServiceWorkerTest&) = delete;
+
  protected:
   ServiceWorkerTest() = default;
   ~ServiceWorkerTest() override = default;
@@ -243,14 +250,17 @@ class ServiceWorkerTest : public ExtensionApiTest {
             ->GetServiceWorkerContext();
     return sw_context->CountExternalRequestsForTest(key);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerTest);
 };
 
 class ServiceWorkerBasedBackgroundTest : public ServiceWorkerTest {
  public:
   ServiceWorkerBasedBackgroundTest() = default;
+
+  ServiceWorkerBasedBackgroundTest(const ServiceWorkerBasedBackgroundTest&) =
+      delete;
+  ServiceWorkerBasedBackgroundTest& operator=(
+      const ServiceWorkerBasedBackgroundTest&) = delete;
+
   ~ServiceWorkerBasedBackgroundTest() override {}
 
   void SetUpOnMainThread() override {
@@ -290,33 +300,19 @@ class ServiceWorkerBasedBackgroundTest : public ServiceWorkerTest {
     }
     return false;
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerBasedBackgroundTest);
 };
 
-// A specialization of ExtensionSettingsApiTest that pretends it's running
-// on version_info::Channel::UNKNOWN.
-class ServiceWorkerBasedBackgroundTrunkTest
-    : public ServiceWorkerBasedBackgroundTest {
- public:
-  ServiceWorkerBasedBackgroundTrunkTest() = default;
-  ~ServiceWorkerBasedBackgroundTrunkTest() override = default;
-  ServiceWorkerBasedBackgroundTrunkTest(
-      const ServiceWorkerBasedBackgroundTrunkTest& other) = delete;
-  ServiceWorkerBasedBackgroundTrunkTest& operator=(
-      const ServiceWorkerBasedBackgroundTrunkTest& other) = delete;
-
- private:
-  // TODO(crbug.com/1185226): Remove unknown channel when chrome.storage.session
-  // is released in stable.
-  ScopedCurrentChannel current_channel_{version_info::Channel::UNKNOWN};
-};
 
 class ServiceWorkerBasedBackgroundTestWithNotification
     : public ServiceWorkerBasedBackgroundTest {
  public:
   ServiceWorkerBasedBackgroundTestWithNotification() {}
+
+  ServiceWorkerBasedBackgroundTestWithNotification(
+      const ServiceWorkerBasedBackgroundTestWithNotification&) = delete;
+  ServiceWorkerBasedBackgroundTestWithNotification& operator=(
+      const ServiceWorkerBasedBackgroundTestWithNotification&) = delete;
+
   ~ServiceWorkerBasedBackgroundTestWithNotification() override = default;
 
   void SetUpOnMainThread() override {
@@ -340,9 +336,6 @@ class ServiceWorkerBasedBackgroundTestWithNotification
   }
 
   std::unique_ptr<NotificationDisplayServiceTester> display_service_tester_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerBasedBackgroundTestWithNotification);
 };
 
 enum class ManifestVersion { kTwo, kThree };
@@ -533,23 +526,22 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, RuntimeMisc) {
       << message_;
 }
 
+// Tests chrome.app namespace is undefined for service worker-based extensions.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, ChromeAppUndefined) {
+  ASSERT_TRUE(RunExtensionTest(
+      "service_worker/worker_based_background/chrome_app_undefined"))
+      << message_;
+}
+
 // Tests chrome.storage APIs.
-// TODO(crbug.com/1185226): Change parent class to
-// `ServiceWorkerBasedBackgroundTest` when chrome.storage.session is released in
-// stable.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTrunkTest,
-                       StorageSetAndGet) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, StorageSetAndGet) {
   ASSERT_TRUE(
       RunExtensionTest("service_worker/worker_based_background/storage"))
       << message_;
 }
 
 // Tests chrome.storage APIs are only enabled with permission.
-// TODO(crbug.com/1185226): Change parent class to
-// `ServiceWorkerBasedBackgroundTest` when chrome.storage.session is released in
-// stable.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTrunkTest,
-                       StorageNoPermissions) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, StorageNoPermissions) {
   ASSERT_TRUE(RunExtensionTest(
       "service_worker/worker_based_background/storage_no_permissions"))
       << message_;
@@ -646,6 +638,12 @@ class ServiceWorkerWithEarlyMessageListenerTest
   explicit ServiceWorkerWithEarlyMessageListenerTest(
       const std::string& test_message)
       : test_message_(test_message) {}
+
+  ServiceWorkerWithEarlyMessageListenerTest(
+      const ServiceWorkerWithEarlyMessageListenerTest&) = delete;
+  ServiceWorkerWithEarlyMessageListenerTest& operator=(
+      const ServiceWorkerWithEarlyMessageListenerTest&) = delete;
+
   ~ServiceWorkerWithEarlyMessageListenerTest() override = default;
 
   bool WaitForMessage() { return listener_->WaitUntilSatisfied(); }
@@ -661,8 +659,6 @@ class ServiceWorkerWithEarlyMessageListenerTest
  private:
   const std::string test_message_;
   std::unique_ptr<ExtensionTestMessageListener> listener_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerWithEarlyMessageListenerTest);
 };
 
 class ServiceWorkerOnStartupEventTest
@@ -670,10 +666,13 @@ class ServiceWorkerOnStartupEventTest
  public:
   ServiceWorkerOnStartupEventTest()
       : ServiceWorkerWithEarlyMessageListenerTest("onStartup event") {}
-  ~ServiceWorkerOnStartupEventTest() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerOnStartupEventTest);
+  ServiceWorkerOnStartupEventTest(const ServiceWorkerOnStartupEventTest&) =
+      delete;
+  ServiceWorkerOnStartupEventTest& operator=(
+      const ServiceWorkerOnStartupEventTest&) = delete;
+
+  ~ServiceWorkerOnStartupEventTest() override = default;
 };
 
 // Tests "runtime.onStartup" for extension SW.
@@ -683,7 +682,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerOnStartupEventTest, PRE_Event) {
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerOnStartupEventTest, Event) {
+// Flaky (crbug.com/1243815).
+IN_PROC_BROWSER_TEST_F(ServiceWorkerOnStartupEventTest, DISABLED_Event) {
   EXPECT_TRUE(WaitForMessage());
 }
 
@@ -695,6 +695,12 @@ class ServiceWorkerRegistrationAtStartupTest
       : ServiceWorkerWithEarlyMessageListenerTest("WORKER_RUNNING") {
     ServiceWorkerTaskQueue::SetObserverForTest(this);
   }
+
+  ServiceWorkerRegistrationAtStartupTest(
+      const ServiceWorkerRegistrationAtStartupTest&) = delete;
+  ServiceWorkerRegistrationAtStartupTest& operator=(
+      const ServiceWorkerRegistrationAtStartupTest&) = delete;
+
   ~ServiceWorkerRegistrationAtStartupTest() override {
     ServiceWorkerTaskQueue::SetObserverForTest(nullptr);
   }
@@ -730,8 +736,6 @@ class ServiceWorkerRegistrationAtStartupTest
   bool extension_activated_ = false;
   absl::optional<bool> will_register_service_worker_;
   std::unique_ptr<base::RunLoop> run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRegistrationAtStartupTest);
 };
 
 // Observes ServiceWorkerTaskQueue::DidStartWorkerFail.
@@ -831,6 +835,9 @@ class EarlyWorkerMessageSender : public EventRouter::Observer {
     event_router_->RegisterObserver(this, event_->event_name);
   }
 
+  EarlyWorkerMessageSender(const EarlyWorkerMessageSender&) = delete;
+  EarlyWorkerMessageSender& operator=(const EarlyWorkerMessageSender&) = delete;
+
   ~EarlyWorkerMessageSender() override {
     event_router_->UnregisterObserver(this);
   }
@@ -865,8 +872,6 @@ class EarlyWorkerMessageSender : public EventRouter::Observer {
   const ExtensionId extension_id_;
   std::unique_ptr<Event> event_;
   ExtensionTestMessageListener listener_;
-
-  DISALLOW_COPY_AND_ASSIGN(EarlyWorkerMessageSender);
 };
 
 // Tests that extension event dispatch works correctly right after extension
@@ -927,6 +932,12 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 class ServiceWorkerBackgroundSyncTest : public ServiceWorkerTest {
  public:
   ServiceWorkerBackgroundSyncTest() {}
+
+  ServiceWorkerBackgroundSyncTest(const ServiceWorkerBackgroundSyncTest&) =
+      delete;
+  ServiceWorkerBackgroundSyncTest& operator=(
+      const ServiceWorkerBackgroundSyncTest&) = delete;
+
   ~ServiceWorkerBackgroundSyncTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -940,9 +951,6 @@ class ServiceWorkerBackgroundSyncTest : public ServiceWorkerTest {
     content::background_sync_test_util::SetIgnoreNetworkChanges(true);
     ServiceWorkerTest::SetUp();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerBackgroundSyncTest);
 };
 
 class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
@@ -951,7 +959,15 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
       : scoped_testing_factory_installer_(
             base::BindRepeating(&gcm::FakeGCMProfileService::Build)),
         gcm_driver_(nullptr),
-        push_service_(nullptr) {}
+        push_service_(nullptr) {
+    feature_list_.InitAndDisableFeature(
+        features::kPushMessagingDisallowSenderIDs);
+  }
+
+  ServiceWorkerPushMessagingTest(const ServiceWorkerPushMessagingTest&) =
+      delete;
+  ServiceWorkerPushMessagingTest& operator=(
+      const ServiceWorkerPushMessagingTest&) = delete;
 
   ~ServiceWorkerPushMessagingTest() override {}
 
@@ -999,18 +1015,23 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
   PushMessagingServiceImpl* push_service() const { return push_service_; }
 
  private:
+  base::test::ScopedFeatureList feature_list_;
   gcm::GCMProfileServiceFactory::ScopedTestingFactoryInstaller
       scoped_testing_factory_installer_;
 
   instance_id::FakeGCMDriverForInstanceID* gcm_driver_;
   PushMessagingServiceImpl* push_service_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerPushMessagingTest);
 };
 
 class ServiceWorkerLazyBackgroundTest : public ServiceWorkerTest {
  public:
   ServiceWorkerLazyBackgroundTest() = default;
+
+  ServiceWorkerLazyBackgroundTest(const ServiceWorkerLazyBackgroundTest&) =
+      delete;
+  ServiceWorkerLazyBackgroundTest& operator=(
+      const ServiceWorkerLazyBackgroundTest&) = delete;
+
   ~ServiceWorkerLazyBackgroundTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -1027,9 +1048,6 @@ class ServiceWorkerLazyBackgroundTest : public ServiceWorkerTest {
     ProcessManager::SetEventPageIdleTimeForTesting(1);
     ProcessManager::SetEventPageSuspendingTimeForTesting(1);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerLazyBackgroundTest);
 };
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterSucceeds) {
@@ -1202,7 +1220,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, OnBeforeRequest) {
       "webrequest/webpage.html");
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ui_test_utils::NavigateToURL(browser(), page_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page_url));
   EXPECT_TRUE(content::WaitForLoadStop(web_contents));
 
   std::string result;
@@ -1241,10 +1259,11 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, SWServedBackgroundPageReceivesEvent) {
   // Close the background page and start it again so that the service worker
   // will start controlling pages.
   background_page->Close();
-  BackgroundPageWatcher(process_manager(), extension).WaitForClose();
+  ExtensionBackgroundPageWaiter(profile(), *extension)
+      .WaitForBackgroundClosed();
   background_page = nullptr;
   process_manager()->WakeEventPage(extension->id(), base::DoNothing());
-  BackgroundPageWatcher(process_manager(), extension).WaitForOpen();
+  ExtensionBackgroundPageWaiter(profile(), *extension).WaitForBackgroundOpen();
 
   // Since the SW is now controlling the extension, the SW serves the background
   // script. page.html sends a message to the background script and we verify
@@ -1271,12 +1290,13 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, SWServedBackgroundPage) {
 
   // Close the background page.
   background_page->Close();
-  BackgroundPageWatcher(process_manager(), extension).WaitForClose();
+  ExtensionBackgroundPageWaiter(profile(), *extension)
+      .WaitForBackgroundClosed();
   background_page = nullptr;
 
   // Start it again.
   process_manager()->WakeEventPage(extension->id(), base::DoNothing());
-  BackgroundPageWatcher(process_manager(), extension).WaitForOpen();
+  ExtensionBackgroundPageWaiter(profile(), *extension).WaitForBackgroundOpen();
 
   // The service worker should get a fetch event for the background page.
   background_page =
@@ -1402,7 +1422,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, BackgroundPageIsWokenIfAsleep) {
       process_manager()->GetBackgroundHostForExtension(extension->id());
   ASSERT_TRUE(background_page);
   background_page->Close();
-  BackgroundPageWatcher(process_manager(), extension).WaitForClose();
+  ExtensionBackgroundPageWaiter(profile(), *extension)
+      .WaitForBackgroundClosed();
 
   EXPECT_EQ("false", NavigateAndExtractInnerText(extension->GetResourceURL(
                          "background-client-is-awake")));
@@ -1682,8 +1703,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, VerifyNoApiBindings) {
   const Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("service_worker/verify_no_api_bindings"));
   ASSERT_TRUE(extension);
-  ui_test_utils::NavigateToURL(browser(),
-                               extension->GetResourceURL("page.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("page.html")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -1707,8 +1728,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, Sync) {
   const Extension* extension =
       LoadExtension(test_data_dir_.AppendASCII("service_worker/sync"));
   ASSERT_TRUE(extension);
-  ui_test_utils::NavigateToURL(browser(),
-                               extension->GetResourceURL("page.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("page.html")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -1737,7 +1758,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
       "controlled_page/index.html");
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ui_test_utils::NavigateToURL(browser(), page_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page_url));
   EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   std::string value;
@@ -1758,7 +1779,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, OnPush) {
   GrantNotificationPermissionForTest(extension_url);
 
   GURL url = extension->GetResourceURL("page.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -1880,8 +1901,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 
   // Navigate to a URL, which should wake up the service worker.
   ExtensionTestMessageListener finished_listener("finished", false);
-  ui_test_utils::NavigateToURL(browser(),
-                               extension->GetResourceURL("page.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("page.html")));
   EXPECT_TRUE(finished_listener.WaitUntilSatisfied());
 }
 
@@ -1972,8 +1993,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsQuerySplit) {
   ASSERT_TRUE(ready_incognito.WaitUntilSatisfied());
 
   // Load a new tab in both browsers.
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome:version"));
-  ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome:version")));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about")));
 
   {
     ExtensionTestMessageListener tabs_listener(false);
@@ -2012,8 +2034,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsQuerySpanning) {
   ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
 
   // Load a new tab in both browsers.
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome:version"));
-  ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome:version")));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about")));
 
   ExtensionTestMessageListener tabs_listener(false);
   // The extension waits for the reply to the "ready" sendMessage call
@@ -2046,8 +2069,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnUpdatedSplit) {
   ASSERT_TRUE(ready_incognito.WaitUntilSatisfied());
 
   // Load a new tab in both browsers.
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome:version"));
-  ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome:version")));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about")));
 
   {
     ExtensionTestMessageListener tabs_listener(false);
@@ -2100,8 +2124,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   ExtensionTestMessageListener tabs_listener(false);
 
   // Load a new tab in both browsers.
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome:version"));
-  ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome:version")));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser_incognito, GURL("chrome:about")));
 
   EXPECT_TRUE(tabs_listener.WaitUntilSatisfied());
   EXPECT_EQ(R"(["chrome://version/","chrome://about/"])",
@@ -2140,12 +2165,12 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   content::ServiceWorkerContext* context =
       storage_partition->GetServiceWorkerContext();
 
-  const ExtensionId kTestExtensionId("iegclhlplifhodhkoafiokenjoapiobj");
+  const ExtensionId test_extension_id("iegclhlplifhodhkoafiokenjoapiobj");
   // Set up an observer to wait for worker to start and then stop.
-  TestWorkerObserver observer(context, kTestExtensionId);
+  TestWorkerObserver observer(context, test_extension_id);
 
   TestExtensionDir test_dir;
-  // Key for extension id |kTestExtensionId|.
+  // Key for extension id |test_extension_id|.
   constexpr const char kKey[] =
       "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjzv7dI7Ygyh67VHE1DdidudpYf8P"
       "Ffv8iucWvzO+3xpF/Dm5xNo7aQhPNiEaNfHwJQ7lsp4gc+C+4bbaVewBFspTruoSJhZc5uEf"
@@ -2171,7 +2196,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   test_dir.WriteFile(FILE_PATH_LITERAL("script.js"), kScript);
   const Extension* extension = LoadExtension(test_dir.UnpackedPath());
   ASSERT_TRUE(extension);
-  ASSERT_EQ(kTestExtensionId, extension->id());
+  ASSERT_EQ(test_extension_id, extension->id());
   LazyContextId context_id(browser()->profile(), extension->id(),
                            extension->url());
   // Let the worker start so it rejects 'install' event. This causes the worker
@@ -2275,8 +2300,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, WorkerRefCount) {
   ASSERT_TRUE(extension);
   ASSERT_TRUE(worker_start_listener.WaitUntilSatisfied());
 
-  ui_test_utils::NavigateToURL(browser(),
-                               extension->GetResourceURL("page.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("page.html")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -2335,16 +2360,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, WorkerRefCount) {
   EXPECT_EQ(0u, GetWorkerRefCount(extension_key));
 }
 
-// Disabled on Ozone due to flakiness: https://crbug.com/1236184.
-#if defined(USE_OZONE)
-#define MAYBE_PRE_EventsAfterRestart DISABLED_PRE_EventsAfterRestart
-#define MAYBE_EventsAfterRestart DISABLED_EventsAfterRestart
-#else
-#define MAYBE_PRE_EventsAfterRestart PRE_EventsAfterRestart
-#define MAYBE_EventsAfterRestart EventsAfterRestart
-#endif
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       MAYBE_PRE_EventsAfterRestart) {
+                       PRE_EventsAfterRestart) {
   ExtensionTestMessageListener event_added_listener("ready", false);
 
   base::ScopedAllowBlockingForTesting allow_blocking;
@@ -2359,7 +2376,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
                                  "events_to_stopped_extension"),
       scoped_temp_dir.GetPath().AppendASCII("v1.crx"), pem_path,
       base::FilePath());
-  const Extension* extension = LoadExtension(extension_path);
+  const Extension* extension =
+      LoadExtension(extension_path, {.wait_for_registration_stored = true});
   ASSERT_TRUE(extension);
   EXPECT_EQ(kTestExtensionId, extension->id());
   ProcessManager* pm = ProcessManager::Get(browser()->profile());
@@ -2374,8 +2392,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 // tabs.onCreated event listener to the extension without explicitly loading the
 // extension. This is because the extension registered a listener for
 // tabs.onMoved before browser restarted in PRE_EventsAfterRestart.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       MAYBE_EventsAfterRestart) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, EventsAfterRestart) {
   // Verify there is no RenderProcessHost for the extension.
   EXPECT_FALSE(ExtensionHasRenderProcessHost(kTestExtensionId));
 
@@ -2391,7 +2408,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnCreated) {
   ASSERT_TRUE(RunExtensionTest("tabs/lazy_background_on_created", {},
-                               {.load_as_service_worker = true}))
+                               {.context_type = ContextType::kServiceWorker}))
       << message_;
 }
 
@@ -2560,8 +2577,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerWithManifestVersionTest,
                                 : "script-src 'self'; object-src 'self';";
   ExtensionTestMessageListener csp_modified_listener(kDefaultCSP, false);
   csp_modified_listener.set_extension_id(extension_id);
-  ui_test_utils::NavigateToURL(
-      browser(), extension->GetResourceURL("extension_page.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("extension_page.html")));
   EXPECT_TRUE(csp_modified_listener.WaitUntilSatisfied());
 
   // Ensure the inline script is not executed because we ensure that the
@@ -2617,6 +2634,10 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLazyBackgroundTest, ConsoleLogging) {
           browser_context->GetDefaultStoragePartition();
       scoped_observation_.Observe(partition->GetServiceWorkerContext());
     }
+
+    ConsoleMessageObserver(const ConsoleMessageObserver&) = delete;
+    ConsoleMessageObserver& operator=(const ConsoleMessageObserver&) = delete;
+
     ~ConsoleMessageObserver() override = default;
 
     void Wait() { run_loop_.Run(); }
@@ -2640,8 +2661,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLazyBackgroundTest, ConsoleLogging) {
     base::ScopedObservation<content::ServiceWorkerContext,
                             content::ServiceWorkerContextObserver>
         scoped_observation_{this};
-
-    DISALLOW_COPY_AND_ASSIGN(ConsoleMessageObserver);
   };
 
   TestExtensionDir test_dir;
@@ -2686,10 +2705,13 @@ class ServiceWorkerCheckBindingsTest
       public testing::WithParamInterface<version_info::Channel> {
  public:
   ServiceWorkerCheckBindingsTest() = default;
-  ~ServiceWorkerCheckBindingsTest() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerCheckBindingsTest);
+  ServiceWorkerCheckBindingsTest(const ServiceWorkerCheckBindingsTest&) =
+      delete;
+  ServiceWorkerCheckBindingsTest& operator=(
+      const ServiceWorkerCheckBindingsTest&) = delete;
+
+  ~ServiceWorkerCheckBindingsTest() override = default;
 };
 
 // Load an extension in each allowed channel and check that the expected

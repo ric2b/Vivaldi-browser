@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
-#include "components/permissions/permission_context_base.h"
 #include "chrome/browser/notifications/notification_permission_context.h"
+#include "components/permissions/permission_context_base.h"
 
 #include "app/vivaldi_apptools.h"
 #include "base/callback.h"
@@ -9,8 +9,8 @@
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #endif
 
 void NotificationPermissionContext::UpdateTabContext(

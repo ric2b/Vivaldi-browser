@@ -9,8 +9,8 @@ import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interf
 import {ButtonState, ShimlessRmaElement} from 'chrome://shimless-rma/shimless_rma.js';
 import {RmadErrorCode, RmaState, StateResult} from 'chrome://shimless-rma/shimless_rma_types.js';
 
-import {assertFalse, assertTrue} from '../../chai_assert.js';
-import {flushTasks, isVisible} from '../../test_util.m.js';
+import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {flushTasks, isVisible} from '../../test_util.js';
 
 export function shimlessRMAAppTest() {
   /** @type {?ShimlessRmaElement} */
@@ -84,11 +84,17 @@ export function shimlessRMAAppTest() {
 
   test('ShimlessRMABasicNavigation', async () => {
     await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
+    const prevButton = component.shadowRoot.querySelector('#back');
+    const cancelButton = component.shadowRoot.querySelector('#cancel');
+    assertTrue(!!prevButton);
+    assertTrue(!!cancelButton);
 
     const initialPage =
         component.shadowRoot.querySelector('onboarding-landing-page');
     assertTrue(!!initialPage);
     assertFalse(initialPage.hidden);
+    assertTrue(prevButton.hidden);
+    assertFalse(cancelButton.hidden);
 
     await clickNext();
 
@@ -98,8 +104,9 @@ export function shimlessRMAAppTest() {
     assertFalse(selectNetworkPage.hidden);
     assertTrue(!!initialPage);
     assertTrue(initialPage.hidden);
+    assertFalse(prevButton.hidden);
+    assertFalse(cancelButton.hidden);
 
-    const prevButton = component.shadowRoot.querySelector('#back');
     prevButton.click();
     await flushTasks();
 
@@ -107,21 +114,25 @@ export function shimlessRMAAppTest() {
     assertTrue(!!selectNetworkPage);
     assertTrue(selectNetworkPage.hidden);
     assertFalse(initialPage.hidden);
+    assertTrue(prevButton.hidden);
+    assertFalse(cancelButton.hidden);
   });
 
   test('ShimlessRMACancellation', async () => {
     await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
-
+    let abortRmaCount = 0;
+    service.abortRma = () => {
+      abortRmaCount++;
+      return Promise.resolve(RmadErrorCode.kOk);
+    };
     const initialPage =
         component.shadowRoot.querySelector('onboarding-landing-page');
-    await clickNext();
-
     const cancelButton = component.shadowRoot.querySelector('#cancel');
+
     cancelButton.click();
     await flushTasks();
 
-    // back to initial page
-    assertFalse(initialPage.hidden);
+    assertEquals(1, abortRmaCount);
   });
 
   test('NextButtonClickedOnReady', async () => {

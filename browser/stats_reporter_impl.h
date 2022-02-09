@@ -8,7 +8,6 @@
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/timer/timer.h"
@@ -49,6 +48,10 @@ class StatsReporterImpl : public StatsReporter {
   };
 
   StatsReporterImpl();
+
+  StatsReporterImpl(const StatsReporterImpl&) = delete;
+  StatsReporterImpl& operator=(const StatsReporterImpl&) = delete;
+
   ~StatsReporterImpl() override;
 
   static bool GeneratePingRequest(
@@ -105,7 +108,6 @@ class StatsReporterImpl : public StatsReporter {
   base::OneShotTimer next_report_timer_;
 
   base::WeakPtrFactory<StatsReporterImpl> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(StatsReporterImpl);
 };
 
 }  // namespace vivaldi

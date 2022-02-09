@@ -94,6 +94,9 @@ update_target("//chrome/installer/util:with_no_strings") {
 
 if (is_linux && !is_component_build) {
   update_target("//chrome/installer/linux:rpm_packaging_files") {
+    sources -= [
+      "rpm/chrome.spec.template",
+    ]
     sources += [
       "//vivaldi/installer/linux/rpm/vivaldi.spec.template",
     ]
@@ -105,7 +108,9 @@ if (is_linux && !is_component_build) {
     sources += [
       "//vivaldi/installer/linux/common/appdata.xml.template",
       "//vivaldi/installer/linux/common/update-ffmpeg",
+      "//vivaldi/installer/linux/common/vivaldi.apt.include",
       "//vivaldi/installer/linux/common/vivaldi.info",
+      "//vivaldi/installer/linux/common/vivaldi.rpm.include",
       "//vivaldi/installer/linux/common/wrapper",
       "//vivaldi/installer/linux/common/xfce-helper.template",
       "//vivaldi/installer/win/EULA.html",

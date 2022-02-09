@@ -19,6 +19,7 @@
 #include "google_apis/gaia/google_service_auth_error.h"
 
 namespace policy {
+class EnrollmentHandler;
 class PolicyOAuth2TokenFetcher;
 }  // namespace policy
 
@@ -27,6 +28,12 @@ namespace ash {
 class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
  public:
   EnterpriseEnrollmentHelperImpl();
+
+  EnterpriseEnrollmentHelperImpl(const EnterpriseEnrollmentHelperImpl&) =
+      delete;
+  EnterpriseEnrollmentHelperImpl& operator=(
+      const EnterpriseEnrollmentHelperImpl&) = delete;
+
   ~EnterpriseEnrollmentHelperImpl() override;
 
   // EnterpriseEnrollmentHelper:
@@ -91,9 +98,10 @@ class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
 
   std::unique_ptr<policy::PolicyOAuth2TokenFetcher> oauth_fetcher_;
 
-  base::WeakPtrFactory<EnterpriseEnrollmentHelperImpl> weak_ptr_factory_{this};
+  // Non-nullptr from DoEnroll till OnEnrollmentFinished.
+  std::unique_ptr<policy::EnrollmentHandler> enrollment_handler_;
 
-  DISALLOW_COPY_AND_ASSIGN(EnterpriseEnrollmentHelperImpl);
+  base::WeakPtrFactory<EnterpriseEnrollmentHelperImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

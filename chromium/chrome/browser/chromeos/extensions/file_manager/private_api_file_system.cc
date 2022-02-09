@@ -27,6 +27,7 @@
 #include "chrome/browser/ash/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
+#include "chrome/browser/ash/file_manager/io_task.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/browser_process.h"
@@ -374,6 +375,24 @@ chromeos::disks::FormatFileSystemType ApiFormatFileSystemToChromeEnum(
   return chromeos::disks::FormatFileSystemType::kUnknown;
 }
 
+absl::optional<file_manager::io_task::OperationType> IOTaskTypeToChromeEnum(
+    api::file_manager_private::IOTaskType type) {
+  switch (type) {
+    case api::file_manager_private::IO_TASK_TYPE_COPY:
+      return file_manager::io_task::OperationType::kCopy;
+    case api::file_manager_private::IO_TASK_TYPE_MOVE:
+      return file_manager::io_task::OperationType::kMove;
+    case api::file_manager_private::IO_TASK_TYPE_DELETE:
+      return file_manager::io_task::OperationType::kDelete;
+    case api::file_manager_private::IO_TASK_TYPE_ZIP:
+      return file_manager::io_task::OperationType::kZip;
+    case api::file_manager_private::IO_TASK_TYPE_NONE:
+      return {};
+  }
+  NOTREACHED() << "Unknown I/O task type " << type;
+  return {};
+}
+
 }  // namespace
 
 ExtensionFunction::ResponseAction
@@ -388,7 +407,7 @@ FileManagerPrivateGrantAccessFunction::FileManagerPrivateGrantAccessFunction() =
 
 ExtensionFunction::ResponseAction FileManagerPrivateGrantAccessFunction::Run() {
   using extensions::api::file_manager_private::GrantAccess::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -464,9 +483,9 @@ ExtensionFunction::ResponseAction FileWatchFunctionBase::Run() {
     return RespondNow(Error("Invalid state"));
 
   // First param is url of a file to watch.
-  std::string url;
-  if (!args_->GetString(0, &url) || url.empty())
+  if (args().empty() || !args()[0].is_string() || args()[0].GetString().empty())
     return RespondNow(Error("Empty watch URL"));
+  const std::string& url = args()[0].GetString();
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -583,7 +602,7 @@ void FileManagerPrivateInternalRemoveFileWatchFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateGetSizeStatsFunction::Run() {
   using extensions::api::file_manager_private::GetSizeStats::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   using file_manager::Volume;
@@ -693,7 +712,7 @@ ExtensionFunction::ResponseAction
 FileManagerPrivateInternalValidatePathNameLengthFunction::Run() {
   using extensions::api::file_manager_private_internal::ValidatePathNameLength::
       Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -724,7 +743,7 @@ void FileManagerPrivateInternalValidatePathNameLengthFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateFormatVolumeFunction::Run() {
   using extensions::api::file_manager_private::FormatVolume::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   using file_manager::Volume;
@@ -749,7 +768,7 @@ FileManagerPrivateFormatVolumeFunction::Run() {
 ExtensionFunction::ResponseAction
 FileManagerPrivateSinglePartitionFormatFunction::Run() {
   using extensions::api::file_manager_private::SinglePartitionFormat::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const DiskMountManager::DiskMap& disks =
@@ -784,7 +803,7 @@ FileManagerPrivateSinglePartitionFormatFunction::Run() {
 ExtensionFunction::ResponseAction
 FileManagerPrivateRenameVolumeFunction::Run() {
   using extensions::api::file_manager_private::RenameVolume::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   using file_manager::Volume;
@@ -842,7 +861,7 @@ FileManagerPrivateInternalStartCopyFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   using extensions::api::file_manager_private_internal::StartCopy::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   profile_ = Profile::FromBrowserContext(browser_context());
@@ -987,7 +1006,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateCancelCopyFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   using extensions::api::file_manager_private::CancelCopy::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -1005,7 +1024,7 @@ ExtensionFunction::ResponseAction
 FileManagerPrivateInternalResolveIsolatedEntriesFunction::Run() {
   using extensions::api::file_manager_private_internal::ResolveIsolatedEntries::
       Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
@@ -1083,7 +1102,7 @@ ExtensionFunction::ResponseAction
 FileManagerPrivateInternalComputeChecksumFunction::Run() {
   using drive::util::FileStreamMd5Digester;
   using extensions::api::file_manager_private_internal::ComputeChecksum::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->url.empty()) {
@@ -1129,7 +1148,7 @@ FileManagerPrivateSearchFilesByHashesFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateSearchFilesByHashesFunction::Run() {
   using api::file_manager_private::SearchFilesByHashes::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   // TODO(hirono): Check the volume ID and fail the function for volumes other
@@ -1228,7 +1247,7 @@ void FileManagerPrivateSearchFilesByHashesFunction::OnSearchByHashes(
     DCHECK(result->HasKey(hashAndPath.hash));
     base::ListValue* list;
     result->GetListWithoutPathExpansion(hashAndPath.hash, &list);
-    list->AppendString(hashAndPath.path.value());
+    list->Append(hashAndPath.path.value());
   }
   Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
@@ -1238,7 +1257,7 @@ FileManagerPrivateSearchFilesFunction::FileManagerPrivateSearchFilesFunction() =
 
 ExtensionFunction::ResponseAction FileManagerPrivateSearchFilesFunction::Run() {
   using api::file_manager_private::SearchFiles::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->search_params.max_results < 0) {
@@ -1299,7 +1318,7 @@ ExtensionFunction::ResponseAction
 FileManagerPrivateInternalGetDirectorySizeFunction::Run() {
   using extensions::api::file_manager_private_internal::GetDirectorySize::
       Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->url.empty()) {
@@ -1340,6 +1359,56 @@ FileManagerPrivateInternalGetDirectorySizeFunction::Run() {
 void FileManagerPrivateInternalGetDirectorySizeFunction::
     OnDirectorySizeRetrieved(int64_t size) {
   Respond(OneArgument(base::Value(static_cast<double>(size))));
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalStartIOTaskFunction::Run() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  using extensions::api::file_manager_private_internal::StartIOTask::Params;
+  const std::unique_ptr<Params> params(Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  auto* const profile = Profile::FromBrowserContext(browser_context());
+  scoped_refptr<storage::FileSystemContext> file_system_context =
+      file_manager::util::GetFileSystemContextForRenderFrameHost(
+          profile, render_frame_host());
+
+  auto* const volume_manager = file_manager::VolumeManager::Get(
+      Profile::FromBrowserContext(browser_context()));
+  if (!volume_manager || !volume_manager->io_task_controller()) {
+    return RespondNow(Error("Invalid state"));
+  }
+
+  std::vector<storage::FileSystemURL> source_urls;
+  for (const std::string& url : params->urls) {
+    storage::FileSystemURL cracked_url =
+        file_system_context->CrackURLInFirstPartyContext(GURL(url));
+    if (!cracked_url.is_valid()) {
+      return RespondNow(Error("Invalid source url."));
+    }
+    source_urls.push_back(std::move(cracked_url));
+  }
+
+  auto type = IOTaskTypeToChromeEnum(params->type);
+  if (!type) {
+    return RespondNow(Error("Invalid I/O task type given."));
+  }
+
+  storage::FileSystemURL destination_folder_url;
+  if (params->params.destination_folder_url) {
+    destination_folder_url = file_system_context->CrackURLInFirstPartyContext(
+        GURL(*(params->params.destination_folder_url)));
+    if (!destination_folder_url.is_valid()) {
+      return RespondNow(Error("Invalid destination folder url."));
+    }
+  }
+
+  // TODO(b/199804935): Replace with {Copy/Move/etc}IOTask when implemented.
+  volume_manager->io_task_controller()->Add(
+      std::make_unique<file_manager::io_task::DummyIOTask>(
+          std::move(source_urls), std::move(destination_folder_url), *type));
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

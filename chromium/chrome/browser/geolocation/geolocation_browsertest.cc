@@ -68,6 +68,10 @@ std::string RunScript(content::RenderFrameHost* render_frame_host,
 class IFrameLoader : public content::NotificationObserver {
  public:
   IFrameLoader(Browser* browser, int iframe_id, const GURL& url);
+
+  IFrameLoader(const IFrameLoader&) = delete;
+  IFrameLoader& operator=(const IFrameLoader&) = delete;
+
   ~IFrameLoader() override;
 
   // content::NotificationObserver:
@@ -90,8 +94,6 @@ class IFrameLoader : public content::NotificationObserver {
 
   // The URL for the iframe we just loaded.
   GURL iframe_url_;
-
-  DISALLOW_COPY_AND_ASSIGN(IFrameLoader);
 };
 
 IFrameLoader::IFrameLoader(Browser* browser, int iframe_id, const GURL& url)
@@ -165,6 +167,10 @@ class GeolocationBrowserTest : public InProcessBrowserTest {
   };
 
   GeolocationBrowserTest();
+
+  GeolocationBrowserTest(const GeolocationBrowserTest&) = delete;
+  GeolocationBrowserTest& operator=(const GeolocationBrowserTest&) = delete;
+
   ~GeolocationBrowserTest() override = default;
 
   // InProcessBrowserTest:
@@ -254,8 +260,6 @@ class GeolocationBrowserTest : public InProcessBrowserTest {
 
   // The urls for the iframes loaded by LoadIFrames.
   std::vector<GURL> iframe_urls_;
-
-  DISALLOW_COPY_AND_ASSIGN(GeolocationBrowserTest);
 };
 
 // WebContentImpl tries to connect Device Service earlier than
@@ -284,7 +288,7 @@ void GeolocationBrowserTest::Initialize(InitializationOptions options) {
   }
   ASSERT_TRUE(current_browser_);
   if (options != INITIALIZATION_OFFTHERECORD)
-    ui_test_utils::NavigateToURL(current_browser_, GetTestURL());
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(current_browser_, GetTestURL()));
 
   // By default the main frame is used for JavaScript execution.
   SetFrameForScriptExecution("");
@@ -634,8 +638,8 @@ class GeolocationPrerenderBrowserTest : public GeolocationBrowserTest {
 IN_PROC_BROWSER_TEST_F(GeolocationPrerenderBrowserTest,
                        DeferredBeforePrerenderActivation) {
   // Navigate to an initial page.
-  ui_test_utils::NavigateToURL(current_browser(),
-                               embedded_test_server()->GetURL("/empty.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      current_browser(), embedded_test_server()->GetURL("/empty.html")));
 
   // Start a prerender with the geolocation test URL.
   int host_id = prerender_helper_.AddPrerender(GetTestURL());

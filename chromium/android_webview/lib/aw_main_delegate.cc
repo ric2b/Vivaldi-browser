@@ -50,7 +50,6 @@
 #include "content/public/browser/android/media_url_interceptor_register.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_descriptor_keys.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -183,16 +182,12 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   }
 
   if (cl->HasSwitch(switches::kWebViewSandboxedRenderer)) {
-    content::RenderProcessHost::SetMaxRendererProcessCount(1u);
     cl->AppendSwitch(switches::kInProcessGPU);
   }
 
   {
     ScopedAddFeatureFlags features(cl);
 
-#if BUILDFLAG(ENABLE_SPELLCHECK)
-    features.EnableIfNotSet(spellcheck::kAndroidSpellCheckerNonLowEnd);
-#endif  // ENABLE_SPELLCHECK
     if (base::android::BuildInfo::GetInstance()->sdk_int() >=
         base::android::SDK_VERSION_OREO) {
       features.EnableIfNotSet(autofill::features::kAutofillExtractAllDatalists);

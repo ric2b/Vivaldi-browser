@@ -98,7 +98,8 @@ bool VP8VaapiVideoEncoderDelegate::Initialize(
     const VaapiVideoEncoderDelegate::Config& ave_config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (VideoCodecProfileToVideoCodec(config.output_profile) != kCodecVP8) {
+  if (VideoCodecProfileToVideoCodec(config.output_profile) !=
+      VideoCodec::kVP8) {
     DVLOGF(1) << "Invalid profile: " << GetProfileName(config.output_profile);
     return false;
   }
@@ -181,22 +182,27 @@ bool VP8VaapiVideoEncoderDelegate::UpdateRates(
     uint32_t framerate) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (bitrate_allocation.GetSumBps() == 0 || framerate == 0)
+  uint32_t bitrate = bitrate_allocation.GetSumBps();
+  if (bitrate == 0 || framerate == 0)
     return false;
 
   if (current_params_.bitrate_allocation == bitrate_allocation &&
       current_params_.framerate == framerate) {
     return true;
   }
-  VLOGF(2) << "New bitrate: " << bitrate_allocation.GetSumBps()
+  VLOGF(2) << "New bitrate: " << bitrate_allocation.ToString()
            << ", new framerate: " << framerate;
 
   current_params_.bitrate_allocation = bitrate_allocation;
   current_params_.framerate = framerate;
 
-  current_params_.cpb_size_bits =
-      current_params_.bitrate_allocation.GetSumBps() *
-      current_params_.cpb_window_size_ms / 1000;
+  base::CheckedNumeric<uint32_t> cpb_size_bits(bitrate);
+  cpb_size_bits /= 1000;
+  cpb_size_bits *= current_params_.cpb_window_size_ms;
+  if (!cpb_size_bits.AssignIfValid(&current_params_.cpb_size_bits)) {
+    VLOGF(1) << "Too large bitrate: " << bitrate_allocation.GetSumBps();
+    return false;
+  }
 
   return true;
 }

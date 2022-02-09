@@ -1,0 +1,300 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
+[
+  {
+    "namespace": "themePrivate",
+    "description": "Use the <code>vivaldi.themePrivate</code> to access the API.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/theme/theme_private_api.h"
+    },
+    "types": [
+      {
+        "id": "BackgroundPosition",
+        "type": "string",
+        "enum": [
+          "stretch",
+          "center",
+          "repeat"
+        ]
+      },
+      {
+        "id": "ThemeData",
+        "type": "object",
+        "description": "Basic typesafe theme data.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The id of the queried theme. This is always set."
+          },
+          "isInstalled": {
+            "type": "boolean",
+            "description": "Is the theme installed or not."
+          },
+          "version": {
+            "type": "number",
+            "description": "If the theme is installed, this is the version of the installed theme."
+          }
+        }
+      },
+      {
+        "id": "ThemeObject",
+        "type": "object",
+        "additionalProperties": {
+          "type": "any",
+          "preserveNull": true
+        },
+        "description": "The theme object."
+      },
+      {
+        "id": "ExportOptions",
+        "type": "object",
+        "properties": {
+          "returnBlob": {
+            "type": "boolean",
+            "optional": true,
+            "description": "When true, the theme archive is returned as a memory blob instead of asking the user to select the file."
+          },
+          "windowId": {
+            "type": "number",
+            "optional": true,
+            "description": "Window to show the file selection dialog to select the output file. Must not be given when |returnBlob| is true."
+          },
+          "dialogTitle": {
+            "type": "string",
+            "optional": true,
+            "description": "The title of the file selection dialog to select the output file. Must not be given when |returnBlob| is true."
+          }
+        }
+      },
+      {
+        "id": "ExportResult",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "True if the theme was successfully exported. False on errors or if the user cancelled operation."
+          },
+          "dataBlob": {
+            "type": "binary",
+            "optional": true,
+            "description": "The exported archive as binary blob. This is given only on success and ony when |returnBlob| is true in |ExportOptions|."
+          }
+        }
+      },
+      {
+        "id": "ImportOptions",
+        "type": "object",
+        "properties": {
+          "windowId": {
+            "type": "number",
+            "optional": true,
+            "description": "The window that shows the import archive selector dialog. Must mot be given if dataBlob is given."
+          },
+          "dialogTitle": {
+            "type": "string",
+            "optional": true,
+            "description": "The title to use in the import archive selector dialog. Must mot be given if dataBlob is given."
+          },
+          "dataBlob": {
+            "type": "binary",
+            "optional": true,
+            "description": "The archive to import the theme from. It will be used instead of a user-selected file. It should be a typed array on JS side. This must not be given if windowId or dialogTitle are specified."
+          }
+        }
+      },
+      {
+        "id": "ImportErrorKind",
+        "type": "string",
+        "enum": [
+          "io",
+          "badArchive",
+          "badSettings",
+          "network"
+        ]
+      },
+      {
+        "id": "ImportError",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "ImportErrorKind",
+            "description": "Generic error kind"
+          },
+          "details": {
+            "type": "string",
+            "description": "low-level error message in English"
+          }
+        }
+      },
+      {
+        "id": "ImportResult",
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "ImportError",
+            "optional": true,
+            "description": "Error if any during the operation."
+          },
+          "themeID": {
+            "type": "string",
+            "description": "The id of the imported theme or an empty string if the user cancels the import or on errors."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "export",
+        "type": "function",
+        "description": "Export the theme into a zip file",
+        "parameters": [
+          {
+            "name": "theme",
+            "$ref": "ThemeObject"
+          },
+          {
+            "name": "options",
+            "$ref": "ExportOptions"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "ExportResult"
+            }
+          ]
+        }
+      },
+      {
+        "name": "import",
+        "type": "function",
+        "description": "Import and install theme archive.",
+        "parameters": [
+          {
+            "name": "options",
+            "$ref": "ImportOptions"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "ImportResult"
+            }
+          ]
+        }
+      },
+      {
+        "name": "download",
+        "type": "function",
+        "description": "Download and install theme.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "themeId",
+            "description": "Theme ID of the theme to download and install. This parameter is primarily used for status events."
+          },
+          {
+            "type": "string",
+            "name": "url",
+            "description": "URL to the theme to download and install."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "ImportResult"
+            }
+          ]
+        }
+      },
+      {
+        "name": "getThemeData",
+        "type": "function",
+        "description": "Get some information about the given theme id.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id",
+            "description": "Theme ID of the theme to return data about."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "data",
+              "$ref": "ThemeData"
+            }
+          ]
+        }
+      }
+    ],
+    "events": [
+      {
+        "name": "onThemeDownloadStarted",
+        "type": "function",
+        "description": "Fired when the theme download is starting.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "themeId"
+          }
+        ]
+      },
+      {
+        "name": "onThemeDownloadProgress",
+        "type": "function",
+        "description": "Fired on download progress.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "themeId"
+          },
+          {
+            "type": "integer",
+            "name": "currentValue",
+            "description": "Fired on download progress with the current progress value."
+          }
+        ]
+      },
+      {
+        "name": "onThemeDownloadCompleted",
+        "type": "function",
+        "description": "Fired on download and install completion.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "themeId"
+          },
+          {
+            "type": "boolean",
+            "name": "success",
+            "description": "true on successful theme install."
+          },
+          {
+            "type": "string",
+            "name": "error",
+            "description": "if success is false, provides an error description."
+          }
+        ]
+      },
+      {
+        "name": "onThemesUpdated",
+        "type": "function",
+        "description": "Fired if the preview or permanent theme collection has changed.",
+        "parameters": [
+          {
+            "type": "boolean",
+            "name": "preview",
+            "description": "true if preview has changed, otherwise false."
+          }
+        ]
+      }
+    ]
+  }
+]

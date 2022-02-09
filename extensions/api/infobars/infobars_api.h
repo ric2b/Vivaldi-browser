@@ -5,8 +5,8 @@
 
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
-#include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_event_histogram_value.h"
+#include "extensions/browser/extension_function.h"
 
 namespace extensions {
 
@@ -17,14 +17,11 @@ class InfobarsSendButtonActionFunction : public ExtensionFunction {
 
   InfobarsSendButtonActionFunction() = default;
 
- protected:
+ private:
   ~InfobarsSendButtonActionFunction() override = default;
 
-private:
   // BookmarksFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(InfobarsSendButtonActionFunction);
 };
 
 }  // namespace extensions

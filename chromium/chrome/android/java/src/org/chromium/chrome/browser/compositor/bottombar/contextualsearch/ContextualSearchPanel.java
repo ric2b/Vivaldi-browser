@@ -452,7 +452,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     @Override
     public float getContentY() {
         return getOffsetY() + getBarContainerHeight() + getPanelHelpHeight()
-                + getRelatedSearchesMaximumHeightDps() + getPromoHeightPx() * mPxToDp;
+                + getRelatedSearchesHeightDps(false) + getPromoHeightPx() * mPxToDp;
     }
 
     @Override
@@ -493,6 +493,17 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
             mShouldPromoteToTabAfterMaximizing = false;
             mManagementDelegate.promoteToTab();
         }
+    }
+
+    @Override
+    protected void animatePanelToState(
+            @Nullable @PanelState Integer state, @StateChangeReason int reason, long duration) {
+        // If the in bar chip showing animation is running, do not run the new panel animation.
+        if (haveSearchBarControl()
+                && getSearchBarControl().inBarRelatedSearchesAnimationIsRunning()) {
+            return;
+        }
+        super.animatePanelToState(state, reason, duration);
     }
 
     // ============================================================================================
@@ -1094,7 +1105,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
                     // Needs to enumerate anything that can appear above it in the panel.
                     return Math.round(
                             (getOffsetY() + getBarContainerHeight()
-                                    + getRelatedSearchesMaximumHeightDps() + getPanelHelpHeight())
+                                    + getRelatedSearchesHeightDps(false) + getPanelHelpHeight())
                             / mPxToDp);
                 }
 
@@ -1115,7 +1126,10 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
 
                 @Override
                 public void onPromoOptOut() {
-                    closePanel(OverlayPanel.StateChangeReason.OPTOUT, true);
+                    if (!ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.CONTEXTUAL_SEARCH_NEW_SETTINGS)) {
+                        closePanel(OverlayPanel.StateChangeReason.OPTOUT, true);
+                    }
                 }
             };
         }
@@ -1166,7 +1180,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
                 public float getYPositionPx() {
                     // Needs to enumerate anything that can appear above it in the panel.
                     return Math.round((getOffsetY() + getBarContainerHeight()
-                                              + getRelatedSearchesMaximumHeightDps())
+                                              + getRelatedSearchesHeightDps(false))
                             / mPxToDp);
                 }
 
@@ -1291,10 +1305,22 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     }
 
     /**
-     * @return Total height of this section of the panel in DPs (once fully exposed by animation).
+     * @return Total height of this section of the Bar in DPs (once fully exposed by animation).
      */
-    float getRelatedSearchesMaximumHeightDps() {
-        return getRelatedSearchesInBarControl().getHeightPx() * mPxToDp;
+    float getInBarRelatedSearchesMaximumHeightDps() {
+        return getRelatedSearchesInBarControl().getMaximumHeightPx() * mPxToDp;
+    }
+
+    /**
+     * Returns the height of the Related Searches carousel for either the in-bar position or
+     * the in-panel position. Either one could have a variable height due to animation.
+     * @param isRelatedSearchesInBar Whether we want the in-bar carousel height or not.
+     * @return Current height of this section in DPs.
+     */
+    float getRelatedSearchesHeightDps(boolean isRelatedSearchesInBar) {
+        return isRelatedSearchesInBar
+                ? getRelatedSearchesInBarControl().getHeightPx() * mPxToDp
+                : getRelatedSearchesInContentControl().getHeightPx() * mPxToDp;
     }
 
     /**

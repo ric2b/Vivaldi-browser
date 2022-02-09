@@ -70,6 +70,10 @@ void RecordContentActionCreated(
 class ShowExtensionAction : public ContentAction {
  public:
   ShowExtensionAction() {}
+
+  ShowExtensionAction(const ShowExtensionAction&) = delete;
+  ShowExtensionAction& operator=(const ShowExtensionAction&) = delete;
+
   ~ShowExtensionAction() override {}
 
   static std::unique_ptr<ContentAction> Create(
@@ -117,14 +121,16 @@ class ShowExtensionAction : public ContentAction {
     return ExtensionActionManager::Get(browser_context)
         ->GetExtensionAction(*extension);
   }
-
-  DISALLOW_COPY_AND_ASSIGN(ShowExtensionAction);
 };
 
 // Action that sets an extension's action icon.
 class SetIcon : public ContentAction {
  public:
   explicit SetIcon(const gfx::Image& icon) : icon_(icon) {}
+
+  SetIcon(const SetIcon&) = delete;
+  SetIcon& operator=(const SetIcon&) = delete;
+
   ~SetIcon() override {}
 
   static std::unique_ptr<ContentAction> Create(
@@ -170,8 +176,6 @@ class SetIcon : public ContentAction {
   }
 
   gfx::Image icon_;
-
-  DISALLOW_COPY_AND_ASSIGN(SetIcon);
 };
 
 // Helper for getting JS collections into C++.

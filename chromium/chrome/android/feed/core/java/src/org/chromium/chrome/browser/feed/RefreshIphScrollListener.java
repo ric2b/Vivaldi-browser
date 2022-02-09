@@ -6,9 +6,7 @@ package org.chromium.chrome.browser.feed;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.chrome.browser.ntp.ScrollListener;
-import org.chromium.chrome.browser.ntp.ScrollListener.ScrollState;
-import org.chromium.chrome.browser.ntp.ScrollableContainerDelegate;
+import org.chromium.chrome.browser.feed.ScrollListener.ScrollState;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.feature_engagement.TriggerState;
@@ -26,7 +24,7 @@ public class RefreshIphScrollListener implements ScrollListener {
     @VisibleForTesting
     static final long FETCH_TIME_AGE_THREASHOLD_MS = 5 * 60 * 1000; // 5 minutes.
 
-    private final FeedIPHDelegate mDelegate;
+    private final FeedBubbleDelegate mDelegate;
     private final ScrollableContainerDelegate mScrollableContainerDelegate;
     private final Runnable mShowIPHRunnable;
     private int mMaxLastVisibleFeedItemPosition;
@@ -34,7 +32,7 @@ public class RefreshIphScrollListener implements ScrollListener {
     /**
      * Constructor for IPH triggering.
      */
-    RefreshIphScrollListener(FeedIPHDelegate delegate,
+    RefreshIphScrollListener(FeedBubbleDelegate delegate,
             ScrollableContainerDelegate scrollableContainerDelegate, Runnable showIPHRunnable) {
         mDelegate = delegate;
         mScrollableContainerDelegate = scrollableContainerDelegate;

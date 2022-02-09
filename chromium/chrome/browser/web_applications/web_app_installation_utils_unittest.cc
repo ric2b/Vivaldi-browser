@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -39,6 +39,7 @@ TEST(WebAppInstallationUtils, SetWebAppManifestFields_Summary) {
   web_app_info.description = u"App Description";
   web_app_info.theme_color = SK_ColorCYAN;
   web_app_info.background_color = SK_ColorMAGENTA;
+  web_app_info.dark_mode_theme_color = SK_ColorBLACK;
 
   const AppId app_id =
       GenerateAppId(/*manifest_id=*/absl::nullopt, web_app_info.start_url);
@@ -51,13 +52,17 @@ TEST(WebAppInstallationUtils, SetWebAppManifestFields_Summary) {
   EXPECT_TRUE(web_app->theme_color().has_value());
   EXPECT_EQ(*web_app->theme_color(), SK_ColorCYAN);
   EXPECT_TRUE(web_app->background_color().has_value());
+  EXPECT_TRUE(web_app->dark_mode_theme_color().has_value());
   EXPECT_EQ(*web_app->background_color(), SK_ColorMAGENTA);
+  EXPECT_EQ(*web_app->dark_mode_theme_color(), SK_ColorBLACK);
 
   web_app_info.theme_color = absl::nullopt;
   web_app_info.background_color = absl::nullopt;
+  web_app_info.dark_mode_theme_color = absl::nullopt;
   SetWebAppManifestFields(web_app_info, *web_app);
   EXPECT_FALSE(web_app->theme_color().has_value());
   EXPECT_FALSE(web_app->background_color().has_value());
+  EXPECT_FALSE(web_app->dark_mode_theme_color().has_value());
 }
 
 TEST(WebAppInstallationUtils, SetWebAppManifestFields_ShareTarget) {

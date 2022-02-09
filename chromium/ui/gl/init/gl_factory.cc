@@ -117,13 +117,12 @@ GLImplementationParts GetRequestedGLImplementation(
 
   // The default implementation is always the first one in list.
   GLImplementationParts impl = allowed_impls[0];
-  UMA_HISTOGRAM_ENUMERATION("GPU.PreferredGLImplementation", impl.gl);
 
   *fallback_to_software_gl = false;
   if (cmd->HasSwitch(switches::kOverrideUseSoftwareGLForHeadless)) {
-    impl = GetSoftwareGLForHeadlessImplementation();
+    impl = GetSoftwareGLImplementationForPlatform();
   } else if (cmd->HasSwitch(switches::kOverrideUseSoftwareGLForTests)) {
-    impl = GetSoftwareGLForTestsImplementation();
+    impl = GetSoftwareGLImplementationForPlatform();
   } else if (cmd->HasSwitch(switches::kUseGL) ||
              cmd->HasSwitch(switches::kUseANGLE)) {
     if (requested_implementation_gl_name == "any") {
@@ -145,14 +144,11 @@ GLImplementationParts GetRequestedGLImplementation(
                                       requested_implementation_angle_name);
       if (!impl.IsAllowed(allowed_impls)) {
         LOG(ERROR) << "Requested GL implementation is not available.";
-        UMA_HISTOGRAM_ENUMERATION("GPU.RequestedGLImplementation",
-                                  kGLImplementationNone);
         return GLImplementationParts(kGLImplementationNone);
       }
     }
   }
 
-  UMA_HISTOGRAM_ENUMERATION("GPU.RequestedGLImplementation", impl.gl);
   return impl;
 }
 
@@ -170,16 +166,12 @@ bool InitializeGLOneOffPlatformHelper(bool init_extensions) {
 
 }  // namespace
 
-GLImplementationParts GetSoftwareGLForTestsImplementation() {
+GLImplementationParts GetSoftwareGLImplementationForPlatform() {
 #if defined(OS_WIN) || defined(OS_LINUX)
   return GetSoftwareGLImplementation();
 #else
   return GetLegacySoftwareGLImplementation();
 #endif
-}
-
-GLImplementationParts GetSoftwareGLForHeadlessImplementation() {
-  return GetLegacySoftwareGLImplementation();
 }
 
 bool InitializeGLOneOff() {
@@ -232,7 +224,7 @@ bool InitializeStaticGLBindingsImplementation(GLImplementationParts impl,
   if (!initialized && fallback_to_software_gl) {
     ShutdownGL(/*due_to_fallback*/ true);
     initialized =
-        InitializeStaticGLBindings(GetLegacySoftwareGLImplementation());
+        InitializeStaticGLBindings(GetSoftwareGLImplementationForPlatform());
   }
   if (!initialized) {
     ShutdownGL(/*due_to_fallback*/ false);
@@ -251,7 +243,7 @@ bool InitializeGLOneOffPlatformImplementation(bool fallback_to_software_gl,
   if (!initialized && fallback_to_software_gl) {
     ShutdownGL(/*due_to_fallback*/ true);
     initialized =
-        InitializeStaticGLBindings(GetLegacySoftwareGLImplementation()) &&
+        InitializeStaticGLBindings(GetSoftwareGLImplementationForPlatform()) &&
         InitializeGLOneOffPlatform();
   }
   if (initialized && init_extensions) {

@@ -92,8 +92,8 @@ static base::Time ExtractTimelineOffset(
 }
 
 static base::TimeDelta FramesToTimeDelta(int frames, double sample_rate) {
-  return base::TimeDelta::FromMicroseconds(
-      frames * base::Time::kMicrosecondsPerSecond / sample_rate);
+  return base::Microseconds(frames * base::Time::kMicrosecondsPerSecond /
+                            sample_rate);
 }
 
 static base::TimeDelta ExtractStartTime(AVStream* stream) {
@@ -121,8 +121,7 @@ static base::TimeDelta ExtractStartTime(AVStream* stream) {
 
 // Record audio decoder config UMA stats corresponding to a src= playback.
 static void RecordAudioCodecStats(const AudioDecoderConfig& audio_config) {
-  UMA_HISTOGRAM_ENUMERATION("Media.AudioCodec", audio_config.codec(),
-                            kAudioCodecMax + 1);
+  base::UmaHistogramEnumeration("Media.AudioCodec", audio_config.codec());
 }
 
 // Record video decoder config UMA stats corresponding to a src= playback.
@@ -132,14 +131,13 @@ static void RecordVideoCodecStats(container_names::MediaContainerName container,
                                   MediaLog* media_log) {
   // TODO(xhwang): Fix these misleading metric names. They should be something
   // like "Media.SRC.Xxxx". See http://crbug.com/716183.
-  UMA_HISTOGRAM_ENUMERATION("Media.VideoCodec", video_config.codec(),
-                            kVideoCodecMax + 1);
+  base::UmaHistogramEnumeration("Media.VideoCodec", video_config.codec());
   if (container == container_names::CONTAINER_MOV) {
-    UMA_HISTOGRAM_ENUMERATION("Media.SRC.VideoCodec.MP4", video_config.codec(),
-                              kVideoCodecMax + 1);
+    base::UmaHistogramEnumeration("Media.SRC.VideoCodec.MP4",
+                                  video_config.codec());
   } else if (container == container_names::CONTAINER_WEBM) {
-    UMA_HISTOGRAM_ENUMERATION("Media.SRC.VideoCodec.WebM", video_config.codec(),
-                              kVideoCodecMax + 1);
+    base::UmaHistogramEnumeration("Media.SRC.VideoCodec.WebM",
+                                  video_config.codec());
   }
 }
 
@@ -571,8 +569,7 @@ void FFmpegDemuxerStream::EnqueuePacket(ScopedAVPacket packet) {
     // correctly give them unique timestamps.
     buffer->set_timestamp(last_packet_timestamp_ == kNoTimestamp
                               ? base::TimeDelta()
-                              : last_packet_timestamp_ +
-                                    base::TimeDelta::FromMicroseconds(1));
+                              : last_packet_timestamp_ + base::Microseconds(1));
   }
 
   // Fixup negative timestamps where the before-zero portion is completely
@@ -582,7 +579,7 @@ void FFmpegDemuxerStream::EnqueuePacket(ScopedAVPacket packet) {
     auto fixed_ts = buffer->discard_padding().first + buffer->timestamp();
 
     // Allow for rounding error in the discard padding calculations.
-    if (fixed_ts == base::TimeDelta::FromMicroseconds(-1))
+    if (fixed_ts == base::Microseconds(-1))
       fixed_ts = base::TimeDelta();
 
     if (fixed_ts >= base::TimeDelta())
@@ -644,7 +641,7 @@ void FFmpegDemuxerStream::EnqueuePacket(ScopedAVPacket packet) {
       buffer->set_timestamp(last_packet_timestamp_ +
                             (last_packet_duration_ != kNoTimestamp
                                  ? last_packet_duration_
-                                 : base::TimeDelta::FromMicroseconds(1)));
+                                 : base::Microseconds(1)));
     }
 
     // The demuxer should always output positive timestamps.
@@ -890,7 +887,7 @@ void FFmpegDemuxerStream::SatisfyPendingRead() {
 
 bool FFmpegDemuxerStream::HasAvailableCapacity() {
   // Try to have two second's worth of encoded data per stream.
-  const base::TimeDelta kCapacity = base::TimeDelta::FromSeconds(2);
+  const base::TimeDelta kCapacity = base::Seconds(2);
   return buffer_queue_.IsEmpty() || buffer_queue_.Duration() < kCapacity;
 }
 
@@ -1104,7 +1101,7 @@ void FFmpegDemuxer::SeekInternal(base::TimeDelta time,
       GetFirstEnabledFFmpegStream(DemuxerStream::AUDIO);
   if (audio_stream) {
     const AudioDecoderConfig& config = audio_stream->audio_decoder_config();
-    if (config.codec() == kCodecOpus)
+    if (config.codec() == AudioCodec::kOpus)
       seek_time = std::max(start_time_, seek_time - config.seek_preroll());
   }
 

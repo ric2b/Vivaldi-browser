@@ -65,38 +65,38 @@ FingerprintHandler::~FingerprintHandler() {
 
 void FingerprintHandler::RegisterMessages() {
   // Note: getFingerprintsList must be called before observers will be added.
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getFingerprintsList",
       base::BindRepeating(&FingerprintHandler::HandleGetFingerprintsList,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getNumFingerprints",
       base::BindRepeating(&FingerprintHandler::HandleGetNumFingerprints,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "startEnroll", base::BindRepeating(&FingerprintHandler::HandleStartEnroll,
                                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "cancelCurrentEnroll",
       base::BindRepeating(&FingerprintHandler::HandleCancelCurrentEnroll,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getEnrollmentLabel",
       base::BindRepeating(&FingerprintHandler::HandleGetEnrollmentLabel,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "removeEnrollment",
       base::BindRepeating(&FingerprintHandler::HandleRemoveEnrollment,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "changeEnrollmentLabel",
       base::BindRepeating(&FingerprintHandler::HandleChangeEnrollmentLabel,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "startAuthentication",
       base::BindRepeating(&FingerprintHandler::HandleStartAuthentication,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "endCurrentAuthentication",
       base::BindRepeating(&FingerprintHandler::HandleEndCurrentAuthentication,
                           base::Unretained(this)));
@@ -176,7 +176,7 @@ void FingerprintHandler::OnSessionStateChanged() {
 
 void FingerprintHandler::HandleGetFingerprintsList(
     const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   std::string callback_id;
   CHECK(args->GetString(0, &callback_id));
 
@@ -206,7 +206,7 @@ void FingerprintHandler::OnGetFingerprintsList(
 }
 
 void FingerprintHandler::HandleGetNumFingerprints(const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   std::string callback_id;
   CHECK(args->GetString(0, &callback_id));
 
@@ -263,7 +263,8 @@ void FingerprintHandler::HandleGetEnrollmentLabel(const base::ListValue* args) {
   CHECK_EQ(2U, list.size());
   std::string callback_id = list[0].GetString();
   int index = list[1].GetInt();
-  DCHECK_LT(index, static_cast<int>(fingerprints_labels_.size()));
+  CHECK_GE(index, 0);
+  CHECK_LT(index, static_cast<int>(fingerprints_paths_.size()));
 
   AllowJavascript();
   fp_service_->RequestRecordLabel(
@@ -282,7 +283,8 @@ void FingerprintHandler::HandleRemoveEnrollment(const base::ListValue* args) {
   CHECK_EQ(2U, list.size());
   std::string callback_id = list[0].GetString();
   int index = list[1].GetInt();
-  DCHECK_LT(index, static_cast<int>(fingerprints_paths_.size()));
+  CHECK_GE(index, 0);
+  CHECK_LT(index, static_cast<int>(fingerprints_paths_.size()));
 
   AllowJavascript();
   fp_service_->RemoveRecord(
@@ -305,6 +307,9 @@ void FingerprintHandler::HandleChangeEnrollmentLabel(
 
   std::string callback_id = list[0].GetString();
   int index = list[1].GetInt();
+  CHECK_GE(index, 0);
+  CHECK_LT(index, static_cast<int>(fingerprints_paths_.size()));
+
   std::string new_label = list[2].GetString();
 
   AllowJavascript();

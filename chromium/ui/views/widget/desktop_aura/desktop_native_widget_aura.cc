@@ -32,6 +32,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
@@ -128,6 +129,13 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
     // https://crrev.com/c/2831291 for more details.
     init_params.context = context;
 
+    auto* anchor = child_window->GetProperty(aura::client::kOwnedWindowAnchor);
+    if (anchor) {
+      init_params.init_properties_container.SetProperty(
+          aura::client::kOwnedWindowAnchor, *anchor);
+      child_window->ClearProperty(aura::client::kOwnedWindowAnchor);
+    }
+
     // This widget instance will get deleted when the window is
     // destroyed.
     top_level_handler->top_level_widget_ = new Widget();
@@ -149,6 +157,11 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
     top_level_handler->child_window_ = child_window;
     return native_window;
   }
+
+  DesktopNativeWidgetTopLevelHandler(
+      const DesktopNativeWidgetTopLevelHandler&) = delete;
+  DesktopNativeWidgetTopLevelHandler& operator=(
+      const DesktopNativeWidgetTopLevelHandler&) = delete;
 
   // aura::WindowObserver overrides
   void OnWindowDestroying(aura::Window* window) override {
@@ -191,8 +204,6 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
 
   Widget* top_level_widget_ = nullptr;
   aura::Window* child_window_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(DesktopNativeWidgetTopLevelHandler);
 };
 
 class DesktopNativeWidgetAuraWindowParentingClient
@@ -203,6 +214,12 @@ class DesktopNativeWidgetAuraWindowParentingClient
       : root_window_(root_window) {
     aura::client::SetWindowParentingClient(root_window_, this);
   }
+
+  DesktopNativeWidgetAuraWindowParentingClient(
+      const DesktopNativeWidgetAuraWindowParentingClient&) = delete;
+  DesktopNativeWidgetAuraWindowParentingClient& operator=(
+      const DesktopNativeWidgetAuraWindowParentingClient&) = delete;
+
   ~DesktopNativeWidgetAuraWindowParentingClient() override {
     aura::client::SetWindowParentingClient(root_window_, nullptr);
   }
@@ -210,6 +227,9 @@ class DesktopNativeWidgetAuraWindowParentingClient
   // Overridden from client::WindowParentingClient:
   aura::Window* GetDefaultParent(aura::Window* window,
                                  const gfx::Rect& bounds) override {
+    // TODO(crbug.com/1236997): Re-enable this logic once Fuchsia's windowing
+    // APIs provide the required functionality.
+#if !defined(OS_FUCHSIA)
     bool is_fullscreen = window->GetProperty(aura::client::kShowStateKey) ==
                          ui::SHOW_STATE_FULLSCREEN;
     bool is_menu = window->GetType() == aura::client::WINDOW_TYPE_MENU;
@@ -225,13 +245,12 @@ class DesktopNativeWidgetAuraWindowParentingClient
           window, root_window_ /* context */, bounds, is_fullscreen, is_menu,
           root_z_order);
     }
+#endif  // !defined(OS_FUCHSIA)
     return root_window_;
   }
 
  private:
   aura::Window* root_window_;
-
-  DISALLOW_COPY_AND_ASSIGN(DesktopNativeWidgetAuraWindowParentingClient);
 };
 
 }  // namespace
@@ -240,6 +259,11 @@ class RootWindowDestructionObserver : public aura::WindowObserver {
  public:
   explicit RootWindowDestructionObserver(DesktopNativeWidgetAura* parent)
       : parent_(parent) {}
+
+  RootWindowDestructionObserver(const RootWindowDestructionObserver&) = delete;
+  RootWindowDestructionObserver& operator=(
+      const RootWindowDestructionObserver&) = delete;
+
   ~RootWindowDestructionObserver() override = default;
 
  private:
@@ -251,8 +275,6 @@ class RootWindowDestructionObserver : public aura::WindowObserver {
   }
 
   DesktopNativeWidgetAura* parent_;
-
-  DISALLOW_COPY_AND_ASSIGN(RootWindowDestructionObserver);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

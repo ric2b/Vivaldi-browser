@@ -7,7 +7,6 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "ui/compositor/layer_animation_observer.h"
 #include "ui/events/scoped_target_handler.h"
 #include "ui/views/view.h"
 #include "ui/views/views_export.h"
@@ -18,8 +17,7 @@ class SlideOutControllerDelegate;
 
 // This class contains logic to control sliding out of a layer in response to
 // swipes, i.e. gesture scroll events.
-class VIEWS_EXPORT SlideOutController : public ui::EventHandler,
-                                        public ui::ImplicitAnimationObserver {
+class VIEWS_EXPORT SlideOutController : public ui::EventHandler {
  public:
   // Indicates how much the target layer is allowed to slide.
   enum class SlideMode {
@@ -30,6 +28,10 @@ class VIEWS_EXPORT SlideOutController : public ui::EventHandler,
 
   SlideOutController(ui::EventTarget* target,
                      SlideOutControllerDelegate* delegate);
+
+  SlideOutController(const SlideOutController&) = delete;
+  SlideOutController& operator=(const SlideOutController&) = delete;
+
   ~SlideOutController() override;
 
   void set_update_opacity(bool update_opacity) {
@@ -44,9 +46,6 @@ class VIEWS_EXPORT SlideOutController : public ui::EventHandler,
 
   // ui::EventHandler
   void OnGestureEvent(ui::GestureEvent* event) override;
-
-  // ui::ImplicitAnimationObserver
-  void OnImplicitAnimationsCompleted() override;
 
   // Enables the swipe control with specifying the width of buttons. Buttons
   // will appear behind the view as user slides it partially and it's kept open
@@ -83,6 +82,8 @@ class VIEWS_EXPORT SlideOutController : public ui::EventHandler,
   // delegate.
   void OnSlideOut();
 
+  void OnAnimationsCompleted();
+
   ui::ScopedTargetHandler target_handling_;
 
   // Unowned and outlives this object.
@@ -114,8 +115,6 @@ class VIEWS_EXPORT SlideOutController : public ui::EventHandler,
   float opacity_ = 1.0;
 
   base::WeakPtrFactory<SlideOutController> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SlideOutController);
 };
 
 }  // namespace views

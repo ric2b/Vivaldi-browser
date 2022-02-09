@@ -129,44 +129,6 @@
         ]
       },
       {
-        "name": "getFocusedElementInfo",
-        "type": "function",
-        "description": "Gets the tagname and type of currently focused element and whether it's editable.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId",
-            "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "type": "string",
-                "name": "element",
-                "description": "Element name"
-              },
-              {
-                "type": "string",
-                "name": "type",
-                "description": "Element type"
-              },
-              {
-                "type": "boolean",
-                "name": "editable",
-                "description": "True if element is editable."
-              },
-              {
-                "type": "string",
-                "name": "role",
-                "description": "Element role"
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "allowBlockedInsecureContent",
         "type": "function",
         "description": "Will load all blocked content in a page.",

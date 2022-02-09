@@ -21,6 +21,20 @@
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 
+namespace {
+
+// Remembers if the main user is managed or not.
+// Note: This is a pessimistic default (no policies read - false) and
+// once the profile is loaded, the value is set and will never change.
+bool g_is_main_user_managed_ = false;
+
+enterprise_management::PolicyData* MainUserPolicyDataStorage() {
+  static enterprise_management::PolicyData policy_data;
+  return &policy_data;
+}
+
+}  // namespace
+
 namespace policy {
 
 PolicyLoaderLacros::PolicyLoaderLacros(
@@ -100,6 +114,14 @@ std::unique_ptr<PolicyBundle> PolicyLoaderLacros::Load() {
   }
   bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
       .MergeFrom(policy_map);
+
+  // Remember if the policy is managed or not.
+  g_is_main_user_managed_ = validator.policy_data()->state() ==
+                            enterprise_management::PolicyData::ACTIVE;
+  if (g_is_main_user_managed_) {
+    *MainUserPolicyDataStorage() = *validator.policy_data();
+  }
+
   return bundle;
 }
 
@@ -108,6 +130,22 @@ void PolicyLoaderLacros::OnPolicyUpdated(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   policy_fetch_response_ = policy_fetch_response;
   Reload(true);
+}
+
+bool PolicyLoaderLacros::IsMainUserManaged() {
+  return g_is_main_user_managed_;
+}
+
+// static
+const enterprise_management::PolicyData*
+PolicyLoaderLacros::main_user_policy_data() {
+  return MainUserPolicyDataStorage();
+}
+
+// static
+void PolicyLoaderLacros::set_main_user_policy_data_for_testing(
+    const enterprise_management::PolicyData& policy_data) {
+  *MainUserPolicyDataStorage() = policy_data;
 }
 
 }  // namespace policy

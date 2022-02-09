@@ -16,6 +16,3 @@ libu2f-udev
 # Trusty and Jessie are dropped. Note that the dependency must still be manually
 # added since the library is dlopen()'ed.
 libvulkan1
-
-# Vivaldi addons
-adobe-flashplugin

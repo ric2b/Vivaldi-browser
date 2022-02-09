@@ -19,6 +19,8 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
                        base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter,
                        base::WeakPtr<Resources> resources);
   ~AdBlockRequestFilter() override;
+  AdBlockRequestFilter(const AdBlockRequestFilter&) = delete;
+  AdBlockRequestFilter& operator=(const AdBlockRequestFilter&) = delete;
 
   // Implementing vivaldi::RequestFilter
   bool WantsExtraHeadersForAnyRequest() const override;
@@ -53,9 +55,8 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
   base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter_;
   base::WeakPtr<Resources> resources_;
-
-  DISALLOW_COPY_AND_ASSIGN(AdBlockRequestFilter);
 };
+
 }  // namespace adblock_filter
 
 #endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_REQUEST_FILTER_H_

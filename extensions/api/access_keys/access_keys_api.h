@@ -11,8 +11,7 @@
 
 namespace extensions {
 
-class AccessKeysGetAccessKeysForPageFunction
-    : public ExtensionFunction {
+class AccessKeysGetAccessKeysForPageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("accessKeys.getAccessKeysForPage",
                              ACCESSKEYS_GETACCESSKEYSFORPAGE)
@@ -25,14 +24,11 @@ class AccessKeysGetAccessKeysForPageFunction
   ResponseAction Run() override;
 
   void AccessKeysReceived(std::vector<::vivaldi::mojom::AccessKeyPtr>);
-
-  DISALLOW_COPY_AND_ASSIGN(AccessKeysGetAccessKeysForPageFunction);
 };
 
 class AccessKeysActionFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("accessKeys.action",
-                             ACCESSKEYS_ACTION)
+  DECLARE_EXTENSION_FUNCTION("accessKeys.action", ACCESSKEYS_ACTION)
 
   AccessKeysActionFunction() = default;
 
@@ -40,8 +36,6 @@ class AccessKeysActionFunction : public ExtensionFunction {
   ~AccessKeysActionFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AccessKeysActionFunction);
 };
 
 }  // namespace extensions

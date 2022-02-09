@@ -182,9 +182,6 @@ class WebMediaPlayer {
   // calls are still made periodically.
   virtual void OnTimeUpdate() {}
 
-  virtual void RequestRemotePlayback() {}
-  virtual void RequestRemotePlaybackControl() {}
-  virtual void RequestRemotePlaybackStop() {}
   virtual void RequestRemotePlaybackDisabled(bool disabled) {}
   virtual void FlingingStarted() {}
   virtual void FlingingStopped() {}
@@ -211,6 +208,9 @@ class WebMediaPlayer {
   // Getters of playback state.
   virtual bool Paused() const = 0;
   virtual bool Seeking() const = 0;
+  // MSE allows authors to assign double values for duration.
+  // Here, we return double rather than TimeDelta to ensure
+  // that authors are returned exactly the value that they assign.
   virtual double Duration() const = 0;
   virtual double CurrentTime() const = 0;
   virtual bool IsEnded() const = 0;

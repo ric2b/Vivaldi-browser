@@ -7,6 +7,7 @@
 #include "base/base64.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/singleton.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -323,7 +324,7 @@ TEST_P(ReportClientTest, EnqueueMessageAndUpload) {
   }
 
   // Trigger upload.
-  task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(1));
+  task_environment_.FastForwardBy(base::Seconds(1));
 }
 
 // Creates speculative queue, enqueues message and verifies it is uploaded
@@ -363,7 +364,7 @@ TEST_P(ReportClientTest, SpeculativelyEnqueueMessageAndUpload) {
   }
 
   // Trigger upload.
-  task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(1));
+  task_environment_.FastForwardBy(base::Seconds(1));
 }
 
 INSTANTIATE_TEST_SUITE_P(ReportClientTestSuite,

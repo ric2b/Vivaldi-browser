@@ -48,6 +48,8 @@ class MailClientService : public KeyedService {
  public:
   MailClientService();
   ~MailClientService() override;
+  MailClientService(const MailClientService&) = delete;
+  MailClientService& operator=(const MailClientService&) = delete;
 
   bool Init(bool no_db,
             const MailClientDatabaseParams& mail_client_database_params);
@@ -146,8 +148,6 @@ class MailClientService : public KeyedService {
 
   // All vended weak pointers are invalidated in Cleanup().
   base::WeakPtrFactory<MailClientService> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailClientService);
 };
 
 }  // namespace mail_client

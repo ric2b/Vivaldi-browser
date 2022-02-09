@@ -31,6 +31,14 @@ namespace gfx {
 class Rect;
 }
 
+namespace perfetto {
+namespace protos {
+namespace pbzero {
+class RenderFrameProxyHost;
+}
+}  // namespace protos
+}  // namespace perfetto
+
 namespace content {
 
 class CrossProcessFrameConnector;
@@ -95,6 +103,10 @@ class CONTENT_EXPORT RenderFrameProxyHost
   RenderFrameProxyHost(SiteInstance* site_instance,
                        scoped_refptr<RenderViewHostImpl> render_view_host,
                        FrameTreeNode* frame_tree_node);
+
+  RenderFrameProxyHost(const RenderFrameProxyHost&) = delete;
+  RenderFrameProxyHost& operator=(const RenderFrameProxyHost&) = delete;
+
   ~RenderFrameProxyHost() override;
 
   RenderProcessHost* GetProcess() { return process_; }
@@ -251,6 +263,11 @@ class CONTENT_EXPORT RenderFrameProxyHost
   //   speculative RenderFrameHost by swapping it back to a RenderFrameProxy.
   void InvalidateMojoConnection();
 
+  // Write a representation of this object into a trace.
+  void WriteIntoTrace(
+      perfetto::TracedProto<perfetto::protos::pbzero::RenderFrameProxyHost>
+          proto);
+
  private:
   // These interceptor need access to frame_host_receiver_for_testing().
   friend class RemoteFrameHostInterceptor;
@@ -280,7 +297,7 @@ class CONTENT_EXPORT RenderFrameProxyHost
   // The SiteInstance this proxy is associated with.
   scoped_refptr<SiteInstance> site_instance_;
 
-  // The renderer process this RenderFrameHostProxy is associated with. It is
+  // The renderer process this RenderFrameProxyHost is associated with. It is
   // equivalent to the result of site_instance_->GetProcess(), but that
   // method has the side effect of creating the process if it doesn't exist.
   // Cache a pointer to avoid unnecessary process creation.
@@ -324,8 +341,6 @@ class CONTENT_EXPORT RenderFrameProxyHost
       remote_main_frame_host_receiver_{this};
 
   blink::RemoteFrameToken frame_token_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderFrameProxyHost);
 };
 
 }  // namespace content

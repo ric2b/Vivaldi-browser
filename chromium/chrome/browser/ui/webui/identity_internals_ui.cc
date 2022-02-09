@@ -103,6 +103,11 @@ class IdentityInternalsTokenRevoker : public GaiaAuthConsumer {
                                 const std::string& callback_id,
                                 Profile* profile,
                                 IdentityInternalsUIMessageHandler* consumer);
+
+  IdentityInternalsTokenRevoker(const IdentityInternalsTokenRevoker&) = delete;
+  IdentityInternalsTokenRevoker& operator=(
+      const IdentityInternalsTokenRevoker&) = delete;
+
   ~IdentityInternalsTokenRevoker() override;
 
   // Returns the access token being revoked.
@@ -126,8 +131,6 @@ class IdentityInternalsTokenRevoker : public GaiaAuthConsumer {
   const std::string callback_id_;
   // An object that needs to be notified once the access token is revoked.
   IdentityInternalsUIMessageHandler* consumer_;  // weak.
-
-  DISALLOW_COPY_AND_ASSIGN(IdentityInternalsTokenRevoker);
 };
 
 IdentityInternalsUIMessageHandler::IdentityInternalsUIMessageHandler() {}
@@ -179,7 +182,7 @@ std::unique_ptr<base::ListValue> IdentityInternalsUIMessageHandler::GetScopes(
     const extensions::IdentityTokenCacheValue& token_cache_value) {
   auto scopes_value = std::make_unique<base::ListValue>();
   for (const auto& scope : token_cache_value.granted_scopes()) {
-    scopes_value->AppendString(scope);
+    scopes_value->Append(scope);
   }
   return scopes_value;
 }
@@ -247,12 +250,12 @@ void IdentityInternalsUIMessageHandler::GetInfoForAllTokens(
 }
 
 void IdentityInternalsUIMessageHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "identityInternalsGetTokens",
       base::BindRepeating(
           &IdentityInternalsUIMessageHandler::GetInfoForAllTokens,
           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "identityInternalsRevokeToken",
       base::BindRepeating(&IdentityInternalsUIMessageHandler::RevokeToken,
                           base::Unretained(this)));

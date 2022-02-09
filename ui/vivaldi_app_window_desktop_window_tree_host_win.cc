@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved.
 //
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -9,13 +9,12 @@
 #include <dwmapi.h>
 
 #include "base/win/windows_version.h"
-//#include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
-#include "ui/base/theme_provider.h"
-#include "ui/display/win/dpi.h"
-#include "ui/views/controls/menu/native_menu_win.h"
-#include "ui/vivaldi_native_app_window_views_win.h"
-
 #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
+#include "ui/base/theme_provider.h"
+#include "ui/views/controls/menu/native_menu_win.h"
+
+#include "app/vivaldi_apptools.h"
+#include "ui/vivaldi_native_app_window_views_win.h"
 
 VivaldiAppWindowDesktopWindowTreeHostWin::
     VivaldiAppWindowDesktopWindowTreeHostWin(
@@ -37,9 +36,8 @@ views::NativeMenuWin*
 VivaldiAppWindowDesktopWindowTreeHostWin::GetSystemMenu() {
   if (!system_menu_.get()) {
     SystemMenuInsertionDelegateWin insertion_delegate;
-    system_menu_.reset(
-      new views::NativeMenuWin(window_view_->GetSystemMenuModel(),
-                               GetHWND()));
+    system_menu_.reset(new views::NativeMenuWin(
+        window_view_->GetSystemMenuModel(), GetHWND()));
     system_menu_->Rebuild(&insertion_delegate);
   }
   return system_menu_.get();
@@ -54,6 +52,18 @@ bool VivaldiAppWindowDesktopWindowTreeHostWin::PreHandleMSG(UINT message,
       GetSystemMenu()->UpdateStates();
       return true;
   }
-  return DesktopWindowTreeHostWin::PreHandleMSG(
-    message, w_param, l_param, result);
+  return DesktopWindowTreeHostWin::PreHandleMSG(message, w_param, l_param,
+                                                result);
+}
+
+void VivaldiAppWindowDesktopWindowTreeHostWin::PostHandleMSG(UINT message,
+                                                             WPARAM w_param,
+                                                             LPARAM l_param) {
+  switch (message) {
+    case WM_DWMCOLORIZATIONCOLORCHANGED: {
+      vivaldi::GetSystemColorsUpdatedCallbackList().Notify();
+      break;
+    }
+  }
+  return DesktopWindowTreeHostWin::PostHandleMSG(message, w_param, l_param);
 }

@@ -3,8 +3,8 @@
 #include "ui/content/vivaldi_tab_check.h"
 
 #include "app/vivaldi_apptools.h"
-#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/public/browser/web_contents.h"
 
 const int VivaldiTabCheck::kVivaldiTabObserverContextKey = 0;

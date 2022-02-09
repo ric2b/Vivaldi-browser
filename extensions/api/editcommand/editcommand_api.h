@@ -16,7 +16,6 @@ class EditcommandExecuteFunction : public ExtensionFunction {
  private:
   ~EditcommandExecuteFunction() override = default;
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(EditcommandExecuteFunction);
 };
 
 }  // namespace extensions

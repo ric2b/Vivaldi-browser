@@ -26,10 +26,8 @@ VivaldiExtensionHost::VivaldiExtensionHost(
       ->set_delegate(this);
 
   // start loading the target right away as we do not do this in webviews
-  webcontents->GetController().LoadURL(
-      url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
-      std::string());
-
+  webcontents->GetController().LoadURL(url, content::Referrer(),
+                                       ui::PAGE_TRANSITION_LINK, std::string());
 }
 
 VivaldiExtensionHost::~VivaldiExtensionHost() {}

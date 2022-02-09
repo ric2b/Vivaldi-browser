@@ -224,13 +224,13 @@ Status StorageQueue::Init() {
   // Initiate periodic uploading, if needed.
   if (!options_.upload_period().is_zero()) {
     upload_timer_.Start(FROM_HERE, options_.upload_period(), this,
-                        &StorageQueue::Flush);
+                        &StorageQueue::PeriodicUpload);
   }
   // In case some events are found in the queue, initiate an upload.
   // This is especially imporant for non-periodic queues, but won't harm
   // others either.
   if (first_sequencing_id_ < next_sequencing_id_) {
-    Flush();
+    Start<ReadContext>(UploaderInterface::INIT_RESUME, this);
   }
   return Status::StatusOK();
 }
@@ -239,6 +239,43 @@ absl::optional<std::string> StorageQueue::GetLastRecordDigest() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(storage_queue_sequence_checker_);
   // Attach last record digest, if present.
   return last_record_digest_;
+}
+
+Status StorageQueue::SetGenerationId(const base::FilePath& full_name) {
+  // Data file should have generation id as an extension too.
+  // For backwards compatibility we allow it to not be included.
+  // TODO(b/195786943): Encapsulate file naming assumptions in objects.
+  const auto generation_extension =
+      full_name.RemoveFinalExtension().FinalExtension();
+  if (generation_extension.empty()) {
+    // Backwards compatibility case - extension is absent.
+    return Status::StatusOK();
+  }
+
+  int64_t file_generation_id = 0;
+  const bool success =
+      base::StringToInt64(generation_extension.substr(1), &file_generation_id);
+  if (!success || file_generation_id <= 0) {
+    return Status(error::DATA_LOSS,
+                  base::StrCat({"Data file generation corrupt: '",
+                                full_name.MaybeAsASCII()}));
+  }
+
+  // Found valid generation [1, int64_max] in the data file name.
+  if (generation_id_ > 0) {
+    // Generation was already set, data file must match.
+    if (file_generation_id != generation_id_) {
+      return Status(error::DATA_LOSS,
+                    base::StrCat({"Data file generation does not match: '",
+                                  full_name.MaybeAsASCII(), "', expected=",
+                                  base::NumberToString(generation_id_)}));
+    }
+  } else {
+    // No generation set in the queue. Use the one from this file and expect
+    // all other files to match.
+    generation_id_ = file_generation_id;
+  }
+  return Status::StatusOK();
 }
 
 StatusOr<int64_t> StorageQueue::AddDataFile(
@@ -258,32 +295,9 @@ StatusOr<int64_t> StorageQueue::AddDataFile(
                   base::StrCat({"File extension does not parse: '",
                                 full_name.MaybeAsASCII(), "'"}));
   }
-  // Data file should have generation id as an extension too.
-  // For backwards compatibility we allow it to not be included.
-  // TODO(b/195786943): Encapsulate file naming assumptions in objects.
-  const auto generation_extension =
-      full_name.RemoveFinalExtension().FinalExtension();
-  if (!generation_extension.empty()) {
-    int64_t file_generation_id = 0;
-    const bool success = base::StringToInt64(generation_extension.substr(1),
-                                             &file_generation_id);
-    if (success && file_generation_id > 0) {
-      // Found valid generation [1, int64_max] in the data file name.
-      if (generation_id_ > 0) {
-        // Generation was already set, data file must match.
-        if (file_generation_id != generation_id_) {
-          return Status(error::DATA_LOSS,
-                        base::StrCat({"Data file generation does not match: '",
-                                      full_name.MaybeAsASCII(), "', expected=",
-                                      base::NumberToString(generation_id_)}));
-        }
-      } else {
-        // No generation set in the queue. Use the one from this file and expect
-        // all other files to match.
-        generation_id_ = file_generation_id;
-      }
-    }
-  }
+
+  RETURN_IF_ERROR(SetGenerationId(full_name));
+
   auto file_or_status = SingleFile::Create(full_name, file_info.GetSize());
   if (!file_or_status.ok()) {
     return file_or_status.status();
@@ -658,7 +672,7 @@ Status StorageQueue::RestoreMetadata(
       base::StrCat({METADATA_NAME, FILE_PATH_LITERAL(".*")}));
   base::FilePath full_name;
   while (full_name = dir_enum.Next(), !full_name.empty()) {
-    const auto extension = dir_enum.GetInfo().GetName().Extension();
+    const auto extension = dir_enum.GetInfo().GetName().FinalExtension();
     if (extension.empty()) {
       continue;
     }
@@ -763,11 +777,13 @@ void StorageQueue::DeleteOutdatedMetadata(int64_t sequencing_id_to_keep) {
 // is zero, RemoveConfirmedData can delete the unused files).
 class StorageQueue::ReadContext : public TaskRunnerContext<Status> {
  public:
-  explicit ReadContext(scoped_refptr<StorageQueue> storage_queue)
+  ReadContext(UploaderInterface::UploadReason reason,
+              scoped_refptr<StorageQueue> storage_queue)
       : TaskRunnerContext<Status>(
             base::BindOnce(&ReadContext::UploadingCompleted,
                            base::Unretained(this)),
             storage_queue->sequenced_task_runner_),
+        reason_(reason),
         async_start_upload_cb_(storage_queue->async_start_upload_cb_),
         must_invoke_upload_(
             EncryptionModuleInterface::is_enabled() &&
@@ -775,6 +791,7 @@ class StorageQueue::ReadContext : public TaskRunnerContext<Status> {
         storage_queue_(storage_queue->weakptr_factory_.GetWeakPtr()) {
     DCHECK(storage_queue.get());
     DCHECK(async_start_upload_cb_);
+    DCHECK_LT(reason, UploaderInterface::MAX_REASON);
     DETACH_FROM_SEQUENCE(read_sequence_checker_);
   }
 
@@ -1158,9 +1175,11 @@ class StorageQueue::ReadContext : public TaskRunnerContext<Status> {
         FROM_HERE, {base::TaskPriority::BEST_EFFORT},
         base::BindOnce(
             [](base::OnceCallback<void()> continuation, ReadContext* self) {
-              self->async_start_upload_cb_.Run(base::BindOnce(
-                  &ReadContext::ScheduleOnUploaderInstantiated,
-                  base::Unretained(self), std::move(continuation)));
+              self->async_start_upload_cb_.Run(
+                  self->reason_,
+                  base::BindOnce(&ReadContext::ScheduleOnUploaderInstantiated,
+                                 base::Unretained(self),
+                                 std::move(continuation)));
             },
             std::move(continuation), base::Unretained(this)));
   }
@@ -1189,6 +1208,10 @@ class StorageQueue::ReadContext : public TaskRunnerContext<Status> {
 
     std::move(continuation).Run();
   }
+
+  // Upload reason. Passed to uploader instantiation and may affect
+  // the uploader object.
+  const UploaderInterface::UploadReason reason_;
 
   // Files that will be read (in order of sequencing ids).
   std::map<int64_t, scoped_refptr<SingleFile>> files_;
@@ -1245,7 +1268,7 @@ class StorageQueue::WriteContext : public TaskRunnerContext<Status> {
     // Otherwise initiate Upload right after writing
     // finished and respond back when reading Upload is done.
     // Note: new uploader created synchronously before scheduling Upload.
-    Start<ReadContext>(storage_queue_);
+    Start<ReadContext>(UploaderInterface::IMMEDIATE_FLUSH, storage_queue_);
   }
 
   void OnStart() override {
@@ -1255,11 +1278,6 @@ class StorageQueue::WriteContext : public TaskRunnerContext<Status> {
     if (!record_.has_destination()) {
       Response(Status(error::FAILED_PRECONDITION,
                       "Malformed record: missing destination"));
-      return;
-    }
-    if (!record_.has_dm_token()) {
-      Response(Status(error::FAILED_PRECONDITION,
-                      "Malformed record: missing dm_token"));
       return;
     }
 
@@ -1600,23 +1618,26 @@ void StorageQueue::CheckBackUpload(Status status, int64_t next_sequencing_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(storage_queue_sequence_checker_);
   if (!status.ok()) {
     // Previous upload failed, retry.
-    Flush();
+    Start<ReadContext>(UploaderInterface::FAILURE_RETRY, this);
     return;
   }
 
   if (!first_unconfirmed_sequencing_id_.has_value() ||
       first_unconfirmed_sequencing_id_.value() < next_sequencing_id) {
     // Not all uploaded events were confirmed after upload, retry.
-    Flush();
+    Start<ReadContext>(UploaderInterface::INCOMPLETE_RETRY, this);
     return;
   }
 
   // No need to retry.
 }
 
+void StorageQueue::PeriodicUpload() {
+  Start<ReadContext>(UploaderInterface::PERIODIC, this);
+}
+
 void StorageQueue::Flush() {
-  // Note: new uploader created every time Flush is called.
-  Start<ReadContext>(this);
+  Start<ReadContext>(UploaderInterface::MANUAL, this);
 }
 
 void StorageQueue::ReleaseAllFileInstances() {

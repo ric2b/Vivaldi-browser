@@ -274,7 +274,7 @@ LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
       // to match the old behavior.
       PLOG(ERROR) << "Overwriting DisplayVersion in 10s after failing to wait "
                      "for the MSI mutex";
-      base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(10));
+      base::PlatformThread::Sleep(base::Seconds(10));
     } else if (wait_result == WAIT_ABANDONED || wait_result == WAIT_OBJECT_0) {
       VLOG(1) << "Acquired MSI mutex; overwriting DisplayVersion.";
       acquired_mutex = true;
@@ -482,9 +482,8 @@ installer::InstallStatus RepeatDeleteOldVersions(
     //   shutdown: old files can't be deleted because Chrome is still in use.
     // Wait 5 minutes after an unsuccessful attempt because retrying immediately
     // is likely to fail again.
-    const base::TimeDelta max_wait_time = num_attempts == 0
-                                              ? base::TimeDelta::FromSeconds(15)
-                                              : base::TimeDelta::FromMinutes(5);
+    const base::TimeDelta max_wait_time =
+        num_attempts == 0 ? base::Seconds(15) : base::Minutes(5);
     if (setup_singleton.WaitForInterrupt(max_wait_time)) {
       VLOG(1) << "Exiting --delete-old-versions process because another "
                  "process tries to acquire the SetupSingleton.";
@@ -1157,13 +1156,19 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
     // existing value.
     std::wstring token_switch_value =
         cmd_line.GetSwitchValueNative(installer::switches::kStoreDMToken);
-    absl::optional<std::string> token;
-    if (!(token = installer::DecodeDMTokenSwitchValue(token_switch_value)) ||
-        !installer::StoreDMToken(*token)) {
-      *exit_code = installer::STORE_DMTOKEN_FAILED;
-    } else {
-      *exit_code = installer::STORE_DMTOKEN_SUCCESS;
-    }
+    auto token = installer::DecodeDMTokenSwitchValue(token_switch_value);
+    *exit_code = token && installer::StoreDMToken(*token)
+                     ? installer::STORE_DMTOKEN_SUCCESS
+                     : installer::STORE_DMTOKEN_FAILED;
+  } else if (cmd_line.HasSwitch(installer::switches::kRotateDeviceTrustKey)) {
+    // The value of the command line arguments is a DM token.  This is used
+    // to send the public part of the signing key to DM server.
+    std::wstring token_switch_value = cmd_line.GetSwitchValueNative(
+        installer::switches::kRotateDeviceTrustKey);
+    auto token = installer::DecodeDMTokenSwitchValue(token_switch_value);
+    *exit_code = token && installer::RotateDeviceTrustKey(*token)
+                     ? installer::ROTATE_DTKEY_SUCCESS
+                     : installer::ROTATE_DTKEY_FAILED;
 #endif
   } else {
     handled = false;
@@ -1631,9 +1636,9 @@ int WINAPI wWinMain(HINSTANCE instance,
       if (!new_cmd.HasSwitch(installer::switches::kSystemLevel))
         new_cmd.AppendSwitch(installer::switches::kSystemLevel);
 
-      DWORD exit_code = installer::UNKNOWN_STATUS;
-      InstallUtil::ExecuteExeAsAdmin(new_cmd, &exit_code);
-      return exit_code;
+      DWORD exe_exit_code = installer::UNKNOWN_STATUS;
+      InstallUtil::ExecuteExeAsAdmin(new_cmd, &exe_exit_code);
+      return exe_exit_code;
     } else {
       LOG(ERROR) << "Non admin user can not install system level Chrome.";
       installer_state.WriteInstallerResult(installer::INSUFFICIENT_RIGHTS,

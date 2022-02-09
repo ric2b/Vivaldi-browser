@@ -8,11 +8,8 @@
 namespace extensions {
 
 void ExtensionPrefs::RegisterAndLoadExtPrefsForVivaldi() {
-
   extension_pref_value_map_->RegisterExtension(vivaldi::kVivaldiAppId,
-                          base::Time(),
-                          true,
-                          true);
+                                               base::Time(), true, true);
 
   // Set regular extension controlled prefs.
   LoadExtensionControlledPrefs(vivaldi::kVivaldiAppId,

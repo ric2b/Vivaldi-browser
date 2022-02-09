@@ -17,6 +17,7 @@
 #include "chrome/browser/content_settings/content_settings_manager_delegate.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/headless/headless_mode_util.h"
 #include "chrome/browser/lite_video/lite_video_observer.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
@@ -47,6 +48,7 @@
 #include "content/public/browser/service_worker_version_base_info.h"
 #include "media/mojo/buildflags.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
+#include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/widevine/cdm/buildflags.h"
@@ -57,12 +59,14 @@
 #include "chrome/browser/win/conflicts/module_database.h"
 #include "chrome/browser/win/conflicts/module_event_sink_impl.h"
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/components/cdm_factory_daemon/cdm_factory_daemon_proxy.h"
+#include "chromeos/components/cdm_factory_daemon/cdm_factory_daemon_proxy_ash.h"
 #include "components/performance_manager/public/performance_manager.h"
 #if defined(ARCH_CPU_X86_64)
 #include "chrome/browser/performance_manager/mechanisms/userspace_swap_chromeos.h"
 #endif  // defined(ARCH_CPU_X86_64)
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/components/cdm_factory_daemon/cdm_factory_daemon_proxy_lacros.h"
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
@@ -94,11 +98,15 @@
 #include "chrome/browser/badging/badge_manager.h"
 #include "chrome/browser/sync/sync_encryption_keys_tab_helper.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PDF)
 #include "components/pdf/browser/pdf_web_contents_helper.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "chrome/browser/printing/print_view_manager_basic.h"
+#include "components/printing/browser/print_to_pdf/pdf_print_manager.h"
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_view_manager.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -332,6 +340,11 @@ void ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
 #endif
 }
 
+void ChromeContentBrowserClient::RegisterWebUIInterfaceBrokers(
+    content::WebUIBrowserInterfaceBrokerRegistry& registry) {
+  chrome::internal::PopulateChromeWebUIFrameInterfaceBrokers(registry);
+}
+
 void ChromeContentBrowserClient::
     RegisterBrowserInterfaceBindersForServiceWorker(
         mojo::BinderMapWithContext<
@@ -462,7 +475,7 @@ bool ChromeContentBrowserClient::BindAssociatedReceiverFromFrame(
         render_frame_host);
     return true;
   }
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_PDF)
   if (interface_name == pdf::mojom::PdfService::Name_) {
     pdf::PDFWebContentsHelper::BindPdfService(
         mojo::PendingAssociatedReceiver<pdf::mojom::PdfService>(
@@ -470,6 +483,8 @@ bool ChromeContentBrowserClient::BindAssociatedReceiverFromFrame(
         render_frame_host);
     return true;
   }
+#endif
+#if !defined(OS_ANDROID)
   if (interface_name == search::mojom::EmbeddedSearchConnector::Name_) {
     SearchTabHelper::BindEmbeddedSearchConnecter(
         mojo::PendingAssociatedReceiver<search::mojom::EmbeddedSearchConnector>(
@@ -482,13 +497,18 @@ bool ChromeContentBrowserClient::BindAssociatedReceiverFromFrame(
   if (interface_name == printing::mojom::PrintManagerHost::Name_) {
     mojo::PendingAssociatedReceiver<printing::mojom::PrintManagerHost> receiver(
         std::move(*handle));
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-    printing::PrintViewManager::BindPrintManagerHost(std::move(receiver),
-                                                     render_frame_host);
-#else
-    printing::PrintViewManagerBasic::BindPrintManagerHost(std::move(receiver),
+    if (headless::IsChromeNativeHeadless()) {
+      print_to_pdf::PdfPrintManager::BindPrintManagerHost(std::move(receiver),
                                                           render_frame_host);
+    } else {
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+      printing::PrintViewManager::BindPrintManagerHost(std::move(receiver),
+                                                       render_frame_host);
+#else
+      printing::PrintViewManagerBasic::BindPrintManagerHost(std::move(receiver),
+                                                            render_frame_host);
 #endif
+    }
     return true;
   }
 #endif  // BUILDFLAG(ENABLE_PRINTING)
@@ -542,9 +562,12 @@ void ChromeContentBrowserClient::BindGpuHostReceiver(
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (auto r = receiver.As<chromeos::cdm::mojom::CdmFactoryDaemon>())
-    chromeos::CdmFactoryDaemonProxy::Create(std::move(r));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  if (auto r = receiver.As<chromeos::cdm::mojom::BrowserCdmFactory>())
+    chromeos::CdmFactoryDaemonProxyAsh::Create(std::move(r));
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (auto r = receiver.As<chromeos::cdm::mojom::BrowserCdmFactory>())
+    chromeos::CdmFactoryDaemonProxyLacros::Create(std::move(r));
+#endif
 }
 
 void ChromeContentBrowserClient::BindUtilityHostReceiver(

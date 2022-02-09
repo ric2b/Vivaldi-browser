@@ -219,7 +219,7 @@ void HistoryPrivateEventRouter::DispatchEvent(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
-  std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(*args_));
+  std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int max_hits = 100;
@@ -257,7 +257,7 @@ void HistoryPrivateDbSearchFunction::SearchComplete(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
-  std::unique_ptr<Search::Params> params(Search::Params::Create(*args_));
+  std::unique_ptr<Search::Params> params(Search::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::u16string search_text = base::UTF8ToUTF16(params->query.text);
@@ -331,7 +331,7 @@ void HistoryPrivateSearchFunction::SearchComplete(
 
 ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   std::unique_ptr<vivaldi::history_private::DeleteVisits::Params> params(
-      vivaldi::history_private::DeleteVisits::Params::Create(*args_));
+      vivaldi::history_private::DeleteVisits::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL url;
@@ -360,7 +360,7 @@ void HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete() {
 ExtensionFunction::ResponseAction
 HistoryPrivateGetTopUrlsPerDayFunction::Run() {
   std::unique_ptr<GetTopUrlsPerDay::Params> params(
-      GetTopUrlsPerDay::Params::Create(*args_));
+      GetTopUrlsPerDay::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   double number_of_days = kMaxResultsWithinDay;
@@ -413,8 +413,9 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
   history_item->date_key = base::StringPrintf(
       "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month);
-  //history_item->date_key.reset(new std::string(base::StringPrintf(
-  //    "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month)));
+  // history_item->date_key.reset(new std::string(base::StringPrintf(
+  //    "%04d-%02d-%02d", exploded.year, exploded.month,
+  //    exploded.day_of_month)));
   history_item->hour = int(exploded.hour);
   history_item->visit_count = int(visit.visit_count);
 
@@ -426,7 +427,7 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
 
 ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
   std::unique_ptr<VisitSearch::Params> params(
-      VisitSearch::Params::Create(*args_));
+      VisitSearch::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   history::QueryOptions options;
@@ -463,7 +464,7 @@ HistoryPrivateSetKeywordSearchTermsForURLFunction::Run() {
   std::unique_ptr<vivaldi::history_private::SetKeywordSearchTermsForURL::Params>
       params(
           vivaldi::history_private::SetKeywordSearchTermsForURL::Params::Create(
-              *args_));
+              args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GetFunctionCallerHistoryService(*this)->SetKeywordSearchTermsForURL(
@@ -478,7 +479,7 @@ HistoryPrivateDeleteAllSearchTermsForKeywordFunction::Run() {
   std::unique_ptr<
       vivaldi::history_private::DeleteAllSearchTermsForKeyword::Params>
       params(vivaldi::history_private::DeleteAllSearchTermsForKeyword::Params::
-                 Create(*args_));
+                 Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GetFunctionCallerHistoryService(*this)->DeleteAllSearchTermsForKeyword(
@@ -489,7 +490,7 @@ HistoryPrivateDeleteAllSearchTermsForKeywordFunction::Run() {
 
 ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   std::unique_ptr<vivaldi::history_private::GetTypedHistory::Params> params(
-      vivaldi::history_private::GetTypedHistory::Params::Create(*args_));
+      vivaldi::history_private::GetTypedHistory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   history::URLDatabase::TypedUrlResults results;
@@ -515,7 +516,7 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
 ExtensionFunction::ResponseAction
 HistoryPrivateMigrateOldTypedUrlFunction::Run() {
   std::unique_ptr<vivaldi::history_private::MigrateOldTypedUrl::Params> params(
-      vivaldi::history_private::MigrateOldTypedUrl::Params::Create(*args_));
+      vivaldi::history_private::MigrateOldTypedUrl::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GetFunctionCallerHistoryService(*this)->AddPage(

@@ -25,6 +25,11 @@ class PermissionDelegationBrowserTest : public InProcessBrowserTest {
       : geolocation_overrider_(
             std::make_unique<device::ScopedGeolocationOverrider>(0, 0)) {}
 
+  PermissionDelegationBrowserTest(const PermissionDelegationBrowserTest&) =
+      delete;
+  PermissionDelegationBrowserTest& operator=(
+      const PermissionDelegationBrowserTest&) = delete;
+
   ~PermissionDelegationBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
@@ -71,8 +76,6 @@ class PermissionDelegationBrowserTest : public InProcessBrowserTest {
       mock_permission_prompt_factory_;
   std::unique_ptr<net::EmbeddedTestServer> https_embedded_test_server_;
   std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
-
-  DISALLOW_COPY_AND_ASSIGN(PermissionDelegationBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(PermissionDelegationBrowserTest, DelegatedToTwoFrames) {
@@ -87,7 +90,7 @@ IN_PROC_BROWSER_TEST_F(PermissionDelegationBrowserTest, DelegatedToTwoFrames) {
   GURL iframe_url_2 =
       https_embedded_test_server()->GetURL("c.com", "/simple.html");
 
-  ui_test_utils::NavigateToURL(browser(), main_frame_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url));
   content::RenderFrameHost* main_frame = GetWebContents()->GetMainFrame();
 
   // Delegate permission to both frames.

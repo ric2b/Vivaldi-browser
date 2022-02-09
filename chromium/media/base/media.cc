@@ -25,6 +25,10 @@ extern "C" {
 }
 #endif
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#include "platform_media/common/win/platform_media_init.h"
+#endif
+
 namespace media {
 
 // Media must only be initialized once; use a thread-safe static to do this.
@@ -48,6 +52,10 @@ class MediaInitializer {
 #endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)
 
 #endif  // BUILDFLAG(ENABLE_FFMPEG)
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+    platform_media_init::OnFFmpegInit();
+#endif
   }
 
 #if defined(OS_ANDROID)

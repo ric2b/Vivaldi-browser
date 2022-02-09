@@ -6,7 +6,7 @@
 class Profile;
 
 namespace vivaldi {
-void VivaldiInitProfile(Profile *);
+void VivaldiInitProfile(Profile*);
 }
 
 #endif  // BROWSER_VIVALDI_PROFILE_IMPL_H_

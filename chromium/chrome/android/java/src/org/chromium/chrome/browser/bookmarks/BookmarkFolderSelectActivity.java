@@ -36,6 +36,9 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemV
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import androidx.appcompat.app.AppCompatActivity;
+
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
@@ -498,7 +501,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
      * is only supposed to be called by {@link BookmarkAddEditFolderActivity}
      */
     public static void startNewFolderSelectActivityForVivaldi(
-            VivaldiBookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
+            AppCompatActivity activity, List<BookmarkId> bookmarks) {
         assert ChromeApplicationImpl.isVivaldi() || bookmarks.size() > 0;
         Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
         intent.putExtra(INTENT_IS_CREATING_FOLDER, true);

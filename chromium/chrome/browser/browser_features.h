@@ -22,7 +22,7 @@ extern const base::Feature kClosedTabCache;
 extern const base::Feature kDestroyProfileOnBrowserClose;
 
 extern const base::Feature kPromoBrowserCommands;
-extern const char kPromoBrowserCommandIdParam[];
+extern const char kBrowserCommandIdParam[];
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const base::Feature kDoubleTapToZoomInTabletMode;
@@ -39,6 +39,17 @@ extern const base::Feature kPwaUpdateDialogForNameAndIcon;
 #if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 extern const base::Feature kUserDataSnapshot;
 #endif
+
+extern const base::Feature kSandboxExternalProtocolBlocked;
+extern const base::Feature kTriggerNetworkDataMigration;
+
+// Returns true if network context data should be migrated to the new data path.
+// Prefer using this function over querying the kTriggerNetworkDataMigration
+// feature directly, as there might be other platform specific factors that
+// determine whether data migration should occur or not.
+bool ShouldTriggerNetworkDataMigration();
+
+extern const base::Feature kWebUsbDeviceDetection;
 
 }  // namespace features
 

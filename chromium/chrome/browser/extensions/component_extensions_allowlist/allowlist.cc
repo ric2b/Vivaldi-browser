@@ -32,9 +32,11 @@ bool IsComponentExtensionAllowlisted(const std::string& extension_id) {
   const char* const kAllowed[] = {
     extension_misc::kInAppPaymentsSupportAppId,
     extension_misc::kPdfExtensionId,
+#if defined(OS_CHROMEOS)
+    extension_misc::kAssessmentAssistantExtensionId,
+#endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     extension_misc::kAccessibilityCommonExtensionId,
-    extension_misc::kAssessmentAssistantExtensionId,
     extension_misc::kCameraAppId,
     extension_misc::kChromeVoxExtensionId,
     extension_misc::kEnhancedNetworkTtsExtensionId,
@@ -43,7 +45,6 @@ bool IsComponentExtensionAllowlisted(const std::string& extension_id) {
     extension_misc::kGuestModeTestExtensionId,
     extension_misc::kSelectToSpeakExtensionId,
     extension_misc::kSwitchAccessExtensionId,
-    extension_misc::kZipArchiverExtensionId,
 #endif
   };
 
@@ -87,7 +88,6 @@ bool IsComponentExtensionAllowlisted(int manifest_resource_id) {
     case IDR_IMAGE_LOADER_MANIFEST:
     case IDR_KEYBOARD_MANIFEST:
     case IDR_MOBILE_MANIFEST:
-    case IDR_VIDEO_PLAYER_MANIFEST:
     case IDR_WALLPAPERMANAGER_MANIFEST:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case IDR_HELP_MANIFEST:
@@ -96,6 +96,7 @@ bool IsComponentExtensionAllowlisted(int manifest_resource_id) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     case VIVALDI_MANIFEST_JS:
     case VIVALDI_PIP_MANIFEST:
+    case VIVALDI_THEMESTORE_MANIFEST:
       return true;
   }
 

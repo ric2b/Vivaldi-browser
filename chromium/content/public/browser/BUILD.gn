@@ -83,7 +83,6 @@ source_set("browser_sources") {
     "browser_ppapi_host.h",
     "browser_task_traits.cc",
     "browser_task_traits.h",
-    "browser_thread.cc",
     "browser_thread.h",
     "browser_url_handler.h",
     "browsing_data_filter_builder.h",
@@ -141,7 +140,10 @@ source_set("browser_sources") {
     "devtools_permission_overrides.cc",
     "devtools_permission_overrides.h",
     "devtools_socket_factory.h",
-    "document_service_base.h",
+    "disallow_activation_reason.h",
+    "document_service.h",
+    "document_service_internal.cc",
+    "document_service_internal.h",
     "dom_storage_context.h",
     "download_item_utils.h",
     "download_manager.cc",
@@ -155,6 +157,7 @@ source_set("browser_sources") {
     "favicon_status.cc",
     "favicon_status.h",
     "feature_observer_client.h",
+    "federated_identity_active_session_permission_context_delegate.h",
     "federated_identity_request_permission_context_delegate.h",
     "federated_identity_sharing_permission_context_delegate.h",
     "file_select_listener.h",
@@ -189,6 +192,7 @@ source_set("browser_sources") {
     "hid_chooser.h",
     "hid_delegate.h",
     "histogram_fetcher.h",
+    "host_zoom_map.h",
     "identity_request_dialog_controller.cc",
     "identity_request_dialog_controller.h",
     "idle_time_provider.h",
@@ -268,6 +272,7 @@ source_set("browser_sources") {
     "peer_connection_tracker_host_observer.cc",
     "peer_connection_tracker_host_observer.h",
     "pepper_vpn_provider_resource_host_proxy.h",
+    "per_web_ui_browser_interface_broker.h",
     "permission_controller.h",
     "permission_controller_delegate.cc",
     "permission_controller_delegate.h",
@@ -344,6 +349,7 @@ source_set("browser_sources") {
     "shared_worker_service.h",
     "site_instance.h",
     "site_instance_process_assignment.h",
+    "site_isolation_mode.h",
     "site_isolation_policy.cc",
     "site_isolation_policy.h",
     "sms_fetcher.h",
@@ -372,7 +378,6 @@ source_set("browser_sources") {
     "supported_delegations.h",
     "swap_metrics_driver.h",
     "touch_selection_controller_client_manager.h",
-    "trace_uploader.h",
     "tracing_controller.h",
     "tracing_delegate.cc",
     "tracing_delegate.h",
@@ -402,6 +407,7 @@ source_set("browser_sources") {
     "web_contents_view_delegate.h",
     "web_drag_dest_delegate.h",
     "web_ui.h",
+    "web_ui_browser_interface_broker_registry.h",
     "web_ui_controller.cc",
     "web_ui_controller.h",
     "web_ui_controller_factory.h",
@@ -414,6 +420,7 @@ source_set("browser_sources") {
     "webrtc_log.h",
     "websocket_handshake_request_info.h",
     "worker_type.h",
+    "zoom_level_delegate.h",
   ]
   configs += [
     "//build/config:precompiled_headers",
@@ -449,6 +456,7 @@ source_set("browser_sources") {
     "//media/mojo/mojom:remoting",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//sandbox/policy/mojom",
     "//services/audio/public/mojom",
     "//services/cert_verifier/public/mojom",
     "//services/data_decoder/public/mojom",
@@ -564,10 +572,11 @@ source_set("browser_sources") {
 
   if (!is_android) {
     sources += [
+      # Some Web Authentication related targets only apply to desktop because
+      # Android provides its own native implementation of that API.
       "authenticator_request_client_delegate.cc",
       "authenticator_request_client_delegate.h",
-      "host_zoom_map.h",
-      "zoom_level_delegate.h",
+      "web_authentication_request_proxy.h",
     ]
   }
 

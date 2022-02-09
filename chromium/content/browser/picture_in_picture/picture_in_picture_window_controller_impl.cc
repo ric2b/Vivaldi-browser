@@ -451,6 +451,6 @@ WebContentsImpl* PictureInPictureWindowControllerImpl::GetWebContentsImpl() {
   return static_cast<WebContentsImpl*>(web_contents());
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(PictureInPictureWindowControllerImpl)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PictureInPictureWindowControllerImpl);
 
 }  // namespace content

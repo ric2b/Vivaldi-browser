@@ -5,7 +5,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000128
+    "kCurrentDataVersion": 10000129
   },
 
   // The following engines are included in country lists and are added to the
@@ -28,7 +28,7 @@
       "name": "Yahoo!",
       "keyword": "yahoo.com",
       "favicon_url": "https://search.yahoo.com/favicon.ico",
-      "search_url": "https://vivaldi-search.com/?a=gsp_vivaldi_00_00&q={searchTerms}",
+      "search_url":  "https://us.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
       "suggest_url": "https://search.yahoo.com/sugg/chrome?output=fxjson&appid=crmas&command={searchTerms}",
       "type": "SEARCH_ENGINE_YAHOO_VIV",
       "id": 1000096

@@ -1,9 +1,11 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
 
 #include <Windows.h>
+
 #include <cguid.h>
 #include <objbase.h>
 #include <tchar.h>
+
 #include "ui/lights/razer_chroma_platform_driver_win.h"
 
 #include "base/synchronization/lock.h"
@@ -11,11 +13,10 @@
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_gen_prefs.h"
 
-
 #ifdef _WIN64
-#define CHROMASDKDLL        _T("RzChromaSDK64.dll")
+#define CHROMASDKDLL _T("RzChromaSDK64.dll")
 #else
-#define CHROMASDKDLL        _T("RzChromaSDK.dll")
+#define CHROMASDKDLL _T("RzChromaSDK.dll")
 #endif
 
 static const char* kRazerChromaThreadName = "Vivaldi_RazerChromaThread";
@@ -71,14 +72,12 @@ DELETEEFFECT pDeleteEffect;
 
 // static
 RazerChromaPlatformDriver*
-RazerChromaPlatformDriver::CreateRazerChromaPlatformDriver(
-    Profile* profile) {
+RazerChromaPlatformDriver::CreateRazerChromaPlatformDriver(Profile* profile) {
   return new RazerChromaPlatformDriverWin(profile);
 }
 
 RazerChromaPlatformDriverWin::RazerChromaPlatformDriverWin(Profile* profile)
-    : RazerChromaPlatformDriver(profile), pref_service_(profile->GetPrefs()) {
-}
+    : RazerChromaPlatformDriver(profile), pref_service_(profile->GetPrefs()) {}
 
 RazerChromaPlatformDriverWin::~RazerChromaPlatformDriverWin() {}
 
@@ -144,7 +143,7 @@ void RazerChromaPlatformDriverWin::Shutdown() {
   if (module_) {
     UNINIT pUnInit = (UNINIT)::GetProcAddress(module_, "UnInit");
     if (pUnInit) {
-      /* RZRESULT result = */pUnInit();
+      /* RZRESULT result = */ pUnInit();
     }
     ::FreeLibrary(module_);
     module_ = NULL;
@@ -178,7 +177,7 @@ void RazerChromaPlatformDriverWin::GenerateDeviceListFromPrefs(
       pref_service_->GetList(vivaldiprefs::kRazerChromaDevices);
   std::string device;
   if (devices) {
-    for (size_t i = 0; i < devices->GetSize(); i++) {
+    for (size_t i = 0; i < devices->GetList().size(); i++) {
       if (devices->GetString(i, &device)) {
         if (device == "keyboard") {
           device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_KEYBOARD);
@@ -234,12 +233,12 @@ void RazerChromaPlatformDriverWin::SetColors(RazerChromaColors& colors) {
         ChromaSDK::Mousepad::STATIC_EFFECT_TYPE effect = {};
         effect.Color = color;
         pCreateMousematEffect(ChromaSDK::Mousepad::CHROMA_STATIC, &effect,
-          &frames[0]);
+                              &frames[0]);
       } else if (device == RazerChromaDevice::CHROMA_DEVICE_HEADSET) {
         ChromaSDK::Headset::STATIC_EFFECT_TYPE effect = {};
         effect.Color = color;
         pCreateHeadsetEffect(ChromaSDK::Headset::CHROMA_STATIC, &effect,
-          &frames[0]);
+                             &frames[0]);
       }
       AddToGroup(effect_id, frames[0], kEffectFrameDelay);
     }
@@ -248,8 +247,8 @@ void RazerChromaPlatformDriverWin::SetColors(RazerChromaColors& colors) {
   task_tracker_->PostTask(
       task_runner_.get(), FROM_HERE,
       base::BindOnce(&RazerChromaPlatformDriverWin::RunEffectsOnThread,
-                          base::Unretained(this), std::move(effect_ids),
-                          colors.size()));
+                     base::Unretained(this), std::move(effect_ids),
+                     colors.size()));
 }
 
 void RazerChromaPlatformDriverWin::AddToGroup(RZEFFECTID group_effect_id,

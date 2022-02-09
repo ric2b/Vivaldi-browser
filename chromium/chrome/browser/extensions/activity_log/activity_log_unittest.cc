@@ -366,42 +366,36 @@ TEST_F(ActivityLogTest, ArgUrlExtraction) {
                                             Action::ACTION_DOM_ACCESS,
                                             "XMLHttpRequest.open");
   action->set_page_url(GURL("http://www.google.com/"));
-  action->mutable_args()->AppendString("POST");
-  action->mutable_args()->AppendString("http://api.google.com/");
+  action->mutable_args()->Append("POST");
+  action->mutable_args()->Append("http://api.google.com/");
   action->mutable_other()->SetInteger(activity_log_constants::kActionDomVerb,
                                       DomActionType::METHOD);
   activity_log->LogAction(action);
 
   // Submit a DOM API call with a relative URL in the argument, which should be
   // resolved relative to the page URL.
-  action = new Action(kExtensionId,
-                      now - base::TimeDelta::FromSeconds(1),
-                      Action::ACTION_DOM_ACCESS,
-                      "XMLHttpRequest.open");
+  action = new Action(kExtensionId, now - base::Seconds(1),
+                      Action::ACTION_DOM_ACCESS, "XMLHttpRequest.open");
   action->set_page_url(GURL("http://www.google.com/"));
-  action->mutable_args()->AppendString("POST");
-  action->mutable_args()->AppendString("/api/");
+  action->mutable_args()->Append("POST");
+  action->mutable_args()->Append("/api/");
   action->mutable_other()->SetInteger(activity_log_constants::kActionDomVerb,
                                       DomActionType::METHOD);
   activity_log->LogAction(action);
 
   // Submit a DOM API call with a relative URL but no base page URL against
   // which to resolve.
-  action = new Action(kExtensionId,
-                      now - base::TimeDelta::FromSeconds(2),
-                      Action::ACTION_DOM_ACCESS,
-                      "XMLHttpRequest.open");
-  action->mutable_args()->AppendString("POST");
-  action->mutable_args()->AppendString("/api/");
+  action = new Action(kExtensionId, now - base::Seconds(2),
+                      Action::ACTION_DOM_ACCESS, "XMLHttpRequest.open");
+  action->mutable_args()->Append("POST");
+  action->mutable_args()->Append("/api/");
   action->mutable_other()->SetInteger(activity_log_constants::kActionDomVerb,
                                       DomActionType::METHOD);
   activity_log->LogAction(action);
 
   // Submit an API call with an embedded URL.
-  action = new Action(kExtensionId,
-                      now - base::TimeDelta::FromSeconds(3),
-                      Action::ACTION_API_CALL,
-                      "windows.create");
+  action = new Action(kExtensionId, now - base::Seconds(3),
+                      Action::ACTION_API_CALL, "windows.create");
   action->set_args(
       ListBuilder()
           .Append(
@@ -453,11 +447,9 @@ TEST_F(ActivityLogTest, ArgUrlApiCalls) {
   scoped_refptr<Action> action;
 
   for (int i = 0; i < api_calls_size; i++) {
-    action = new Action(kExtensionId,
-                        now - base::TimeDelta::FromSeconds(i),
-                        Action::ACTION_DOM_ACCESS,
-                        kUrlApiCalls[i]);
-    action->mutable_args()->AppendString("http://www.google.co.uk");
+    action = new Action(kExtensionId, now - base::Seconds(i),
+                        Action::ACTION_DOM_ACCESS, kUrlApiCalls[i]);
+    action->mutable_args()->Append("http://www.google.co.uk");
     action->mutable_other()->SetInteger(activity_log_constants::kActionDomVerb,
                                         DomActionType::SETTER);
     activity_log->LogAction(action);

@@ -13,8 +13,8 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "ash.shimless_rma.mojom.CalibrationComponent"
-          cpp = "::rmad::CheckCalibrationState_CalibrationStatus_Component"
+          mojom = "ash.shimless_rma.mojom.OsUpdateOperation"
+          cpp = "::update_engine::Operation"
         },
         {
           mojom = "ash.shimless_rma.mojom.ComponentRepairStatus"
@@ -38,6 +38,22 @@ mojom("mojom") {
           cpp = "::rmad::RmadErrorCode"
         },
         {
+          mojom = "ash.shimless_rma.mojom.CalibrationSetupInstruction"
+          cpp = "::rmad::CalibrationSetupInstruction"
+        },
+        {
+          mojom = "ash.shimless_rma.mojom.CalibrationOverallStatus"
+          cpp = "::rmad::CalibrationOverallStatus"
+        },
+        {
+          mojom = "ash.shimless_rma.mojom.CalibrationStatus"
+          cpp = "::rmad::CalibrationComponentStatus_CalibrationStatus"
+        },
+        {
+          mojom = "ash.shimless_rma.mojom.CalibrationComponentStatus"
+          cpp = "::rmad::CalibrationComponentStatus"
+        },
+        {
           mojom = "media.mojom.CdmKeyInformation"
           cpp = "::std::unique_ptr<::media::CdmKeyInformation>"
           move_only = true
@@ -50,9 +66,13 @@ mojom("mojom") {
       traits_headers = [
         "shimless_rma_mojom_traits.h",
         "//chromeos/dbus/rmad/rmad.pb.h",
+        "//chromeos/dbus/update_engine/update_engine.pb.h",
       ]
       traits_sources = [ "shimless_rma_mojom_traits.cc" ]
-      traits_public_deps = [ "//chromeos/dbus/rmad:rmad_proto" ]
+      traits_public_deps = [
+        "//chromeos/dbus/rmad:rmad_proto",
+        "//chromeos/dbus/update_engine:proto",
+      ]
     },
   ]
 }
@@ -68,6 +88,7 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//chromeos/dbus/rmad",
     "//chromeos/dbus/rmad:rmad_proto",
+    "//chromeos/dbus/update_engine",
     "//content/test:test_support",
     "//services/data_decoder/public/cpp:test_support",
     "//services/device/public/cpp:test_support",

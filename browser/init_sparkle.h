@@ -14,6 +14,6 @@ GURL GetAppcastUrl();
 void Initialize();
 
 #endif
-}  // namespace vivaldi
+}  // namespace init_sparkle
 
 #endif  // BROWSER_INIT_SPARKLE_H_

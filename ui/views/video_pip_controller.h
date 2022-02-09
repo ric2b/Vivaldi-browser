@@ -32,6 +32,8 @@ class VideoPIPController
   ~VideoPIPController() override;
   VideoPIPController(vivaldi::VideoPIPController::Delegate* delegate,
                      content::WebContents* web_contents);
+  VideoPIPController(const VideoPIPController&) = delete;
+  VideoPIPController& operator=(const VideoPIPController&) = delete;
 
   void SeekTo(double current_position, double seek_progress);
 
@@ -69,8 +71,6 @@ class VideoPIPController
 
   // Used to check which actions are currently supported.
   base::flat_set<media_session::mojom::MediaSessionAction> actions_;
-
-  DISALLOW_COPY_AND_ASSIGN(VideoPIPController);
 };
 
 }  // namespace vivaldi

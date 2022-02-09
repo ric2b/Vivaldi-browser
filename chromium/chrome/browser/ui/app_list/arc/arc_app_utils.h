@@ -57,11 +57,16 @@ extern const char kSettingsAppId[];
 extern const char kYoutubeAppId[];
 extern const char kYoutubeMusicAppId[];
 extern const char kYoutubeMusicWebApkAppId[];
+extern const char kAndroidContactsAppId[];
 
 // Represents unparsed intent.
 class Intent {
  public:
   Intent();
+
+  Intent(const Intent&) = delete;
+  Intent& operator=(const Intent&) = delete;
+
   ~Intent();
 
   enum LaunchFlags : uint32_t {
@@ -100,8 +105,6 @@ class Intent {
   std::string activity_;                   // Extracted from component.
   uint32_t launch_flags_ = 0;              // Extracted from launchFlags;
   std::vector<std::string> extra_params_;  // Other parameters not listed above.
-
-  DISALLOW_COPY_AND_ASSIGN(Intent);
 };
 
 // Observes ARC app launches.

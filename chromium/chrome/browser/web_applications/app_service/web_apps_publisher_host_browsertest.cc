@@ -31,14 +31,14 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
-#include "chrome/browser/web_applications/components/app_registry_controller.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/browser/web_applications/components/web_app_install_utils.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
+#include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
+#include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -134,7 +134,8 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, PublishApps) {
       embedded_test_server()->GetURL("/banners/manifest_test_page.html"));
   mock_app_publisher.Wait();
 
-  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 3U);
+  // OnWebAppInstalled() and OnWebAppInstalledWithOsHooks() lead to updates.
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 4U);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->readiness,
             apps::mojom::Readiness::kReady);
@@ -245,11 +246,9 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, LocallyInstalledState) {
     web_app_info->description = description;
     app_id = InstallWebApp(std::move(web_app_info));
 
-    provider()
-        .registry_controller()
-        .AsWebAppSyncBridge()
-        ->SetAppIsLocallyInstalled(app_id,
-                                   /*is_locally_installed=*/false);
+    provider().sync_bridge().SetAppIsLocallyInstalled(
+        app_id,
+        /*is_locally_installed=*/false);
   }
 
   MockAppPublisher mock_app_publisher;
@@ -262,14 +261,41 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, LocallyInstalledState) {
                                      IconEffects::kBlocked |
                                      IconEffects::kCrOsStandardMask));
 
-  provider()
-      .registry_controller()
-      .AsWebAppSyncBridge()
-      ->SetAppIsLocallyInstalled(app_id,
-                                 /*is_locally_installed=*/true);
+  provider().sync_bridge().SetAppIsLocallyInstalled(
+      app_id,
+      /*is_locally_installed=*/true);
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->icon_key->icon_effects,
             IconEffects::kRoundCorners | IconEffects::kCrOsStandardMask);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, PolicyId) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL app_url = embedded_test_server()->GetURL("/web_apps/basic.html");
+  const GURL install_url =
+      embedded_test_server()->GetURL("/web_apps/get_manifest.html?basic.json");
+  AppId app_id = InstallWebAppFromPage(browser(), install_url);
+  MockAppPublisher mock_app_publisher;
+  WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
+  mock_app_publisher.Wait();
+
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->publisher_id,
+            app_url.spec());
+  EXPECT_TRUE(mock_app_publisher.get_deltas().back()->policy_id->empty());
+
+  // Set policy to pin the web app.
+  web_app::ExternallyInstalledWebAppPrefs web_app_prefs(
+      browser()->profile()->GetPrefs());
+  web_app_prefs.Insert(install_url, app_id,
+                       web_app::ExternalInstallSource::kExternalPolicy);
+
+  provider().registrar().NotifyWebAppInstalledWithOsHooks(app_id);
+
+  mock_app_publisher.Wait();
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->policy_id,
+            install_url.spec());
 }
 
 IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, ContentSettings) {
@@ -306,12 +332,12 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, ContentSettings) {
 
   const std::vector<apps::mojom::PermissionPtr>& permissions =
       mock_app_publisher.get_deltas().back()->permissions;
-  auto camera_permission = std::find_if(
-      permissions.begin(), permissions.end(),
-      [](const apps::mojom::PermissionPtr& permission) {
-        return permission->permission_id ==
-               static_cast<uint32_t>(ContentSettingsType::MEDIASTREAM_CAMERA);
-      });
+  auto camera_permission =
+      std::find_if(permissions.begin(), permissions.end(),
+                   [](const apps::mojom::PermissionPtr& permission) {
+                     return permission->permission_type ==
+                            apps::mojom::PermissionType::kCamera;
+                   });
   ASSERT_TRUE(camera_permission != permissions.end());
   EXPECT_EQ((*camera_permission)->value_type,
             apps::mojom::PermissionValueType::kTriState);
@@ -486,9 +512,25 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest,
       *apps::AppServiceProxyFactory::GetForProfile(profile())
            ->WebAppsPublisherHostForTesting();
 
-  web_apps_publisher_host.ExecuteContextMenuCommand(app_id,
-                                                    /*item_id=*/5,
-                                                    display::kDefaultDisplayId);
+  crosapi::mojom::MenuItemsPtr menu_items;
+  {
+    base::RunLoop run_loop;
+    web_apps_publisher_host.GetMenuModel(
+        app_id,
+        base::BindLambdaForTesting(
+            [&run_loop, &menu_items](crosapi::mojom::MenuItemsPtr items) {
+              menu_items = std::move(items);
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+  }
+  ASSERT_TRUE(menu_items);
+  ASSERT_EQ(6U, menu_items->items.size());
+
+  auto id = *menu_items->items[5]->id;
+
+  web_apps_publisher_host.ExecuteContextMenuCommand(app_id, id,
+                                                    base::DoNothing());
 
   EXPECT_EQ(BrowserList::GetInstance()
                 ->GetLastActive()
@@ -577,8 +619,7 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, Notification) {
 
 IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, DisabledState) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  WebAppSyncBridge& web_app_sync_bridge =
-      *provider().registry_controller().AsWebAppSyncBridge();
+  WebAppSyncBridge& web_app_sync_bridge = provider().sync_bridge();
   const AppId app_id = InstallWebAppFromManifest(
       browser(), embedded_test_server()->GetURL("/web_apps/basic.html"));
 

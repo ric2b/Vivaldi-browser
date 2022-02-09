@@ -26,6 +26,7 @@
 #include "services/network/public/cpp/resource_request_body.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/navigation/impression.h"
+#include "third_party/blink/public/common/navigation/navigation_policy.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/navigation/was_activated_option.mojom.h"
 #include "ui/base/page_transition_types.h"
@@ -138,7 +139,8 @@ class NavigationController {
     // fields that are present in both structs (some properties are ignored
     // because they are unique to LoadURLParams or OpenURLParams).
     explicit LoadURLParams(const OpenURLParams& open_url_params);
-
+    LoadURLParams(const LoadURLParams&) = delete;
+    LoadURLParams& operator=(const LoadURLParams&) = delete;
     ~LoadURLParams();
 
     // The url to load. This field is required.
@@ -287,7 +289,11 @@ class NavigationController {
     // for navigations originating from a link click.
     absl::optional<blink::Impression> impression;
 
-    DISALLOW_COPY_AND_ASSIGN(LoadURLParams);
+    // Download policy to be applied if this navigation turns into a download.
+    blink::NavigationDownloadPolicy download_policy;
+
+    // Indicates that this navigation is for PDF content in a renderer.
+    bool is_pdf = false;
   };
 
   // Disables checking for a repost and prompting the user. This is used during
@@ -430,7 +436,8 @@ class NavigationController {
   virtual void GoBack() = 0;
   virtual void GoForward() = 0;
 
-  // Navigates to the specified absolute index.
+  // Navigates to the specified absolute index. Should only be used for
+  // browser-initiated navigations.
   virtual void GoToIndex(int index) = 0;
 
   // Navigates to the specified offset from the "current entry". Does nothing if

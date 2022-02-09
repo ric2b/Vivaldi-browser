@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/vivaldi_constants.h"
 #include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_number_conversions.h"
@@ -25,8 +26,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/common/extensions/api/commands/commands_handler.h"
+#include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -36,13 +37,13 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
-#include "extensions/browser/image_loader.h"
-#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/image_loader.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_icon_set.h"
@@ -56,6 +57,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/vivaldi_document_loader.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -66,12 +68,10 @@ namespace {
 std::string GetShortcutTextForExtensionAction(
     ExtensionAction* action,
     content::BrowserContext* browser_context) {
-
   Profile* profile = Profile::FromBrowserContext(browser_context);
   const Extension* extension =
-    extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
-        action->extension_id(),
-        extensions::ExtensionRegistry::ENABLED);
+      extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
+          action->extension_id(), extensions::ExtensionRegistry::ENABLED);
   extensions::CommandService* command_service =
       extensions::CommandService::Get(browser_context);
 
@@ -113,14 +113,14 @@ std::string EncodeBitmapToPng(const SkBitmap* bitmap) {
 }
 
 gfx::ImageSkiaRep ScaleImageSkiaRep(const gfx::ImageSkiaRep& rep,
-  int target_width_dp,
-  float target_scale) {
+                                    int target_width_dp,
+                                    float target_scale) {
   int width_px = target_width_dp * target_scale;
   return gfx::ImageSkiaRep(
-    skia::ImageOperations::Resize(rep.GetBitmap(),
-      skia::ImageOperations::RESIZE_BEST,
-      width_px, width_px),
-    target_scale);
+      skia::ImageOperations::Resize(rep.GetBitmap(),
+                                    skia::ImageOperations::RESIZE_BEST,
+                                    width_px, width_px),
+      target_scale);
 }
 
 #define USE_HARDCODED_SCALE 1
@@ -162,12 +162,13 @@ void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
     gfx::ImageSkiaRep rep = skia.GetRepresentation(device_scale);
     if (rep.scale() != device_scale) {
       skia.AddRepresentation(ScaleImageSkiaRep(
-        rep, ExtensionAction::ActionIconSize(), device_scale));
+          rep, ExtensionAction::ActionIconSize(), device_scale));
     }
     if (rep.is_null()) {
       info->badge_icon = std::make_unique<std::string>();
     } else {
-      info->badge_icon = std::make_unique<std::string>(EncodeBitmapToPng(&rep.GetBitmap()));
+      info->badge_icon =
+          std::make_unique<std::string>(EncodeBitmapToPng(&rep.GetBitmap()));
     }
   } else {
     info->badge_icon.reset(new std::string(""));
@@ -180,7 +181,7 @@ void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
 
   std::string manifest_string;
   if (extension->manifest()->GetString(manifest_keys::kHomepageURL,
-                                        &manifest_string)) {
+                                       &manifest_string)) {
     info->homepage = std::make_unique<std::string>(manifest_string);
   }
   if (OptionsPageInfo::HasOptionsPage(extension)) {
@@ -196,7 +197,7 @@ void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
 
 // static
 ExtensionActionUtil* ExtensionActionUtilFactory::GetForBrowserContext(
-      content::BrowserContext* browser_context) {
+    content::BrowserContext* browser_context) {
   return static_cast<ExtensionActionUtil*>(
       GetInstance()->GetServiceForBrowserContext(browser_context, true));
 }
@@ -247,6 +248,10 @@ void ExtensionActionUtil::SendIconLoaded(
       ExtensionRegistry::Get(browser_context)
           ->GetExtensionById(extension_id,
                              extensions::ExtensionRegistry::EVERYTHING);
+  if (!extension) {
+    // This has been observed in the wild. VB-83896
+    return;
+  }
   ExtensionActionManager* manager =
       ExtensionActionManager::Get(browser_context);
   ExtensionAction* action = manager->GetExtensionAction(*extension);
@@ -256,14 +261,13 @@ void ExtensionActionUtil::SendIconLoaded(
     info.id = extension_id;
 
     ::vivaldi::BroadcastEvent(
-      vivaldi::extension_action_utils::OnIconLoaded::kEventName,
-      vivaldi::extension_action_utils::OnIconLoaded::Create(info),
-      browser_context);
+        vivaldi::extension_action_utils::OnIconLoaded::kEventName,
+        vivaldi::extension_action_utils::OnIconLoaded::Create(info),
+        browser_context);
   }
 }
 
-ExtensionActionUtil::ExtensionActionUtil(Profile* profile)
-    : profile_(profile) {
+ExtensionActionUtil::ExtensionActionUtil(Profile* profile) : profile_(profile) {
   ExtensionRegistry::Get(profile_)->AddObserver(this);
   ExtensionActionAPI::Get(profile)->AddObserver(this);
   CommandService::Get(profile_)->AddObserver(this);
@@ -272,8 +276,8 @@ ExtensionActionUtil::ExtensionActionUtil(Profile* profile)
   prefs_registrar_->Init(profile->GetPrefs());
 
   prefs_registrar_->Add(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
-    base::BindRepeating(
-      &ExtensionActionUtil::PrefsChange, base::Unretained(this)));
+                        base::BindRepeating(&ExtensionActionUtil::PrefsChange,
+                                            base::Unretained(this)));
 
   PrefsChange();
 }
@@ -286,7 +290,7 @@ void ExtensionActionUtil::PrefsChange() {
   }
 
   user_hidden_extensions_.reset(
-    new base::ListValue(hidden_extensions->GetList()));
+      new base::ListValue(hidden_extensions->GetList()));
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
@@ -296,8 +300,7 @@ void ExtensionActionUtil::FillInfoForTabId(
     ExtensionAction* action,
     int tab_id) {
   info->keyboard_shortcut.reset(
-    new std::string(GetShortcutTextForExtensionAction(
-      action, profile_)));
+      new std::string(GetShortcutTextForExtensionAction(action, profile_)));
 
   info->id = action->extension_id();
 
@@ -305,7 +308,7 @@ void ExtensionActionUtil::FillInfoForTabId(
   info->badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
 
   info->badge_text.reset(
-    new std::string(action->GetExplicitlySetBadgeText(tab_id)));
+      new std::string(action->GetExplicitlySetBadgeText(tab_id)));
 
   info->badge_background_color.reset(
       new std::string(color_utils::SkColorToRgbaString(
@@ -315,8 +318,8 @@ void ExtensionActionUtil::FillInfoForTabId(
       color_utils::SkColorToRgbaString(action->GetBadgeTextColor(tab_id))));
 
   info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
-    ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
-    : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
+                          ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
+                          : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
 
   info->visible.reset(new bool(action->GetIsVisible(tab_id)));
 
@@ -335,6 +338,7 @@ void ExtensionActionUtil::Shutdown() {
   ExtensionRegistry::Get(profile_)->RemoveObserver(this);
   ExtensionActionAPI::Get(profile_)->RemoveObserver(this);
   CommandService::Get(profile_)->RemoveObserver(this);
+  vivaldi_document_loader_.reset();
 }
 
 void ExtensionActionUtil::OnExtensionActionUpdated(
@@ -411,6 +415,14 @@ void ExtensionActionUtil::OnExtensionLoaded(
   // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
   // not stored profile_? See VB-52519.
 
+  // temp; move this to a separate service. Gets two calls on startup via added
+  // and TriggerOnLoaded
+  if (extension->id() == ::vivaldi::kVivaldiAppId &&
+      !vivaldi_document_loader_) {
+    vivaldi_document_loader_ =
+        std::make_unique<VivaldiDocumentLoader>(profile_, extension);
+  }
+
   extensions::ExtensionActionManager* action_manager =
       extensions::ExtensionActionManager::Get(profile_);
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
@@ -429,8 +441,7 @@ void ExtensionActionUtil::OnExtensionLoaded(
   // Notify the client about the extension info we got so far.
   ::vivaldi::BroadcastEvent(
       vivaldi::extension_action_utils::OnAdded::kEventName,
-      vivaldi::extension_action_utils::OnAdded::Create(info),
-      browser_context);
+      vivaldi::extension_action_utils::OnAdded::Create(info), browser_context);
 
   std::unique_ptr<extensions::ExtensionResource> icon_resource;
   ExtensionAction* pageorbrowser_action =
@@ -466,10 +477,10 @@ void ExtensionActionUtil::OnExtensionLoaded(
   if (icon_resource.get() && !icon_resource.get()->extension_root().empty()) {
     extensions::ImageLoader* loader =
         extensions::ImageLoader::Get(browser_context);
-    loader->LoadImageAsync(
-        extension, *icon_resource.get(), gfx::Size(icon_size, icon_size),
-        base::BindOnce(&ExtensionActionUtil::SendIconLoaded,
-                       browser_context, extension->id()));
+    loader->LoadImageAsync(extension, *icon_resource.get(),
+                           gfx::Size(icon_size, icon_size),
+                           base::BindOnce(&ExtensionActionUtil::SendIconLoaded,
+                                          browser_context, extension->id()));
   }
 }
 
@@ -487,7 +498,8 @@ void ExtensionActionUtil::OnExtensionUnloaded(
 }
 
 void ExtensionActionUtil::OnExtensionCommandAdded(
-    const std::string& extension_id, const Command& added_command) {
+    const std::string& extension_id,
+    const Command& added_command) {
   // TODO(daniel@vivaldi.com): Currently we only support shortcuts for
   // _execute_browser_action ("Activate the Extension"). Some extensions come
   // with other keyboard shortcuts of their own. Until we add support for those,
@@ -499,12 +511,14 @@ void ExtensionActionUtil::OnExtensionCommandAdded(
                               added_command.accelerator().modifiers(), 0);
   ::vivaldi::BroadcastEvent(
       vivaldi::extension_action_utils::OnCommandAdded::kEventName,
-      vivaldi::extension_action_utils::OnCommandAdded::Create(
-          extension_id, shortcut_text), profile_);
+      vivaldi::extension_action_utils::OnCommandAdded::Create(extension_id,
+                                                              shortcut_text),
+      profile_);
 }
 
 void ExtensionActionUtil::OnExtensionCommandRemoved(
-    const std::string& extension_id, const Command& removed_command) {
+    const std::string& extension_id,
+    const Command& removed_command) {
   if (removed_command.command_name() != "_execute_browser_action")
     return;
   std::string shortcut_text =
@@ -513,14 +527,13 @@ void ExtensionActionUtil::OnExtensionCommandRemoved(
 
   ::vivaldi::BroadcastEvent(
       vivaldi::extension_action_utils::OnCommandRemoved::kEventName,
-      vivaldi::extension_action_utils::OnCommandRemoved::Create(
-          extension_id, shortcut_text),
+      vivaldi::extension_action_utils::OnCommandRemoved::Create(extension_id,
+                                                                shortcut_text),
       profile_);
 }
 
 void ExtensionActionUtil::NotifyTabSelectionChange(
-  content::WebContents* selected_contents) {
-
+    content::WebContents* selected_contents) {
   Browser* browser = chrome::FindBrowserWithWebContents(selected_contents);
   if (!browser)
     return;
@@ -528,13 +541,13 @@ void ExtensionActionUtil::NotifyTabSelectionChange(
 
   // loop through the extensions and update the actions based on the tabid
   const extensions::ExtensionSet& extensions =
-    extensions::ExtensionRegistry::Get(profile_)->enabled_extensions();
+      extensions::ExtensionRegistry::Get(profile_)->enabled_extensions();
 
   extensions::ExtensionActionManager* action_manager =
-    extensions::ExtensionActionManager::Get(profile_);
+      extensions::ExtensionActionManager::Get(profile_);
 
   for (ExtensionSet::const_iterator it = extensions.begin();
-    it != extensions.end(); ++it) {
+       it != extensions.end(); ++it) {
     const Extension* extension = it->get();
 
     ExtensionAction* action = action_manager->GetExtensionAction(*extension);
@@ -567,7 +580,6 @@ std::string NoSuchMenuItem(const std::string& menu_id) {
 
 }  // namespace
 
-
 ExtensionFunction::ResponseAction
 ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
   namespace Results =
@@ -594,19 +606,18 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
       vivaldi::extension_action_utils::ExtensionInfo info;
 
       ExtensionActionUtil* utils =
-        ExtensionActionUtilFactory::GetForBrowserContext(
-          browser_context());
+          ExtensionActionUtilFactory::GetForBrowserContext(browser_context());
 
       utils->FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
       info.name.reset(new std::string(extension->name()));
 
       std::string manifest_string;
       if (extension->manifest()->GetString(manifest_keys::kHomepageURL,
-                                            &manifest_string)) {
+                                           &manifest_string)) {
         info.homepage.reset(new std::string(manifest_string));
       }
       if (extension->manifest()->GetString(manifest_keys::kOptionsPage,
-                                            &manifest_string)) {
+                                           &manifest_string)) {
         info.optionspage.reset(new std::string(manifest_string));
       }
       toolbar_extensionactions.push_back(std::move(info));
@@ -622,7 +633,7 @@ ExtensionActionUtilsExecuteExtensionActionFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::ExecuteExtensionAction::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
@@ -632,8 +643,6 @@ ExtensionActionUtilsExecuteExtensionActionFunction::Run() {
   if (!extension)
     return RespondNow(Error(NoSuchExtension(params->extension_id)));
 
-  // Note; we cannot use GetAssociatedWebContents since the extension is not
-  // running in a tab.
   Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
   if (!browser)
     return RespondNow(Error(NoSuchWindow(params->window_id)));
@@ -664,7 +673,7 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
   using vivaldi::extension_action_utils::ToggleBrowserActionVisibility::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
@@ -692,7 +701,7 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
                base::Value(params->extension_id))) {
     updated_hidden_extensions.EraseListValue(base::Value(params->extension_id));
   } else {
-    updated_hidden_extensions.AppendString(params->extension_id);
+    updated_hidden_extensions.Append(params->extension_id);
   }
   profile->GetPrefs()->Set(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
                            updated_hidden_extensions);
@@ -718,6 +727,8 @@ class UninstallDialogHelper : public ExtensionUninstallDialog::Delegate {
   // This class handles its own lifetime.
   UninstallDialogHelper() {}
   ~UninstallDialogHelper() override {}
+  UninstallDialogHelper(const UninstallDialogHelper&) = delete;
+  UninstallDialogHelper& operator=(const UninstallDialogHelper&) = delete;
 
   void BeginUninstall(Browser* browser, const Extension* extension) {
     uninstall_dialog_ = ExtensionUninstallDialog::Create(
@@ -734,15 +745,14 @@ class UninstallDialogHelper : public ExtensionUninstallDialog::Delegate {
   }
 
   std::unique_ptr<ExtensionUninstallDialog> uninstall_dialog_;
-
-  DISALLOW_COPY_AND_ASSIGN(UninstallDialogHelper);
 };
 }  // namespace
 
-ExtensionFunction::ResponseAction ExtensionActionUtilsRemoveExtensionFunction::Run() {
+ExtensionFunction::ResponseAction
+ExtensionActionUtilsRemoveExtensionFunction::Run() {
   using vivaldi::extension_action_utils::RemoveExtension::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
@@ -765,7 +775,7 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsShowExtensionOptionsFunction::Run() {
   using vivaldi::extension_action_utils::ShowExtensionOptions::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
@@ -855,9 +865,9 @@ void RecursivelyFillMenu(
   }
 }
 
-std::vector<vivaldi::extension_action_utils::MenuItem>
-FillMenuFromManifest(const Extension* extension,
-                     content::BrowserContext* browser_context) {
+std::vector<vivaldi::extension_action_utils::MenuItem> FillMenuFromManifest(
+    const Extension* extension,
+    content::BrowserContext* browser_context) {
   std::vector<vivaldi::extension_action_utils::MenuItem> menu_items;
   bool can_cross_incognito =
       util::CanCrossIncognito(extension, browser_context);
@@ -879,15 +889,15 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsGetExtensionMenuFunction::Run() {
   using vivaldi::extension_action_utils::GetExtensionMenu::Params;
   namespace Results =
-    vivaldi::extension_action_utils::GetExtensionMenu::Results;
+      vivaldi::extension_action_utils::GetExtensionMenu::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
-    extensions::ExtensionRegistry::Get(browser_context())
-    ->GetExtensionById(params->extension_id,
-      extensions::ExtensionRegistry::ENABLED);
+      extensions::ExtensionRegistry::Get(browser_context())
+          ->GetExtensionById(params->extension_id,
+                             extensions::ExtensionRegistry::ENABLED);
   if (!extension) {
     return RespondNow(Error(NoSuchExtension(params->extension_id)));
   }
@@ -902,15 +912,15 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsExecuteMenuActionFunction::Run() {
   using vivaldi::extension_action_utils::ExecuteMenuAction::Params;
   namespace Results =
-    vivaldi::extension_action_utils::ExecuteMenuAction::Results;
+      vivaldi::extension_action_utils::ExecuteMenuAction::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
-    extensions::ExtensionRegistry::Get(browser_context())
-    ->GetExtensionById(params->extension_id,
-      extensions::ExtensionRegistry::ENABLED);
+      extensions::ExtensionRegistry::Get(browser_context())
+          ->GetExtensionById(params->extension_id,
+                             extensions::ExtensionRegistry::ENABLED);
   if (!extension) {
     return RespondNow(Error(NoSuchExtension(params->extension_id)));
   }
@@ -940,8 +950,7 @@ ExtensionActionUtilsExecuteMenuActionFunction::Run() {
     }
   }
   manager->ExecuteCommand(browser_context(), contents, nullptr,
-                          content::ContextMenuParams(),
-                          action_id);
+                          content::ContextMenuParams(), action_id);
   return RespondNow(ArgumentList(Results::Create(true)));
 }
 

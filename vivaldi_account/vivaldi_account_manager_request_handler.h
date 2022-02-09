@@ -32,6 +32,10 @@ class VivaldiAccountManagerRequestHandler {
                                       const net::HttpRequestHeaders& headers,
                                       RequestDoneCallback callback);
   ~VivaldiAccountManagerRequestHandler();
+  VivaldiAccountManagerRequestHandler(
+      const VivaldiAccountManagerRequestHandler&) = delete;
+  VivaldiAccountManagerRequestHandler& operator=(
+      const VivaldiAccountManagerRequestHandler&) = delete;
 
   void Retry();
 
@@ -55,8 +59,6 @@ class VivaldiAccountManagerRequestHandler {
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
   net::BackoffEntry request_backoff_;
   base::OneShotTimer request_backoff_timer_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountManagerRequestHandler);
 };
 
 }  // namespace vivaldi

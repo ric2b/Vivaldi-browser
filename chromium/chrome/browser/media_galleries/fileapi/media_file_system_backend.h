@@ -41,6 +41,10 @@ class MediaFileSystemBackend : public storage::FileSystemBackend {
   MediaFileSystemBackend(
       const base::FilePath& profile_path,
       download::QuarantineConnectionCallback quarantine_connection_callback);
+
+  MediaFileSystemBackend(const MediaFileSystemBackend&) = delete;
+  MediaFileSystemBackend& operator=(const MediaFileSystemBackend&) = delete;
+
   ~MediaFileSystemBackend() override;
 
   // Asserts that the current task is sequenced with any other task that calls
@@ -73,7 +77,7 @@ class MediaFileSystemBackend : public storage::FileSystemBackend {
   storage::CopyOrMoveFileValidatorFactory* GetCopyOrMoveFileValidatorFactory(
       storage::FileSystemType type,
       base::File::Error* error_code) override;
-  storage::FileSystemOperation* CreateFileSystemOperation(
+  std::unique_ptr<storage::FileSystemOperation> CreateFileSystemOperation(
       const storage::FileSystemURL& url,
       storage::FileSystemContext* context,
       base::File::Error* error_code) const override;
@@ -111,8 +115,6 @@ class MediaFileSystemBackend : public storage::FileSystemBackend {
 #if defined(OS_WIN) || defined(OS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<DeviceMediaAsyncFileUtil> device_media_async_file_util_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(MediaFileSystemBackend);
 };
 
 #endif  // CHROME_BROWSER_MEDIA_GALLERIES_FILEAPI_MEDIA_FILE_SYSTEM_BACKEND_H_

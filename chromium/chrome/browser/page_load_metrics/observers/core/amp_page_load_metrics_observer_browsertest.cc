@@ -27,6 +27,11 @@ using UkmEntry = ukm::builders::AmpPageLoad;
 class AmpPageLoadMetricsBrowserTest : public InProcessBrowserTest {
  public:
   AmpPageLoadMetricsBrowserTest() {}
+
+  AmpPageLoadMetricsBrowserTest(const AmpPageLoadMetricsBrowserTest&) = delete;
+  AmpPageLoadMetricsBrowserTest& operator=(
+      const AmpPageLoadMetricsBrowserTest&) = delete;
+
   ~AmpPageLoadMetricsBrowserTest() override {}
 
   void PreRunTestOnMainThread() override {
@@ -85,8 +90,6 @@ class AmpPageLoadMetricsBrowserTest : public InProcessBrowserTest {
  private:
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
   std::unique_ptr<net::EmbeddedTestServer> https_test_server_;
-
-  DISALLOW_COPY_AND_ASSIGN(AmpPageLoadMetricsBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AmpPageLoadMetricsBrowserTest, NoAmp) {
@@ -96,7 +99,7 @@ IN_PROC_BROWSER_TEST_F(AmpPageLoadMetricsBrowserTest, NoAmp) {
       page_load_metrics::PageLoadMetricsTestWaiter::TimingField::kLoadEvent);
   StartHttpsServer(net::EmbeddedTestServer::CERT_OK);
   GURL url = https_test_server()->GetURL("/english_page.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   waiter.Wait();
   CloseAllTabs();
   ExpectMetricCountForUrl(url, "MainFrameAmpPageLoad", 0);
@@ -110,7 +113,7 @@ IN_PROC_BROWSER_TEST_F(AmpPageLoadMetricsBrowserTest, AmpMainFrame) {
                                 TimingField::kFirstContentfulPaint);
   StartHttpsServer(net::EmbeddedTestServer::CERT_OK);
   GURL url = https_test_server()->GetURL("/page_load_metrics/amp_basic.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   waiter.Wait();
   CloseAllTabs();
   ExpectMetricValueForUrl(url, "MainFrameAmpPageLoad", 1);
@@ -125,7 +128,7 @@ IN_PROC_BROWSER_TEST_F(AmpPageLoadMetricsBrowserTest, AmpSubframe) {
   StartHttpsServer(net::EmbeddedTestServer::CERT_OK);
   GURL url =
       https_test_server()->GetURL("/page_load_metrics/amp_reader_mock.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   waiter.Wait();
   CloseAllTabs();
   ExpectMetricCountForUrl(url, "MainFrameAmpPageLoad", 0);

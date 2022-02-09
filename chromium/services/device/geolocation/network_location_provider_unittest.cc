@@ -293,12 +293,13 @@ class GeolocationNetworkProviderTest : public testing::Test {
       base::ListValue expected_wifi_aps_json;
       CreateReferenceWifiScanDataJson(expected_wifi_aps, wifi_start_index,
                                       &expected_wifi_aps_json);
-      EXPECT_EQ(size_t(expected_wifi_aps), expected_wifi_aps_json.GetSize());
+      EXPECT_EQ(size_t(expected_wifi_aps),
+                expected_wifi_aps_json.GetList().size());
 
       const base::ListValue* wifi_aps_json;
       ASSERT_TRUE(
           JsonGetList("wifiAccessPoints", *request_json, &wifi_aps_json));
-      for (size_t i = 0; i < expected_wifi_aps_json.GetSize(); ++i) {
+      for (size_t i = 0; i < expected_wifi_aps_json.GetList().size(); ++i) {
         const base::DictionaryValue* expected_json;
         ASSERT_TRUE(expected_wifi_aps_json.GetDictionary(i, &expected_json));
         const base::DictionaryValue* actual_json;
@@ -775,8 +776,7 @@ TEST_F(GeolocationNetworkProviderTest, LastPositionNotUsedTooOld) {
   // Seed the last position cache with a geoposition value with the timestamp
   // set to 20 minutes ago.
   mojom::Geoposition last_position = CreateReferencePosition(0);
-  last_position.timestamp =
-      base::Time::Now() - base::TimeDelta::FromMinutes(20);
+  last_position.timestamp = base::Time::Now() - base::Minutes(20);
   EXPECT_TRUE(ValidateGeoposition(last_position));
   position_cache_.SetLastUsedNetworkPosition(last_position);
 

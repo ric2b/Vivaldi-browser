@@ -8,6 +8,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/share/share_metrics.h"
 #include "chrome/browser/sharing_hub/sharing_hub_model.h"
 #include "chrome/browser/sharing_hub/sharing_hub_service.h"
 #include "chrome/browser/sharing_hub/sharing_hub_service_factory.h"
@@ -19,6 +20,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/color/color_id.h"
 
 namespace sharing_hub {
 
@@ -34,6 +36,8 @@ bool SharingHubSubMenuModel::IsCommandIdEnabled(int command_id) const {
 }
 
 void SharingHubSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
+  share::LogShareSourceDesktop(share::ShareSourceDesktop::kAppMenuSharingHub);
+
   if (IsThirdPartyAction(command_id)) {
     SharingHubModel* const model = GetSharingHubModel();
     if (!model)
@@ -70,7 +74,7 @@ void SharingHubSubMenuModel::Build(content::WebContents* web_contents) {
   std::vector<SharingHubAction> first_party_actions;
   std::vector<SharingHubAction> third_party_actions;
   model->GetFirstPartyActionList(web_contents, &first_party_actions);
-  model->GetThirdPartyActionList(web_contents, &third_party_actions);
+  model->GetThirdPartyActionList(&third_party_actions);
 
   for (auto action : first_party_actions) {
     AddItem(action.command_id, action.title);
@@ -79,9 +83,10 @@ void SharingHubSubMenuModel::Build(content::WebContents* web_contents) {
   AddSeparator(ui::NORMAL_SEPARATOR);
   for (auto action : third_party_actions) {
     if (action.third_party_icon.isNull()) {
-      AddItemWithIcon(action.command_id, action.title,
-                      ui::ImageModel::FromVectorIcon(*action.icon, /*color*/ -1,
-                                                     /*icon_size*/ 16));
+      AddItemWithIcon(
+          action.command_id, action.title,
+          ui::ImageModel::FromVectorIcon(*action.icon, ui::kColorMenuIcon,
+                                         /*icon_size*/ 16));
     } else {
       AddItemWithIcon(action.command_id, action.title,
                       ui::ImageModel::FromImageSkia(action.third_party_icon));

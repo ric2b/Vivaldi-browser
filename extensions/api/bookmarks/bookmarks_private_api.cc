@@ -27,8 +27,8 @@
 #include "app/vivaldi_constants.h"
 #include "browser/vivaldi_default_bookmarks.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
-#include "components/datasource/vivaldi_data_source_api.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -228,17 +228,25 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
 
 void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
                                                      const BookmarkNode* node) {
-  ::vivaldi::BroadcastEvent(bookmarks_private::OnFaviconChanged::kEventName,
-                            bookmarks_private::OnFaviconChanged::Create(
-                                base::NumberToString(node->id())),
-                            browser_context_);
+  if (!node->is_favicon_loaded() && !node->is_favicon_loading()) {
+    // Forces loading the favicon
+    model->GetFavicon(node);
+  }
+  if (!node->icon_url()) {
+    return;
+  }
+  ::vivaldi::BroadcastEvent(
+      bookmarks_private::OnFaviconChanged::kEventName,
+      bookmarks_private::OnFaviconChanged::Create(
+          base::NumberToString(node->id()), node->icon_url()->spec()),
+      browser_context_);
 }
 
 ExtensionFunction::ResponseAction
 BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   using vivaldi::bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
 #if defined(OS_WIN)
@@ -268,8 +276,8 @@ BookmarksPrivateEmptyTrashFunction::RunOnReady() {
       removed = true;
     }
     if (removed) {
-      VivaldiDataSourcesAPI::ScheduleRemovalOfUnusedUrlData(
-          browser_context(), kDataUrlGCSTrashDelay);
+      VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(browser_context(),
+                                                        kDataUrlGCSTrashDelay);
     }
     success = true;
   }
@@ -301,7 +309,7 @@ BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
   using vivaldi::bookmarks_private::IsCustomThumbnail::Params;
   namespace Results = vivaldi::bookmarks_private::IsCustomThumbnail::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   if (!params)
     BadMessage();
 
@@ -312,7 +320,7 @@ BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
 
   std::string url = vivaldi_bookmark_kit::GetThumbnail(node);
   bool is_custom_thumbnail =
-      !url.empty() && !vivaldi_data_url_utils::IsBookmarkCapureUrl(url);
+      !url.empty() && !vivaldi_data_url_utils::IsBookmarkCaptureUrl(url);
   return ArgumentList(Results::Create(is_custom_thumbnail));
 }
 

@@ -267,10 +267,11 @@ CreateClientConnectionManager(
 class CastViewsDelegate : public views::ViewsDelegate {
  public:
   CastViewsDelegate() = default;
-  ~CastViewsDelegate() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(CastViewsDelegate);
+  CastViewsDelegate(const CastViewsDelegate&) = delete;
+  CastViewsDelegate& operator=(const CastViewsDelegate&) = delete;
+
+  ~CastViewsDelegate() override = default;
 };
 
 #endif  // defined(USE_AURA)
@@ -282,7 +283,8 @@ base::FilePath GetApplicationFontsDir() {
   std::string fontconfig_sysroot;
   if (env->GetVar("FONTCONFIG_SYSROOT", &fontconfig_sysroot)) {
     // Running with hermetic fontconfig; using the full path will not work.
-    // Assume the root is base::DIR_MODULE as set by base::SetUpFontconfig().
+    // Assume the root is base::DIR_MODULE as set by
+    // test_fonts::SetUpFontconfig().
     return base::FilePath("/fonts");
   } else {
     base::FilePath dir_module;
@@ -411,10 +413,7 @@ CastBrowserMainParts::CastBrowserMainParts(
   AddDefaultCommandLineSwitches(command_line);
 
   service_manager_context_ = std::make_unique<ServiceManagerContext>(
-      cast_content_browser_client_,
-      base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-          ? content::GetUIThreadTaskRunner({})
-          : content::GetIOThreadTaskRunner({}));
+      cast_content_browser_client_, content::GetUIThreadTaskRunner({}));
   ServiceManagerConnection::GetForProcess()->Start();
 }
 
@@ -530,7 +529,8 @@ int CastBrowserMainParts::PreCreateThreads() {
 
 int CastBrowserMainParts::PreMainMessageLoopRun() {
 #if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
-  memory_pressure_monitor_.reset(new util::MultiSourceMemoryPressureMonitor());
+  memory_pressure_monitor_.reset(
+      new memory_pressure::MultiSourceMemoryPressureMonitor());
   auto cast_system_memory_pressure_evaluator =
       std::make_unique<CastSystemMemoryPressureEvaluator>(
           memory_pressure_monitor_->CreateVoter());
@@ -712,7 +712,7 @@ void CastBrowserMainParts::StartPeriodicCrashReportUpload() {
   OnStartPeriodicCrashReportUpload();
   crash_reporter_timer_.reset(new base::RepeatingTimer());
   crash_reporter_timer_->Start(
-      FROM_HERE, base::TimeDelta::FromMinutes(20), this,
+      FROM_HERE, base::Minutes(20), this,
       &CastBrowserMainParts::OnStartPeriodicCrashReportUpload);
 }
 

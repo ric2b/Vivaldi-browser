@@ -32,6 +32,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_host.h"
+#include "extensions/browser/extension_host_test_helper.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -48,6 +49,9 @@ namespace ash {
 
 class SelectToSpeakTest : public InProcessBrowserTest {
  public:
+  SelectToSpeakTest(const SelectToSpeakTest&) = delete;
+  SelectToSpeakTest& operator=(const SelectToSpeakTest&) = delete;
+
   void OnFocusRingChanged() {
     if (loop_runner_) {
       loop_runner_->Quit();
@@ -70,16 +74,17 @@ class SelectToSpeakTest : public InProcessBrowserTest {
         browser()->profile(), extension_misc::kSelectToSpeakExtensionId);
 
     tray_test_api_ = SystemTrayTestApi::Create();
-    content::WindowedNotificationObserver extension_load_waiter(
-        extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
-        content::NotificationService::AllSources());
+
+    extensions::ExtensionHostTestHelper host_helper(
+        browser()->profile(), extension_misc::kSelectToSpeakExtensionId);
     AccessibilityManager::Get()->SetSelectToSpeakEnabled(true);
-    extension_load_waiter.Wait();
+    host_helper.WaitForHostCompletedFirstLoad();
 
     aura::Window* root_window = Shell::Get()->GetPrimaryRootWindow();
     generator_ = std::make_unique<ui::test::EventGenerator>(root_window);
 
-    ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -102,7 +107,7 @@ class SelectToSpeakTest : public InProcessBrowserTest {
   }
 
   void ActivateSelectToSpeakInWindowBounds(std::string url) {
-    ui_test_utils::NavigateToURL(browser(), GURL(url));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(url)));
     gfx::Rect bounds = GetWebContentsBounds();
 
     // Hold down Search and drag over the web contents to select everything.
@@ -166,7 +171,6 @@ class SelectToSpeakTest : public InProcessBrowserTest {
   scoped_refptr<content::MessageLoopRunner> loop_runner_;
   scoped_refptr<content::MessageLoopRunner> tray_loop_runner_;
   base::WeakPtrFactory<SelectToSpeakTest> weak_ptr_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(SelectToSpeakTest);
 };
 
 /* Test fixture enabling experimental accessibility language detection switch */
@@ -214,8 +218,9 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, MAYBE_ActivatesWithTapOnSelectToSpeakT
 
   // We should be in "selection" mode, so clicking with the mouse should
   // start speech.
-  ui_test_utils::NavigateToURL(
-      browser(), GURL("data:text/html;charset=utf-8,<p>This is some text</p>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      GURL("data:text/html;charset=utf-8,<p>This is some text</p>")));
   gfx::Rect bounds = GetWebContentsBounds();
   generator_->MoveMouseTo(bounds.x(), bounds.y());
   generator_->PressLeftButton();
@@ -242,8 +247,9 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, MAYBE_WorksWithTouchSelection) {
 
   // We should be in "selection" mode, so tapping and dragging should
   // start speech.
-  ui_test_utils::NavigateToURL(
-      browser(), GURL("data:text/html;charset=utf-8,<p>This is some text</p>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      GURL("data:text/html;charset=utf-8,<p>This is some text</p>")));
   gfx::Rect bounds = GetWebContentsBounds();
   generator_->PressTouch(gfx::Point(bounds.x(), bounds.y()));
   generator_->PressMoveAndReleaseTouchTo(bounds.x() + bounds.width(),
@@ -281,9 +287,9 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest,
   AccessibilityManager::Get()->SetSelectToSpeakStateObserverForTest(callback);
 
   // Create a window on the non-primary display.
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser_on_secondary_display,
-      GURL("data:text/html;charset=utf-8,<p>This is some text</p>"));
+      GURL("data:text/html;charset=utf-8,<p>This is some text</p>")));
   // Click in the tray bounds to start 'selection' mode.
   TapSelectToSpeakTray();
   // We should be in "selection" mode, so tapping and dragging should
@@ -454,8 +460,9 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTestWithLanguageDetection,
 #define MAYBE_DoesNotCrashWithMousewheelEvent DoesNotCrashWithMousewheelEvent
 #endif
 IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, MAYBE_DoesNotCrashWithMousewheelEvent) {
-  ui_test_utils::NavigateToURL(
-      browser(), GURL("data:text/html;charset=utf-8,<p>This is some text</p>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      GURL("data:text/html;charset=utf-8,<p>This is some text</p>")));
   gfx::Rect bounds = GetWebContentsBounds();
 
   // Hold down Search and drag over the web contents to select everything.
@@ -491,8 +498,9 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, FocusRingMovesWithMouse) {
   // No focus rings to start.
   EXPECT_EQ(nullptr, focus_ring_group);
 
-  ui_test_utils::NavigateToURL(browser(), GURL("data:text/html;charset=utf-8,"
-                                               "<p>This is some text</p>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           GURL("data:text/html;charset=utf-8,"
+                                                "<p>This is some text</p>")));
   gfx::Rect bounds = GetWebContentsBounds();
   PrepareToWaitForFocusRingChanged();
   generator_->PressKey(ui::VKEY_LWIN, 0 /* flags */);
@@ -582,8 +590,9 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, MAYBE_ContinuesReadingDuringResize) {
 IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, MAYBE_WorksWithStickyKeys) {
   AccessibilityManager::Get()->EnableStickyKeys(true);
 
-  ui_test_utils::NavigateToURL(
-      browser(), GURL("data:text/html;charset=utf-8,<p>This is some text</p>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      GURL("data:text/html;charset=utf-8,<p>This is some text</p>")));
 
   // Tap Search and click a few pixels into the window bounds.
   generator_->PressKey(ui::VKEY_LWIN, 0 /* flags */);

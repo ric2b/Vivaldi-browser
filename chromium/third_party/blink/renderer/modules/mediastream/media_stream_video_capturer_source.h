@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -47,6 +48,12 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
       const MediaStreamDevice& device,
       const media::VideoCaptureParams& capture_params,
       DeviceCapturerFactoryCallback device_capturer_factory_callback);
+
+  MediaStreamVideoCapturerSource(const MediaStreamVideoCapturerSource&) =
+      delete;
+  MediaStreamVideoCapturerSource& operator=(
+      const MediaStreamVideoCapturerSource&) = delete;
+
   ~MediaStreamVideoCapturerSource() override;
 
   void SetDeviceCapturerFactoryCallbackForTesting(
@@ -111,8 +118,6 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
   DeviceCapturerFactoryCallback device_capturer_factory_callback_;
 
   base::WeakPtrFactory<MediaStreamVideoSource> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(MediaStreamVideoCapturerSource);
 };
 
 }  // namespace blink

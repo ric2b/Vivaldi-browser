@@ -69,33 +69,33 @@ typedef std::vector<NotificationToCreate> NotificationsToCreate;
 class NotificationResult {
  public:
   NotificationResult() = default;
+  NotificationResult(const NotificationResult&) = delete;
+  NotificationResult& operator=(const NotificationResult&) = delete;
+
   bool success;
   std::string message;
   NotificationRow notification_row;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NotificationResult);
 };
 
 class GetAllNotificationResult {
  public:
   GetAllNotificationResult();
   ~GetAllNotificationResult();
+  GetAllNotificationResult(const GetAllNotificationResult&) = delete;
+  GetAllNotificationResult& operator=(const GetAllNotificationResult&) = delete;
+
   bool success;
   std::string message;
   NotificationRows notifications;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(GetAllNotificationResult);
 };
 
 class DeleteNotificationResult {
  public:
   DeleteNotificationResult() = default;
-  bool success;
+  DeleteNotificationResult(const DeleteNotificationResult&) = delete;
+  DeleteNotificationResult& operator=(const DeleteNotificationResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteNotificationResult);
+  bool success;
 };
 
 }  // namespace calendar

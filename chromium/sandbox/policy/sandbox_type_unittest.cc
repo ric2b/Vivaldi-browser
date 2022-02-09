@@ -67,9 +67,11 @@ TEST(SandboxTypeTest, Utility) {
   SetCommandLineFlagsForSandboxType(&command_line4, SandboxType::kNoSandbox);
   EXPECT_EQ(SandboxType::kNoSandbox, SandboxTypeFromCommandLine(command_line4));
 
+#if BUILDFLAG(ENABLE_PLUGINS)
   base::CommandLine command_line5(command_line);
   SetCommandLineFlagsForSandboxType(&command_line5, SandboxType::kPpapi);
   EXPECT_EQ(SandboxType::kPpapi, SandboxTypeFromCommandLine(command_line5));
+#endif
 
   base::CommandLine command_line6(command_line);
   SetCommandLineFlagsForSandboxType(&command_line6, SandboxType::kService);
@@ -98,12 +100,6 @@ TEST(SandboxTypeTest, Utility) {
   EXPECT_EQ(SandboxType::kXrCompositing,
             SandboxTypeFromCommandLine(command_line10));
 
-  base::CommandLine command_line11(command_line);
-  SetCommandLineFlagsForSandboxType(&command_line11,
-                                    SandboxType::kProxyResolver);
-  EXPECT_EQ(SandboxType::kProxyResolver,
-            SandboxTypeFromCommandLine(command_line11));
-
   base::CommandLine command_line12(command_line);
   SetCommandLineFlagsForSandboxType(&command_line12,
                                     SandboxType::kPdfConversion);
@@ -111,7 +107,7 @@ TEST(SandboxTypeTest, Utility) {
             SandboxTypeFromCommandLine(command_line12));
 #endif
 
-#if BUILDFLAG(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
   base::CommandLine command_line13(command_line);
   SetCommandLineFlagsForSandboxType(&command_line13,
                                     SandboxType::kPrintBackend);
@@ -159,6 +155,7 @@ TEST(SandboxTypeTest, GPU) {
   EXPECT_EQ(SandboxType::kNoSandbox, SandboxTypeFromCommandLine(command_line));
 }
 
+#if BUILDFLAG(ENABLE_PLUGINS)
 TEST(SandboxTypeTest, PPAPIPlugin) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   command_line.AppendSwitchASCII(switches::kProcessType,
@@ -172,6 +169,7 @@ TEST(SandboxTypeTest, PPAPIPlugin) {
   command_line.AppendSwitch(switches::kNoSandbox);
   EXPECT_EQ(SandboxType::kNoSandbox, SandboxTypeFromCommandLine(command_line));
 }
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 TEST(SandboxTypeTest, Nonesuch) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);

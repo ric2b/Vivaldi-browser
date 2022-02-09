@@ -16,19 +16,19 @@
 class DeskTemplateAppLaunchHandler;
 
 namespace ash {
-class DesksHelper;
 class DeskTemplate;
+class DesksController;
 }  // namespace ash
 
 namespace desks_storage {
+class DeskModel;
 class LocalDeskDataManager;
 }
 
 class Profile;
 
 // Class to handle all Desks in-browser functionalities. Will call into
-// ash::DesksController (via ash::DesksHelper) to do actual desk related
-// operations.
+// ash::DesksController to do actual desk related operations.
 class DesksClient : public ash::SessionObserver {
  public:
   DesksClient();
@@ -92,6 +92,10 @@ class DesksClient : public ash::SessionObserver {
   void LaunchDeskTemplate(const std::string& template_uuid,
                           LaunchDeskTemplateCallback callback);
 
+  // Returns either the local desk storage backend or Chrome sync desk storage
+  // backend depending on the feature flag DeskTemplateSync.
+  desks_storage::DeskModel* GetDeskModel();
+
  private:
   friend class DesksClientTest;
   friend class ScopedDeskClientAppLaunchHandlerSetter;
@@ -148,9 +152,9 @@ class DesksClient : public ash::SessionObserver {
                          desks_storage::DeskModel::GetAllEntriesStatus status,
                          std::vector<ash::DeskTemplate*> entries);
 
-  // Convenience pointer to the desks helper which is `ash::DesksController`.
+  // Convenience pointer to ash::DesksController.
   // Guaranteed to be not null for the duration of `this`.
-  ash::DesksHelper* const desks_helper_;
+  ash::DesksController* const desks_controller_;
 
   Profile* active_profile_ = nullptr;
 
@@ -160,7 +164,7 @@ class DesksClient : public ash::SessionObserver {
   // A test only template for testing `LaunchDeskTemplate`.
   std::unique_ptr<ash::DeskTemplate> launch_template_for_test_;
 
-  // object responsible for desks storage
+  // Local desks storage backend.
   std::unique_ptr<desks_storage::LocalDeskDataManager> storage_manager_;
 
   base::WeakPtrFactory<DesksClient> weak_ptr_factory_{this};

@@ -105,7 +105,7 @@
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
-#include "platform_media/common/win/mf_util.h"
+#include "platform_media/common/win/platform_media_init.h"
 #endif
 
 namespace content {
@@ -123,6 +123,10 @@ bool StartSandboxWindows(const sandbox::SandboxInterfaceInfo*);
 class ContentSandboxHelper : public gpu::GpuSandboxHelper {
  public:
   ContentSandboxHelper() {}
+
+  ContentSandboxHelper(const ContentSandboxHelper&) = delete;
+  ContentSandboxHelper& operator=(const ContentSandboxHelper&) = delete;
+
   ~ContentSandboxHelper() override {}
 
 #if defined(OS_WIN)
@@ -167,7 +171,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     base::SysInfo::AmountOfPhysicalMemory();
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
-    media::LoadMFDecodingLibraries(/*demuxer_support=*/true);
+    platform_media_init::InitForGPUProcess();
 #endif
   }
 
@@ -188,8 +192,6 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
 #if defined(OS_WIN)
   const sandbox::SandboxInterfaceInfo* sandbox_info_ = nullptr;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(ContentSandboxHelper);
 };
 
 }  // namespace

@@ -11,7 +11,7 @@
 <translation id="1454726940098520109">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1462666970065907900">Vërtet do e mbyllni dritaren?</translation>
 <translation id="1480046233931937785">Mirënjohje</translation>
-<translation id="1526344461589023948">Problem me regjistrimin e përditësimit të shkarkuar. Lutemi të kontrolloni hapësirën e nevojshme në kompjuter dhe provojeni prapë.</translation>
+<translation id="1526344461589023948">Problem me regjistrimin e përditësimit të shkarkuar. Lutemi të kontrolloni hapësirën e nevojshme në kompjuter dhe provojeni më vonë.</translation>
 <translation id="1657174850639146440">Monstra 9</translation>
 <translation id="1676595396635191120">Dritare private të re</translation>
 <translation id="1702758681952953055">Nëse problemi përsëritet, lutemi ta raportoni bashkë me detajet e mëposhtme:</translation>
@@ -25,7 +25,7 @@
 <translation id="19598411548897379">Universal</translation>
 <translation id="1985669426322966465">Përditësimi i programit</translation>
 <translation id="2079036669923635404">Klikoni që ta përditësoni Vivaldin në versionin <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Problem me shkarkimin e skedarëve të përditësuar. Lutemi të kontrolloni linjën e internetit dhe provojeni prapë.</translation>
+<translation id="2141974047387702305">Problem me shkarkimin e skedarëve të përditësuar. Lutemi të kontrolloni linjën e internetit dhe provojeni më vonë.</translation>
 <translation id="2339641773402824483">Kontrollon përditësimet...</translation>
 <translation id="2441056087170876076">Monstra 2</translation>
 <translation id="2444387452209867610">Vë shënimin</translation>
@@ -91,7 +91,7 @@
 <translation id="4881695831933465202">Hap</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> nga <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Taste të shpejta të importuara</translation>
-<translation id="5092656712000637858">Shtoj faqen te paneli anësor</translation>
+<translation id="5092656712000637858">Shtoj faqen te panelet</translation>
 <translation id="5177818338935286353">Monstra 7</translation>
 <translation id="5213743983876949565">Kafsha 1</translation>
 <translation id="5238244642230426581">Faqet interesante të importuara</translation>
@@ -116,21 +116,21 @@
 <translation id="630690498669249215">Faqet interesante nga Opera</translation>
 <translation id="6339818817272922368">Konto lokale</translation>
 <translation id="6438786710866753178">Peizazhi 4</translation>
-<translation id="6477028720702061455">Përzgjidhni dosjen e profilit të Opera për ta importuar</translation>
+<translation id="6477028720702061455">Përzgjidhni dosjen e profilit të Opera për importim</translation>
 <translation id="6510706699590490869">&amp;Përditësoj Vivaldin</translation>
 <translation id="6538338088414940408">Hap lidhjen në skedën në sfond</translation>
 <translation id="6551219277044048123">Shtoj si mot&amp;or kërkimi...</translation>
 <translation id="6630781781151951863">Peizazhi 18</translation>
 <translation id="6635049669875534328">Të rejat e programit:</translation>
-<translation id="6693585104974197539">Përzgjidhni dosjen e profilit të Edge për ta importuar</translation>
-<translation id="6726279523566323394">Përzgjidhni dosjen e profilit të Brave për ta importuar</translation>
+<translation id="6693585104974197539">Përzgjidhni dosjen e profilit të Edge për importim</translation>
+<translation id="6726279523566323394">Përzgjidhni dosjen e profilit të Brave për importim</translation>
 <translation id="6804831687363620480">Fatkeqësisht, parametrat e Opera 15+ nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
 <translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopjoj</translation>
 <translation id="7086554968911045110">Peizazhi 7</translation>
 <translation id="7111492742514999492">Peizazhi 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7581266044164103589">E pamundur të hapej instaluesi. Lutemi të kontrolloni memorien apo hapësirën e nevojshme në kompjuter dhe provojeni prapë.</translation>
+<translation id="7581266044164103589">E pamundur të hapej instaluesi. Lutemi të kontrolloni memorien apo hapësirën e nevojshme në kompjuter dhe provojeni më vonë.</translation>
 <translation id="7658239707568436148">Anuloj</translation>
 <translation id="7715497554424665066">&amp;Shmang përditësimin</translation>
 <translation id="7724603315864178912">Pres</translation>
@@ -160,10 +160,10 @@
 <translation id="8768970203213061953">Peizazhi 14</translation>
 <translation id="8773635261052182196">Nuk do të shfaqen më njoftimet. Mund të aktivizohen sërish te parametrat e Vivaldit.</translation>
 <translation id="8813277370772331957">Më kujto pastaj</translation>
-<translation id="8894900864683381599">Shtoj lidhjen te paneli anësor</translation>
+<translation id="8894900864683381599">Shtoj lidhjen te panelet</translation>
 <translation id="8912720443398351457">Vërtet doni të dilni nga Vivaldi?</translation>
 <translation id="8947109330183116400">Përzgjidhni skedarin HTML të faqeve interesante</translation>
-<translation id="9017566390391482291">Përzgjidhni dosjen e profilit të Vivaldit për ta importuar</translation>
+<translation id="9017566390391482291">Përzgjidhni dosjen e profilit të Vivaldit për importim</translation>
 <translation id="9048058608784130603">Pret përditësimin <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Përpunoj</translation>
 <translation id="912022491595344261">Hap imazhin si <ph name="USER" /></translation>

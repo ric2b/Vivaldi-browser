@@ -94,6 +94,8 @@ update_target("//media/renderers:renderers") {
     "//vivaldi/platform_media/renderer/decoders/pass_through_decoder.h",
     "//vivaldi/platform_media/renderer/decoders/video_frame_transformer.cc",
     "//vivaldi/platform_media/renderer/decoders/video_frame_transformer.h",
+    "//vivaldi/platform_media/renderer/decoders/vivaldi_decoder_config.h",
+    "//vivaldi/platform_media/renderer/decoders/vivaldi_decoder_config.cc",
     "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.cc",
     "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.h",
     "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.cc",
@@ -159,8 +161,6 @@ update_target("//media/renderers:renderers") {
   }
   if (is_win) {
     sources += [
-      "//vivaldi/platform_media/common/win/mf_util.cc",
-      "//vivaldi/platform_media/common/win/mf_util.h",
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.cc",
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.h",
       "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",
@@ -213,6 +213,20 @@ update_target("//content/renderer:renderer") {
   ]
 }
 
+if (is_win) {
+
+update_template_instance("//base:base") {
+  if (!defined(sources)) {
+    sources = []
+  }
+  sources += [
+      "//vivaldi/platform_media/common/win/platform_media_init.cc",
+      "//vivaldi/platform_media/common/win/platform_media_init.h",
+  ]
+}
+
+}
+
 } # system_proprietary_codecs
 
 # --------------------
@@ -221,42 +235,14 @@ update_target("//content/renderer:renderer") {
 
 if (system_proprietary_codecs) {
   update_target("//third_party/ffmpeg:ffmpeg_internal") {
-    # Include AAC parser to the list of parsers ffmpeg uses.
-    parser_list_file =
-        "//third_party/ffmpeg/" + platform_config_root +
-            "/libavcodec/parser_list.c"
-    parser_list_lines = read_file(parser_list_file, "list lines")
-    assert(
-        "static const AVCodecParser * const parser_list[] = {" ==
-            parser_list_lines[0],
-        "Unexpected format of $parser_list_file"
-    )
-    parser_list_lines[0] += "&ff_aac_parser,"
-    patched_parser_list = target_gen_dir + "/vivaldi/libavcodec/parser_list.c"
-    write_file(patched_parser_list, parser_list_lines)
-
     sources += [
       "libavcodec/aac_ac3_parser.c",
       "libavcodec/aac_parser.c",
       "libavcodec/adts_header.c",
+      "libavformat/aacdec.c",
+      "libavformat/apetag.c",
+      "libavformat/img2.c",
     ]
-
-    # Include AAC decoder placeholder (Windows) or AT AAC decoder to the list of
-    # AAC decoders.
-    decoder_list_file =
-        "//third_party/ffmpeg/" + platform_config_root +
-            "/libavcodec/codec_list.c"
-    decoder_list_lines = read_file(decoder_list_file, "list lines")
-    assert(
-        "static const AVCodec * const codec_list[] = {" ==
-            decoder_list_lines[0],
-        "Unexpected format of $decoder_list_file"
-    )
-    if (is_mac) {
-      decoder_list_lines[0] += "&ff_aac_at_decoder,"
-      patched_decoder_list = target_gen_dir + "/vivaldi/libavcodec/codec_list.c"
-      write_file(patched_decoder_list, decoder_list_lines)
-    }
 
     if (is_mac) {
       # Patch audiotoolboxdec.c to replace bad filter string with NULL.
@@ -297,11 +283,24 @@ if (system_proprietary_codecs) {
       sources += [patched_audiotoolbox_source]
     }
 
-    # Point include dirs to the patched files first
+    if (is_win) {
+      sources += [
+        "//vivaldi/platform_media/ffmpeg/wmfaacdec.c",
+      ]
+      libs += [
+        "Mfplat.lib",
+        "mfuuid.lib",
+        "wmcodecdspuuid.lib",
+      ]
+    }
+
+    # Use the generated config files as include files.
+    deps += ["//vivaldi/platform_media/ffmpeg:generate_config"]
+    patched_config_dir =
+        get_path_info("//vivaldi/platform_media/ffmpeg/", "gen_dir")
     include_dirs_orig = include_dirs
     include_dirs = []
-    include_dirs = [target_gen_dir + "/vivaldi" ] + include_dirs_orig
-
+    include_dirs = [ patched_config_dir ] + include_dirs_orig
   }
 
   if (is_mac) {

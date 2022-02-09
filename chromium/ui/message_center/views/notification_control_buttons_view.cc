@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "build/chromeos_buildflags.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
@@ -143,14 +143,6 @@ void NotificationControlButtonsView::SetBackgroundColor(SkColor color) {
   background_color_ = color;
   UpdateButtonIconColors();
 }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-void NotificationControlButtonsView::OnThemeChanged() {
-  View::OnThemeChanged();
-  SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_NotificationButtonBackground)));
-}
-#endif
 
 void NotificationControlButtonsView::UpdateButtonIconColors() {
   SkColor icon_color = DetermineButtonIconColor();

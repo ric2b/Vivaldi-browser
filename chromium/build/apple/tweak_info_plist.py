@@ -479,7 +479,5 @@ if __name__ == '__main__':
   # TODO(https://crbug.com/941669): Temporary workaround until all scripts use
   # python3 by default.
   if sys.version_info[0] < 3:
-    if "PYTHONPATH" in os.environ:
-      del os.environ["PYTHONPATH"]
     os.execvp('python3', ['python3'] + sys.argv)
   sys.exit(Main(sys.argv[1:]))

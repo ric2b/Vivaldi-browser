@@ -11,6 +11,6 @@ namespace vivaldi {
 
 void VerifyWindowSize(NSWindow* window, const display::Display& old_display);
 
-} // vivaldi
+}  // namespace vivaldi
 
 #endif  // COMPONENTS_REMOTE_COCOA_APP_SHIM_VIVALDI_WINDOW_SIZE_HELPER_H_

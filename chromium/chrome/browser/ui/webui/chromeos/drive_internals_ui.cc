@@ -233,6 +233,10 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
  public:
   DriveInternalsWebUIHandler() : last_sent_event_id_(-1) {}
 
+  DriveInternalsWebUIHandler(const DriveInternalsWebUIHandler&) = delete;
+  DriveInternalsWebUIHandler& operator=(const DriveInternalsWebUIHandler&) =
+      delete;
+
   ~DriveInternalsWebUIHandler() override {}
 
   void DownloadLogsZip(const base::FilePath& path) {
@@ -260,36 +264,36 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
 
   // WebUIMessageHandler override.
   void RegisterMessages() override {
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "pageLoaded",
         base::BindRepeating(&DriveInternalsWebUIHandler::OnPageLoaded,
                             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "periodicUpdate",
         base::BindRepeating(&DriveInternalsWebUIHandler::OnPeriodicUpdate,
                             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "setVerboseLoggingEnabled",
         base::BindRepeating(
             &DriveInternalsWebUIHandler::SetVerboseLoggingEnabled,
             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "enableTracing",
         base::BindRepeating(&DriveInternalsWebUIHandler::SetTracingEnabled,
                             weak_ptr_factory_.GetWeakPtr(), true));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "disableTracing",
         base::BindRepeating(&DriveInternalsWebUIHandler::SetTracingEnabled,
                             weak_ptr_factory_.GetWeakPtr(), false));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "restartDrive",
         base::BindRepeating(&DriveInternalsWebUIHandler::RestartDrive,
                             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "resetDriveFileSystem",
         base::BindRepeating(&DriveInternalsWebUIHandler::ResetDriveFileSystem,
                             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "zipLogs",
         base::BindRepeating(&DriveInternalsWebUIHandler::ZipDriveFsLogs,
                             weak_ptr_factory_.GetWeakPtr()));
@@ -297,31 +301,31 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
 
   void RegisterDeveloperMessages() {
     CHECK(developer_mode_);
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "setStartupArguments",
         base::BindRepeating(&DriveInternalsWebUIHandler::SetStartupArguments,
                             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "enableNetworking",
         base::BindRepeating(&DriveInternalsWebUIHandler::SetNetworkingEnabled,
                             weak_ptr_factory_.GetWeakPtr(), true));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "disableNetworking",
         base::BindRepeating(&DriveInternalsWebUIHandler::SetNetworkingEnabled,
                             weak_ptr_factory_.GetWeakPtr(), false));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "enableForcePauseSyncing",
         base::BindRepeating(&DriveInternalsWebUIHandler::ForcePauseSyncing,
                             weak_ptr_factory_.GetWeakPtr(), true));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "disableForcePauseSyncing",
         base::BindRepeating(&DriveInternalsWebUIHandler::ForcePauseSyncing,
                             weak_ptr_factory_.GetWeakPtr(), false));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "dumpAccountSettings",
         base::BindRepeating(&DriveInternalsWebUIHandler::DumpAccountSettings,
                             weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "loadAccountSettings",
         base::BindRepeating(&DriveInternalsWebUIHandler::LoadAccountSettings,
                             weak_ptr_factory_.GetWeakPtr()));
@@ -813,7 +817,6 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
   bool developer_mode_ = false;
 
   base::WeakPtrFactory<DriveInternalsWebUIHandler> weak_ptr_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(DriveInternalsWebUIHandler);
 };
 
 class LogsZipper : public download::AllDownloadItemNotifier::Observer {
@@ -827,6 +830,9 @@ class LogsZipper : public download::AllDownloadItemNotifier::Observer {
                 .DirName()),
         zip_path_(logs_directory_.AppendASCII(kLogsZipName)),
         drive_internals_(std::move(drive_internals)) {}
+
+  LogsZipper(const LogsZipper&) = delete;
+  LogsZipper& operator=(const LogsZipper&) = delete;
 
   void Start() {
     base::ThreadPool::PostTaskAndReplyWithResult(
@@ -905,8 +911,6 @@ class LogsZipper : public download::AllDownloadItemNotifier::Observer {
   const base::WeakPtr<DriveInternalsWebUIHandler> drive_internals_;
 
   std::unique_ptr<download::AllDownloadItemNotifier> download_notifier_;
-
-  DISALLOW_COPY_AND_ASSIGN(LogsZipper);
 };
 
 constexpr char LogsZipper::kLogsZipName[];

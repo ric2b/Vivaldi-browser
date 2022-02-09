@@ -33,10 +33,10 @@ bool VivaldiContextMenu::HasDarkTextColor() {
 }
 
 BookmarkMenuContainer::BookmarkMenuContainer(Delegate* a_delegate)
-  :edge(Below), delegate(a_delegate) {}
+    : edge(Below), delegate(a_delegate) {}
 BookmarkMenuContainer::~BookmarkMenuContainer() {}
 MenubarMenuParams::MenubarMenuParams(Delegate* a_delegate)
-  :delegate(a_delegate) {}
+    : delegate(a_delegate) {}
 MenubarMenuParams::~MenubarMenuParams() {}
 
 bool MenubarMenuParams::Delegate::IsBookmarkMenu(int menu_id) {
@@ -56,7 +56,7 @@ bool MenubarMenuParams::Delegate::IsItemPersistent(int id) {
 }
 
 bool MenubarMenuParams::Delegate::GetAccelerator(int id,
-    ui::Accelerator* accelerator) {
+                                                 ui::Accelerator* accelerator) {
   return false;
 }
 
@@ -69,7 +69,7 @@ BookmarkMenuContainer* MenubarMenuParams::Delegate::GetBookmarkMenuContainer() {
 }
 
 MenubarMenuEntry* MenubarMenuParams::GetSibling(int id) {
-  for (::vivaldi::MenubarMenuEntry& sibling: siblings) {
+  for (::vivaldi::MenubarMenuEntry& sibling : siblings) {
     if (sibling.id == id) {
       return &sibling;
     }
@@ -77,4 +77,4 @@ MenubarMenuEntry* MenubarMenuParams::GetSibling(int id) {
   return nullptr;
 }
 
-} // vivaldi
+}  // namespace vivaldi

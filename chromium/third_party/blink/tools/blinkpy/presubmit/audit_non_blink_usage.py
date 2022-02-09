@@ -54,6 +54,7 @@ _CONFIG = [
             "base::i18n::ToUCharPtr",
             'base::Location',
             'base::MakeRefCounted',
+            'base::Milliseconds',
             'base::OptionalFromPtr',
             'base::OptionalOrNullptr',
             'base::PlatformThread',
@@ -290,6 +291,7 @@ _CONFIG = [
             'gfx::RRectF',
             'gfx::ScaleToCeiledSize',
             'gfx::ScaleToEnclosingRectSafe',
+            'gfx::ScaleToFlooredSize',
             'gfx::ScaleVector2d',
             'gfx::Size',
             'gfx::SizeF',
@@ -541,6 +543,7 @@ _CONFIG = [
             # serialization. Please keep alphabetized.
             'ui::CanHaveInlineTextBoxChildren',
             'ui::IsCellOrTableHeader',
+            'ui::IsComboBox',
             'ui::IsContainerWithSelectableChildren',
             'ui::IsDialog',
             'ui::IsHeading',
@@ -924,6 +927,8 @@ _CONFIG = [
             'third_party/blink/renderer/bindings/core/v8/v8_code_cache.h',
             'third_party/blink/renderer/core/loader/document_loader.cc',
             'third_party/blink/renderer/core/loader/document_loader.h',
+            'third_party/blink/renderer/core/workers/worklet_global_scope.h',
+            'third_party/blink/renderer/core/workers/worklet_global_scope.cc',
             'third_party/blink/renderer/core/workers/worker_global_scope.cc',
             'third_party/blink/renderer/core/workers/worker_global_scope.h',
             'third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h',
@@ -961,6 +966,7 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/core/html/media/',
+            'third_party/blink/renderer/modules/canvas/',
             'third_party/blink/renderer/modules/vr/',
             'third_party/blink/renderer/modules/webgl/',
             'third_party/blink/renderer/modules/webgpu/',
@@ -1304,6 +1310,9 @@ _CONFIG = [
             # liburlpattern API.
             "base::IsStringASCII",
 
+            # Needed to use part of the StringUTF8Adaptor API.
+            "base::StringPiece",
+
             # //third_party/liburlpattern
             'liburlpattern::.+',
 
@@ -1423,6 +1432,7 @@ _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/modules/manifest/'],
         'allowed': [
+            'net::IsValidTopLevelMimeType',
             'net::ParseMimeTypeWithoutParameter',
             'net::registry_controlled_domains::.+',
         ],
@@ -1488,6 +1498,28 @@ _CONFIG = [
             'third_party/blink/renderer/platform/graphics/document_transition_shared_element_id.h'
         ],
         'allowed': ['cc::DocumentTransitionSharedElementId'],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/',
+        ],
+        'allowed': ['ui::k200Percent'],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/loader/frame_client_hints_preferences_context.cc',
+        ],
+        'allowed': [
+            'base::NoDestructor',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/webdatabase/dom_window_web_database.cc',
+        ],
+        'allowed': [
+            'base::CommandLine',
+        ]
     },
 ]
 

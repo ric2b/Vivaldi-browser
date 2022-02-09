@@ -218,7 +218,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
   const base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
       // Use FromDeltaSinceWindowsEpoch because creation_time_us has
       // always used the Windows epoch.
-      base::TimeDelta::FromMicroseconds(creation_time_us));
+      base::Microseconds(creation_time_us));
 
   const vivaldi::NoteNode* node;
   switch (specifics.special_node_type()) {
@@ -238,11 +238,9 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
       return model->AddSeparator(parent, index,
                                  NodeTitleFromSpecifics(specifics),
                                  creation_time, guid);
-      break;
     case sync_pb::NotesSpecifics::FOLDER:
       return model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
                               creation_time, guid);
-      break;
   }
 
   NOTREACHED();

@@ -82,7 +82,9 @@ export class Resolution {
  * @enum {string}
  */
 export const MimeType = {
+  GIF: 'image/gif',
   JPEG: 'image/jpeg',
+  MP4: 'video/mp4',
   PDF: 'application/pdf',
 };
 
@@ -112,7 +114,6 @@ export const Facing = {
   VIRTUAL_ENV: 'virtual_environment',
   VIRTUAL_EXT: 'virtual_external',
   NOT_SET: '(not set)',
-  UNKNOWN: 'unknown',
 };
 
 /**
@@ -128,13 +129,22 @@ export const ViewName = {
   PHOTO_RESOLUTION_SETTINGS: 'view-photo-resolution-settings',
   PTZ_PANEL: 'view-ptz-panel',
   RESOLUTION_SETTINGS: 'view-resolution-settings',
-  REVIEW_DOCUMENT: 'view-review-document',
+  REVIEW: 'view-review',
   SETTINGS: 'view-settings',
   SPLASH: 'view-splash',
   TIMER_SETTINGS: 'view-timer-settings',
   VIDEO_RESOLUTION_SETTINGS: 'view-video-resolution-settings',
   WARNING: 'view-warning',
 };
+
+/**
+ * @enum {string}
+ */
+export const VideoType = {
+  MP4: 'mp4',
+  GIF: 'gif',
+};
+
 
 // The types here are used only in jsdoc and are required to be explicitly
 // exported in order to be referenced by closure compiler.
@@ -184,17 +194,18 @@ export let FpsRangeList;
  * @enum {string}
  */
 export const PerfEvent = {
-  PHOTO_TAKING: 'photo-taking',
-  PHOTO_CAPTURE_SHUTTER: 'photo-capture-shutter',
-  PHOTO_CAPTURE_POST_PROCESSING: 'photo-capture-post-processing',
-  VIDEO_CAPTURE_POST_PROCESSING: 'video-capture-post-processing',
-  PORTRAIT_MODE_CAPTURE_POST_PROCESSING:
-      'portrait-mode-capture-post-processing',
-  MODE_SWITCHING: 'mode-switching',
   CAMERA_SWITCHING: 'camera-switching',
-  LAUNCHING_FROM_WINDOW_CREATION: 'launching-from-window-creation',
+  GIF_CAPTURE_POST_PROCESSING: 'gif-capture-post-processing',
   LAUNCHING_FROM_LAUNCH_APP_COLD: 'launching-from-launch-app-cold',
   LAUNCHING_FROM_LAUNCH_APP_WARM: 'launching-from-launch-app-warm',
+  LAUNCHING_FROM_WINDOW_CREATION: 'launching-from-window-creation',
+  MODE_SWITCHING: 'mode-switching',
+  PHOTO_CAPTURE_POST_PROCESSING: 'photo-capture-post-processing',
+  PHOTO_CAPTURE_SHUTTER: 'photo-capture-shutter',
+  PHOTO_TAKING: 'photo-taking',
+  PORTRAIT_MODE_CAPTURE_POST_PROCESSING:
+      'portrait-mode-capture-post-processing',
+  VIDEO_CAPTURE_POST_PROCESSING: 'video-capture-post-processing',
 };
 
 /**
@@ -241,6 +252,7 @@ export const ErrorType = {
   IDLE_DETECTOR_FAILURE: 'idle-detector-failure',
   INVALID_REVIEW_UI_STATE: 'invalid-review-ui-state',
   METADATA_MAPPING_FAILURE: 'metadata-mapping-failure',
+  MULTIPLE_STREAMS_FAILURE: 'multiple-streams-failure',
   NO_AVAILABLE_LEVEL: 'no-available-level',
   PERF_METRICS_FAILURE: 'perf-metrics-failure',
   PRELOAD_IMAGE_FAILURE: 'preload-image-failure',
@@ -252,7 +264,6 @@ export const ErrorType = {
   UNKNOWN_FACING: 'unknown-facing',
   UNSAFE_INTEGER: 'unsafe-integer',
   UNSUPPORTED_PROTOCOL: 'unsupported-protocol',
-  MULTIPLE_STREAMS_FAILURE: 'multiple-streams-failure',
 };
 
 /**

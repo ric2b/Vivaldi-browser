@@ -113,6 +113,11 @@ class ModifierKeyboardHookWinImpl : public KeyboardHookWinBase {
   ModifierKeyboardHookWinImpl(absl::optional<base::flat_set<DomCode>> dom_codes,
                               KeyEventCallback callback,
                               bool enable_hook_registration);
+
+  ModifierKeyboardHookWinImpl(const ModifierKeyboardHookWinImpl&) = delete;
+  ModifierKeyboardHookWinImpl& operator=(const ModifierKeyboardHookWinImpl&) =
+      delete;
+
   ~ModifierKeyboardHookWinImpl() override;
 
   // KeyboardHookWinBase implementation.
@@ -145,8 +150,6 @@ class ModifierKeyboardHookWinImpl : public KeyboardHookWinBase {
   // synthesized left control key event followed by the right alt key event.
   // This sequence occurs on the initial keypress and every repeat.
   int altgr_sequence_count_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(ModifierKeyboardHookWinImpl);
 };
 
 // static
@@ -250,8 +253,8 @@ bool ModifierKeyboardHookWinImpl::ProcessKeyEventMessage(WPARAM w_param,
           : LocatedToNonLocatedKeyboardCode(static_cast<KeyboardCode>(vk));
 
   bool is_repeat = false;
-  MSG msg = {nullptr, static_cast<UINT>(w_param), non_located_vk,
-             GetLParamFromScanCode(scan_code), time_stamp};
+  CHROME_MSG msg = {nullptr, static_cast<UINT>(w_param), non_located_vk,
+                    GetLParamFromScanCode(scan_code), time_stamp};
   EventType event_type = EventTypeFromMSG(msg);
   if (event_type == ET_KEY_PRESSED) {
     UpdateModifierState(vk, /*key_down=*/true);

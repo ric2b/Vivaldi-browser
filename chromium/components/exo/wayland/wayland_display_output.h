@@ -21,10 +21,14 @@ namespace wayland {
 // associated with a global, and wl_outputs created by clients.  This object
 // will self destruct upon the display removal aftrer delays up to 9 seconds (3
 // seconds x 3 times) to give time for clients to release the output they
-// created, excepf for the shutdown scenario where they're removed immediately.
+// created, except for the shutdown scenario where they're removed immediately.
 class WaylandDisplayOutput {
  public:
   explicit WaylandDisplayOutput(int64_t display_id);
+
+  WaylandDisplayOutput(const WaylandDisplayOutput&) = delete;
+  WaylandDisplayOutput& operator=(const WaylandDisplayOutput&) = delete;
+
   ~WaylandDisplayOutput();
 
   int64_t id() const;
@@ -46,8 +50,6 @@ class WaylandDisplayOutput {
   const int64_t id_;
   wl_global* global_ = nullptr;
   base::flat_map<wl_client*, wl_resource*> output_ids_;
-
-  DISALLOW_COPY_AND_ASSIGN(WaylandDisplayOutput);
 };
 
 }  // namespace wayland

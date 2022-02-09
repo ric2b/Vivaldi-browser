@@ -50,7 +50,9 @@ public class ChromeColors {
     public static @ColorInt int getPrimaryBackgroundColor(Context context, boolean isIncognito) {
         return isIncognito ? ApiCompatibilityUtils.getColor(
                        context.getResources(), R.color.default_bg_color_dark)
-                           : MaterialColors.getColor(context, R.attr.default_bg_color_dynamic, TAG);
+                           : MaterialColors.getColor(context, R.attr.default_bg_color_dynamic,
+                                   // Temporarily pass a default, see https://crbug.com/1247186.
+                                   R.color.default_bg_color);
     }
 
     /**
@@ -61,7 +63,7 @@ public class ChromeColors {
      * @return The large text primary style.
      */
     public static int getLargeTextPrimaryStyle(boolean forceLightTextColor) {
-        return forceLightTextColor ? R.style.TextAppearance_TextLarge_Primary_Light
+        return forceLightTextColor ? R.style.TextAppearance_TextLarge_Primary_Baseline_Light
                                    : R.style.TextAppearance_TextLarge_Primary;
     }
 
@@ -73,7 +75,7 @@ public class ChromeColors {
      * @return The medium text secondary style.
      */
     public static int getTextMediumThickSecondaryStyle(boolean forceLightTextColor) {
-        return forceLightTextColor ? R.style.TextAppearance_TextMediumThick_Secondary_Light
+        return forceLightTextColor ? R.style.TextAppearance_TextMediumThick_Secondary_Baseline_Light
                                    : R.style.TextAppearance_TextMediumThick_Secondary;
     }
 

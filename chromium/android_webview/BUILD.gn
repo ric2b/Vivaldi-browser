@@ -39,7 +39,7 @@ template("standalone_system_webview_apk_tmpl") {
   system_webview_apk_or_module_tmpl(target_name) {
     forward_variables_from(invoker, "*")
     deps = upstream_only_webview_deps
-    min_sdk_version = 21
+    min_sdk_version = default_min_sdk_version
     if (android_64bit_target_cpu && defined(include_32_bit_webview) &&
         !include_32_bit_webview) {
       android_manifest = system_webview_64_android_manifest
@@ -108,7 +108,7 @@ if (android_64bit_target_cpu && skip_secondary_abi_for_cq) {
     system_webview_bundle("system_webview_bundle") {
       base_module_target = ":system_webview_base_bundle_module"
       bundle_name = "SystemWebView"
-      min_sdk_version = 21
+      min_sdk_version = default_min_sdk_version
       compress_shared_libraries = true
     }
 
@@ -145,7 +145,7 @@ if (android_64bit_target_cpu) {
     system_webview_bundle("system_webview_64_bundle") {
       base_module_target = ":system_webview_64_base_bundle_module"
       bundle_name = "SystemWebView64"
-      min_sdk_version = 21
+      min_sdk_version = default_min_sdk_version
       compress_shared_libraries = true
       include_32_bit_webview = false
     }
@@ -172,7 +172,7 @@ if (android_64bit_target_cpu) {
         base_module_target = ":system_webview_32_base_bundle_module"
         bundle_name = "SystemWebView32"
         include_64_bit_webview = false
-        min_sdk_version = 21
+        min_sdk_version = default_min_sdk_version
         compress_shared_libraries = true
       }
     }
@@ -497,6 +497,7 @@ generate_jni("browser_jni_headers") {
     "java/src/org/chromium/android_webview/AwContentsLifecycleNotifier.java",
     "java/src/org/chromium/android_webview/AwContentsStatics.java",
     "java/src/org/chromium/android_webview/AwCookieManager.java",
+    "java/src/org/chromium/android_webview/AwDarkMode.java",
     "java/src/org/chromium/android_webview/AwDebug.java",
     "java/src/org/chromium/android_webview/AwDevToolsServer.java",
     "java/src/org/chromium/android_webview/AwFeatureList.java",
@@ -550,6 +551,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/AwContentsLifecycleNotifier.java",
     "java/src/org/chromium/android_webview/AwContentsStatics.java",
     "java/src/org/chromium/android_webview/AwCookieManager.java",
+    "java/src/org/chromium/android_webview/AwDarkMode.java",
     "java/src/org/chromium/android_webview/AwDataDirLock.java",
     "java/src/org/chromium/android_webview/AwDebug.java",
     "java/src/org/chromium/android_webview/AwDevToolsServer.java",
@@ -587,6 +589,8 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/BrowserSafeModeActionList.java",
     "java/src/org/chromium/android_webview/CleanupReference.java",
     "java/src/org/chromium/android_webview/ClientCertLookupTable.java",
+    "java/src/org/chromium/android_webview/DarkModeHelper.java",
+    "java/src/org/chromium/android_webview/DarkModeHistogramRecorder.java",
     "java/src/org/chromium/android_webview/DefaultVideoPosterRequestHandler.java",
     "java/src/org/chromium/android_webview/ErrorCodeConversionHelper.java",
     "java/src/org/chromium/android_webview/FindAddress.java",
@@ -603,6 +607,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/ScrollAccessibilityHelper.java",
     "java/src/org/chromium/android_webview/SslUtil.java",
     "java/src/org/chromium/android_webview/ViewPositionObserver.java",
+    "java/src/org/chromium/android_webview/WebAddressParser.java",
     "java/src/org/chromium/android_webview/WebMessageListener.java",
     "java/src/org/chromium/android_webview/WebMessageListenerHolder.java",
     "java/src/org/chromium/android_webview/WebMessageListenerInfo.java",
@@ -615,6 +620,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/gfx/JavaBrowserViewRendererHelper.java",
     "java/src/org/chromium/android_webview/gfx/RectUtils.java",
     "java/src/org/chromium/android_webview/gfx/RootBeginFrameSourceWebView.java",
+    "java/src/org/chromium/android_webview/metrics/AwMetricsLogUploader.java",
     "java/src/org/chromium/android_webview/metrics/AwMetricsServiceClient.java",
     "java/src/org/chromium/android_webview/metrics/AwNonembeddedUmaReplayer.java",
     "java/src/org/chromium/android_webview/permission/AwGeolocationCallback.java",
@@ -666,6 +672,7 @@ android_library("browser_java") {
     "//services/network/public/mojom:url_loader_base_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/androidx:androidx_core_core_java",
     "//third_party/blink/public:blink_headers_java",
     "//third_party/blink/public/mojom:mojom_platform_java",
     "//ui/android:ui_no_recycler_view_java",
@@ -774,14 +781,17 @@ android_library("common_java") {
   deps = [
     "//base:base_java",
     "//cc/base:cc_base_java",
+    "//components/autofill/android:autofill_features_java",
+    "//components/feature_engagement/public:public_java",
     "//components/metrics:metrics_java",
     "//components/power_scheduler:power_scheduler_java",
     "//components/viz:viz_java",
+    "//content/public/android:content_java",
+    "//content/public/common:common_java",
     "//gpu/config:config_java",
     "//services/network/public:features_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/blink/public/common:common_java",
-    "//ui/android:ui_features_java",
   ]
   srcjar_deps = [
     ":common_java_features_srcjar",
@@ -795,6 +805,7 @@ android_aidl("common_aidl") {
     "java/src/org/chromium/android_webview/common/services/ICrashReceiverService.aidl",
     "java/src/org/chromium/android_webview/common/services/IDeveloperUiService.aidl",
     "java/src/org/chromium/android_webview/common/services/IMetricsBridgeService.aidl",
+    "java/src/org/chromium/android_webview/common/services/IMetricsUploadService.aidl",
     "java/src/org/chromium/android_webview/common/services/ISafeModeService.aidl",
     "java/src/org/chromium/android_webview/common/services/IVariationsSeedServer.aidl",
     "java/src/org/chromium/android_webview/common/services/IVariationsSeedServerCallback.aidl",

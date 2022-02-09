@@ -11,13 +11,14 @@
 
 namespace content {
 class RenderFrameHost;
-}
+class RenderFrameHostImpl;
+}  // namespace content
 
 class VivaldiFrameHostServiceImpl
     : public vivaldi::mojom::VivaldiFrameHostService,
       public base::SupportsUserData::Data {
  public:
-  VivaldiFrameHostServiceImpl(content::RenderFrameHost* frame_host);
+  VivaldiFrameHostServiceImpl(content::RenderFrameHostImpl* frame_host);
   ~VivaldiFrameHostServiceImpl() override;
 
   static void BindHandler(
@@ -26,13 +27,15 @@ class VivaldiFrameHostServiceImpl
 
   // Mojo methods
   void NotifyMediaElementAdded() override;
+  void DidChangeLoadProgressExtended(double load_progress,
+                                     double loaded_bytes,
+                                     int loaded_elements,
+                                     int total_elements) override;
 
  private:
   // Owner
-  content::RenderFrameHost* const frame_host_;
+  content::RenderFrameHostImpl* const frame_host_;
   mojo::Receiver<vivaldi::mojom::VivaldiFrameHostService> receiver_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiFrameHostServiceImpl);
 };
 
 #endif  //  EXTENSIONS_HELPER_VIVALDI_FRAME_HOST_SERVICE_IMPL_H_

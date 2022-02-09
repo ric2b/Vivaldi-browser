@@ -67,6 +67,8 @@ enum Setting {
   kNearbyShareDeviceVisibility = 215,
   kNearbyShareContacts = 216,
   kNearbyShareDataUsage = 217,
+  kPhoneHubAppsOnOff = 218,
+  kPhoneHubCameraRollOnOff = 219,
 
   // People section.
   kAddAccount = 300,
@@ -262,6 +264,7 @@ enum Setting {
   kReportAnIssue = 1705,
   kTermsOfService = 1706,
   kDiagnostics = 1707,
+  kChangeDeviceName = 1708,
 
   // Kerberos section.
   kAddKerberosTicketV2 = 1800,

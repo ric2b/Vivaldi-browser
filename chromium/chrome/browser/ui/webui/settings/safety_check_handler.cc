@@ -203,8 +203,8 @@ base::Time TimestampDelegate::FetchChromeCleanerScanCompletionTimestamp() {
   // TODO(crbug.com/1139806): Part of the above workaround. If the timestamp in
   // prefs is null or older than the one from the registry, then return the one
   // from the registry. Otherwise return the one from prefs.
-  base::Time end_time_from_registry = base::Time::FromDeltaSinceWindowsEpoch(
-      base::TimeDelta::FromMicroseconds(end_time));
+  base::Time end_time_from_registry =
+      base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(end_time));
   if (end_time_from_prefs.is_null() ||
       end_time_from_prefs < end_time_from_registry) {
     return end_time_from_registry;
@@ -368,7 +368,7 @@ void SafetyCheckHandler::HandlePerformSafetyCheck(const base::ListValue* args) {
       FROM_HERE,
       base::BindOnce(&SafetyCheckHandler::PerformSafetyCheck,
                      weak_ptr_factory_.GetWeakPtr()),
-      base::TimeDelta::FromSeconds(1));
+      base::Seconds(1));
 }
 
 void SafetyCheckHandler::HandleGetParentRanDisplayString(
@@ -661,11 +661,6 @@ std::u16string SafetyCheckHandler::GetStringForPasswords(
       return l10n_util::GetPluralStringFUTF16(
           IDS_SETTINGS_COMPROMISED_PASSWORDS_COUNT, 0);
     case PasswordsStatus::kCompromisedExist:
-      // TODO(crbug.com/1128904): Clean up the old code path.
-      if (!base::FeatureList::IsEnabled(features::kSafetyCheckWeakPasswords)) {
-        return l10n_util::GetPluralStringFUTF16(
-            IDS_SETTINGS_COMPROMISED_PASSWORDS_COUNT, compromised.value());
-      }
       if (weak.value() == 0) {
         // Only compromised passwords, no weak passwords.
         return l10n_util::GetPluralStringFUTF16(
@@ -793,7 +788,7 @@ std::u16string SafetyCheckHandler::GetStringForTimePassed(
   base::Time::Exploded system_time_exploded;
   system_time.LocalExplode(&system_time_exploded);
 
-  const base::Time time_yesterday = system_time - base::TimeDelta::FromDays(1);
+  const base::Time time_yesterday = system_time - base::Days(1);
   base::Time::Exploded time_yesterday_exploded;
   time_yesterday.LocalExplode(&time_yesterday_exploded);
 
@@ -883,10 +878,7 @@ void SafetyCheckHandler::UpdatePasswordsResultOnCheckIdle() {
   size_t num_compromised =
       passwords_delegate_->GetCompromisedCredentials().size();
   size_t num_weak = passwords_delegate_->GetWeakCredentials().size();
-  // TODO(crbug.com/1128904): Clean up the old code path.
-  if (num_compromised == 0 &&
-      (num_weak == 0 ||
-       !base::FeatureList::IsEnabled(features::kSafetyCheckWeakPasswords))) {
+  if (num_compromised == 0 && num_weak == 0) {
     // If there are no |OnCredentialDone| callbacks with is_leaked = true, no
     // need to wait for InsecureCredentialsManager callbacks any longer, since
     // there should be none for the current password check.
@@ -1063,11 +1055,11 @@ void SafetyCheckHandler::OnJavascriptDisallowed() {
 void SafetyCheckHandler::RegisterMessages() {
   // Usage of base::Unretained(this) is safe, because web_ui() owns `this` and
   // won't release ownership until destruction.
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       kPerformSafetyCheck,
       base::BindRepeating(&SafetyCheckHandler::HandlePerformSafetyCheck,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       kGetParentRanDisplayString,
       base::BindRepeating(&SafetyCheckHandler::HandleGetParentRanDisplayString,
                           base::Unretained(this)));

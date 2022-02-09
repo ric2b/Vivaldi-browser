@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SAFE_BROWSING_CONTENT_BROWSER_TRIGGERS_AD_SAMPLER_TRIGGER_H_
 #define COMPONENTS_SAFE_BROWSING_CONTENT_BROWSER_TRIGGERS_AD_SAMPLER_TRIGGER_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -60,6 +61,9 @@ enum AdSamplerTriggerAction {
 class AdSamplerTrigger : public content::WebContentsObserver,
                          public content::WebContentsUserData<AdSamplerTrigger> {
  public:
+  AdSamplerTrigger(const AdSamplerTrigger&) = delete;
+  AdSamplerTrigger& operator=(const AdSamplerTrigger&) = delete;
+
   ~AdSamplerTrigger() override;
 
   // content::WebContentsObserver implementation.
@@ -118,8 +122,6 @@ class AdSamplerTrigger : public content::WebContentsObserver,
   base::WeakPtrFactory<AdSamplerTrigger> weak_ptr_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(AdSamplerTrigger);
 };
 
 }  // namespace safe_browsing

@@ -18,9 +18,9 @@
 #include "net/base/network_change_notifier.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/breakpad.h"
+#include "remoting/base/host_settings.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/host_exit_codes.h"
-#include "remoting/host/host_settings.h"
 #include "remoting/host/it2me/it2me_native_messaging_host.h"
 #include "remoting/host/logging.h"
 #include "remoting/host/native_messaging/native_messaging_pipe.h"
@@ -253,7 +253,8 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
       ChromotingHostContext::Create(new remoting::AutoThreadTaskRunner(
           main_task_executor.task_runner(), run_loop.QuitClosure()));
   std::unique_ptr<PolicyWatcher> policy_watcher =
-      PolicyWatcher::CreateWithTaskRunner(context->file_task_runner());
+      PolicyWatcher::CreateWithTaskRunner(context->file_task_runner(),
+                                          context->management_service());
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Create an X11EventSource on all UI threads, so the global X11 connection

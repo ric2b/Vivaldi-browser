@@ -50,6 +50,10 @@ class SearchBoxViewBase : public views::View,
                           public views::TextfieldController {
  public:
   explicit SearchBoxViewBase(SearchBoxViewDelegate* delegate);
+
+  SearchBoxViewBase(const SearchBoxViewBase&) = delete;
+  SearchBoxViewBase& operator=(const SearchBoxViewBase&) = delete;
+
   ~SearchBoxViewBase() override;
 
   struct InitParams {
@@ -134,6 +138,7 @@ class SearchBoxViewBase : public views::View,
 
   SearchBoxViewDelegate* delegate() { return delegate_; }
   views::BoxLayout* box_layout() { return box_layout_; }
+  views::ImageView* search_icon() { return search_icon_; }
 
   void SetSearchBoxBackgroundCornerRadius(int corner_radius);
 
@@ -204,8 +209,6 @@ class SearchBoxViewBase : public views::View,
       AddEnabledChangedCallback(
           base::BindRepeating(&SearchBoxViewBase::OnEnabledChanged,
                               base::Unretained(this)));
-
-  DISALLOW_COPY_AND_ASSIGN(SearchBoxViewBase);
 };
 
 }  // namespace ash

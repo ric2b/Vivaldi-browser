@@ -42,6 +42,7 @@ class StorageQueue : public base::RefCountedDeleteOnSequence<StorageQueue> {
  public:
   // Callback type for UploadInterface provider for this queue.
   using AsyncStartUploaderCb = base::RepeatingCallback<void(
+      UploaderInterface::UploadReason,
       UploaderInterface::UploaderInterfaceResultCb)>;
 
   // Creates StorageQueue instance with the specified options, and returns it
@@ -218,6 +219,10 @@ class StorageQueue : public base::RefCountedDeleteOnSequence<StorageQueue> {
       const base::FilePath& full_name,
       const base::FileEnumerator::FileInfo& file_info);
 
+  // Helper method for Init(): sets generation id based on data file name.
+  // For backwards compatibility, accepts file name without generation too.
+  Status SetGenerationId(const base::FilePath& full_name);
+
   // Helper method for Init(): enumerates all data files in the directory.
   // Valid file names are <prefix>.<sequencing_id>, any other names are ignored.
   // Adds used data files to the set.
@@ -298,6 +303,9 @@ class StorageQueue : public base::RefCountedDeleteOnSequence<StorageQueue> {
   // Helper method to retry upload if prior one failed or if some events below
   // |next_sequencing_id| were not uploaded.
   void CheckBackUpload(Status status, int64_t next_sequencing_id);
+
+  // Helper method called by periodic time to upload data.
+  void PeriodicUpload();
 
   // Sequential task runner for all activities in this StorageQueue
   // (must be first member in class).

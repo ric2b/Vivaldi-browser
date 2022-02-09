@@ -22,14 +22,6 @@
         android:background="@color/default_bg_color"
         style="@style/ModernToolbar"/>
 
-    <!-- Vivaldi -->
-    <View
-        android:layout_height="1dp"
-        android:layout_width="match_parent"
-        android:layout_marginTop="@dimen/toolbar_height_no_shadow"
-        android:background="@color/vivaldi_dark_bg_20_opacity"
-        />
-
     <org.chromium.components.browser_ui.widget.FadingShadowView
         android:id="@+id/shadow"
         android:layout_width="match_parent"

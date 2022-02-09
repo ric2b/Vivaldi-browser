@@ -42,7 +42,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -255,7 +255,7 @@ ThumbnailsCaptureUIFunction::~ThumbnailsCaptureUIFunction() = default;
 ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   using vivaldi::thumbnails::CaptureUI::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
@@ -363,7 +363,7 @@ ThumbnailsCaptureTabFunction::~ThumbnailsCaptureTabFunction() = default;
 ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   using vivaldi::thumbnails::CaptureTab::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->params.save_file_pattern) {
@@ -517,7 +517,7 @@ ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() =
 ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   using vivaldi::thumbnails::CaptureBookmark::Params;
 
-  std::unique_ptr<Params> params(Params::Create(*args_));
+  std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int64_t bookmark_id;
@@ -528,7 +528,7 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   }
   url_ = GURL(params->params.url);
 
-  VivaldiDataSourcesAPI::CaptureBookmarkThumbnail(
+  VivaldiImageStore::CaptureBookmarkThumbnail(
       browser_context(), bookmark_id, url_,
       base::BindOnce(&ThumbnailsCaptureBookmarkFunction::SendResult, this));
 

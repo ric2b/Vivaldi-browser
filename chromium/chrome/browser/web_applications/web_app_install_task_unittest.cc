@@ -20,31 +20,30 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/components/web_app_icon_generator.h"
-#include "chrome/browser/web_applications/components/web_app_install_utils.h"
-#include "chrome/browser/web_applications/components/web_app_utils.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
-#include "chrome/browser/web_applications/test/test_data_retriever.h"
-#include "chrome/browser/web_applications/test/test_file_handler_manager.h"
+#include "chrome/browser/web_applications/test/fake_data_retriever.h"
+#include "chrome/browser/web_applications/test/fake_install_finalizer.h"
+#include "chrome/browser/web_applications/test/fake_os_integration_manager.h"
+#include "chrome/browser/web_applications/test/fake_web_app_database_factory.h"
+#include "chrome/browser/web_applications/test/fake_web_app_registry_controller.h"
+#include "chrome/browser/web_applications/test/fake_web_app_ui_manager.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
-#include "chrome/browser/web_applications/test/test_install_finalizer.h"
-#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
-#include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
-#include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
-#include "chrome/browser/web_applications/test/test_web_app_ui_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_url_loader.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
+#include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -91,9 +90,9 @@ class WebAppInstallTaskTest : public WebAppTest {
   void SetUp() override {
     WebAppTest::SetUp();
 
-    test_registry_controller_ =
-        std::make_unique<TestWebAppRegistryController>();
-    test_registry_controller_->SetUp(profile());
+    fake_registry_controller_ =
+        std::make_unique<FakeWebAppRegistryController>();
+    fake_registry_controller_->SetUp(profile());
 
     auto file_utils = std::make_unique<TestFileUtils>();
     file_utils_ = file_utils.get();
@@ -103,20 +102,20 @@ class WebAppInstallTaskTest : public WebAppTest {
 
     policy_manager_ = std::make_unique<WebAppPolicyManager>(profile());
 
-    ui_manager_ = std::make_unique<TestWebAppUiManager>();
+    ui_manager_ = std::make_unique<FakeWebAppUiManager>();
 
     install_finalizer_ = std::make_unique<WebAppInstallFinalizer>(
         profile(), icon_manager_.get(), policy_manager_.get());
 
     install_finalizer_->SetSubsystems(&registrar(), ui_manager_.get(),
-                                      &test_registry_controller_->sync_bridge(),
-                                      &test_os_integration_manager());
+                                      &fake_registry_controller_->sync_bridge(),
+                                      &fake_os_integration_manager());
 
-    auto data_retriever = std::make_unique<TestDataRetriever>();
+    auto data_retriever = std::make_unique<FakeDataRetriever>();
     data_retriever_ = data_retriever.get();
 
     install_task_ = std::make_unique<WebAppInstallTask>(
-        profile(), &test_os_integration_manager(), install_finalizer_.get(),
+        profile(), &fake_os_integration_manager(), install_finalizer_.get(),
         std::move(data_retriever), &registrar());
 
     url_loader_ = std::make_unique<TestWebAppUrlLoader>();
@@ -155,7 +154,7 @@ class WebAppInstallTaskTest : public WebAppTest {
     policy_manager_.reset();
     icon_manager_.reset();
 
-    test_registry_controller_.reset();
+    fake_registry_controller_.reset();
 
     WebAppTest::TearDown();
   }
@@ -165,7 +164,7 @@ class WebAppInstallTaskTest : public WebAppTest {
                              const std::string description,
                              const GURL& scope,
                              absl::optional<SkColor> theme_color,
-                             bool open_as_window) {
+                             DisplayMode user_display_mode) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
 
     web_app_info->start_url = url;
@@ -173,7 +172,7 @@ class WebAppInstallTaskTest : public WebAppTest {
     web_app_info->description = base::UTF8ToUTF16(description);
     web_app_info->scope = scope;
     web_app_info->theme_color = theme_color;
-    web_app_info->open_as_window = open_as_window;
+    web_app_info->user_display_mode = user_display_mode;
 
     data_retriever_->SetRendererWebApplicationInfo(std::move(web_app_info));
   }
@@ -182,23 +181,23 @@ class WebAppInstallTaskTest : public WebAppTest {
                              const std::string name,
                              const std::string description) {
     CreateRendererAppInfo(url, name, description, GURL(), absl::nullopt,
-                          /*open_as_window*/ true);
+                          /*user_display_mode=*/DisplayMode::kStandalone);
   }
 
   void ResetInstallTask() {
-    auto data_retriever = std::make_unique<TestDataRetriever>();
-    data_retriever_ = static_cast<TestDataRetriever*>(data_retriever.get());
+    auto data_retriever = std::make_unique<FakeDataRetriever>();
+    data_retriever_ = static_cast<FakeDataRetriever*>(data_retriever.get());
 
     install_task_ = std::make_unique<WebAppInstallTask>(
-        profile(), &test_os_integration_manager(), install_finalizer_.get(),
+        profile(), &fake_os_integration_manager(), install_finalizer_.get(),
         std::move(data_retriever), &registrar());
   }
 
   void SetInstallFinalizerForTesting() {
-    auto test_install_finalizer = std::make_unique<TestInstallFinalizer>();
-    test_install_finalizer_ = test_install_finalizer.get();
-    install_finalizer_ = std::move(test_install_finalizer);
-    install_task_->SetInstallFinalizerForTesting(test_install_finalizer_);
+    auto fake_install_finalizer = std::make_unique<FakeInstallFinalizer>();
+    fake_install_finalizer_ = fake_install_finalizer.get();
+    install_finalizer_ = std::move(fake_install_finalizer);
+    install_task_->SetInstallFinalizerForTesting(fake_install_finalizer_);
   }
 
   void CreateDefaultDataToRetrieve(const GURL& url, const GURL& scope) {
@@ -210,11 +209,11 @@ class WebAppInstallTaskTest : public WebAppTest {
     CreateDefaultDataToRetrieve(url, GURL{});
   }
 
-  void CreateDataToRetrieve(const GURL& url, bool open_as_window) {
+  void CreateDataToRetrieve(const GURL& url, DisplayMode user_display_mode) {
     DCHECK(data_retriever_);
 
     auto renderer_web_app_info = std::make_unique<WebApplicationInfo>();
-    renderer_web_app_info->open_as_window = open_as_window;
+    renderer_web_app_info->user_display_mode = user_display_mode;
     data_retriever_->SetRendererWebApplicationInfo(
         std::move(renderer_web_app_info));
 
@@ -226,9 +225,9 @@ class WebAppInstallTaskTest : public WebAppTest {
     data_retriever_->SetIcons(IconsMap{});
   }
 
-  TestInstallFinalizer& test_install_finalizer() {
-    DCHECK(test_install_finalizer_);
-    return *test_install_finalizer_;
+  FakeInstallFinalizer& fake_install_finalizer() {
+    DCHECK(fake_install_finalizer_);
+    return *fake_install_finalizer_;
   }
 
   void SetIconsMapToRetrieve(IconsMap icons_map) {
@@ -323,16 +322,16 @@ class WebAppInstallTaskTest : public WebAppTest {
 
  protected:
   WebAppInstallTask& install_task() { return *install_task_; }
-  TestWebAppRegistryController& controller() {
-    return *test_registry_controller_;
+  FakeWebAppRegistryController& controller() {
+    return *fake_registry_controller_;
   }
 
   WebAppRegistrar& registrar() { return controller().registrar(); }
-  TestOsIntegrationManager& test_os_integration_manager() {
+  FakeOsIntegrationManager& fake_os_integration_manager() {
     return controller().os_integration_manager();
   }
   TestWebAppUrlLoader& url_loader() { return *url_loader_; }
-  TestDataRetriever& data_retriever() {
+  FakeDataRetriever& data_retriever() {
     DCHECK(data_retriever_);
     return *data_retriever_;
   }
@@ -340,13 +339,13 @@ class WebAppInstallTaskTest : public WebAppTest {
   std::unique_ptr<WebAppIconManager> icon_manager_;
   std::unique_ptr<WebAppPolicyManager> policy_manager_;
   std::unique_ptr<WebAppInstallTask> install_task_;
-  std::unique_ptr<TestWebAppUiManager> ui_manager_;
+  std::unique_ptr<FakeWebAppUiManager> ui_manager_;
   std::unique_ptr<WebAppInstallFinalizer> install_finalizer_;
 
   // Owned by icon_manager_:
   TestFileUtils* file_utils_ = nullptr;
   // Owned by install_task_:
-  TestDataRetriever* data_retriever_ = nullptr;
+  FakeDataRetriever* data_retriever_ = nullptr;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ArcAppTest arc_test_;
@@ -355,9 +354,9 @@ class WebAppInstallTaskTest : public WebAppTest {
 #endif
 
  private:
-  std::unique_ptr<TestWebAppRegistryController> test_registry_controller_;
+  std::unique_ptr<FakeWebAppRegistryController> fake_registry_controller_;
   std::unique_ptr<TestWebAppUrlLoader> url_loader_;
-  TestInstallFinalizer* test_install_finalizer_ = nullptr;
+  FakeInstallFinalizer* fake_install_finalizer_ = nullptr;
 };
 
 class WebAppInstallTaskWithRunOnOsLoginTest : public WebAppInstallTaskTest {
@@ -374,7 +373,7 @@ class WebAppInstallTaskWithRunOnOsLoginTest : public WebAppInstallTaskTest {
                              const std::string description,
                              const GURL& scope,
                              absl::optional<SkColor> theme_color,
-                             bool open_as_window,
+                             DisplayMode user_display_mode,
                              bool run_on_os_login) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
 
@@ -383,7 +382,7 @@ class WebAppInstallTaskWithRunOnOsLoginTest : public WebAppInstallTaskTest {
     web_app_info->description = base::UTF8ToUTF16(description);
     web_app_info->scope = scope;
     web_app_info->theme_color = theme_color;
-    web_app_info->open_as_window = open_as_window;
+    web_app_info->user_display_mode = user_display_mode;
     web_app_info->run_on_os_login = run_on_os_login;
 
     data_retriever_->SetRendererWebApplicationInfo(std::move(web_app_info));
@@ -406,7 +405,7 @@ TEST_F(WebAppInstallTaskTest, InstallFromWebContents) {
 
   CreateRendererAppInfo(url, "Renderer Name", description, /*scope*/ GURL{},
                         theme_color,
-                        /*open_as_window*/ true);
+                        /*user_display_mode=*/DisplayMode::kStandalone);
   {
     auto manifest = blink::mojom::Manifest::New();
     manifest->start_url = url;
@@ -547,9 +546,10 @@ TEST_F(WebAppInstallTaskTest, WebContentsDestroyed) {
 
 TEST_F(WebAppInstallTaskTest, InstallableCheck) {
   const std::string renderer_description = "RendererDescription";
-  CreateRendererAppInfo(
-      GURL("https://renderer.com/path"), "RendererName", renderer_description,
-      GURL("https://renderer.com/scope"), 0x00, /*open_as_window*/ true);
+  CreateRendererAppInfo(GURL("https://renderer.com/path"), "RendererName",
+                        renderer_description,
+                        GURL("https://renderer.com/scope"), 0x00,
+                        /*user_display_mode=*/DisplayMode::kStandalone);
 
   const GURL manifest_start_url = GURL("https://example.com/start");
   const AppId app_id =
@@ -624,13 +624,13 @@ TEST_F(WebAppInstallTaskTest, GetIcons) {
   InstallWebAppFromManifestWithFallback();
 
   std::unique_ptr<WebApplicationInfo> web_app_info =
-      test_install_finalizer().web_app_info();
+      fake_install_finalizer().web_app_info();
 
   // Make sure that icons have been generated for all sub sizes.
   EXPECT_TRUE(ContainsOneIconOfEachSize(web_app_info->icon_bitmaps.any));
 
   // Generated icons are not considered part of the manifest icons.
-  EXPECT_TRUE(web_app_info->icon_infos.empty());
+  EXPECT_TRUE(web_app_info->manifest_icons.empty());
 
   // Generated icons are not considered part of the manifest shortcut icons.
   EXPECT_TRUE(web_app_info->shortcuts_menu_item_infos.empty());
@@ -649,13 +649,13 @@ TEST_F(WebAppInstallTaskTest, GetIcons_NoIconsProvided) {
   InstallWebAppFromManifestWithFallback();
 
   std::unique_ptr<WebApplicationInfo> web_app_info =
-      test_install_finalizer().web_app_info();
+      fake_install_finalizer().web_app_info();
 
   // Make sure that icons have been generated for all sizes.
   EXPECT_TRUE(ContainsOneIconOfEachSize(web_app_info->icon_bitmaps.any));
 
   // Generated icons are not considered part of the manifest icons.
-  EXPECT_TRUE(web_app_info->icon_infos.empty());
+  EXPECT_TRUE(web_app_info->manifest_icons.empty());
 
   // Generated icons are not considered part of the manifest shortcut icons.
   EXPECT_TRUE(web_app_info->shortcuts_menu_item_infos.empty());
@@ -858,8 +858,8 @@ TEST_F(WebAppInstallTaskTest, FinalizerMethodsCalled) {
 
   InstallWebAppFromManifestWithFallback();
 
-  EXPECT_EQ(1u, test_os_integration_manager().num_create_shortcuts_calls());
-  EXPECT_EQ(1, test_install_finalizer().num_reparent_tab_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_create_shortcuts_calls());
+  EXPECT_EQ(1, fake_install_finalizer().num_reparent_tab_calls());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   const size_t expected_num_add_app_to_quick_launch_bar_calls = 0;
@@ -869,24 +869,24 @@ TEST_F(WebAppInstallTaskTest, FinalizerMethodsCalled) {
 
   EXPECT_EQ(
       expected_num_add_app_to_quick_launch_bar_calls,
-      test_os_integration_manager().num_add_app_to_quick_launch_bar_calls());
+      fake_os_integration_manager().num_add_app_to_quick_launch_bar_calls());
 }
 
 TEST_F(WebAppInstallTaskTest, FinalizerMethodsNotCalled) {
   PrepareTestAppInstall();
-  test_install_finalizer().SetNextFinalizeInstallResult(
-      AppId(), InstallResultCode::kBookmarkExtensionInstallError);
+  fake_install_finalizer().SetNextFinalizeInstallResult(
+      AppId(), InstallResultCode::kInstallURLLoadTimeOut);
 
   InstallResult result = InstallWebAppFromManifestWithFallbackAndGetResults();
 
   EXPECT_TRUE(result.app_id.empty());
-  EXPECT_EQ(InstallResultCode::kBookmarkExtensionInstallError, result.code);
+  EXPECT_EQ(InstallResultCode::kInstallURLLoadTimeOut, result.code);
 
-  EXPECT_EQ(0u, test_os_integration_manager().num_create_shortcuts_calls());
-  EXPECT_EQ(0, test_install_finalizer().num_reparent_tab_calls());
+  EXPECT_EQ(0u, fake_os_integration_manager().num_create_shortcuts_calls());
+  EXPECT_EQ(0, fake_install_finalizer().num_reparent_tab_calls());
   EXPECT_EQ(
       0u,
-      test_os_integration_manager().num_add_app_to_quick_launch_bar_calls());
+      fake_os_integration_manager().num_add_app_to_quick_launch_bar_calls());
 }
 
 TEST_F(WebAppInstallTaskTest, InstallWebAppFromManifest_Success) {
@@ -923,22 +923,23 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_Success) {
 
   auto web_app_info = std::make_unique<WebApplicationInfo>();
   web_app_info->start_url = url;
-  web_app_info->open_as_window = true;
+  web_app_info->user_display_mode = DisplayMode::kStandalone;
   web_app_info->title = u"App Name";
 
   base::RunLoop run_loop;
 
   install_task_->InstallWebAppFromInfo(
-      std::move(web_app_info), ForInstallableSite::kYes,
-      webapps::WebappInstallSource::MENU_BROWSER_TAB,
+      std::move(web_app_info), /*overwrite_existing_manifest_fields=*/false,
+      ForInstallableSite::kYes, webapps::WebappInstallSource::MENU_BROWSER_TAB,
       base::BindLambdaForTesting(
           [&](const AppId& installed_app_id, InstallResultCode code) {
             EXPECT_EQ(InstallResultCode::kSuccessNewInstall, code);
             EXPECT_EQ(app_id, installed_app_id);
 
             std::unique_ptr<WebApplicationInfo> final_web_app_info =
-                test_install_finalizer().web_app_info();
-            EXPECT_TRUE(final_web_app_info->open_as_window);
+                fake_install_finalizer().web_app_info();
+            EXPECT_EQ(final_web_app_info->user_display_mode,
+                      DisplayMode::kStandalone);
 
             run_loop.Quit();
           }));
@@ -951,7 +952,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_GenerateIcons) {
 
   auto web_app_info = std::make_unique<WebApplicationInfo>();
   web_app_info->start_url = GURL("https://example.com/path");
-  web_app_info->open_as_window = false;
+  web_app_info->user_display_mode = DisplayMode::kBrowser;
   web_app_info->title = u"App Name";
 
   // Add square yellow icon.
@@ -961,12 +962,12 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_GenerateIcons) {
   base::RunLoop run_loop;
 
   install_task_->InstallWebAppFromInfo(
-      std::move(web_app_info), ForInstallableSite::kYes,
-      webapps::WebappInstallSource::ARC,
+      std::move(web_app_info), /*overwrite_existing_manifest_fields=*/false,
+      ForInstallableSite::kYes, webapps::WebappInstallSource::ARC,
       base::BindLambdaForTesting([&](const AppId& installed_app_id,
                                      InstallResultCode code) {
         std::unique_ptr<WebApplicationInfo> final_web_app_info =
-            test_install_finalizer().web_app_info();
+            fake_install_finalizer().web_app_info();
 
         // Make sure that icons have been generated for all sub sizes.
         EXPECT_TRUE(
@@ -979,7 +980,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_GenerateIcons) {
           EXPECT_EQ(SK_ColorYELLOW, icon.second.getColor(0, 0));
         }
 
-        EXPECT_FALSE(final_web_app_info->open_as_window);
+        EXPECT_EQ(final_web_app_info->user_display_mode, DisplayMode::kBrowser);
 
         run_loop.Quit();
       }));
@@ -1004,7 +1005,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromManifestWithFallback_NoIcons) {
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, code);
 
         std::unique_ptr<WebApplicationInfo> final_web_app_info =
-            test_install_finalizer().web_app_info();
+            fake_install_finalizer().web_app_info();
         // Make sure that icons have been generated for all sub sizes.
         EXPECT_TRUE(
             ContainsOneIconOfEachSize(final_web_app_info->icon_bitmaps.any));
@@ -1013,7 +1014,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromManifestWithFallback_NoIcons) {
           EXPECT_FALSE(icon.second.drawsNothing());
         }
 
-        EXPECT_TRUE(final_web_app_info->icon_infos.empty());
+        EXPECT_TRUE(final_web_app_info->manifest_icons.empty());
 
         run_loop.Quit();
       }));
@@ -1032,7 +1033,7 @@ TEST_F(WebAppInstallTaskTest, IntentToPlayStore) {
   const absl::optional<SkColor> theme_color = 0xAABBCCDD;
 
   CreateRendererAppInfo(url, name, description, /*scope*/ GURL{}, theme_color,
-                        /*open_as_window*/ true);
+                        /*user_display_mode=*/DisplayMode::kStandalone);
   {
     auto manifest = blink::mojom::Manifest::New();
     manifest->start_url = url;
@@ -1071,12 +1072,12 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_GuestProfile) {
   Profile* guest_profile = profile_manager.CreateGuestProfile();
 
   const GURL start_url("https://example.com/path");
-  auto data_retriever = std::make_unique<TestDataRetriever>();
+  auto data_retriever = std::make_unique<FakeDataRetriever>();
   data_retriever->BuildDefaultDataToRetrieve(start_url,
                                              /*scope=*/GURL{});
 
   auto install_task = std::make_unique<WebAppInstallTask>(
-      guest_profile, &test_os_integration_manager(), install_finalizer_.get(),
+      guest_profile, &fake_os_integration_manager(), install_finalizer_.get(),
       std::move(data_retriever), &registrar());
 
   base::RunLoop run_loop;
@@ -1094,7 +1095,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_GuestProfile) {
 TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_DisplayMode) {
   {
     CreateDataToRetrieve(GURL("https://example.com/"),
-                         /*open_as_window*/ false);
+                         /*user_display_mode=*/DisplayMode::kBrowser);
 
     auto app_id = InstallWebAppWithParams(MakeParams(DisplayMode::kUndefined));
 
@@ -1103,7 +1104,8 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_DisplayMode) {
   }
   ResetInstallTask();
   {
-    CreateDataToRetrieve(GURL("https://example.org/"), /*open_as_window*/ true);
+    CreateDataToRetrieve(GURL("https://example.org/"),
+                         /*user_display_mode=*/DisplayMode::kStandalone);
 
     auto app_id = InstallWebAppWithParams(MakeParams(DisplayMode::kUndefined));
 
@@ -1112,7 +1114,8 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_DisplayMode) {
   }
   ResetInstallTask();
   {
-    CreateDataToRetrieve(GURL("https://example.au/"), /*open_as_window*/ true);
+    CreateDataToRetrieve(GURL("https://example.au/"),
+                         /*user_display_mode=*/DisplayMode::kStandalone);
 
     auto app_id = InstallWebAppWithParams(MakeParams(DisplayMode::kBrowser));
 
@@ -1122,7 +1125,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_DisplayMode) {
   ResetInstallTask();
   {
     CreateDataToRetrieve(GURL("https://example.app/"),
-                         /*open_as_window*/ false);
+                         /*user_display_mode=*/DisplayMode::kBrowser);
 
     auto app_id = InstallWebAppWithParams(MakeParams(DisplayMode::kStandalone));
 
@@ -1237,19 +1240,19 @@ TEST_F(WebAppInstallTaskTest, LoadAndRetrieveWebApplicationInfoWithIcons) {
         LoadAndRetrieveWebApplicationInfoWithIcons(url);
     EXPECT_TRUE(result);
     EXPECT_EQ(result->start_url, start_url);
-    EXPECT_TRUE(result->icon_infos.empty());
+    EXPECT_TRUE(result->manifest_icons.empty());
     EXPECT_FALSE(result->icon_bitmaps.any.empty());
   }
   ResetInstallTask();
   {
     // Verify the callback is always called.
     base::RunLoop run_loop;
-    auto data_retriever = std::make_unique<TestDataRetriever>();
+    auto data_retriever = std::make_unique<FakeDataRetriever>();
     data_retriever->BuildDefaultDataToRetrieve(url, GURL{});
     url_loader().SetNextLoadUrlResult(url, WebAppUrlLoader::Result::kUrlLoaded);
 
     auto task = std::make_unique<WebAppInstallTask>(
-        profile(), &test_os_integration_manager(), install_finalizer_.get(),
+        profile(), &fake_os_integration_manager(), install_finalizer_.get(),
         std::move(data_retriever), &registrar());
 
     std::unique_ptr<WebApplicationInfo> info;
@@ -1320,7 +1323,8 @@ TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
 
   CreateDefaultDataToRetrieve(url, scope);
   CreateRendererAppInfo(url, name, description, /*scope=*/GURL{}, theme_color,
-                        /*open_as_window=*/true, /*run_on_os_login=*/true);
+                        /*user_display_mode=*/DisplayMode::kStandalone,
+                        /*run_on_os_login=*/true);
 
   base::RunLoop run_loop;
   bool callback_called = false;
@@ -1350,7 +1354,7 @@ TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
   EXPECT_EQ(scope, web_app->scope());
   EXPECT_EQ(theme_color, web_app->theme_color());
   EXPECT_EQ(1u,
-            test_os_integration_manager().num_register_run_on_os_login_calls());
+            fake_os_integration_manager().num_register_run_on_os_login_calls());
 }
 
 TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
@@ -1367,7 +1371,8 @@ TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
 
   CreateDefaultDataToRetrieve(url, scope);
   CreateRendererAppInfo(url, name, description, /*scope=*/GURL{}, theme_color,
-                        /*open_as_window=*/true, /*run_on_os_login=*/false);
+                        /*user_display_mode=*/DisplayMode::kStandalone,
+                        /*run_on_os_login=*/false);
 
   base::RunLoop run_loop;
   bool callback_called = false;
@@ -1397,7 +1402,7 @@ TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
   EXPECT_EQ(scope, web_app->scope());
   EXPECT_EQ(theme_color, web_app->theme_color());
   EXPECT_EQ(0u,
-            test_os_integration_manager().num_register_run_on_os_login_calls());
+            fake_os_integration_manager().num_register_run_on_os_login_calls());
 }
 
 // TODO(https://crbug.com/1096953): Move these tests out into a dedicated
@@ -1453,7 +1458,7 @@ class WebAppInstallTaskTestWithShortcutsMenu : public WebAppInstallTaskTest {
           result.app_id = installed_app_id;
           result.code = code;
           std::unique_ptr<WebApplicationInfo> final_web_app_info =
-              test_install_finalizer().web_app_info();
+              fake_install_finalizer().web_app_info();
           EXPECT_EQ(theme_color, final_web_app_info->theme_color);
           EXPECT_EQ(1u, final_web_app_info->shortcuts_menu_item_infos.size());
           EXPECT_EQ(base::UTF8ToUTF16(shortcut_name),
@@ -1501,7 +1506,7 @@ class WebAppInstallTaskTestWithShortcutsMenu : public WebAppInstallTaskTest {
 
     auto web_app_info = std::make_unique<WebApplicationInfo>();
     web_app_info->start_url = url;
-    web_app_info->open_as_window = true;
+    web_app_info->user_display_mode = DisplayMode::kStandalone;
     web_app_info->theme_color = theme_color;
     web_app_info->title = u"App Name";
 
@@ -1530,7 +1535,7 @@ class WebAppInstallTaskTestWithShortcutsMenu : public WebAppInstallTaskTest {
           result.app_id = installed_app_id;
           result.code = code;
           std::unique_ptr<WebApplicationInfo> final_web_app_info =
-              test_install_finalizer().web_app_info();
+              fake_install_finalizer().web_app_info();
           EXPECT_EQ(theme_color, final_web_app_info->theme_color);
           EXPECT_EQ(1u, final_web_app_info->shortcuts_menu_item_infos.size());
           EXPECT_EQ(base::UTF8ToUTF16(shortcut_name),
@@ -1773,7 +1778,7 @@ TEST_F(WebAppInstallTaskTestWithFileHandlers,
 
   EXPECT_EQ(InstallResultCode::kSuccessNewInstall, install_result.code);
   EXPECT_EQ(app_id, install_result.app_id);
-  EXPECT_EQ(1u, test_os_integration_manager().num_create_file_handlers_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_create_file_handlers_calls());
 }
 
 TEST_F(WebAppInstallTaskTestWithFileHandlers,
@@ -1790,9 +1795,9 @@ TEST_F(WebAppInstallTaskTestWithFileHandlers,
   EXPECT_EQ(app_id, install_result.app_id);
 #if defined(OS_CHROMEOS)
   // OS integration is always enabled in ChromeOS
-  EXPECT_EQ(1u, test_os_integration_manager().num_create_file_handlers_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_create_file_handlers_calls());
 #else
-  EXPECT_EQ(0u, test_os_integration_manager().num_create_file_handlers_calls());
+  EXPECT_EQ(0u, fake_os_integration_manager().num_create_file_handlers_calls());
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -1806,7 +1811,7 @@ TEST_F(WebAppInstallTaskTestWithFileHandlers,
       CreateManifest(url), webapps::WebappInstallSource::MENU_BROWSER_TAB);
   EXPECT_EQ(InstallResultCode::kSuccessNewInstall, install_result.code);
   EXPECT_EQ(app_id, install_result.app_id);
-  EXPECT_EQ(1u, test_os_integration_manager().num_create_file_handlers_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_create_file_handlers_calls());
 
   ResetInstallTask();
 
@@ -1820,7 +1825,7 @@ TEST_F(WebAppInstallTaskTestWithFileHandlers,
       UpdateWebAppFromInfo(app_id, std::move(app_info));
   EXPECT_EQ(InstallResultCode::kSuccessAlreadyInstalled, update_result.code);
   EXPECT_EQ(app_id, update_result.app_id);
-  EXPECT_EQ(1u, test_os_integration_manager().num_update_file_handlers_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_update_file_handlers_calls());
 }
 
 TEST_F(WebAppInstallTaskTestWithFileHandlers,
@@ -1835,9 +1840,9 @@ TEST_F(WebAppInstallTaskTestWithFileHandlers,
   EXPECT_EQ(app_id, install_result.app_id);
 #if defined(OS_CHROMEOS)
   // OS integration is always enabled in ChromeOS
-  EXPECT_EQ(1u, test_os_integration_manager().num_create_file_handlers_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_create_file_handlers_calls());
 #else
-  EXPECT_EQ(0u, test_os_integration_manager().num_create_file_handlers_calls());
+  EXPECT_EQ(0u, fake_os_integration_manager().num_create_file_handlers_calls());
 #endif  // defined(OS_CHROMEOS)
 
   ResetInstallTask();
@@ -1854,9 +1859,9 @@ TEST_F(WebAppInstallTaskTestWithFileHandlers,
   EXPECT_EQ(app_id, update_result.app_id);
 #if defined(OS_CHROMEOS)
   // OS integration is always enabled in ChromeOS
-  EXPECT_EQ(1u, test_os_integration_manager().num_update_file_handlers_calls());
+  EXPECT_EQ(1u, fake_os_integration_manager().num_update_file_handlers_calls());
 #else
-  EXPECT_EQ(0u, test_os_integration_manager().num_update_file_handlers_calls());
+  EXPECT_EQ(0u, fake_os_integration_manager().num_update_file_handlers_calls());
 #endif  // defined(OS_CHROMEOS)
 }
 

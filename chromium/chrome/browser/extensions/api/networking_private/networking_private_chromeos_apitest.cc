@@ -117,6 +117,11 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
  public:
   NetworkingPrivateChromeOSApiTest() {}
 
+  NetworkingPrivateChromeOSApiTest(const NetworkingPrivateChromeOSApiTest&) =
+      delete;
+  NetworkingPrivateChromeOSApiTest& operator=(
+      const NetworkingPrivateChromeOSApiTest&) = delete;
+
   bool RunNetworkingSubtest(const std::string& test) {
     const std::string arg =
         base::StringPrintf("{\"test\": \"%s\"}", test.c_str());
@@ -300,7 +305,7 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
     device_test()->AddDevice(kWifiDevicePath, shill::kTypeWifi,
                              "stub_wifi_device1");
     base::ListValue wifi_ip_configs;
-    wifi_ip_configs.AppendString(kIPConfigPath);
+    wifi_ip_configs.Append(kIPConfigPath);
     SetDeviceProperty(kWifiDevicePath, shill::kIPConfigsProperty,
                       wifi_ip_configs);
     SetDeviceProperty(kWifiDevicePath, shill::kAddressProperty,
@@ -342,7 +347,7 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
     service_test()->SetServiceProperty(
         kWifi1ServicePath, shill::kStaticIPConfigProperty, static_ipconfig);
     base::ListValue frequencies1;
-    frequencies1.AppendInteger(2400);
+    frequencies1.Append(2400);
     service_test()->SetServiceProperty(
         kWifi1ServicePath, shill::kWifiFrequencyListProperty, frequencies1);
     service_test()->SetServiceProperty(kWifi1ServicePath, shill::kWifiFrequency,
@@ -363,8 +368,8 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
         base::Value(shill::kTetheringNotDetectedState));
 
     base::ListValue frequencies2;
-    frequencies2.AppendInteger(2400);
-    frequencies2.AppendInteger(5000);
+    frequencies2.Append(2400);
+    frequencies2.Append(5000);
     service_test()->SetServiceProperty(
         kWifi2ServicePath, shill::kWifiFrequencyListProperty, frequencies2);
     service_test()->SetServiceProperty(kWifi2ServicePath, shill::kWifiFrequency,
@@ -425,9 +430,6 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
   sync_preferences::TestingPrefServiceSyncable user_prefs_;
   TestingPrefServiceSimple local_state_;
   std::string userhash_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateChromeOSApiTest);
 };
 
 // Place each subtest into a separate browser test so that the stub networking

@@ -101,7 +101,9 @@
     "sync",
     "tabs",
     "tabsPrivate",
+    "themePrivate",
     "thumbnails",
+    "translateHistory",
     "topSites",
     "unlimitedStorage",
     "utilities",
@@ -124,7 +126,6 @@
           "saga/saga.html",
           "components/thumbnail/capture.html",
           "components/chat/chat.html",
-          "components/settings/settings.html",
           "components/mail/mail.html",
           "components/welcome/welcome.html",
           "components/experiments/experiments.html",
@@ -134,8 +135,7 @@
           "defaultsPlatformSpecific.js",
           "defaults.js",
           "bundle.js",
-          "devtools.html",
-          "window.html"
+          "devtools.html"
         ]
       },
       {

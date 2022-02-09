@@ -7,8 +7,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/schema/vivaldi_utilities.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #ifndef OS_WIN
 // static
@@ -19,8 +19,7 @@ RazerChromaPlatformDriver::CreateRazerChromaPlatformDriver(Profile* profile) {
 }
 #endif  // OS_WIN
 
-RazerChromaHandler::RazerChromaHandler(Profile* profile)
-    : profile_(profile) {
+RazerChromaHandler::RazerChromaHandler(Profile* profile) : profile_(profile) {
   platform_driver_.reset(
       RazerChromaPlatformDriver::CreateRazerChromaPlatformDriver(profile));
 
@@ -33,9 +32,7 @@ RazerChromaHandler::RazerChromaHandler(Profile* profile)
   OnPrefChanged(vivaldiprefs::kRazerChromaEnabled);
 }
 
-RazerChromaHandler::~RazerChromaHandler() {
-
-}
+RazerChromaHandler::~RazerChromaHandler() {}
 
 bool RazerChromaHandler::Initialize() {
   if (initialized_ || !IsEnabled()) {

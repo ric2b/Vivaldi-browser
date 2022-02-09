@@ -52,6 +52,7 @@
 #include "content/common/field_trial_recorder.mojom.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/mojo_core_library_support.h"
+#include "content/common/pseudonymization_salt.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -95,6 +96,7 @@
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
 #include <stdio.h>
 #include "base/test/clang_profiling.h"
+#include "build/config/compiler/compiler_buildflags.h"
 #if defined(OS_WIN)
 #include <io.h>
 #endif
@@ -179,7 +181,7 @@ void TerminateSelfOnDisconnect() {
   // Some sanitizer tools rely on exit handlers (e.g. to run leak detection,
   // or dump code coverage data to disk). Instead of exiting the process
   // immediately, we give it 60 seconds to run exit handlers.
-  CHECK(CreateWaitAndExitThread(base::TimeDelta::FromSeconds(60)));
+  CHECK(CreateWaitAndExitThread(base::Seconds(60)));
 #if defined(LEAK_SANITIZER)
   // Invoke LeakSanitizer early to avoid detecting shutdown-only leaks. If
   // leaks are found, the process will exit here.
@@ -376,7 +378,7 @@ class ChildThreadImpl::IOThreadState
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   void SetProfilingFile(base::File file) override {
     // TODO(crbug.com/985574) Remove Android check when possible.
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
+#if defined(OS_POSIX) && (!defined(OS_ANDROID) || defined(CLANG_PGO))
     // Take the file descriptor so that |file| does not close it.
     int fd = file.TakePlatformFile();
     FILE* f = fdopen(fd, "r+b");
@@ -395,6 +397,10 @@ class ChildThreadImpl::IOThreadState
     std::move(callback).Run();
   }
 #endif
+
+  void SetPseudonymizationSalt(uint32_t salt) override {
+    content::SetPseudonymizationSalt(salt);
+  }
 
   const scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_;
   const base::WeakPtr<ChildThreadImpl> weak_main_thread_;
@@ -706,7 +712,7 @@ void ChildThreadImpl::Init(const Options& options) {
       FROM_HERE,
       base::BindOnce(&ChildThreadImpl::EnsureConnected,
                      channel_connected_factory_->GetWeakPtr()),
-      base::TimeDelta::FromSeconds(connection_timeout));
+      base::Seconds(connection_timeout));
 
   // In single-process mode, there is no need to synchronize trials to the
   // browser process (because it's the same process).

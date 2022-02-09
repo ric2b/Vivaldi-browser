@@ -69,6 +69,7 @@ enum class RequestTypeForUma {
   PERMISSION_FONT_ACCESS = 26,
   PERMISSION_IDLE_DETECTION = 27,
   PERMISSION_FILE_HANDLING = 28,
+  PERMISSION_U2F_API_REQUEST = 29,
   // NUM must be the last value in the enum.
   NUM
 };
@@ -159,6 +160,10 @@ enum class PermissionPromptDisposition {
   // Only used on desktop, a less prominent version of chip on the left-hand
   // side of the location bar that shows a bubble when clicked.
   LOCATION_BAR_LEFT_QUIET_CHIP = 9,
+
+  // Only used on Android, a message bubble near top of the screen and below the
+  // location bar. Message UI is an alternative UI to infobar UI.
+  MESSAGE_UI = 10,
 };
 
 // The reason why the permission prompt disposition was used. Enum used in UKMs,
@@ -247,6 +252,10 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptDeniedGesture[];
   static const char kPermissionsPromptDeniedNoGesture[];
 
+  PermissionUmaUtil() = delete;
+  PermissionUmaUtil(const PermissionUmaUtil&) = delete;
+  PermissionUmaUtil& operator=(const PermissionUmaUtil&) = delete;
+
   static void PermissionRequested(ContentSettingsType permission,
                                   const GURL& requesting_origin);
 
@@ -327,6 +336,12 @@ class PermissionUmaUtil {
   static std::string GetPermissionActionString(
       PermissionAction permission_action);
 
+  static bool IsPromptDispositionQuiet(
+      PermissionPromptDisposition prompt_disposition);
+
+  static bool IsPromptDispositionLoud(
+      PermissionPromptDisposition prompt_disposition);
+
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation
   // condition is met (from ALLOW to something else).
@@ -358,6 +373,7 @@ class PermissionUmaUtil {
 
  private:
   friend class PermissionUmaUtilTest;
+
   // Records UMA and UKM metrics for ContentSettingsTypes that have user facing
   // permission prompts. The passed in `permission` must be such that
   // PermissionUtil::IsPermission(permission) returns true.
@@ -385,8 +401,6 @@ class PermissionUmaUtil {
       const std::vector<PermissionRequest*>& requests,
       bool accepted,
       bool is_one_time);
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(PermissionUmaUtil);
 };
 
 }  // namespace permissions

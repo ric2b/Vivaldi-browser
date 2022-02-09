@@ -4,9 +4,9 @@
 #define INSTALLER_UTIL_VIVALDI_SETUP_UTIL_H_
 
 #include "base/files/file_path.h"
+#include "base/version.h"
 #include "base/win/windows_types.h"
 #include "chrome/installer/util/util_constants.h"
-#include "base/version.h"
 
 #include "installer/util/vivaldi_install_constants.h"
 #include "installer/util/vivaldi_install_util.h"

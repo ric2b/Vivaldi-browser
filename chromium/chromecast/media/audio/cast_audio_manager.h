@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -56,6 +57,10 @@ class CastAudioManager : public ::media::AudioManagerBase {
       scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
       external_service_support::ExternalConnector* connector,
       bool use_mixer);
+
+  CastAudioManager(const CastAudioManager&) = delete;
+  CastAudioManager& operator=(const CastAudioManager&) = delete;
+
   ~CastAudioManager() override;
 
   // AudioManagerBase implementation.
@@ -133,8 +138,6 @@ class CastAudioManager : public ::media::AudioManagerBase {
   // Weak pointers must be dereferenced on the |browser_task_runner|.
   base::WeakPtr<CastAudioManager> weak_this_;
   base::WeakPtrFactory<CastAudioManager> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(CastAudioManager);
 };
 
 }  // namespace media

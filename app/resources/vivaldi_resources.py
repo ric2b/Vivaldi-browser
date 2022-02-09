@@ -59,6 +59,22 @@ def ReplaceMatches(resources, matcher, replace_with, exceptions=[]):
     if not isinstance(node, message.MessageNode) or isinstance(node, message.PhNode):
       continue
     modified_string = False
+
+    finished = False
+    while not finished:
+      finished = True
+      for index, part in enumerate(node.mixed_content):
+        if not isinstance(part, (str,)):
+          continue
+        if index + 1 >= len(node.mixed_content):
+          continue
+        if isinstance(node.mixed_content[index+1], str):
+          part = part + node.mixed_content[index+1]
+          node.mixed_content[index] = part
+          del node.mixed_content[index+1]
+          finished = False
+          break;
+
     for index, part in enumerate(node.mixed_content):
       if not isinstance(part, (str,)):
         continue
@@ -87,6 +103,21 @@ def ReplaceMatches(resources, matcher, replace_with, exceptions=[]):
       assert(clique.GetMessage().dirty)
       for _lang, tmessage in translated.items():
         parts = tmessage.GetContent()
+
+        finished = False
+        while not finished:
+          finished = True
+          for index, part in enumerate(parts):
+            if not isinstance(part, (str,)):
+              continue
+            if index + 1 >= len(parts):
+              continue
+            if isinstance(parts[index+1], str):
+              part = part + parts[index+1]
+              parts[index] = part
+              del parts[index+1]
+              finished = False
+              break;
         for index, part in enumerate(parts):
           if not isinstance(part, str):
             continue

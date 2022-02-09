@@ -5,8 +5,8 @@
 
 #include <map>
 
-#include "ui/base/models/simple_menu_model.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
+#include "ui/base/models/simple_menu_model.h"
 
 class NotesSubMenuObserver;
 class NotesSubMenuObserverHelper;

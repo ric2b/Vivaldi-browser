@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Cdd, Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, DuplexMode, MarginsType, PrinterType, PrintPreviewModelElement, ScalingType, Size} from 'chrome://print/print_preview.js';
+import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, DuplexMode, GooglePromotedDestinationId, MarginsType, PrinterType, PrintPreviewModelElement, ScalingType, Size} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {isChromeOS, isLacros} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from '../chai_assert.js';
-import {eventToPromise} from '../test_util.m.js';
+import {eventToPromise} from '../test_util.js';
 
 import {getCddTemplateWithAdvancedSettings} from './print_preview_test_utils.js';
 
@@ -541,7 +541,7 @@ suite(model_test.suiteName, function() {
   // to Drive CrOS.
   test(assert(model_test.TestNames.PrintToGoogleDriveCros), function() {
     const driveDestination = new Destination(
-        Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS, DestinationType.LOCAL,
+        GooglePromotedDestinationId.SAVE_TO_DRIVE_CROS, DestinationType.LOCAL,
         DestinationOrigin.LOCAL, 'Save to Google Drive',
         DestinationConnectionStatus.ONLINE);
     initializeModel();

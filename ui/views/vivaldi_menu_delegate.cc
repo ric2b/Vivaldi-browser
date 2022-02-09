@@ -27,9 +27,9 @@ bool MenuDelegate::VivaldiShouldTryPositioningContextMenu() const {
   return false;
 }
 
-void MenuDelegate::VivaldiGetContextMenuPosition(gfx::Rect* menu_bounds,
+void MenuDelegate::VivaldiGetContextMenuPosition(
+    gfx::Rect* menu_bounds,
     const gfx::Rect& monitor_bounds,
-    const gfx::Rect& anchor_bounds) const {
-}
+    const gfx::Rect& anchor_bounds) const {}
 
 }  // namespace views

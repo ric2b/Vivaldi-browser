@@ -23,6 +23,10 @@ class DocumentBlockedControllerClient
                                   const GURL& request_url);
 
   ~DocumentBlockedControllerClient() override;
+  DocumentBlockedControllerClient(const DocumentBlockedControllerClient&) =
+      delete;
+  DocumentBlockedControllerClient& operator=(
+      const DocumentBlockedControllerClient&) = delete;
 
   // security_interstitials::ControllerClient overrides.
   void GoBack() override;
@@ -30,8 +34,6 @@ class DocumentBlockedControllerClient
 
  private:
   const GURL request_url_;
-
-  DISALLOW_COPY_AND_ASSIGN(DocumentBlockedControllerClient);
 };
 }  // namespace adblock_filter
 

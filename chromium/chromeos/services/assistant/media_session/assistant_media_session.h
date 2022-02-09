@@ -28,6 +28,10 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantMediaSession
     : public media_session::mojom::MediaSession {
  public:
   explicit AssistantMediaSession(MediaHost* host);
+
+  AssistantMediaSession(const AssistantMediaSession&) = delete;
+  AssistantMediaSession& operator=(const AssistantMediaSession&) = delete;
+
   ~AssistantMediaSession() override;
 
   // media_session.mojom.MediaSession overrides:
@@ -58,6 +62,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantMediaSession
   void ToggleCamera() override {}
   void HangUp() override {}
   void Raise() override {}
+  void SetMute(bool mute) override {}
 
   // Requests/abandons audio focus to the AudioFocusManager.
   void RequestAudioFocus(media_session::mojom::AudioFocusType audio_focus_type);
@@ -130,8 +135,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantMediaSession
       base::UnguessableToken::Null();
 
   base::WeakPtrFactory<AssistantMediaSession> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AssistantMediaSession);
 };
 
 }  // namespace assistant

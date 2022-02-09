@@ -111,6 +111,10 @@ bool ComparePortAssociations(
 }  // namespace
 
 class DisplayPrefsTest : public AshTestBase {
+ public:
+  DisplayPrefsTest(const DisplayPrefsTest&) = delete;
+  DisplayPrefsTest& operator=(const DisplayPrefsTest&) = delete;
+
  protected:
   DisplayPrefsTest() = default;
   ~DisplayPrefsTest() override = default;
@@ -240,16 +244,14 @@ class DisplayPrefsTest : public AshTestBase {
  private:
   std::unique_ptr<WindowTreeHostManager::Observer> observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(DisplayPrefsTest);
 };
 
 class DisplayPrefsTestGuest : public DisplayPrefsTest {
  public:
   DisplayPrefsTestGuest() { set_start_session(false); }
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DisplayPrefsTestGuest);
+  DisplayPrefsTestGuest(const DisplayPrefsTestGuest&) = delete;
+  DisplayPrefsTestGuest& operator=(const DisplayPrefsTestGuest&) = delete;
 };
 
 TEST_F(DisplayPrefsTest, ListedLayoutOverrides) {
@@ -305,7 +307,7 @@ TEST_F(DisplayPrefsTest, BasicStores) {
   // displays. So set internal display first before adding display.
   display::test::ScopedSetInternalDisplayId set_internal(display_manager(),
                                                          id1);
-  UpdateDisplay("300x200*2, 400x300#400x400|300x200*1.25");
+  UpdateDisplay("300x200*2, 400x300#500x400|300x200*1.25");
   display::test::DisplayManagerTestApi display_manager_test(display_manager());
   int64_t id2 = display_manager_test.GetSecondaryDisplay().id();
   int64_t dummy_id = display::GetNextSynthesizedDisplayId(id2);
@@ -401,7 +403,7 @@ TEST_F(DisplayPrefsTest, BasicStores) {
 
   const base::ListValue* external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(0U, external_display_mirror_info->GetSize());
+  EXPECT_EQ(0U, external_display_mirror_info->GetList().size());
 
   const base::DictionaryValue* properties =
       local_state()->GetDictionary(prefs::kDisplayProperties);
@@ -411,9 +413,10 @@ TEST_F(DisplayPrefsTest, BasicStores) {
   EXPECT_TRUE(property->GetInteger("rotation", &rotation));
   EXPECT_EQ(1, rotation);
 
-  double display_zoom_1;
-  EXPECT_TRUE(property->GetDouble("display_zoom_factor", &display_zoom_1));
-  EXPECT_NEAR(display_zoom_1, zoom_factor_1, 0.0001);
+  absl::optional<double> display_zoom_1 =
+      property->FindDoubleKey("display_zoom_factor");
+  ASSERT_TRUE(display_zoom_1);
+  EXPECT_NEAR(*display_zoom_1, zoom_factor_1, 0.0001);
 
   // Internal display never registered the resolution.
   int width = 0, height = 0;
@@ -459,9 +462,10 @@ TEST_F(DisplayPrefsTest, BasicStores) {
   EXPECT_TRUE(property->GetInteger("rotation", &rotation));
   EXPECT_EQ(0, rotation);
 
-  double display_zoom_2;
-  EXPECT_TRUE(property->GetDouble("display_zoom_factor", &display_zoom_2));
-  EXPECT_NEAR(display_zoom_2, zoom_factor_2, 0.0001);
+  absl::optional<double> display_zoom_2 =
+      property->FindDoubleKey("display_zoom_factor");
+  ASSERT_TRUE(display_zoom_2);
+  EXPECT_NEAR(*display_zoom_2, zoom_factor_2, 0.0001);
 
   EXPECT_FALSE(property->GetInteger("insets_top", &top));
   EXPECT_FALSE(property->GetInteger("insets_left", &left));
@@ -541,7 +545,7 @@ TEST_F(DisplayPrefsTest, BasicStores) {
 
   external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(1U, external_display_mirror_info->GetSize());
+  EXPECT_EQ(1U, external_display_mirror_info->GetList().size());
   // ExternalDisplayInfo stores ID without output index.
   EXPECT_EQ(base::NumberToString(display::GetDisplayIdWithoutOutputIndex(id2)),
             external_display_mirror_info->GetList()[0].GetString());
@@ -1376,7 +1380,7 @@ TEST_F(DisplayPrefsTest, ExternalDisplayMirrorInfo) {
   LoadDisplayPreferences();
   const base::ListValue* pref_external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(1U, pref_external_display_mirror_info->GetSize());
+  EXPECT_EQ(1U, pref_external_display_mirror_info->GetList().size());
   EXPECT_EQ(base::NumberToString(first_display_masked_id),
             pref_external_display_mirror_info->GetList()[0].GetString());
 
@@ -1387,7 +1391,7 @@ TEST_F(DisplayPrefsTest, ExternalDisplayMirrorInfo) {
   EXPECT_TRUE(display_manager()->IsInMirrorMode());
   pref_external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(1U, pref_external_display_mirror_info->GetSize());
+  EXPECT_EQ(1U, pref_external_display_mirror_info->GetList().size());
   EXPECT_EQ(base::NumberToString(first_display_masked_id),
             pref_external_display_mirror_info->GetList()[0].GetString());
 
@@ -1398,7 +1402,7 @@ TEST_F(DisplayPrefsTest, ExternalDisplayMirrorInfo) {
   EXPECT_TRUE(display_manager()->IsInMirrorMode());
   pref_external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(2U, pref_external_display_mirror_info->GetSize());
+  EXPECT_EQ(2U, pref_external_display_mirror_info->GetList().size());
   EXPECT_EQ(base::NumberToString(first_display_masked_id),
             pref_external_display_mirror_info->GetList()[0].GetString());
   EXPECT_EQ(base::NumberToString(second_display_masked_id),
@@ -1416,7 +1420,7 @@ TEST_F(DisplayPrefsTest, ExternalDisplayMirrorInfo) {
   LoadDisplayPreferences();
   pref_external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(1U, pref_external_display_mirror_info->GetSize());
+  EXPECT_EQ(1U, pref_external_display_mirror_info->GetList().size());
   EXPECT_EQ(base::NumberToString(second_display_masked_id),
             pref_external_display_mirror_info->GetList()[0].GetString());
 
@@ -1427,7 +1431,7 @@ TEST_F(DisplayPrefsTest, ExternalDisplayMirrorInfo) {
   EXPECT_FALSE(display_manager()->IsInMirrorMode());
   pref_external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(1U, pref_external_display_mirror_info->GetSize());
+  EXPECT_EQ(1U, pref_external_display_mirror_info->GetList().size());
   EXPECT_EQ(base::NumberToString(second_display_masked_id),
             pref_external_display_mirror_info->GetList()[0].GetString());
 
@@ -1438,7 +1442,7 @@ TEST_F(DisplayPrefsTest, ExternalDisplayMirrorInfo) {
   EXPECT_FALSE(display_manager()->IsInMirrorMode());
   pref_external_display_mirror_info =
       local_state()->GetList(prefs::kExternalDisplayMirrorInfo);
-  EXPECT_EQ(0U, pref_external_display_mirror_info->GetSize());
+  EXPECT_EQ(0U, pref_external_display_mirror_info->GetList().size());
 }
 
 TEST_F(DisplayPrefsTest, ExternalDisplayConnectedBeforeLoadingPrefs) {

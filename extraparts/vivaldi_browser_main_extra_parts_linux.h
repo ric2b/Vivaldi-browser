@@ -9,8 +9,10 @@ class VivaldiBrowserMainExtraPartsLinux : public VivaldiBrowserMainExtraParts {
  public:
   VivaldiBrowserMainExtraPartsLinux();
   ~VivaldiBrowserMainExtraPartsLinux() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraPartsLinux);
+  VivaldiBrowserMainExtraPartsLinux(const VivaldiBrowserMainExtraPartsLinux&) =
+      delete;
+  VivaldiBrowserMainExtraPartsLinux& operator=(
+      const VivaldiBrowserMainExtraPartsLinux&) = delete;
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_LINUX_H_

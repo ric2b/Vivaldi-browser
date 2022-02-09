@@ -42,21 +42,26 @@ class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
  public:
   explicit PlatformVideoFramePool(
       gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
+
+  PlatformVideoFramePool(const PlatformVideoFramePool&) = delete;
+  PlatformVideoFramePool& operator=(const PlatformVideoFramePool&) = delete;
+
   ~PlatformVideoFramePool() override;
 
   // Returns the ID of the GpuMemoryBuffer wrapped by |frame|.
   static gfx::GpuMemoryBufferId GetGpuMemoryBufferId(const VideoFrame& frame);
 
   // DmabufVideoFramePool implementation.
-  absl::optional<GpuBufferLayout> Initialize(const Fourcc& fourcc,
-                                             const gfx::Size& coded_size,
-                                             const gfx::Rect& visible_rect,
-                                             const gfx::Size& natural_size,
-                                             size_t max_num_frames,
-                                             bool use_protected) override;
+  StatusOr<GpuBufferLayout> Initialize(const Fourcc& fourcc,
+                                       const gfx::Size& coded_size,
+                                       const gfx::Rect& visible_rect,
+                                       const gfx::Size& natural_size,
+                                       size_t max_num_frames,
+                                       bool use_protected) override;
   scoped_refptr<VideoFrame> GetFrame() override;
   bool IsExhausted() override;
   void NotifyWhenFrameAvailable(base::OnceClosure cb) override;
+  void ReleaseAllFrames() override;
 
   // Returns the original frame of a wrapped frame. We need this method to
   // determine whether the frame returned by GetFrame() is the same one after
@@ -141,8 +146,6 @@ class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
   // Used at the VideoFrame destruction callback.
   base::WeakPtr<PlatformVideoFramePool> weak_this_;
   base::WeakPtrFactory<PlatformVideoFramePool> weak_this_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PlatformVideoFramePool);
 };
 
 }  // namespace media

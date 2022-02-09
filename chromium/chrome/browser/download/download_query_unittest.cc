@@ -56,6 +56,9 @@ class DownloadQueryTest : public testing::Test {
  public:
   DownloadQueryTest() {}
 
+  DownloadQueryTest(const DownloadQueryTest&) = delete;
+  DownloadQueryTest& operator=(const DownloadQueryTest&) = delete;
+
   ~DownloadQueryTest() override {}
 
   void TearDown() override {}
@@ -109,8 +112,6 @@ class DownloadQueryTest : public testing::Test {
   std::vector<std::unique_ptr<download::MockDownloadItem>> owned_mocks_;
   DownloadQuery query_;
   DownloadVector results_;
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadQueryTest);
 };
 
 template<> void DownloadQueryTest::AddFilter(
@@ -148,7 +149,7 @@ void DownloadQueryTest::AddFilter(DownloadQuery::FilterType name,
   std::unique_ptr<base::ListValue> list(new base::ListValue());
   for (std::vector<std::u16string>::const_iterator it = cpp_value.begin();
        it != cpp_value.end(); ++it) {
-    list->AppendString(*it);
+    list->Append(*it);
   }
   CHECK(query_.AddFilter(name, *list.get()));
 }
@@ -158,7 +159,7 @@ template<> void DownloadQueryTest::AddFilter(
   std::unique_ptr<base::ListValue> list(new base::ListValue());
   for (std::vector<std::string>::const_iterator it = cpp_value.begin();
        it != cpp_value.end(); ++it) {
-    list->AppendString(*it);
+    list->Append(*it);
   }
   CHECK(query_.AddFilter(name, *list.get()));
 }

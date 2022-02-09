@@ -35,8 +35,8 @@ ImportedPasswordForm::ImportedPasswordForm() = default;
 ImportedPasswordForm::ImportedPasswordForm(const ImportedPasswordForm& form) =
     default;
 
-ImportedPasswordForm::ImportedPasswordForm(ImportedPasswordForm&& form) =
-    default;
+ImportedPasswordForm::ImportedPasswordForm(
+    ImportedPasswordForm&& form) noexcept = default;
 
 ImportedPasswordForm& ImportedPasswordForm::operator=(
     const ImportedPasswordForm& form) = default;

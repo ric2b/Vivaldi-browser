@@ -64,10 +64,14 @@ namespace {
     for (int y = 0; y < bitmap.height(); ++y)                 \
       for (int x = 0; x < bitmap.width(); ++x) {              \
         int alpha = *bitmap.getAddr32(x, y) >> 24;            \
-        bool opaque = opaqueRect.Contains(x, y);              \
-        EXPECT_EQ(opaque, alpha == 255);                      \
+        bool is_opaque = opaqueRect.Contains(x, y);           \
+        EXPECT_EQ(is_opaque, alpha == 255);                   \
       }                                                       \
   }
+
+AutoDarkMode AutoDarkModeDisabled() {
+  return AutoDarkMode(DarkModeFilter::ElementRole::kBackground, false);
+}
 
 TEST(GraphicsContextTest, Recording) {
   SkBitmap bitmap;
@@ -82,12 +86,14 @@ TEST(GraphicsContextTest, Recording) {
   FloatRect bounds(0, 0, 100, 100);
 
   context.BeginRecording(bounds);
-  context.FillRect(FloatRect(0, 0, 50, 50), opaque, SkBlendMode::kSrcOver);
+  context.FillRect(FloatRect(0, 0, 50, 50), opaque, AutoDarkModeDisabled(),
+                   SkBlendMode::kSrcOver);
   canvas.drawPicture(context.EndRecording());
   EXPECT_OPAQUE_PIXELS_ONLY_IN_RECT(bitmap, IntRect(0, 0, 50, 50))
 
   context.BeginRecording(bounds);
-  context.FillRect(FloatRect(0, 0, 100, 100), opaque, SkBlendMode::kSrcOver);
+  context.FillRect(FloatRect(0, 0, 100, 100), opaque, AutoDarkModeDisabled(),
+                   SkBlendMode::kSrcOver);
   // Make sure the opaque region was unaffected by the rect drawn during
   // recording.
   EXPECT_OPAQUE_PIXELS_ONLY_IN_RECT(bitmap, IntRect(0, 0, 50, 50))
@@ -103,7 +109,7 @@ TEST(GraphicsContextTest, UnboundedDrawsAreClipped) {
   SkiaPaintCanvas canvas(bitmap);
 
   Color opaque(1.0f, 0.0f, 0.0f, 1.0f);
-  Color alpha(0.0f, 0.0f, 0.0f, 0.0f);
+  Color transparent(0.0f, 0.0f, 0.0f, 0.0f);
   FloatRect bounds(0, 0, 100, 100);
 
   auto paint_controller = std::make_unique<PaintController>();
@@ -123,7 +129,8 @@ TEST(GraphicsContextTest, UnboundedDrawsAreClipped) {
   context.SetLineDash(dash_array, 0);
 
   // Make the device opaque in 10,10 40x40.
-  context.FillRect(FloatRect(10, 10, 40, 40), opaque, SkBlendMode::kSrcOver);
+  context.FillRect(FloatRect(10, 10, 40, 40), opaque, AutoDarkModeDisabled(),
+                   SkBlendMode::kSrcOver);
   canvas.drawPicture(context.EndRecording());
   EXPECT_OPAQUE_PIXELS_ONLY_IN_RECT(bitmap, IntRect(10, 10, 40, 40));
 
@@ -137,9 +144,9 @@ TEST(GraphicsContextTest, UnboundedDrawsAreClipped) {
   path.MoveTo(FloatPoint(10, 10));
   path.AddLineTo(FloatPoint(40, 40));
   PaintFlags flags;
-  flags.setColor(alpha.Rgb());
+  flags.setColor(transparent.Rgb());
   flags.setBlendMode(SkBlendMode::kSrcOut);
-  context.DrawPath(path.GetSkPath(), flags);
+  context.DrawPath(path.GetSkPath(), flags, AutoDarkModeDisabled());
 
   canvas.drawPicture(context.EndRecording());
   EXPECT_OPAQUE_PIXELS_IN_RECT(bitmap, IntRect(20, 10, 30, 40));
@@ -157,14 +164,21 @@ class GraphicsContextDarkModeTest : public testing::Test {
   void DrawColorsToContext(bool is_dark_mode_on,
                            const DarkModeSettings& settings) {
     GraphicsContext context(*paint_controller_);
-    context.SetDarkModeEnabled(is_dark_mode_on);
     if (is_dark_mode_on)
       context.UpdateDarkModeSettingsForTest(settings);
     context.BeginRecording(FloatRect(0, 0, 4, 1));
-    context.FillRect(FloatRect(0, 0, 1, 1), Color(SK_ColorBLACK));
-    context.FillRect(FloatRect(1, 0, 1, 1), Color(SK_ColorWHITE));
-    context.FillRect(FloatRect(2, 0, 1, 1), Color(SK_ColorRED));
-    context.FillRect(FloatRect(3, 0, 1, 1), Color(SK_ColorGRAY));
+    context.FillRect(FloatRect(0, 0, 1, 1), Color(SK_ColorBLACK),
+                     AutoDarkMode(DarkModeFilter::ElementRole::kBackground,
+                                  is_dark_mode_on));
+    context.FillRect(FloatRect(1, 0, 1, 1), Color(SK_ColorWHITE),
+                     AutoDarkMode(DarkModeFilter::ElementRole::kBackground,
+                                  is_dark_mode_on));
+    context.FillRect(FloatRect(2, 0, 1, 1), Color(SK_ColorRED),
+                     AutoDarkMode(DarkModeFilter::ElementRole::kBackground,
+                                  is_dark_mode_on));
+    context.FillRect(FloatRect(3, 0, 1, 1), Color(SK_ColorGRAY),
+                     AutoDarkMode(DarkModeFilter::ElementRole::kBackground,
+                                  is_dark_mode_on));
     // Capture the result in the bitmap.
     canvas_->drawPicture(context.EndRecording());
   }

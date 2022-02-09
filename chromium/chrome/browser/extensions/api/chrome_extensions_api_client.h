@@ -20,12 +20,17 @@ class ClipboardExtensionHelper;
 class ChromeExtensionsAPIClient : public ExtensionsAPIClient {
  public:
   ChromeExtensionsAPIClient();
+
+  ChromeExtensionsAPIClient(const ChromeExtensionsAPIClient&) = delete;
+  ChromeExtensionsAPIClient& operator=(const ChromeExtensionsAPIClient&) =
+      delete;
+
   ~ChromeExtensionsAPIClient() override;
 
   // ExtensionsApiClient implementation.
   void AddAdditionalValueStoreCaches(
       content::BrowserContext* context,
-      const scoped_refptr<ValueStoreFactory>& factory,
+      const scoped_refptr<value_store::ValueStoreFactory>& factory,
       const scoped_refptr<base::ObserverListThreadSafe<SettingsObserver>>&
           observers,
       std::map<settings_namespace::Namespace, ValueStoreCache*>* caches)
@@ -113,8 +118,6 @@ class ChromeExtensionsAPIClient : public ExtensionsAPIClient {
 #endif
   std::unique_ptr<extensions::ChromeAutomationInternalApiDelegate>
       extensions_automation_api_delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeExtensionsAPIClient);
 };
 
 }  // namespace extensions

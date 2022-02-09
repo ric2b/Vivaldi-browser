@@ -86,7 +86,7 @@ TEST(UserDataUtilTest, SortsCompleteContactsByUseDate) {
   autofill::test::SetProfileInfo(profile_old.get(), "Adam", "", "West",
                                  "adam.west@gmail.com", "", "", "", "", "", "",
                                  "", "");
-  profile_old->set_use_date(current - base::TimeDelta::FromDays(2));
+  profile_old->set_use_date(current - base::Days(2));
 
   auto profile_new = std::make_unique<autofill::AutofillProfile>();
   autofill::test::SetProfileInfo(profile_new.get(), "Adam", "", "West",
@@ -162,7 +162,7 @@ TEST(UserDataUtilTest, GetDefaultContactSelectionForCompleteProfiles) {
   autofill::test::SetProfileInfo(profile_old.get(), "Adam", "", "West",
                                  "adam.west@gmail.com", "", "", "", "", "", "",
                                  "", "");
-  profile_old->set_use_date(current - base::TimeDelta::FromDays(2));
+  profile_old->set_use_date(current - base::Days(2));
 
   auto profile_new = std::make_unique<autofill::AutofillProfile>();
   autofill::test::SetProfileInfo(profile_new.get(), "Adam", "", "West",
@@ -227,7 +227,7 @@ TEST(UserDataUtilTest, SortsCompleteAddressesByUseDate) {
   autofill::test::SetProfileInfo(profile_old.get(), "Adam", "", "West", "", "",
                                  "Brandschenkestrasse 110", "", "Zurich", "",
                                  "8002", "CH", "");
-  profile_old->set_use_date(current - base::TimeDelta::FromDays(2));
+  profile_old->set_use_date(current - base::Days(2));
 
   auto profile_new = std::make_unique<autofill::AutofillProfile>();
   autofill::test::SetProfileInfo(profile_new.get(), "Adam", "", "West", "", "",
@@ -318,8 +318,7 @@ TEST(UserDataUtilTest, GetDefaultAddressSelectionForCompleteProfiles) {
                                  "adam.west@gmail.com", "West", "", "",
                                  "Brandschenkestrasse 110", "", "Zurich", "",
                                  "8002", "CH", "+41");
-  profile_with_irrelevant_details->set_use_date(current -
-                                                base::TimeDelta::FromDays(2));
+  profile_with_irrelevant_details->set_use_date(current - base::Days(2));
 
   auto profile_complete = std::make_unique<autofill::AutofillProfile>();
   autofill::test::SetProfileInfo(profile_complete.get(), "Adam", "", "West", "",
@@ -376,7 +375,7 @@ TEST(UserDataUtilTest, SortsEquallyValidCardsByCardUseDate) {
   autofill::test::SetCreditCardInfo(old_card.get(), "Adam West",
                                     "4111111111111111", "1", "2050",
                                     /* billing_address_id= */ "");
-  old_card->set_use_date(current - base::TimeDelta::FromDays(2));
+  old_card->set_use_date(current - base::Days(2));
   auto old_instrument =
       std::make_unique<PaymentInstrument>(std::move(old_card), nullptr);
 
@@ -524,7 +523,7 @@ TEST(UserDataUtilTest, GetDefaultSelectionForCompletePaymentInstruments) {
   autofill::test::SetCreditCardInfo(old_card.get(), "Adam West",
                                     "4111111111111111", "1", "2050",
                                     /* billing_address_id= */ "");
-  old_card->set_use_date(current - base::TimeDelta::FromDays(2));
+  old_card->set_use_date(current - base::Days(2));
   auto old_instrument =
       std::make_unique<PaymentInstrument>(std::move(old_card), nullptr);
 
@@ -984,7 +983,7 @@ TEST_F(UserDataUtilTextValueTest, RequestEmptyAutofillValue) {
   AutofillValue autofill_value;
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(autofill_value, &user_data_, &result)
+  EXPECT_EQ(GetFormattedClientValue(autofill_value, user_data_, &result)
                 .proto_status(),
             INVALID_ACTION);
   EXPECT_EQ(result, "");
@@ -995,9 +994,9 @@ TEST_F(UserDataUtilTextValueTest, ValueExpressionResultIsEmpty) {
   client_value.mutable_value_expression()->add_chunk()->set_text("");
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(client_value, &user_data_, &result)
-                .proto_status(),
-            EMPTY_VALUE_EXPRESSION_RESULT);
+  EXPECT_EQ(
+      GetFormattedClientValue(client_value, user_data_, &result).proto_status(),
+      EMPTY_VALUE_EXPRESSION_RESULT);
   EXPECT_EQ(result, "");
 }
 
@@ -1007,7 +1006,7 @@ TEST_F(UserDataUtilTextValueTest, RequestDataFromUnknownProfile) {
   autofill_value.mutable_value_expression()->add_chunk()->set_text("text");
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(autofill_value, &user_data_, &result)
+  EXPECT_EQ(GetFormattedClientValue(autofill_value, user_data_, &result)
                 .proto_status(),
             PRECONDITION_FAILED);
   EXPECT_EQ(result, "");
@@ -1029,7 +1028,7 @@ TEST_F(UserDataUtilTextValueTest, RequestUnknownDataFromKnownProfile) {
       static_cast<int>(autofill::ServerFieldType::NAME_MIDDLE));
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(autofill_value, &user_data_, &result)
+  EXPECT_EQ(GetFormattedClientValue(autofill_value, user_data_, &result)
                 .proto_status(),
             AUTOFILL_INFO_NOT_AVAILABLE);
   EXPECT_EQ(result, "");
@@ -1051,7 +1050,7 @@ TEST_F(UserDataUtilTextValueTest, RequestKnownDataFromKnownProfile) {
 
   std::string result;
   EXPECT_TRUE(
-      GetFormattedClientValue(autofill_value, &user_data_, &result).ok());
+      GetFormattedClientValue(autofill_value, user_data_, &result).ok());
   EXPECT_EQ(result, "John");
 }
 
@@ -1075,8 +1074,36 @@ TEST_F(UserDataUtilTextValueTest, EscapeDataFromProfile) {
 
   std::string result;
   EXPECT_TRUE(
-      GetFormattedClientValue(autofill_value, &user_data_, &result).ok());
+      GetFormattedClientValue(autofill_value, user_data_, &result).ok());
   EXPECT_EQ(result, "^Jo\\.h\\*n$");
+}
+
+TEST_F(UserDataUtilTextValueTest, RequestLocalizedProfileData) {
+  autofill::AutofillProfile contact(base::GenerateGUID(),
+                                    autofill::test::kEmptyOrigin);
+  autofill::test::SetProfileInfo(&contact, "John", /* middle name */ "", "Doe",
+                                 "", "", "", "", "", "", "", "CH", "");
+  user_model_.SetSelectedAutofillProfile(
+      "contact", std::make_unique<autofill::AutofillProfile>(contact),
+      &user_data_);
+
+  AutofillValue autofill_value;
+  autofill_value.mutable_profile()->set_identifier("contact");
+  autofill_value.mutable_value_expression()->add_chunk()->set_key(
+      static_cast<int>(autofill::ServerFieldType::ADDRESS_HOME_COUNTRY));
+
+  std::string result_default;
+  EXPECT_TRUE(
+      GetFormattedClientValue(autofill_value, user_data_, &result_default)
+          .ok());
+  EXPECT_EQ(result_default, "Switzerland");
+
+  autofill_value.set_locale("de-CH");
+  std::string result_localized;
+  EXPECT_TRUE(
+      GetFormattedClientValue(autofill_value, user_data_, &result_localized)
+          .ok());
+  EXPECT_EQ(result_localized, "Schweiz");
 }
 
 TEST_F(UserDataUtilTextValueTest, RequestDataFromUnknownCreditCard) {
@@ -1085,7 +1112,7 @@ TEST_F(UserDataUtilTextValueTest, RequestDataFromUnknownCreditCard) {
       static_cast<int>(autofill::ServerFieldType::CREDIT_CARD_NAME_FULL));
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(autofill_value, &user_data_, &result)
+  EXPECT_EQ(GetFormattedClientValue(autofill_value, user_data_, &result)
                 .proto_status(),
             AUTOFILL_INFO_NOT_AVAILABLE);
   EXPECT_EQ(result, "");
@@ -1104,7 +1131,7 @@ TEST_F(UserDataUtilTextValueTest, RequestUnknownDataFromKnownCreditCard) {
       static_cast<int>(AutofillFormatProto::CREDIT_CARD_VERIFICATION_CODE));
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(autofill_value, &user_data_, &result)
+  EXPECT_EQ(GetFormattedClientValue(autofill_value, user_data_, &result)
                 .proto_status(),
             AUTOFILL_INFO_NOT_AVAILABLE);
   EXPECT_EQ(result, "");
@@ -1124,7 +1151,7 @@ TEST_F(UserDataUtilTextValueTest, RequestDataFromKnownCreditCard) {
 
   std::string result;
   EXPECT_TRUE(
-      GetFormattedClientValue(autofill_value, &user_data_, &result).ok());
+      GetFormattedClientValue(autofill_value, user_data_, &result).ok());
   EXPECT_EQ(result, "John Doe");
 }
 
@@ -1133,9 +1160,9 @@ TEST_F(UserDataUtilTextValueTest, RequestUnknownMemoryKey) {
   client_value.mutable_value_expression()->add_chunk()->set_memory_key("_val0");
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(client_value, &user_data_, &result)
-                .proto_status(),
-            CLIENT_MEMORY_KEY_NOT_AVAILABLE);
+  EXPECT_EQ(
+      GetFormattedClientValue(client_value, user_data_, &result).proto_status(),
+      CLIENT_MEMORY_KEY_NOT_AVAILABLE);
   EXPECT_EQ(result, "");
 }
 
@@ -1146,7 +1173,7 @@ TEST_F(UserDataUtilTextValueTest, RequestKnownMemoryKey) {
 
   AutofillValue client_value;
   client_value.mutable_value_expression()->add_chunk()->set_memory_key("key");
-  EXPECT_TRUE(GetFormattedClientValue(client_value, &user_data_, &result).ok());
+  EXPECT_TRUE(GetFormattedClientValue(client_value, user_data_, &result).ok());
   EXPECT_EQ(result, "Hello...");
 
   AutofillValueRegexp client_value_regexp;
@@ -1155,7 +1182,7 @@ TEST_F(UserDataUtilTextValueTest, RequestKnownMemoryKey) {
       ->add_chunk()
       ->set_memory_key("key");
   EXPECT_TRUE(
-      GetFormattedClientValue(client_value_regexp, &user_data_, &result).ok());
+      GetFormattedClientValue(client_value_regexp, user_data_, &result).ok());
   EXPECT_EQ(result, "Hello\\.\\.\\.");
 }
 
@@ -1166,9 +1193,9 @@ TEST_F(UserDataUtilTextValueTest, RequestEmptyKnownMemoryKey) {
   client_value.mutable_value_expression()->add_chunk()->set_memory_key("key");
 
   std::string result;
-  EXPECT_EQ(GetFormattedClientValue(client_value, &user_data_, &result)
-                .proto_status(),
-            EMPTY_VALUE_EXPRESSION_RESULT);
+  EXPECT_EQ(
+      GetFormattedClientValue(client_value, user_data_, &result).proto_status(),
+      EMPTY_VALUE_EXPRESSION_RESULT);
   EXPECT_EQ(result, "");
 }
 
@@ -1194,48 +1221,15 @@ TEST_F(UserDataUtilTextValueTest,
       base::NumberToString(expMonthKey));
 
   std::string result;
-  EXPECT_TRUE(GetFormattedClientValue(client_value, &user_data_, &result).ok());
+  EXPECT_TRUE(GetFormattedClientValue(client_value, user_data_, &result).ok());
   EXPECT_EQ(result, "01 January");
 }
 
-TEST_F(UserDataUtilTextValueTest, GetCredentialsFromDifferentDomainFails) {
+TEST_F(UserDataUtilTextValueTest, GetUsername) {
   user_data_.selected_login_ = absl::make_optional<WebsiteLoginManager::Login>(
       GURL("https://www.example.com"), "username");
 
   ElementFinder::Result element;
-  content::WebContentsTester::For(web_contents_.get())
-      ->NavigateAndCommit(GURL("https://www.other.com"));
-  element.container_frame_host = web_contents_->GetMainFrame();
-
-  EXPECT_CALL(*this,
-              OnResult(EqualsStatus(ClientStatus(PASSWORD_ORIGIN_MISMATCH)),
-                       std::string()))
-      .Times(2);
-
-  PasswordManagerValue password_value;
-  password_value.set_credential_type(PasswordManagerValue::PASSWORD);
-
-  GetPasswordManagerValue(password_value, element, &user_data_,
-                          &mock_website_login_manager_,
-                          base::BindOnce(&UserDataUtilTextValueTest::OnResult,
-                                         base::Unretained(this)));
-
-  PasswordManagerValue username_value;
-  username_value.set_credential_type(PasswordManagerValue::USERNAME);
-
-  GetPasswordManagerValue(username_value, element, &user_data_,
-                          &mock_website_login_manager_,
-                          base::BindOnce(&UserDataUtilTextValueTest::OnResult,
-                                         base::Unretained(this)));
-}
-
-TEST_F(UserDataUtilTextValueTest, GetUsernameFromSameDomain) {
-  user_data_.selected_login_ = absl::make_optional<WebsiteLoginManager::Login>(
-      GURL("https://www.example.com"), "username");
-
-  ElementFinder::Result element;
-  content::WebContentsTester::For(web_contents_.get())
-      ->NavigateAndCommit(GURL("https://www.example.com"));
   element.container_frame_host = web_contents_->GetMainFrame();
 
   PasswordManagerValue password_manager_value;
@@ -1249,13 +1243,11 @@ TEST_F(UserDataUtilTextValueTest, GetUsernameFromSameDomain) {
                                          base::Unretained(this)));
 }
 
-TEST_F(UserDataUtilTextValueTest, GetStoredPasswordFromSameDomain) {
+TEST_F(UserDataUtilTextValueTest, GetStoredPassword) {
   user_data_.selected_login_ = absl::make_optional<WebsiteLoginManager::Login>(
       GURL("https://www.example.com"), "username");
 
   ElementFinder::Result element;
-  content::WebContentsTester::For(web_contents_.get())
-      ->NavigateAndCommit(GURL("https://www.example.com"));
   element.container_frame_host = web_contents_->GetMainFrame();
 
   PasswordManagerValue password_manager_value;

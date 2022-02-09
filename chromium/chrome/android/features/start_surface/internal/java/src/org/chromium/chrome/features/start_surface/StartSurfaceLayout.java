@@ -149,11 +149,11 @@ public class StartSurfaceLayout extends Layout {
             @Override
             public void finishedHiding() {
                 // The Android View version of GTS overview is hidden.
-                // If not doing GTS-to-Tab transition animation or single tab switcher is shown on
-                // start surface, we show the fade-out instead, which was already done.
+                // If not doing GTS-to-Tab transition animation or start surface homepage is hiding
+                // (instead of grid tab switcher), we show the fade-out instead, which was already
+                // done.
                 if (!TabUiFeatureUtilities.isTabToGtsAnimationEnabled()
-                        || StartSurfaceConfiguration.START_SURFACE_LAST_ACTIVE_TAB_ONLY
-                                   .getValue()) {
+                        || isHidingStartSurfaceHomepage()) {
                     postHiding();
                     return;
                 }
@@ -210,7 +210,7 @@ public class StartSurfaceLayout extends Layout {
             // When shown on StartSurface jank is tracked under
             // JankScenario.START_SURFACE_TAB_SWITCHER and it's started/stopped on
             // StartSurfaceMediator.
-            if (!StartSurfaceConfiguration.isStartSurfaceEnabled()) {
+            if (!StartSurfaceConfiguration.isStartSurfaceFlagEnabled()) {
                 mJankTracker.startTrackingScenario(JankScenario.TAB_SWITCHER);
             }
 
@@ -226,9 +226,10 @@ public class StartSurfaceLayout extends Layout {
             mLayoutTabs = new LayoutTab[] {sourceLayoutTab};
 
             boolean quick;
-            boolean isShowingStartSurface = isShowingStartSurface();
-            // If start surface is showing, carousel or grid tab switcher is used.
-            if (isShowingStartSurface) {
+            boolean isShowingStartSurfaceHomepage = isShowingStartSurfaceHomepage();
+            // If start surface homepage is showing, carousel or single tab switcher is used.
+            // Otherwise grid tab switcher is used.
+            if (isShowingStartSurfaceHomepage) {
                 quick = getCarouselOrSingleTabListDelegate().prepareOverview();
             } else {
                 quick = getGridTabListDelegate().prepareOverview();
@@ -239,7 +240,7 @@ public class StartSurfaceLayout extends Layout {
             boolean isCurrentTabModelEmpty = mTabModelSelector.getCurrentModel().getCount() == 0;
             boolean showShrinkingAnimation = animate
                     && TabUiFeatureUtilities.isTabToGtsAnimationEnabled() && !isCurrentTabModelEmpty
-                    && !isShowingStartSurface;
+                    && !isShowingStartSurfaceHomepage;
 
             boolean skipSlowZooming = TabUiFeatureUtilities.SKIP_SLOW_ZOOMING.getValue();
             Log.d(TAG, "SkipSlowZooming = " + skipSlowZooming);
@@ -319,7 +320,7 @@ public class StartSurfaceLayout extends Layout {
             // When shown on StartSurface jank is tracked under
             // JankScenario.START_SURFACE_TAB_SWITCHER and it's started/stopped on
             // StartSurfaceMediator.
-            if (!StartSurfaceConfiguration.isStartSurfaceEnabled()) {
+            if (!StartSurfaceConfiguration.isStartSurfaceFlagEnabled()) {
                 mJankTracker.finishTrackingScenario(JankScenario.TAB_SWITCHER);
             }
         }
@@ -338,7 +339,6 @@ public class StartSurfaceLayout extends Layout {
         // Note(david@vivaldi.com): Select normal TabModel when current one is empty.
         if (mTabModelSelector.getCurrentModel().getCount() == 0)
             mTabModelSelector.selectModel(false);
-        if (mTabModelSelector.getCurrentModel().getCount() == 0) return false;
         return mController.onBackPressed();
     }
 
@@ -507,7 +507,7 @@ public class StartSurfaceLayout extends Layout {
     }
 
     private Rect getThumbnailLocationOfCurrentTab() {
-        if (isHidingStartSurface()) {
+        if (isHidingStartSurfaceHomepage()) {
             return getCarouselOrSingleTabListDelegate().getThumbnailLocationOfCurrentTab(true);
         } else {
             return getGridTabListDelegate().getThumbnailLocationOfCurrentTab(true);
@@ -536,22 +536,36 @@ public class StartSurfaceLayout extends Layout {
             return mGridTabListDelegate != null ? mGridTabListDelegate
                                                 : mCarouselOrSingleTabListDelegate;
         }
-        return isShowingStartSurface() ? getCarouselOrSingleTabListDelegate()
-                                       : getGridTabListDelegate();
+        return isShowingStartSurfaceHomepage() ? getCarouselOrSingleTabListDelegate()
+                                               : getGridTabListDelegate();
     }
 
-    private boolean isShowingStartSurface() {
-        return mController.getStartSurfaceState() == StartSurfaceState.SHOWN_HOMEPAGE
-                || mController.getStartSurfaceState() == StartSurfaceState.SHOWING_HOMEPAGE
-                || mController.getStartSurfaceState() == StartSurfaceState.SHOWING_START;
+    /**
+     * When state is SHOWN_HOMEPAGE or SHOWING_HOMEPAGE or SHOWING_START, state surface homepage is
+     * showing. When state is StartSurfaceState.SHOWING_PREVIOUS and the previous state is
+     * SHOWN_HOMEPAGE or NOT_SHOWN, homepage is showing.
+     * @return Whether start surface homepage is showing.
+     */
+    private boolean isShowingStartSurfaceHomepage() {
+        @StartSurfaceState
+        int currentState = mController.getStartSurfaceState();
+        @StartSurfaceState
+        int previousState = mController.getPreviousStartSurfaceState();
+
+        return currentState == StartSurfaceState.SHOWN_HOMEPAGE
+                || currentState == StartSurfaceState.SHOWING_HOMEPAGE
+                || currentState == StartSurfaceState.SHOWING_START
+                || (currentState == StartSurfaceState.SHOWING_PREVIOUS
+                        && (previousState == StartSurfaceState.SHOWN_HOMEPAGE
+                                || previousState == StartSurfaceState.NOT_SHOWN));
     }
 
-    private boolean isHidingStartSurface() {
+    private boolean isHidingStartSurfaceHomepage() {
         return mController.getPreviousStartSurfaceState() == StartSurfaceState.SHOWN_HOMEPAGE;
     }
 
     private void postHiding() {
-        if (ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled()) {
+        if (ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(getContext())) {
             mStartSurface.onHide();
         } else {
             getGridTabListDelegate().postHiding();
@@ -575,7 +589,7 @@ public class StartSurfaceLayout extends Layout {
         long elapsedMs = SystemClock.elapsedRealtime() - mStartTime;
         // If it's hiding start surface, TabListDelegate for carousel/single tab switcher should be
         // used.
-        long lastDirty = isHidingStartSurface()
+        long lastDirty = isHidingStartSurfaceHomepage()
                 ? getCarouselOrSingleTabListDelegate().getLastDirtyTime()
                 : getGridTabListDelegate().getLastDirtyTime();
         int dirtySpan = (int) (lastDirty - mStartTime);

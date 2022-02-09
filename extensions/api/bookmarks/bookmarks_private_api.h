@@ -9,10 +9,10 @@
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 
-using extensions::BrowserContextKeyedAPI;
-using extensions::BrowserContextKeyedAPIFactory;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
+using extensions::BrowserContextKeyedAPI;
+using extensions::BrowserContextKeyedAPIFactory;
 
 namespace extensions {
 
@@ -94,9 +94,6 @@ class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(
-      BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction);
 };
 
 class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
@@ -111,8 +108,6 @@ class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
 
   // BookmarksFunction:
   ResponseValue RunOnReady() override;
-
-  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateEmptyTrashFunction);
 };
 
 class BookmarksPrivateUpdatePartnersFunction : public ExtensionFunction {
@@ -131,8 +126,6 @@ class BookmarksPrivateUpdatePartnersFunction : public ExtensionFunction {
   void OnUpdatePartnersResult(bool ok,
                               bool no_version,
                               const std::string& locale);
-
-  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateUpdatePartnersFunction);
 };
 
 class BookmarksPrivateIsCustomThumbnailFunction : public BookmarksFunction {
@@ -148,8 +141,6 @@ class BookmarksPrivateIsCustomThumbnailFunction : public BookmarksFunction {
  private:
   // BookmarksFunction:
   ResponseValue RunOnReady() override;
-
-  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateIsCustomThumbnailFunction);
 };
 
 }  // namespace extensions

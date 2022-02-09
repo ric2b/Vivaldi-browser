@@ -7,7 +7,6 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
-#include "build/build_config.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/buildflags.h"
 #include "third_party/blink/public/common/common_export.h"
@@ -16,6 +15,8 @@
 namespace blink {
 namespace features {
 
+BLINK_COMMON_EXPORT extern const base::Feature
+    kAutomaticLazyFrameLoadingToEmbeds;
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlockingDownloadsInAdFrameWithoutUserActivation;
 BLINK_COMMON_EXPORT extern const base::Feature kCOEPForSharedWorker;
@@ -31,6 +32,7 @@ BLINK_COMMON_EXPORT extern const base::Feature
     kEagerCacheStorageSetupForServiceWorkers;
 BLINK_COMMON_EXPORT extern const base::Feature kScriptStreaming;
 BLINK_COMMON_EXPORT extern const base::Feature kSmallScriptStreaming;
+BLINK_COMMON_EXPORT extern const base::Feature kConsumeCodeCacheOffThread;
 BLINK_COMMON_EXPORT extern const base::Feature kUserLevelMemoryPressureSignal;
 BLINK_COMMON_EXPORT extern const base::Feature kFreezePurgeMemoryAllPagesFrozen;
 BLINK_COMMON_EXPORT extern const base::Feature kReduceUserAgent;
@@ -44,7 +46,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kForceSynchronousHTMLParsing;
 BLINK_COMMON_EXPORT extern const base::Feature kTopLevelAwait;
 BLINK_COMMON_EXPORT extern const base::Feature kEditingNG;
 BLINK_COMMON_EXPORT extern const base::Feature kLayoutNG;
-BLINK_COMMON_EXPORT extern const base::Feature kLayoutNGTable;
 BLINK_COMMON_EXPORT extern const base::Feature kMixedContentAutoupgrade;
 BLINK_COMMON_EXPORT extern const base::Feature kNavigationPredictor;
 BLINK_COMMON_EXPORT extern const base::Feature kNavigatorPluginsFixed;
@@ -53,9 +54,9 @@ BLINK_COMMON_EXPORT extern const base::Feature kPortals;
 BLINK_COMMON_EXPORT extern const base::Feature kPortalsCrossOrigin;
 BLINK_COMMON_EXPORT extern const base::Feature kFencedFrames;
 BLINK_COMMON_EXPORT extern const base::Feature kUserAgentClientHint;
-BLINK_COMMON_EXPORT extern const base::Feature kLangClientHintHeader;
 BLINK_COMMON_EXPORT extern const base::Feature
     kPrefersColorSchemeClientHintHeader;
+BLINK_COMMON_EXPORT extern const base::Feature kViewportHeightClientHintHeader;
 
 enum class FencedFramesImplementationType {
   kShadowDOM,
@@ -88,6 +89,7 @@ BLINK_COMMON_EXPORT bool IsPrerender2Enabled();
 
 // Fenced Frames:
 BLINK_COMMON_EXPORT bool IsFencedFramesEnabled();
+BLINK_COMMON_EXPORT bool IsFencedFramesMPArchBased();
 
 BLINK_COMMON_EXPORT extern const base::Feature
     kPreviewsResourceLoadingHintsSpecificResourceTypes;
@@ -172,9 +174,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapConcurrentSweeping;
 BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapIncrementalMarking;
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlinkHeapIncrementalMarkingStress;
-
-BLINK_COMMON_EXPORT extern const base::Feature
-    kVerifyHTMLFetchedFromAppCacheBeforeDelay;
 
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlinkCompositorUseDisplayThreadPriority;
@@ -293,10 +292,7 @@ extern const char
     kSkipTouchEventFilterFilteringProcessParamValueBrowserAndRenderer[];
 
 BLINK_COMMON_EXPORT extern const base::Feature kCompressParkableStrings;
-BLINK_COMMON_EXPORT extern const base::Feature kParkableStringsToDisk;
 BLINK_COMMON_EXPORT bool IsParkableStringsToDiskEnabled();
-
-BLINK_COMMON_EXPORT extern const base::Feature kCrOSAutoSelect;
 
 BLINK_COMMON_EXPORT extern const base::Feature kCLSScrollAnchoring;
 
@@ -338,7 +334,8 @@ BLINK_COMMON_EXPORT extern const base::Feature kWebAppNoteTaking;
 
 BLINK_COMMON_EXPORT extern const base::Feature kLoadingTasksUnfreezable;
 
-BLINK_COMMON_EXPORT extern const base::Feature kFreezeWhileKeepActive;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kNetworkRequestUsesOnlyPerProcessBufferLimit;
 
 BLINK_COMMON_EXPORT extern const base::Feature kTargetBlankImpliesNoOpener;
 
@@ -352,13 +349,9 @@ BLINK_COMMON_EXPORT extern const base::Feature kWebRtcDistinctWorkerThread;
 BLINK_COMMON_EXPORT extern const base::Feature
     kSendCnameAliasesToSubresourceFilterFromRenderer;
 
-BLINK_COMMON_EXPORT extern const base::Feature kDeclarativeShadowDOM;
-
 BLINK_COMMON_EXPORT extern const base::Feature kInterestCohortAPIOriginTrial;
 
 BLINK_COMMON_EXPORT extern const base::Feature kInterestCohortFeaturePolicy;
-
-BLINK_COMMON_EXPORT extern const base::Feature kTextFragmentColorChange;
 
 BLINK_COMMON_EXPORT extern const base::Feature kDisableDocumentDomainByDefault;
 
@@ -393,9 +386,16 @@ BLINK_COMMON_EXPORT extern const base::Feature kJXL;
 BLINK_COMMON_EXPORT extern const base::Feature
     kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes;
 
-// Master control for Fledge Interest Group feature
-BLINK_COMMON_EXPORT extern const base::Feature kFledgeInterestGroups;
-BLINK_COMMON_EXPORT extern const base::Feature kFledgeInterestGroupAPI;
+// Main controls for ad serving API features.
+//
+// Backend storage + kill switch for Interest Group API  origin trials.
+BLINK_COMMON_EXPORT extern const base::Feature kInterestGroupStorage;
+// Interest Group JS API/runtimeflag.
+BLINK_COMMON_EXPORT extern const base::Feature kAdInterestGroupAPI;
+// PARAKEET ad serving runtime flag/JS API.
+BLINK_COMMON_EXPORT extern const base::Feature kParakeet;
+// FLEDGE ad serving runtime flag/JS API.
+BLINK_COMMON_EXPORT extern const base::Feature kFledge;
 
 // Control switch for minimizing processing in the WebRTC APM when all audio
 // tracks are disabled.
@@ -420,6 +420,9 @@ BLINK_COMMON_EXPORT extern const base::Feature kClipboardCustomFormats;
 // heuristic where images occupying the full viewport are ignored.
 BLINK_COMMON_EXPORT extern const base::Feature kUsePageViewportInLCP;
 
+// Send all user interaction latency data from renderer to the browser process.
+BLINK_COMMON_EXPORT extern const base::Feature kSendAllUserInteractionLatencies;
+
 // Enable "Sec-CH-UA-Platform" client hint and request header for all requests
 BLINK_COMMON_EXPORT extern const base::Feature kUACHPlatformEnabledByDefault;
 
@@ -433,14 +436,74 @@ BLINK_COMMON_EXPORT extern const base::Feature kDesktopPWAsSubApps;
 
 // When enabled, we report all JavaScript frameworks via a manual traversal to
 // detect the properties and attributes required.
-BLINK_COMMON_EXPORT extern const base::Feature kReportAllJavascriptFrameworks;
+BLINK_COMMON_EXPORT extern const base::Feature kReportAllJavaScriptFrameworks;
 
 // Suppresses console errors for CORS problems which report an associated
 // inspector issue anyway.
 BLINK_COMMON_EXPORT extern const base::Feature kCORSErrorsIssueOnly;
 
+// Synchronously load web fonts inlined as data urls. See crbug.com/1236283
+BLINK_COMMON_EXPORT extern const base::Feature kSyncLoadDataUrlFonts;
+
+// Makes Persistent quota the same as Temporary quota.
+BLINK_COMMON_EXPORT
+extern const base::Feature kPersistentQuotaIsTemporaryQuota;
+
+// If enabled, the ResourceLoadScheculer will take the current network state
+// into consideration, when it plans to delay a low-priority throttleable
+// requests in the tight mode. The factors include:
+//  - The total number of the in-flight multiplexed connections (e.g.,
+//    H2/SPDY/QUIC).
+//  - HTTP RTT estimate.
 BLINK_COMMON_EXPORT extern const base::Feature
-    kDeprecateThirdPartyContextWebSQL;
+    kDelayLowPriorityRequestsAccordingToNetworkState;
+
+// When enabled, this turns off an LCP calculation optimization that's ignoring
+// initially invisible images, and resulting in LCP correctness issues. See
+// https://crbug.com/1249622
+BLINK_COMMON_EXPORT extern const base::Feature
+    kIncludeInitiallyInvisibleImagesInLCP;
+
+// When enabled, this includes SVG background images in LCP calculation.
+BLINK_COMMON_EXPORT extern const base::Feature kIncludeBackgroundSVGInLCP;
+
+// Number of the requests that can be handled in the tight mode.
+BLINK_COMMON_EXPORT
+extern const base::FeatureParam<int> kMaxNumOfThrottleableRequestsInTightMode;
+
+// The HTTP RTT threshold: decide whether the
+// `kDelayLowPriorityRequestsAccordingToNetworkState` feature can take effect
+// practically according to the network connection state.
+BLINK_COMMON_EXPORT
+extern const base::FeatureParam<base::TimeDelta> kHttpRttThreshold;
+
+// The cost reduction for the multiplexed requests when
+// `kDelayLowPriorityRequestsAccordingToNetworkState` is enabled.
+BLINK_COMMON_EXPORT
+extern const base::FeatureParam<double> kCostReductionOfMultiplexedRequests;
+
+// If enabled, the major version number returned by Chrome will be forced to
+// 100.  This feature is only applicable for M96-M99 and will be removed after
+// M99.  The purpose of this feature is to allow users to test and proactively
+// fix any issues as we approach a 3-digit major version number.
+BLINK_COMMON_EXPORT extern const base::Feature kForceMajorVersion100InUserAgent;
+
+BLINK_COMMON_EXPORT extern const base::Feature kClientHintsDeviceMemory;
+BLINK_COMMON_EXPORT extern const base::Feature kClientHintsDPR;
+BLINK_COMMON_EXPORT extern const base::Feature kClientHintsResourceWidth;
+BLINK_COMMON_EXPORT extern const base::Feature kClientHintsViewportWidth;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kWebSQLInThirdPartyContextEnabled;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kClientHintsDeviceMemory_DEPRECATED;
+BLINK_COMMON_EXPORT extern const base::Feature kClientHintsDPR_DEPRECATED;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kClientHintsResourceWidth_DEPRECATED;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kClientHintsViewportWidth_DEPRECATED;
+
+// https://drafts.csswg.org/css-cascade-5/#layering
+BLINK_COMMON_EXPORT extern const base::Feature kCSSCascadeLayers;
 
 }  // namespace features
 }  // namespace blink

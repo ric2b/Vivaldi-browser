@@ -28,14 +28,19 @@
 #include "remoting/host/desktop_display_info.h"
 #include "remoting/host/desktop_environment_options.h"
 #include "remoting/host/file_transfer/session_file_operations_handler.h"
-#include "remoting/host/mojom/clipboard.mojom.h"
+#include "remoting/host/mojom/desktop_session.mojom.h"
 #include "remoting/host/mojom/remoting_mojom_traits.h"
+#include "remoting/proto/url_forwarder_control.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/process_stats_stub.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
 #include "ui/events/event.h"
+
+namespace base {
+class Location;
+}
 
 namespace IPC {
 class ChannelProxy;
@@ -56,6 +61,7 @@ class ProcessStatsSender;
 class RemoteInputFilter;
 class ScreenControls;
 class ScreenResolution;
+class UrlForwarderConfigurator;
 
 namespace protocol {
 class ActionRequest;
@@ -72,7 +78,7 @@ class DesktopSessionAgent
       public ClientSessionControl,
       public protocol::ProcessStatsStub,
       public IpcFileOperations::ResultHandler,
-      public mojom::ClipboardEventHandler {
+      public mojom::DesktopSessionControl {
  public:
   class Delegate {
    public:
@@ -84,6 +90,12 @@ class DesktopSessionAgent
     // Notifies the delegate that the network-to-desktop channel has been
     // disconnected.
     virtual void OnNetworkProcessDisconnected() = 0;
+
+    // Allows the desktop process to ask the daemon process to crash the network
+    // process. This should be called any time the network process sends an
+    // invalid IPC message to the desktop process (indicating that the network
+    // process might have been compromised).
+    virtual void CrashNetworkProcess(const base::Location& location) = 0;
   };
 
   DesktopSessionAgent(
@@ -91,6 +103,9 @@ class DesktopSessionAgent
       scoped_refptr<AutoThreadTaskRunner> caller_task_runner,
       scoped_refptr<AutoThreadTaskRunner> input_task_runner,
       scoped_refptr<AutoThreadTaskRunner> io_task_runner);
+
+  DesktopSessionAgent(const DesktopSessionAgent&) = delete;
+  DesktopSessionAgent& operator=(const DesktopSessionAgent&) = delete;
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -121,8 +136,9 @@ class DesktopSessionAgent
   void OnDataResult(std::uint64_t file_id,
                     ResultHandler::DataResult result) override;
 
-  // mojom::ClipboardEventHandler implementation.
+  // mojom::DesktopSessionControl implementation.
   void InjectClipboardEvent(const protocol::ClipboardEvent& event) override;
+  void SetUpUrlForwarder() override;
 
   // Creates desktop integration components and a connected IPC channel to be
   // used to access them. The client end of the channel is returned.
@@ -193,6 +209,10 @@ class DesktopSessionAgent
   void StopProcessStatsReport();
 
  private:
+  void OnCheckUrlForwarderSetUpResult(bool is_set_up);
+  void OnUrlForwarderSetUpStateChanged(
+      protocol::UrlForwarderControl::SetUpUrlForwarderResponse::State state);
+
   // Task runner dedicated to running methods of |audio_capturer_|.
   scoped_refptr<AutoThreadTaskRunner> audio_capture_task_runner_;
 
@@ -258,15 +278,17 @@ class DesktopSessionAgent
 
   CurrentProcessStatsAgent current_process_stats_;
 
-  mojo::AssociatedRemote<mojom::ClipboardEventObserver>
-      clipboard_observer_remote_;
-  mojo::AssociatedReceiver<mojom::ClipboardEventHandler>
-      clipboard_handler_receiver_{this};
+  mojo::AssociatedRemote<mojom::DesktopSessionEventHandler>
+      desktop_session_event_handler_;
+  mojo::AssociatedReceiver<mojom::DesktopSessionControl>
+      desktop_session_control_{this};
+
+  // Checks and configures the URL forwarder.
+  std::unique_ptr<::remoting::UrlForwarderConfigurator>
+      url_forwarder_configurator_;
 
   // Used to disable callbacks to |this|.
   base::WeakPtrFactory<DesktopSessionAgent> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(DesktopSessionAgent);
 };
 
 }  // namespace remoting

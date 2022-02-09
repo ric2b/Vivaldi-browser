@@ -30,6 +30,9 @@ import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperMa
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * {@link LayoutManagerChromePhone} is the specialization of {@link LayoutManagerChrome} for the
  * phone.
@@ -39,7 +42,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     private SimpleAnimationLayout mSimpleAnimationLayout;
 
     // Vivaldi
-    private StripLayoutHelperManager mTabStripLayoutHelperManager;
+    private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
     private SharedPreferencesManager.Observer mPreferenceObserver;
     private boolean mTabStripAdded;
 
@@ -64,11 +67,14 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                 layerTitleCacheSupplier, overviewModeBehaviorSupplier, topUiThemeColorProvider,
                 jankTracker);
 
-        // Vivaldi
-        Context context = mHost.getContext();
-        mTabStripLayoutHelperManager =
-                new StripLayoutHelperManager(context, this, mHost.getLayoutRenderHost(),
-                        () -> mTitleCache, layerTitleCacheSupplier);
+        // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
+        // The second one is the stack strip.
+        for (int i = 0; i < 2; i++) {
+            mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), this,
+                    mHost.getLayoutRenderHost(), () -> mTitleCache, layerTitleCacheSupplier));
+            mTabStrips.get(i).setIsStackStrip(i != 0);
+        }
+
         mTabStripAdded = false;
         mPreferenceObserver = key -> {
             if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)
@@ -104,9 +110,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         mSimpleAnimationLayout.setTabModelSelector(selector, tabContentManager);
 
         // Vivaldi
-        if (mTabStripLayoutHelperManager != null) {
-            mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
-        }
+        for (int i = 0; i < 2; i++) mTabStrips.get(i).setTabModelSelector(selector, creator);
     }
 
     @Override
@@ -235,17 +239,17 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     @Override
     public void destroy() {
         super.destroy();
-        if (mTabStripLayoutHelperManager != null) {
-            mTabStripLayoutHelperManager.destroy();
-            mTabStripLayoutHelperManager = null;
-        }
+        // Vivaldi
+        for (int i = 0; i < 2; i++) mTabStrips.get(i).destroy();
+        mTabStrips.clear();
+
         SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
     }
 
     // Vivaldi: Update the {@link SceneOverlay} according to the tab strip setting.
     private void updateGlobalSceneOverlay() {
             if(!mTabStripAdded) {
-                addSceneOverlay(mTabStripLayoutHelperManager);
+                for (int i = 0; i < 2; i++) addSceneOverlay(mTabStrips.get(i));
                 if (getTabModelSelector() != null)
                     tabModelSwitched(getTabModelSelector().isIncognitoSelected()); //!! TODO(jarle): CHECK IF THIS IS CORRECT
                 mTabStripAdded = true;

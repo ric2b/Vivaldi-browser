@@ -52,6 +52,8 @@ class UpdateNotifierWindow::WindowClass {
  public:
   WindowClass();
   ~WindowClass();
+  WindowClass(const WindowClass&) = delete;
+  WindowClass& operator=(const WindowClass&) = delete;
 
   static WindowClass& GetInstance() {
     static base::NoDestructor<WindowClass> instance;
@@ -64,8 +66,6 @@ class UpdateNotifierWindow::WindowClass {
  private:
   ATOM atom_;
   HINSTANCE instance_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowClass);
 };
 
 UpdateNotifierWindow::WindowClass::WindowClass()

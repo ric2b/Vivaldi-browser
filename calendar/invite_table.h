@@ -28,6 +28,8 @@ class InviteTable {
   // Must call CreateInviteTable() before to make sure the database is
   // initialized.
   InviteTable();
+  InviteTable(const InviteTable&) = delete;
+  InviteTable& operator=(const InviteTable&) = delete;
 
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
@@ -47,8 +49,6 @@ class InviteTable {
  protected:
   virtual sql::Database& GetDB() = 0;
   void FillInviteRow(sql::Statement& statement, InviteRow* invite);
-
-  DISALLOW_COPY_AND_ASSIGN(InviteTable);
 };
 
 #define INVITE_ROW_FIELDS \

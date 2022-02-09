@@ -16,6 +16,9 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
  public:
   explicit VivaldiUtilitiesHookDelegate();
   ~VivaldiUtilitiesHookDelegate() override;
+  VivaldiUtilitiesHookDelegate(const VivaldiUtilitiesHookDelegate&) = delete;
+  VivaldiUtilitiesHookDelegate& operator=(const VivaldiUtilitiesHookDelegate&) =
+      delete;
 
   // APIBindingHooksDelegate:
   APIBindingHooks::RequestResult HandleRequest(
@@ -27,6 +30,9 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
 
  private:
   // Request handlers for the corresponding API methods.
+  APIBindingHooks::RequestResult HandleGenerateGUID(
+      v8::Local<v8::Context> context,
+      const std::vector<v8::Local<v8::Value>>& arguments);
   APIBindingHooks::RequestResult HandleGetUrlFragments(
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);
@@ -36,9 +42,6 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
   APIBindingHooks::RequestResult HandleIsUrlValid(
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);
-
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiUtilitiesHookDelegate);
 };
 
 }  // namespace extensions

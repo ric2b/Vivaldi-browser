@@ -16,6 +16,7 @@
 #include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
@@ -29,10 +30,16 @@
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
-#include "v8/include/v8.h"
+#include "v8/include/v8-container.h"
+#include "v8/include/v8-context.h"
+#include "v8/include/v8-forward.h"
+#include "v8/include/v8-object.h"
+#include "v8/include/v8-primitive.h"
+#include "v8/include/v8-template.h"
 
 namespace auction_worklet {
 
@@ -86,10 +93,59 @@ v8::MaybeLocal<v8::Value> CreatePrevWinsArray(
   return v8::Array::New(isolate, prev_wins_v8.data(), prev_wins_v8.size());
 }
 
+// Converts a vector of blink::InterestGroup::Ads into a v8 object.
+bool CreateAdVector(AuctionV8Helper* v8_helper,
+                    v8::Local<v8::Context> context,
+                    const std::vector<blink::InterestGroup::Ad>& ads,
+                    v8::Local<v8::Value>& out_value) {
+  v8::Isolate* isolate = v8_helper->isolate();
+
+  std::vector<v8::Local<v8::Value>> ads_vector;
+  for (const auto& ad : ads) {
+    v8::Local<v8::Object> ad_object = v8::Object::New(isolate);
+    gin::Dictionary ad_dict(isolate, ad_object);
+    if (!ad_dict.Set("renderUrl", ad.render_url.spec()) ||
+        (ad.metadata && !v8_helper->InsertJsonValue(context, "metadata",
+                                                    *ad.metadata, ad_object))) {
+      return false;
+    }
+    ads_vector.emplace_back(std::move(ad_object));
+  }
+  out_value = v8::Array::New(isolate, ads_vector.data(), ads_vector.size());
+  return true;
+}
+
+// Checks that `url` is a valid URL and is in `ads`. Appends an error to
+// `out_errors` if not. `script_source_url` is used in output error messages
+// only.
+bool IsAllowedAdUrl(const GURL& url,
+                    const GURL& script_source_url,
+                    const char* argument_name,
+                    const std::vector<blink::InterestGroup::Ad>& ads,
+                    std::vector<std::string>& out_errors) {
+  if (!url.is_valid() || !url.SchemeIs(url::kHttpsScheme)) {
+    out_errors.push_back(
+        base::StrCat({script_source_url.spec(), " generateBid() returned ",
+                      argument_name, " URL that isn't a valid https:// URL."}));
+    return false;
+  }
+
+  for (const auto& ad : ads) {
+    if (url == ad.render_url)
+      return true;
+  }
+  out_errors.push_back(base::StrCat({script_source_url.spec(),
+                                     " generateBid() returned ", argument_name,
+                                     " URL that isn't one "
+                                     "of the registered creative URLs."}));
+  return false;
+}
+
 }  // namespace
 
 BidderWorklet::BidderWorklet(
     scoped_refptr<AuctionV8Helper> v8_helper,
+    bool pause_for_debugger_on_start,
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         pending_url_loader_factory,
     mojom::BiddingInterestGroupPtr bidding_interest_group,
@@ -101,28 +157,25 @@ BidderWorklet::BidderWorklet(
     mojom::AuctionWorkletService::LoadBidderWorkletAndGenerateBidCallback
         load_bidder_worklet_and_generate_bid_callback)
     : v8_runner_(v8_helper->v8_runner()),
+      v8_helper_(v8_helper),
+      context_group_id_(AuctionV8Helper::kNoDebugContextGroupId),
+      // TODO(mmenke): Remove up the value_or() for script_source_url_; auction
+      // worklets shouldn't be created when there's no bidding URL.
+      script_source_url_(
+          bidding_interest_group->group.bidding_url.value_or(GURL())),
       load_bidder_worklet_and_generate_bid_callback_(
           std::move(load_bidder_worklet_and_generate_bid_callback)),
       v8_state_(nullptr, base::OnTaskRunnerDeleter(v8_runner_)) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
   DCHECK(load_bidder_worklet_and_generate_bid_callback_);
 
-  // TODO(mmenke): Remove up the value_or() for script_source_url- auction
-  // worklets shouldn't be created when there's no bidding URL.
-  GURL script_source_url(
-      bidding_interest_group->group.bidding_url.value_or(GURL()));
-
-  // Bind URLLoaderFactory. Remote is not needed after this method completes,
-  // since requests will continue after the URLLoaderFactory pipe has been
-  // closed, so no need to keep it around after requests have been issued.
-  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory(
-      std::move(pending_url_loader_factory));
+  url_loader_factory_.Bind(std::move(pending_url_loader_factory));
 
   if (bidding_interest_group->group.trusted_bidding_signals_url.has_value() &&
       bidding_interest_group->group.trusted_bidding_signals_keys.has_value() &&
       !bidding_interest_group->group.trusted_bidding_signals_keys->empty()) {
     trusted_bidding_signals_ = std::make_unique<TrustedBiddingSignals>(
-        url_loader_factory.get(),
+        url_loader_factory_.get(),
         *bidding_interest_group->group.trusted_bidding_signals_keys,
         browser_signal_top_window_origin.host(),
         *bidding_interest_group->group.trusted_bidding_signals_url, v8_helper,
@@ -131,16 +184,14 @@ BidderWorklet::BidderWorklet(
   }
 
   v8_state_ = std::unique_ptr<V8State, base::OnTaskRunnerDeleter>(
-      new V8State(v8_helper, script_source_url, weak_ptr_factory_.GetWeakPtr(),
+      new V8State(v8_helper, script_source_url_, weak_ptr_factory_.GetWeakPtr(),
                   std::move(bidding_interest_group), auction_signals_json,
                   per_buyer_signals_json, browser_signal_top_window_origin,
                   browser_signal_seller_origin, auction_start_time),
       base::OnTaskRunnerDeleter(v8_runner_));
 
-  worklet_loader_ = std::make_unique<WorkletLoader>(
-      url_loader_factory.get(), script_source_url, v8_helper,
-      base::BindOnce(&BidderWorklet::OnScriptDownloaded,
-                     base::Unretained(this)));
+  paused_ = pause_for_debugger_on_start;
+  // DeliverContextGroupIdOnUserThread will call StartIfReady().
 }
 
 BidderWorklet::~BidderWorklet() {
@@ -164,6 +215,15 @@ void BidderWorklet::ReportWin(
                                 browser_signal_bid, std::move(callback)));
 }
 
+void BidderWorklet::ConnectDevToolsAgent(
+    mojo::PendingReceiver<blink::mojom::DevToolsAgent> agent) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
+  v8_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&V8State::ConnectDevToolsAgent,
+                     base::Unretained(v8_state_.get()), std::move(agent)));
+}
+
 BidderWorklet::V8State::V8State(
     scoped_refptr<AuctionV8Helper> v8_helper,
     GURL script_source_url,
@@ -185,6 +245,8 @@ BidderWorklet::V8State::V8State(
       auction_start_time_(auction_start_time),
       script_source_url_(std::move(script_source_url)) {
   DETACH_FROM_SEQUENCE(v8_sequence_checker_);
+  v8_helper_->v8_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&V8State::FinishInit, base::Unretained(this)));
 }
 
 void BidderWorklet::V8State::SetWorkletScript(
@@ -257,8 +319,8 @@ void BidderWorklet::V8State::ReportWin(
   // value indicates no exception.
   std::vector<std::string> errors_out;
   if (v8_helper_
-          ->RunScript(context, worklet_script_.Get(isolate), "reportWin", args,
-                      errors_out)
+          ->RunScript(context, worklet_script_.Get(isolate), context_group_id_,
+                      "reportWin", args, errors_out)
           .IsEmpty()) {
     PostReportWinCallbackToUserThread(std::move(callback),
                                       absl::nullopt /* report_url */,
@@ -304,23 +366,20 @@ void BidderWorklet::V8State::GenerateBid() {
     return;
   }
 
-  std::vector<v8::Local<v8::Value>> ads_vector;
-  for (const auto& ad : *interest_group.ads) {
-    v8::Local<v8::Object> ad_object = v8::Object::New(isolate);
-    gin::Dictionary ad_dict(isolate, ad_object);
-    if (!ad_dict.Set("renderUrl", ad.render_url.spec()) ||
-        (ad.metadata && !v8_helper_->InsertJsonValue(
-                            context, "metadata", *ad.metadata, ad_object))) {
-      PostErrorBidCallbackToUserThread();
-      return;
-    }
-    ads_vector.emplace_back(std::move(ad_object));
-  }
-  if (!v8_helper_->InsertValue(
-          "ads", v8::Array::New(isolate, ads_vector.data(), ads_vector.size()),
-          interest_group_object)) {
+  v8::Local<v8::Value> ads;
+  if (!CreateAdVector(v8_helper_.get(), context, *interest_group.ads, ads) ||
+      !v8_helper_->InsertValue("ads", std::move(ads), interest_group_object)) {
     PostErrorBidCallbackToUserThread();
-    return;
+  }
+
+  if (interest_group.ad_components) {
+    v8::Local<v8::Value> ad_components;
+    if (!CreateAdVector(v8_helper_.get(), context,
+                        *interest_group.ad_components, ad_components) ||
+        !v8_helper_->InsertValue("adComponents", std::move(ad_components),
+                                 interest_group_object)) {
+      PostErrorBidCallbackToUserThread();
+    }
   }
 
   args.push_back(std::move(interest_group_object));
@@ -377,8 +436,8 @@ void BidderWorklet::V8State::GenerateBid() {
   v8::Local<v8::Value> generate_bid_result;
   std::vector<std::string> errors_out;
   if (!v8_helper_
-           ->RunScript(context, worklet_script_.Get(isolate), "generateBid",
-                       args, errors_out)
+           ->RunScript(context, worklet_script_.Get(isolate), context_group_id_,
+                       "generateBid", args, errors_out)
            .ToLocal(&generate_bid_result)) {
     PostErrorBidCallbackToUserThread(std::move(errors_out));
     return;
@@ -416,37 +475,108 @@ void BidderWorklet::V8State::GenerateBid() {
   }
 
   GURL render_url(render_url_string);
-  if (!render_url.is_valid() || !render_url.SchemeIs(url::kHttpsScheme)) {
-    errors_out.push_back(base::StrCat(
-        {script_source_url_.spec(),
-         " generateBid() returned render_url isn't a valid https:// URL."}));
+  if (!IsAllowedAdUrl(render_url, script_source_url_, "render",
+                      *interest_group.ads, errors_out)) {
     PostErrorBidCallbackToUserThread(std::move(errors_out));
     return;
   }
 
-  // `render_url` must be in `ad_render_urls`.
-  for (const auto& ad : *interest_group.ads) {
-    if (render_url == ad.render_url) {
-      user_thread_->PostTask(
-          FROM_HERE,
-          base::BindOnce(&BidderWorklet::DeliverBidCallbackOnUserThread,
-                         parent_,
-                         mojom::BidderWorkletBid::New(
-                             std::move(ad_json), bid, std::move(render_url),
-                             base::TimeTicks::Now() - start /* bid_duration */),
-                         std::move(errors_out)));
+  absl::optional<std::vector<GURL>> ad_component_urls;
+  v8::Local<v8::Value> ad_components;
+  if (result_dict.Get("adComponents", &ad_components) &&
+      !ad_components->IsNullOrUndefined()) {
+    if (!interest_group.ad_components) {
+      errors_out.push_back(
+          base::StrCat({script_source_url_.spec(),
+                        " generateBid() return value contains adComponents but "
+                        "InterestGroup has no adComponents."}));
+      PostErrorBidCallbackToUserThread(std::move(errors_out));
       return;
     }
+
+    if (!ad_components->IsArray()) {
+      errors_out.push_back(base::StrCat(
+          {script_source_url_.spec(),
+           " generateBid() returned adComponents value must be an array."}));
+      PostErrorBidCallbackToUserThread(std::move(errors_out));
+      return;
+    }
+
+    v8::Local<v8::Array> ad_components_array = ad_components.As<v8::Array>();
+    if (ad_components_array->Length() > blink::kMaxAdAuctionAdComponents) {
+      errors_out.push_back(base::StringPrintf(
+          "%s generateBid() returned adComponents with over %zu items.",
+          script_source_url_.spec().c_str(), blink::kMaxAdAuctionAdComponents));
+      PostErrorBidCallbackToUserThread(std::move(errors_out));
+      return;
+    }
+
+    ad_component_urls.emplace();
+    for (size_t i = 0; i < ad_components_array->Length(); ++i) {
+      std::string url_string;
+      if (!gin::ConvertFromV8(
+              isolate, ad_components_array->Get(context, i).ToLocalChecked(),
+              &url_string)) {
+        errors_out.push_back(
+            base::StrCat({script_source_url_.spec(),
+                          " generateBid() returned adComponents value must be "
+                          "an array of strings."}));
+        PostErrorBidCallbackToUserThread(std::move(errors_out));
+        return;
+      }
+
+      GURL ad_component_url(url_string);
+      if (!IsAllowedAdUrl(ad_component_url, script_source_url_, "adComponents",
+                          *interest_group.ad_components, errors_out)) {
+        PostErrorBidCallbackToUserThread(std::move(errors_out));
+        return;
+      }
+      ad_component_urls->emplace_back(std::move(ad_component_url));
+    }
   }
-  errors_out.push_back(
-      base::StrCat({script_source_url_.spec(),
-                    " generateBid() returned render_url isn't one "
-                    "of the registered creative URLs."}));
-  PostErrorBidCallbackToUserThread(std::move(errors_out));
+
+  user_thread_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&BidderWorklet::DeliverBidCallbackOnUserThread, parent_,
+                     mojom::BidderWorkletBid::New(
+                         std::move(ad_json), bid, std::move(render_url),
+                         std::move(ad_component_urls),
+                         base::TimeTicks::Now() - start /* bid_duration */),
+                     std::move(errors_out)));
+}
+
+void BidderWorklet::V8State::ConnectDevToolsAgent(
+    mojo::PendingReceiver<blink::mojom::DevToolsAgent> agent) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  v8_helper_->ConnectDevToolsAgent(std::move(agent), user_thread_,
+                                   context_group_id_);
 }
 
 BidderWorklet::V8State::~V8State() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  v8_helper_->FreeContextGroupId(context_group_id_);
+}
+
+void BidderWorklet::V8State::FinishInit() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  context_group_id_ = v8_helper_->AllocContextGroupIdAndSetResumeCallback(
+      base::BindOnce(&BidderWorklet::V8State::PostResumeToUserThread, parent_,
+                     user_thread_));
+  user_thread_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&BidderWorklet::DeliverContextGroupIdOnUserThread, parent_,
+                     context_group_id_));
+}
+
+// static
+void BidderWorklet::V8State::PostResumeToUserThread(
+    base::WeakPtr<BidderWorklet> parent,
+    scoped_refptr<base::SequencedTaskRunner> user_thread) {
+  // This is static since it's called from debugging, not BidderWorklet,
+  // so the usual guarantee that BidderWorklet posts things before posting
+  // V8State destruction is irrelevant.
+  user_thread->PostTask(FROM_HERE,
+                        base::BindOnce(&BidderWorklet::ResumeIfPaused, parent));
 }
 
 void BidderWorklet::V8State::PostReportWinCallbackToUserThread(
@@ -466,6 +596,33 @@ void BidderWorklet::V8State::PostErrorBidCallbackToUserThread(
   user_thread_->PostTask(
       FROM_HERE, base::BindOnce(&BidderWorklet::InvokeBidCallbackOnError,
                                 parent_, std::move(error_msgs)));
+}
+
+void BidderWorklet::ResumeIfPaused() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
+  if (!paused_)
+    return;
+
+  paused_ = false;
+  StartIfReady();
+}
+
+void BidderWorklet::StartIfReady() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
+  if (paused_ || context_group_id_ == AuctionV8Helper::kNoDebugContextGroupId) {
+    return;
+  }
+
+  worklet_loader_ = std::make_unique<WorkletLoader>(
+      url_loader_factory_.get(), script_source_url_, std::move(v8_helper_),
+      context_group_id_,
+      base::BindOnce(&BidderWorklet::OnScriptDownloaded,
+                     base::Unretained(this)));
+
+  // Remote is not needed after this method completes,
+  // since requests will continue after the URLLoaderFactory pipe has been
+  // closed, so no need to keep it around after requests have been issued.
+  url_loader_factory_.reset();
 }
 
 void BidderWorklet::OnScriptDownloaded(WorkletLoader::Result worklet_script,
@@ -519,6 +676,13 @@ void BidderWorklet::GenerateBidIfReady() {
   v8_runner_->PostTask(FROM_HERE,
                        base::BindOnce(&BidderWorklet::V8State::GenerateBid,
                                       base::Unretained(v8_state_.get())));
+}
+
+void BidderWorklet::DeliverContextGroupIdOnUserThread(int context_group_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
+  context_group_id_ = context_group_id;
+  DCHECK_NE(AuctionV8Helper::kNoDebugContextGroupId, context_group_id_);
+  StartIfReady();
 }
 
 void BidderWorklet::InvokeBidCallbackOnError(

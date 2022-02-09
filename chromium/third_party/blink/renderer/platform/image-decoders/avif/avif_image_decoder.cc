@@ -536,7 +536,7 @@ void AVIFImageDecoder::InitializeNewFrame(wtf_size_t index) {
   avifImageTiming timing;
   auto ret = avifDecoderNthImageTiming(decoder_.get(), index, &timing);
   DCHECK_EQ(ret, AVIF_RESULT_OK);
-  buffer.SetDuration(base::TimeDelta::FromSecondsD(timing.duration));
+  buffer.SetDuration(base::Seconds(timing.duration));
 }
 
 void AVIFImageDecoder::Decode(wtf_size_t index) {
@@ -693,9 +693,6 @@ bool AVIFImageDecoder::UpdateDemuxer() {
     // https://github.com/AOMediaCodec/libavif/issues/636.
     decoder_->maxThreads = 2;
 
-    // TODO(wtc): Currently libavif always prioritizes the animation, but that's
-    // not correct. It should instead select animation or still image based on
-    // the preferred and major brands listed in the file.
     if (animation_option_ != AnimationOption::kUnspecified &&
         avifDecoderSetSource(
             decoder_.get(),

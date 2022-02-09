@@ -10,8 +10,11 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check_op.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "components/pdf/browser/pdf_stream_delegate.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -28,14 +31,13 @@ namespace pdf {
 
 namespace {
 
-// The background color for the PDF viewer in string format. Keep it in-sync
-// with `BACKGROUND_COLOR` in chrome/browser/resources/pdf/pdf_viewer.js.
-static const char kPdfViewerBackgroundColor[] = "4283586137";
-
-// TODO(https://crbug.com/1227206): Change the "background-color" attribute
-// value depending on the actual plugin params. For example, when the plugin is
-// for Print Preview, its background color should be different.
-std::string GenerateResponse(const GURL& source_url, const GURL& original_url) {
+// Generates a response ready to be used for creating the PDF loader. The
+// returned value is a raw string in which the escape characters are not
+// processed.
+// Note: This function is security sensitive since it defines the boundary of
+// HTML and the embedded PDF. Must limit information shared with the PDF plugin
+// process through this response.
+std::string GenerateResponse(const PdfStreamDelegate::StreamInfo& stream_info) {
   // TODO(crbug.com/1228987): This script in this response is never executed
   // when JavaScript is blocked throughout the browser (set in
   // chrome://settings/content/javascript). A permanent solution would likely
@@ -51,35 +53,33 @@ html {
 }
 </style>
 <embed type="application/x-google-chrome-pdf" src="$1" original-url="$2"
-       background-color="$3">
-<script>
-const channel = new MessageChannel();
-const plugin = document.querySelector('embed');
-
-plugin.addEventListener('message', e => channel.port1.postMessage(e.data));
-channel.port1.onmessage = e => plugin.postMessage(e.data);
-
-window.parent.postMessage(
-    {type: 'connect', token: plugin.getAttribute('src')}, '$4',
-    [channel.port2]);
+  background-color="$4" javascript="$5"$6>
+<script type="module">
+$3
 </script>
 )";
 
+  // TODO(crbug.com/1252096): We should load the injected scripts as network
+  // resources instead. Until then, feel free to raise this limit as necessary.
+  if (stream_info.injected_script)
+    DCHECK_LE(stream_info.injected_script->size(), 8'192u);
+
   return base::ReplaceStringPlaceholders(
       kResponseTemplate,
-      {source_url.spec(), original_url.spec(), kPdfViewerBackgroundColor,
-       source_url.GetOrigin().spec()},
+      {stream_info.stream_url.spec(), stream_info.original_url.spec(),
+       stream_info.injected_script ? *stream_info.injected_script : "",
+       base::NumberToString(stream_info.background_color),
+       stream_info.allow_javascript ? "allow" : "block",
+       stream_info.full_frame ? " full-frame" : ""},
       /*offsets=*/nullptr);
 }
 
 }  // namespace
 
 PluginResponseWriter::PluginResponseWriter(
-    const GURL& source_url,
-    const GURL& original_url,
+    const PdfStreamDelegate::StreamInfo& stream_info,
     mojo::PendingRemote<network::mojom::URLLoaderClient> client)
-    : body_(GenerateResponse(source_url, original_url)),
-      client_(std::move(client)) {}
+    : body_(GenerateResponse(stream_info)), client_(std::move(client)) {}
 
 PluginResponseWriter::~PluginResponseWriter() = default;
 

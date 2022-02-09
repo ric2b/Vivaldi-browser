@@ -424,6 +424,13 @@ void VariationsSeedStore::RegisterPrefs(PrefRegistrySimple* registry) {
                                std::string());
 }
 
+// static
+VerifySignatureResult VariationsSeedStore::VerifySeedSignatureForTesting(
+    const std::string& seed_bytes,
+    const std::string& base64_seed_signature) {
+  return VerifySeedSignature(seed_bytes, base64_seed_signature);
+}
+
 void VariationsSeedStore::ClearPrefs(SeedType seed_type) {
   if (seed_type == SeedType::LATEST) {
     local_state_->ClearPref(prefs::kVariationsCompressedSeed);
@@ -601,21 +608,22 @@ StoreSeedResult VariationsSeedStore::ValidateSeedBytes(
     return StoreSeedResult::FAILED_PARSE;
 
   if (signature_verification_enabled_) {
-    const VerifySignatureResult result =
+    const VerifySignatureResult verify_result =
         VerifySeedSignature(seed_bytes, base64_seed_signature);
     switch (seed_type) {
       case SeedType::LATEST:
-        UMA_HISTOGRAM_ENUMERATION("Variations.StoreSeedSignature", result,
+        UMA_HISTOGRAM_ENUMERATION("Variations.StoreSeedSignature",
+                                  verify_result,
                                   VerifySignatureResult::ENUM_SIZE);
         break;
       case SeedType::SAFE:
         UMA_HISTOGRAM_ENUMERATION(
-            "Variations.SafeMode.StoreSafeSeed.SignatureValidity", result,
-            VerifySignatureResult::ENUM_SIZE);
+            "Variations.SafeMode.StoreSafeSeed.SignatureValidity",
+            verify_result, VerifySignatureResult::ENUM_SIZE);
         break;
     }
 
-    if (result != VerifySignatureResult::VALID_SIGNATURE)
+    if (verify_result != VerifySignatureResult::VALID_SIGNATURE)
       return StoreSeedResult::FAILED_SIGNATURE;
   }
   result->bytes = seed_bytes;

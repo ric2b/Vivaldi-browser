@@ -21,12 +21,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/web_applications/components/web_app_icon_generator.h"
-#include "chrome/browser/web_applications/components/web_app_utils.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_thread.h"
 #include "skia/ext/image_operations.h"
@@ -814,14 +814,12 @@ void WebAppIconManager::ReadAllIcons(const AppId& app_id,
   }
 
   std::map<IconPurpose, std::vector<SquareSizePx>> icon_purposes_to_sizes;
-  const SortedSizesPx& sizes_any =
-      web_app->downloaded_icon_sizes(IconPurpose::ANY);
-  icon_purposes_to_sizes[IconPurpose::ANY] =
-      std::vector<SquareSizePx>(sizes_any.begin(), sizes_any.end());
-  const SortedSizesPx& sizes_maskable =
-      web_app->downloaded_icon_sizes(IconPurpose::MASKABLE);
-  icon_purposes_to_sizes[IconPurpose::MASKABLE] =
-      std::vector<SquareSizePx>(sizes_maskable.begin(), sizes_maskable.end());
+
+  for (IconPurpose purpose : kIconPurposes) {
+    const SortedSizesPx& sizes_px = web_app->downloaded_icon_sizes(purpose);
+    icon_purposes_to_sizes[purpose] =
+        std::vector<SquareSizePx>(sizes_px.begin(), sizes_px.end());
+  }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, kTaskTraits,

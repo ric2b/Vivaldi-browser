@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.feed.shared.stream;
 
+import android.view.View;
+
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -77,6 +79,13 @@ public interface Stream {
      */
     void hidePlaceholder();
 
+    /**
+     * Returns the options for this stream if one exists.
+     */
+    default View getOptionsView() {
+        return null;
+    }
+
     /** Record that user tapped ManageInterests. */
     default void recordActionManageInterests() {}
 
@@ -131,6 +140,12 @@ public interface Stream {
      *     prevent abrupt scroll jumps.
      */
     void unbind(boolean shouldPlaceSpacer);
+
+    /**
+     * Returns a value that uniquely identifies the state of the Stream's content. If this value
+     * changes, then scroll state won't be restored.
+     */
+    String getContentState();
 
     /**
      * Interface users can implement to know when content in the Stream has changed content on

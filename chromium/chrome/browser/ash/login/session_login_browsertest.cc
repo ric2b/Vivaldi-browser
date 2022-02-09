@@ -14,10 +14,12 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
+#include "chrome/browser/ash/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_screen_exit_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
+#include "chrome/browser/ash/login/test/user_policy_mixin.h"
 #include "chrome/browser/ash/login/user_flow.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
@@ -38,13 +40,14 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
-namespace chromeos {
-
+namespace ash {
 namespace {
+
 constexpr char kOnboardingBackfillVersion[] = "0.0.0.0";
+
 }
 
-class BrowserLoginTest : public chromeos::LoginManagerTest {
+class BrowserLoginTest : public LoginManagerTest {
  public:
   BrowserLoginTest() { set_should_launch_browser(true); }
 
@@ -61,7 +64,7 @@ IN_PROC_BROWSER_TEST_F(BrowserLoginTest, PRE_BrowserActive) {
       AccountId::FromUserEmailGaiaId(test::kTestEmail, test::kTestGaiaId));
   EXPECT_EQ(session_manager::SessionState::OOBE,
             session_manager::SessionManager::Get()->session_state());
-  chromeos::StartupUtils::MarkOobeCompleted();
+  StartupUtils::MarkOobeCompleted();
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserLoginTest, BrowserActive) {
@@ -95,7 +98,7 @@ IN_PROC_BROWSER_TEST_F(BrowserLoginTest,
       AccountId::FromUserEmailGaiaId(test::kTestEmail, test::kTestGaiaId));
   EXPECT_EQ(session_manager::SessionState::OOBE,
             session_manager::SessionManager::Get()->session_state());
-  chromeos::StartupUtils::MarkOobeCompleted();
+  StartupUtils::MarkOobeCompleted();
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserLoginTest,
@@ -109,7 +112,7 @@ IN_PROC_BROWSER_TEST_F(BrowserLoginTest,
       user_manager::UserManager::Get()->IsLoggedInAsUserWithGaiaAccount());
 
   keyboard::KeyboardConfig config =
-      ash::KeyboardController::Get()->GetKeyboardConfig();
+      KeyboardController::Get()->GetKeyboardConfig();
   EXPECT_TRUE(config.auto_capitalize);
   EXPECT_TRUE(config.auto_complete);
   EXPECT_TRUE(config.auto_correct);
@@ -119,14 +122,27 @@ IN_PROC_BROWSER_TEST_F(BrowserLoginTest,
 }
 
 class OnboardingTest : public LoginManagerTest {
+ public:
+  // Child users require a user policy, set up an empty one so the user can
+  // get through login.
+  void SetUpInProcessBrowserTestFixture() override {
+    ASSERT_TRUE(user_policy_mixin_.RequestPolicyUpdate());
+    LoginManagerTest::SetUpInProcessBrowserTestFixture();
+  }
+
  protected:
   DeviceStateMixin device_state_{
       &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_UNOWNED};
-  FakeGaiaMixin gaia_mixin_{&mixin_host_, embedded_test_server()};
+  FakeGaiaMixin gaia_mixin_{&mixin_host_};
   LoginManagerMixin login_mixin_{&mixin_host_, LoginManagerMixin::UserList(),
                                  &gaia_mixin_};
   AccountId regular_user_{
       AccountId::FromUserEmailGaiaId(test::kTestEmail, test::kTestGaiaId)};
+
+  LocalPolicyTestServerMixin policy_server_mixin_{&mixin_host_};
+
+  UserPolicyMixin user_policy_mixin_{&mixin_host_, regular_user_,
+                                     &policy_server_mixin_};
 };
 
 IN_PROC_BROWSER_TEST_F(OnboardingTest, PRE_OnboardingUserActivityRegularUser) {
@@ -135,20 +151,16 @@ IN_PROC_BROWSER_TEST_F(OnboardingTest, PRE_OnboardingUserActivityRegularUser) {
   login_mixin_.LoginWithDefaultContext(test_user);
   OobeScreenExitWaiter(UserCreationView::kScreenId).Wait();
 
-  ash::test::UserSessionManagerTestApi test_api(
-      ash::UserSessionManager::GetInstance());
+  test::UserSessionManagerTestApi test_api(UserSessionManager::GetInstance());
   ASSERT_TRUE(test_api.get_onboarding_user_activity_counter());
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
+  WizardController::SkipPostLoginScreensForTesting();
 }
 
 IN_PROC_BROWSER_TEST_F(OnboardingTest, OnboardingUserActivityRegularUser) {
   login_mixin_.LoginAsNewRegularUser();
-  ash::LoginScreenTestApi::SubmitPassword(regular_user_, "password",
-                                          /*check_if_submittable=*/false);
   login_mixin_.WaitForActiveSession();
 
-  ash::test::UserSessionManagerTestApi test_api(
-      ash::UserSessionManager::GetInstance());
+  test::UserSessionManagerTestApi test_api(UserSessionManager::GetInstance());
   ASSERT_TRUE(test_api.get_onboarding_user_activity_counter());
 }
 
@@ -158,8 +170,7 @@ IN_PROC_BROWSER_TEST_F(OnboardingTest, OnboardingUserActivityChildUser) {
   login_mixin_.LoginAsNewChildUser();
   OobeScreenExitWaiter(UserCreationView::kScreenId).Wait();
 
-  ash::test::UserSessionManagerTestApi test_api(
-      ash::UserSessionManager::GetInstance());
+  test::UserSessionManagerTestApi test_api(UserSessionManager::GetInstance());
   ASSERT_FALSE(test_api.get_onboarding_user_activity_counter());
 }
 
@@ -169,7 +180,7 @@ IN_PROC_BROWSER_TEST_F(OnboardingTest, OnboardingCompletedVersion) {
   OobeScreenExitWaiter user_creation_exit_waiter(UserCreationView::kScreenId);
   login_mixin_.LoginAsNewRegularUser();
   user_creation_exit_waiter.Wait();
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
+  WizardController::SkipPostLoginScreensForTesting();
   login_mixin_.WaitForActiveSession();
 
   AccountId account_id =
@@ -186,7 +197,7 @@ IN_PROC_BROWSER_TEST_F(OnboardingTest, PRE_OnboardingCompletedVersionBackfill) {
   OobeScreenExitWaiter user_creation_exit_waiter(UserCreationView::kScreenId);
   login_mixin_.LoginWithDefaultContext(test_user);
   user_creation_exit_waiter.Wait();
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
+  WizardController::SkipPostLoginScreensForTesting();
   login_mixin_.WaitForActiveSession();
 
   AccountId account_id =
@@ -196,8 +207,8 @@ IN_PROC_BROWSER_TEST_F(OnboardingTest, PRE_OnboardingCompletedVersionBackfill) {
 }
 
 IN_PROC_BROWSER_TEST_F(OnboardingTest, OnboardingCompletedVersionBackfill) {
-  ash::LoginScreenTestApi::SubmitPassword(regular_user_, "password",
-                                          /*check_if_submittable=*/false);
+  LoginScreenTestApi::SubmitPassword(regular_user_, "password",
+                                     /*check_if_submittable=*/false);
   login_mixin_.WaitForActiveSession();
 
   AccountId account_id =
@@ -216,13 +227,12 @@ class LockOnSuspendUsageTest : public LoginManagerTest {
 // user login.
 IN_PROC_BROWSER_TEST_F(LockOnSuspendUsageTest, RegularUser) {
   OobeScreenWaiter(UserCreationView::kScreenId).Wait();
-  ash::WizardController::SkipPostLoginScreensForTesting();
+  WizardController::SkipPostLoginScreensForTesting();
   login_mixin_.LoginAsNewRegularUser();
   login_mixin_.WaitForActiveSession();
 
-  ash::PowerEventObserverTestApi test_api(
-      ash::Shell::Get()->power_event_observer());
+  PowerEventObserverTestApi test_api(Shell::Get()->power_event_observer());
   ASSERT_TRUE(test_api.TrackingLockOnSuspendUsage());
 }
 
-}  // namespace chromeos
+}  // namespace ash

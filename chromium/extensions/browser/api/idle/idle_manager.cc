@@ -187,8 +187,9 @@ base::TimeDelta IdleManager::GetAutoLockDelay() const {
       ->GetMaxPolicyAutoScreenLockDelay();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   return chromeos::LacrosService::Get()->system_idle_cache()->auto_lock_delay();
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#else
   return base::TimeDelta();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 // static
@@ -233,8 +234,8 @@ IdleMonitor* IdleManager::GetMonitor(const std::string& extension_id) {
 void IdleManager::StartPolling() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!poll_timer_.IsRunning()) {
-    poll_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(kPollInterval),
-                      this, &IdleManager::UpdateIdleState);
+    poll_timer_.Start(FROM_HERE, base::Seconds(kPollInterval), this,
+                      &IdleManager::UpdateIdleState);
   }
 }
 

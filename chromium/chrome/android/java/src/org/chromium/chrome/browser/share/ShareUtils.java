@@ -10,7 +10,9 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.url.GURL;
 
+// Vivaldi
 import org.vivaldi.browser.common.VivaldiUrlConstants;
+import org.chromium.build.BuildConfig;
 
 /**
  *  A collection of helper functions for sharing in a non static context.
@@ -22,6 +24,9 @@ public class ShareUtils {
      * @param tab The tab being tested.
      */
     public boolean shouldEnableShare(@Nullable Tab tab) {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
+
         if (tab == null) {
             return false;
         }

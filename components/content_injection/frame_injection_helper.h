@@ -3,8 +3,8 @@
 #ifndef COMPONENTS_CONTENT_INJECTION_FRAME_INJECTION_HELPER_H_
 #define COMPONENTS_CONTENT_INJECTION_FRAME_INJECTION_HELPER_H_
 
-#include "mojo/public/cpp/bindings/receiver.h"
 #include "components/content_injection/mojom/content_injection.mojom.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
 namespace content {
 class RenderFrameHost;

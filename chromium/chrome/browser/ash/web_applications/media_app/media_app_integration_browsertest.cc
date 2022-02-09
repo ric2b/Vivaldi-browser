@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "ash/constants/ash_features.h"
+#include "ash/webui/media_app_ui/buildflags.h"
+#include "ash/webui/media_app_ui/test/media_app_ui_browsertest.h"
+#include "ash/webui/media_app_ui/url_constants.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -11,8 +14,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
+#include "chrome/browser/ash/file_manager/app_service_file_tasks.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
-#include "chrome/browser/ash/file_manager/web_file_tasks.h"
 #include "chrome/browser/ash/web_applications/system_web_app_integration_test.h"
 #include "chrome/browser/error_reporting/mock_chrome_js_error_report_processor.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -20,12 +23,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_paths.h"
-#include "chromeos/components/media_app_ui/buildflags.h"
-#include "chromeos/components/media_app_ui/test/media_app_ui_browsertest.h"
-#include "chromeos/components/media_app_ui/url_constants.h"
 #include "components/crash/content/browser/error_reporting/mock_crash_endpoint.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
@@ -112,7 +112,7 @@ content::WebContents* PrepareActiveBrowserForTest() {
 content::EvalJsResult WaitForImageAlt(content::WebContents* web_ui,
                                       const std::string& alt) {
   constexpr char kScript[] = R"(
-      (async () => {
+      (async function waitForImageAlt() {
         const img = await waitForNode('img[alt="$1"]');
         return `$${img.naturalWidth}x$${img.naturalHeight}`;
       })();
@@ -128,7 +128,7 @@ content::EvalJsResult WaitForImageAlt(content::WebContents* web_ui,
 // available / while editing.
 content::EvalJsResult WaitForNavigable(content::WebContents* web_ui) {
   constexpr char kScript[] = R"(
-      (async () => {
+      (async function waitForNavigable() {
         await waitForNode(':not([panelopen])[shownav]');
       })();
   )";
@@ -146,7 +146,7 @@ void TouchFileSync(const base::FilePath& path, const base::Time& time) {
 // Test that the Media App installs and launches correctly. Runs some spot
 // checks on the manifest.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaApp) {
-  const GURL url(chromeos::kChromeUIMediaAppURL);
+  const GURL url(ash::kChromeUIMediaAppURL);
   EXPECT_NO_FATAL_FAILURE(
       ExpectSystemWebAppValid(web_app::SystemAppType::MEDIA, url, "Gallery"));
 }
@@ -210,7 +210,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsPdf) {
   // Note: If "object-src" is not set in the CSP, the `<embed>` element fails to
   // load and times out.
   constexpr char kLoadPdf[] = R"(
-      (() => {
+      (function loadPdf() {
         const embedBlob =  document.createElement('embed');
         embedBlob.type ='application/pdf';
         embedBlob.height = '100%';
@@ -237,14 +237,14 @@ namespace {
 // icon-button ids are calculated from a hash of the button labels. Id is used
 // because the UI toolkit has loose guarantees about where the actual label
 // appears in the shadow DOM.
-const std::string kInfoButtonSelector = "#icon-button-2283726";
-const std::string kAnnotationButtonSelector = "#icon-button-3709949292";
-const std::string kCropAndRotateButtonSelector = "#icon-button-2723030533";
+constexpr char kInfoButtonSelector[] = "#icon-button-2283726";
+constexpr char kAnnotationButtonSelector[] = "#icon-button-3709949292";
+constexpr char kCropAndRotateButtonSelector[] = "#icon-button-2723030533";
 
 // Clicks the button on the app bar with the specified selector.
 void clickAppBarButton(content::WebContents* app, const std::string& selector) {
   constexpr char kClickButton[] = R"(
-      (async () => {
+      (async function clickAppBarButton() {
         const button =
             await getNode('$1', ['backlight-app-bar', 'backlight-app']);
         button.click();
@@ -258,7 +258,7 @@ void clickAppBarButton(content::WebContents* app, const std::string& selector) {
 // 'on' attribute (indicating it's styled as active).
 bool isAppBarButtonOn(content::WebContents* app, const std::string& selector) {
   constexpr char kIsButtonOn[] = R"(
-    (async () => {
+    (async function isAppBarButtonOn() {
       const button =
           await getNode('$1', ['backlight-app-bar', 'backlight-app']);
       return button.hasAttribute('on');
@@ -286,7 +286,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsInkForImageAnnotation) {
   // insufficient since it has a default width of 300 and height of 150).
   // Note: The loading of ink engine elements can be async.
   constexpr char kCheckInkLoaded[] = R"(
-    (async () => {
+    (async function checkInkLoaded() {
       const inkEngineCanvas = await waitForNode(
           'canvas.ink-engine[width]', ['backlight-image-handler']);
       return !!inkEngineCanvas &&
@@ -309,10 +309,11 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, InformationPanel) {
   content::WebContents* app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
                                                 TestFile(kFileJpeg640x480));
   PrepareAppForTest(app);
+  EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
 
   // Expect info panel to not be open on first load.
   constexpr char kHasInfoPanelOpen[] = R"(
-    (async () => {
+    (async function hasInfoPanelOpen() {
       const metadataPanel = await getNode(
           'backlight-metadata-panel', ['backlight-image-handler']);
       return !!metadataPanel;
@@ -333,7 +334,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, InformationPanel) {
   // disappear from the DOM until the close animation is complete.
   clickAppBarButton(app, kInfoButtonSelector);
   constexpr char kWaitForImageHandlerUpdate[] = R"(
-    (async () => {
+    (async function waitForImageHandlerUpdate() {
       const imageHandler = await getNode('backlight-image-handler');
       await childListUpdate(imageHandler.shadowRoot);
     })();
@@ -354,15 +355,14 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   const auto kTestFile = folder.files()[0];
   // Stamp the file with a time far in the past, so it can be "updated".
   // Note: Add a bit to the epoch to workaround https://crbug.com/1080434.
-  TouchFileSync(kTestFile,
-                base::Time::UnixEpoch() + base::TimeDelta::FromDays(1));
+  TouchFileSync(kTestFile, base::Time::UnixEpoch() + base::Days(1));
 
   folder.Open(kTestFile);
   content::WebContents* app = PrepareActiveBrowserForTest();
   EXPECT_EQ("800x600", WaitForImageAlt(app, kFilePng800x600));
 
   constexpr char kHasSaveDiscardButtons[] = R"(
-    (async () => {
+    (async function hasSaveDiscardButtons() {
       const discardButton = await getNode('ea-button[label="Discard edits"]',
           ['backlight-app-bar', 'backlight-app']);
       const saveButton = await getNode('backlight-split-button[label="Save"]',
@@ -378,7 +378,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   // buttons now exist.
   clickAppBarButton(app, kCropAndRotateButtonSelector);
   constexpr char kRotateImage[] = R"(
-    (async () => {
+    (async function rotateImage() {
       await waitForNode('backlight-crop-panel', ['backlight-image-handler']);
       const rotateAntiClockwiseButton = await getNode('#icon-button-427243323',
           ['backlight-crop-panel', 'backlight-image-handler']);
@@ -396,7 +396,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
 
   // Save the changes, then wait for the save to go through.
   constexpr char kClickSaveButton[] = R"(
-    (async () => {
+    (async function clickSaveButton() {
       const saveButton = await getNode('ea-button[label="Save"]',
           ['backlight-split-button[label="Save"]', 'backlight-app-bar',
           'backlight-app']);
@@ -414,7 +414,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   MediaAppUiBrowserTest::EvalJsInAppFrame(app, kClickSaveButton);
 
   constexpr char kWaitForSaveToast[] = R"(
-    (async () => {
+    (async function waitForSaveToast() {
       const savedToast = await window['savedToastPromise'];
       return !!savedToast;
     })();
@@ -446,7 +446,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, HandleRawFiles) {
   // Inject a script to manipulate the RAW loader into returning a result that
   // includes an Exif rotation.
   constexpr char kAdd270DegreeRotation[] = R"(
-    (function() {
+    (function add270DegreeRotation() {
       const realPiexImage = getPiexModuleForTesting().image;
       getPiexModuleForTesting().image = (memory, length) => {
         const response = realPiexImage(memory, length);
@@ -477,18 +477,14 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, HandleRawFiles) {
 // file manager and eligible for opening appropriate files / mime types.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
                        MediaAppEligibleOpenTask) {
-  constexpr bool kIsDirectory = false;
-  const extensions::EntryInfo image_entry(TestFile(kFilePng800x600),
-                                          "image/png", kIsDirectory);
-  const extensions::EntryInfo video_entry(TestFile(kFileVideoVP9), "video/webm",
-                                          kIsDirectory);
+  base::FilePath image_path = TestFile(kFilePng800x600);
+  base::FilePath video_path = TestFile(kFileVideoVP9);
 
   WaitForTestSystemAppInstall();
 
-  for (const auto& single_entry : {video_entry, image_entry}) {
-    SCOPED_TRACE(single_entry.mime_type);
-    std::vector<file_manager::file_tasks::FullTaskDescriptor> result;
-    file_manager::file_tasks::FindWebTasks(profile(), {single_entry}, &result);
+  for (const auto& file_path : {video_path, image_path}) {
+    std::vector<file_manager::file_tasks::FullTaskDescriptor> result =
+        file_manager::test::GetTasksForFile(profile(), file_path);
 
     ASSERT_LT(0u, result.size());
     EXPECT_EQ(1u, result.size());
@@ -500,7 +496,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
               task.task_verb);
     EXPECT_EQ(descriptor.app_id, *GetManager().GetAppIdForSystemApp(
                                      web_app::SystemAppType::MEDIA));
-    EXPECT_EQ(chromeos::kChromeUIMediaAppURL, descriptor.action_id);
+    EXPECT_EQ(ash::kChromeUIMediaAppURL, descriptor.action_id);
     EXPECT_EQ(file_manager::file_tasks::TASK_TYPE_WEB_APP,
               descriptor.task_type);
   }
@@ -511,9 +507,9 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
   WaitForTestSystemAppInstall();
 
   // Check system_web_app_manager has the correct attributes for Media App.
-  EXPECT_FALSE(
-      GetManager().ShouldShowInLauncher(web_app::SystemAppType::MEDIA));
-  EXPECT_FALSE(GetManager().ShouldShowInSearch(web_app::SystemAppType::MEDIA));
+  auto* system_app = GetManager().GetSystemApp(web_app::SystemAppType::MEDIA);
+  EXPECT_FALSE(system_app->ShouldShowInLauncher());
+  EXPECT_FALSE(system_app->ShouldShowInSearch());
 }
 
 // Note: Error reporting tests are limited to one per test instance otherwise we
@@ -695,8 +691,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
 
   // Stamp the file with a time far in the past, so it can be "updated".
   // Note: Add a bit to the epoch to workaround https://crbug.com/1080434.
-  TouchFileSync(copied_jpeg_640x480,
-                base::Time::UnixEpoch() + base::TimeDelta::FromDays(1));
+  TouchFileSync(copied_jpeg_640x480, base::Time::UnixEpoch() + base::Days(1));
 
   // Sent an open request using only the 640x480 JPEG file.
   folder.Open(copied_jpeg_640x480);

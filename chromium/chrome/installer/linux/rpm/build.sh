@@ -235,7 +235,7 @@ fi
 eval $(sed -e "s/^\([^=]\+\)=\(.*\)$/export \1='\2'/" \
   "${OUTPUTDIR}/installer/theme/BRANDING")
 
-REPOCONFIG="http://repo.vivaldi.com/archive/rpm"
+REPOCONFIG="https://repo.vivaldi.com/archive/rpm"
 verify_channel
 export USR_BIN_SYMLINK_NAME="${PACKAGE}-${CHANNEL}"
 

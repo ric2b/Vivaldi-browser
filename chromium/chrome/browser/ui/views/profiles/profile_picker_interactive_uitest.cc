@@ -179,9 +179,9 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest, FullscreenWithKeyboard) {
 }
 
 // Checks that the signin web view is able to process keyboard events.
-// TODO(https://crbug.com/1227800): Flaky on linux.
-#if defined(OS_LINUX)
-#define MAYBE_CloseSigninWithKeyboard DISABLED_CloseSigninWithKeyboardd
+// TODO(https://crbug.com/1227800): Flaky on linux and Windows.
+#if defined(OS_LINUX) || defined(OS_WIN)
+#define MAYBE_CloseSigninWithKeyboard DISABLED_CloseSigninWithKeyboard
 #else
 #define MAYBE_CloseSigninWithKeyboard CloseSigninWithKeyboard
 #endif
@@ -192,7 +192,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
   // Simulate a click on the signin button.
   base::MockCallback<base::OnceCallback<void(bool)>> switch_finished_callback;
   EXPECT_CALL(switch_finished_callback, Run(true));
-  ProfilePicker::SwitchToSignIn(SK_ColorRED, switch_finished_callback.Get());
+  ProfilePicker::SwitchToDiceSignIn(SK_ColorRED,
+                                    switch_finished_callback.Get());
 
   // Switch to the signin webview.
   WaitForLayoutWithToolbar();
@@ -207,8 +208,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
 
 // Checks that both the signin web view and the main picker view are able to
 // process a back keyboard event.
-// TODO(https://crbug.com/1173544): Flaky on linux and Win7.
-#if defined(OS_LINUX) || defined(OS_WIN)
+// TODO(https://crbug.com/1173544): Flaky on linux, Win7, Mac
+#if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_MAC)
 #define MAYBE_NavigateBackWithKeyboard DISABLED_NavigateBackWithKeyboard
 #else
 #define MAYBE_NavigateBackWithKeyboard NavigateBackWithKeyboard
@@ -232,7 +233,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
   // Simulate a click on the signin button.
   base::MockCallback<base::OnceCallback<void(bool)>> switch_finished_callback;
   EXPECT_CALL(switch_finished_callback, Run(true));
-  ProfilePicker::SwitchToSignIn(SK_ColorRED, switch_finished_callback.Get());
+  ProfilePicker::SwitchToDiceSignIn(SK_ColorRED,
+                                    switch_finished_callback.Get());
 
   // Switch to the signin webview.
   WaitForLayoutWithToolbar();

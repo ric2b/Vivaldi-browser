@@ -20,7 +20,6 @@ var VIVALDI_WEB_VIEW_API_METHODS = [
   // Vivaldi methods
   'allowBlockedInsecureContent',
   'discardPage',
-  'getFocusedElementInfo',
   'getPageHistory',
   'getThumbnail',
   'setIsFullscreen',

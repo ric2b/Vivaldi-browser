@@ -35,6 +35,8 @@ class UpdateNotifierManager : public UIDelegate {
  public:
   UpdateNotifierManager();
   ~UpdateNotifierManager() override;
+  UpdateNotifierManager(const UpdateNotifierManager&) = delete;
+  UpdateNotifierManager& operator=(const UpdateNotifierManager&) = delete;
 
   static UpdateNotifierManager& GetInstance();
 
@@ -56,15 +58,12 @@ class UpdateNotifierManager : public UIDelegate {
   void OnCheckForUpdatesEvent(base::WaitableEvent* waitable_event);
   void OnQuitEvent(base::WaitableEvent* waitable_event);
 
-  void OnUpdateCheckResult(std::unique_ptr<Appcast> appcast,
-                           Error error);
+  void OnUpdateCheckResult(std::unique_ptr<Appcast> appcast, Error error);
   void StartDownload();
-  void EnsureOldDownloadsDeleted();
   void OnUpdateDownloadReport(JobId job_id, DownloadReport report);
-  void OnUpdateDownloadResult(
-      JobId job_id,
-      std::unique_ptr<InstallerLaunchData> launch_data,
-      Error error);
+  void OnUpdateDownloadResult(JobId job_id,
+                              std::unique_ptr<InstallerLaunchData> launch_data,
+                              Error error);
   void LaunchInstaller();
   void FinishCheck();
 
@@ -109,9 +108,8 @@ class UpdateNotifierManager : public UIDelegate {
   // such id as the check does not store anything on the disc and the result of
   // any check can be used to decide about updates.
   std::atomic<JobId> download_job_id_{0};
-
-  DISALLOW_COPY_AND_ASSIGN(UpdateNotifierManager);
 };
+
 }  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_UPDATE_NOTIFIER_MANAGER_H_

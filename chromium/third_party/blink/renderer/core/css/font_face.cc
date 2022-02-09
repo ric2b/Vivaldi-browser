@@ -191,23 +191,24 @@ FontFace* FontFace::Create(ExecutionContext* context,
 }
 
 FontFace* FontFace::Create(Document* document,
-                           const StyleRuleFontFace* font_face_rule) {
+                           const StyleRuleFontFace* font_face_rule,
+                           bool is_user_style) {
   const CSSPropertyValueSet& properties = font_face_rule->Properties();
 
   // Obtain the font-family property and the src property. Both must be defined.
-  const CSSValue* family =
-      properties.GetPropertyCSSValue(AtRuleDescriptorID::FontFamily);
-  if (!family || (!family->IsFontFamilyValue() && !family->IsIdentifierValue()))
+  auto* family = DynamicTo<CSSFontFamilyValue>(
+      properties.GetPropertyCSSValue(AtRuleDescriptorID::FontFamily));
+  if (!family)
     return nullptr;
   const CSSValue* src = properties.GetPropertyCSSValue(AtRuleDescriptorID::Src);
   if (!src || !src->IsValueList())
     return nullptr;
 
-  FontFace* font_face =
-      MakeGarbageCollected<FontFace>(document->GetExecutionContext());
+  FontFace* font_face = MakeGarbageCollected<FontFace>(
+      document->GetExecutionContext(), font_face_rule, is_user_style);
+  font_face->SetFamilyValue(*family);
 
-  if (font_face->SetFamilyValue(*family) &&
-      font_face->SetPropertyFromStyle(properties,
+  if (font_face->SetPropertyFromStyle(properties,
                                       AtRuleDescriptorID::FontStyle) &&
       font_face->SetPropertyFromStyle(properties,
                                       AtRuleDescriptorID::FontWeight) &&
@@ -237,8 +238,13 @@ FontFace* FontFace::Create(Document* document,
   return nullptr;
 }
 
-FontFace::FontFace(ExecutionContext* context)
-    : ExecutionContextClient(context), status_(kUnloaded) {}
+FontFace::FontFace(ExecutionContext* context,
+                   const StyleRuleFontFace* style_rule,
+                   bool is_user_style)
+    : ExecutionContextClient(context),
+      status_(kUnloaded),
+      style_rule_(style_rule),
+      is_user_style_(is_user_style) {}
 
 FontFace::FontFace(ExecutionContext* context,
                    const AtomicString& family,
@@ -463,36 +469,8 @@ bool FontFace::SetPropertyValue(const CSSValue* value,
   return true;
 }
 
-bool FontFace::SetFamilyValue(const CSSValue& value) {
-  AtomicString family;
-  if (auto* family_value = DynamicTo<CSSFontFamilyValue>(value)) {
-    family = AtomicString(family_value->Value());
-  } else if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
-    // We need to use the raw text for all the generic family types, since
-    // @font-face is a way of actually defining what font to use for those
-    // types.
-    switch (identifier_value->GetValueID()) {
-      case CSSValueID::kSerif:
-        family = font_family_names::kWebkitSerif;
-        break;
-      case CSSValueID::kSansSerif:
-        family = font_family_names::kWebkitSansSerif;
-        break;
-      case CSSValueID::kCursive:
-        family = font_family_names::kWebkitCursive;
-        break;
-      case CSSValueID::kFantasy:
-        family = font_family_names::kWebkitFantasy;
-        break;
-      case CSSValueID::kMonospace:
-        family = font_family_names::kWebkitMonospace;
-        break;
-      default:
-        return false;
-    }
-  }
-  family_ = family;
-  return true;
+void FontFace::SetFamilyValue(const CSSFontFamilyValue& family_value) {
+  family_ = family_value.Value();
 }
 
 String FontFace::status() const {
@@ -907,6 +885,7 @@ void FontFace::Trace(Visitor* visitor) const {
   visitor->Trace(loaded_property_);
   visitor->Trace(css_font_face_);
   visitor->Trace(callbacks_);
+  visitor->Trace(style_rule_);
   ScriptWrappable::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
 }
@@ -950,6 +929,11 @@ FontMetricsOverride FontFace::GetFontMetricsOverride() const {
 float FontFace::GetSizeAdjust() const {
   DCHECK(size_adjust_);
   return To<CSSPrimitiveValue>(*size_adjust_).GetFloatValue() / 100;
+}
+
+Document* FontFace::GetDocument() const {
+  auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext());
+  return window ? window->document() : nullptr;
 }
 
 }  // namespace blink

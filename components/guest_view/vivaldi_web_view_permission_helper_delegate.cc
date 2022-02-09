@@ -12,7 +12,7 @@ void WebViewPermissionHelper::SetDownloadInformation(
 }
 
 void WebViewPermissionHelperDelegate::SetDownloadInformation(
-  const content::DownloadInformation& info) {
+    const content::DownloadInformation& info) {
   download_info_ = info;
 }
 

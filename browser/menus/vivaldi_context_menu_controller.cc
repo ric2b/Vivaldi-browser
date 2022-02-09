@@ -12,8 +12,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/browser/context_menu_params.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "include/core/SkBitmap.h"
@@ -30,12 +30,11 @@ ContextMenuController::ContextMenuController(
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
     std::unique_ptr<Params> params)
-  : window_web_contents_(window_web_contents),
-   rv_context_menu_(rv_context_menu),
-   with_developer_tools_(!rv_context_menu_ ||
-                         rv_context_menu_->SupportsInspectTools()),
-   params_(std::move(params)) {
-
+    : window_web_contents_(window_web_contents),
+      rv_context_menu_(rv_context_menu),
+      with_developer_tools_(!rv_context_menu_ ||
+                            rv_context_menu_->SupportsInspectTools()),
+      params_(std::move(params)) {
   using Origin = extensions::vivaldi::context_menu::Origin;
 
   // We set the height to zero depending on where we want chrome code to
@@ -131,7 +130,7 @@ void ContextMenuController::InitModel() {
   bool dark_text_color = menu_->HasDarkTextColor();
 
   // Add items from JS
-  for (const context_menu::Element& child: params_->properties.children) {
+  for (const context_menu::Element& child : params_->properties.children) {
     PopulateModel(child, dark_text_color, root_menu_model_);
   }
 
@@ -181,29 +180,27 @@ void ContextMenuController::PopulateModel(const Element& child,
         menu_model->AddRadioItem(id, label, *item.radiogroup.get());
         id_to_checked_map_[id] = item.checked && *item.checked;
         break;
-      case context_menu::ITEM_TYPE_FOLDER:
-        {
-          ui::SimpleMenuModel* child_menu_model;
-          if (rv_context_menu_) {
-            child_menu_model = new ui::SimpleMenuModel(rv_context_menu_);
-          } else {
-            child_menu_model = new ui::SimpleMenuModel(this);
-          }
-          models_.push_back(base::WrapUnique(child_menu_model));
-
-          menu_model->AddSubMenu(id, label, child_menu_model);
-          for (const Element& it: *child.children) {
-            PopulateModel(it, dark_text_color, child_menu_model);
-          }
-          SanitizeModel(child_menu_model);
+      case context_menu::ITEM_TYPE_FOLDER: {
+        ui::SimpleMenuModel* child_menu_model;
+        if (rv_context_menu_) {
+          child_menu_model = new ui::SimpleMenuModel(rv_context_menu_);
+        } else {
+          child_menu_model = new ui::SimpleMenuModel(this);
         }
-        break;
+        models_.push_back(base::WrapUnique(child_menu_model));
+
+        menu_model->AddSubMenu(id, label, child_menu_model);
+        for (const Element& it : *child.children) {
+          PopulateModel(it, dark_text_color, child_menu_model);
+        }
+        SanitizeModel(child_menu_model);
+      } break;
       case context_menu::ITEM_TYPE_NONE:
         return;
     }
     if (item.shortcut && !item.shortcut->empty()) {
-      id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
-          *item.shortcut, true);
+      id_to_accelerator_map_[id] =
+          ::vivaldi::ParseShortcut(*item.shortcut, true);
     }
     // We will show an accelerator unless explicitly registered to false. Note
     // that we transfer display information in each item, but all items are set
@@ -219,7 +216,7 @@ void ContextMenuController::PopulateModel(const Element& child,
       id_to_enabled_map_[id] = *item.enabled;
     }
     if (item.url && !item.url->empty()) {
-       // Set default document icon
+      // Set default document icon
       SetIcon(id, params_->properties.icons.at(0), menu_model);
       // Attempt loading a favicon that will replace the default.
       id_to_url_map_[id] = item.url.get();
@@ -240,14 +237,14 @@ void ContextMenuController::PopulateModel(const Element& child,
       case context_menu::CONTAINER_CONTENT_PWA:
         pwa_controller_ = std::make_unique<PWAMenuController>(
             FindBrowserForEmbedderWebContents(window_web_contents_));
-        pwa_controller_->PopulateModel(GetContainerModel(
-            container, id, menu_model));
+        pwa_controller_->PopulateModel(
+            GetContainerModel(container, id, menu_model));
         break;
       default:
-        if (rv_context_menu_ && rv_context_menu_->HasContainerContent
-            (container)) {
-          rv_context_menu_->PopulateContainer(container, id,
-              GetContainerModel(container, id, menu_model));
+        if (rv_context_menu_ &&
+            rv_context_menu_->HasContainerContent(container)) {
+          rv_context_menu_->PopulateContainer(
+              container, id, GetContainerModel(container, id, menu_model));
         }
         break;
     }
@@ -257,7 +254,9 @@ void ContextMenuController::PopulateModel(const Element& child,
 }
 
 ui::SimpleMenuModel* ContextMenuController::GetContainerModel(
-    const Container& container, int id, ui::SimpleMenuModel* menu_model) {
+    const Container& container,
+    int id,
+    ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
 
   if (container.mode == context_menu::CONTAINER_MODE_FOLDER) {
@@ -316,7 +315,8 @@ void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
   // we do not test more than the last adjustment above.
 }
 
-void ContextMenuController::SetIcon(int command_id, const std::string& icon,
+void ContextMenuController::SetIcon(int command_id,
+                                    const std::string& icon,
                                     ui::SimpleMenuModel* menu_model) {
   if (icon.length() > 0) {
     std::string png_data;
@@ -329,11 +329,8 @@ void ContextMenuController::SetIcon(int command_id, const std::string& icon,
         int height = img.Height();
         gfx::CalculateFaviconTargetSize(&width, &height);
         SkBitmap bitmap(*img.ToSkBitmap());
-        img = gfx::Image::CreateFrom1xBitmap(
-            skia::ImageOperations::Resize(bitmap,
-                                          skia::ImageOperations::RESIZE_GOOD,
-                                          width,
-                                          height));
+        img = gfx::Image::CreateFrom1xBitmap(skia::ImageOperations::Resize(
+            bitmap, skia::ImageOperations::RESIZE_GOOD, width, height));
       }
 
       menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id),
@@ -376,8 +373,8 @@ bool ContextMenuController::IsCommandIdChecked(int command_id) const {
 }
 
 bool ContextMenuController::IsCommandIdEnabled(int command_id) const {
-   auto it = id_to_enabled_map_.find(command_id);
-   return it != id_to_enabled_map_.end() ? it->second : true;
+  auto it = id_to_enabled_map_.find(command_id);
+  return it != id_to_enabled_map_.end() ? it->second : true;
 }
 
 bool ContextMenuController::IsItemForCommandIdDynamic(int command_id) const {
@@ -416,9 +413,9 @@ bool ContextMenuController::GetAcceleratorForCommandId(
 }
 
 void ContextMenuController::VivaldiCommandIdHighlighted(int command_id) {
-   auto it = id_to_url_map_.find(command_id);
-   extensions::MenubarMenuAPI::SendHover(
-       GetProfile(), it != id_to_url_map_.end() ? *it->second : "");
+  auto it = id_to_url_map_.find(command_id);
+  extensions::MenubarMenuAPI::SendHover(
+      GetProfile(), it != id_to_url_map_.end() ? *it->second : "");
 }
 
 void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {

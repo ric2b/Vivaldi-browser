@@ -30,7 +30,8 @@ mojo::ScopedMessagePipeHandle MessagePipeHandleFromInt(uint32_t handle) {
 struct MockInputMethod : public mojom::InputMethod {
   MOCK_METHOD(void,
               OnFocus,
-              (chromeos::ime::mojom::InputFieldInfoPtr input_field_info),
+              (chromeos::ime::mojom::InputFieldInfoPtr input_field_info,
+               chromeos::ime::mojom::InputMethodSettingsPtr settings),
               (override));
   MOCK_METHOD(void, OnBlur, (), (override));
   MOCK_METHOD(void,
@@ -44,6 +45,10 @@ struct MockInputMethod : public mojom::InputMethod {
               ProcessKeyEvent,
               (chromeos::ime::mojom::PhysicalKeyEventPtr event,
                ProcessKeyEventCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              OnCandidateSelected,
+              (uint32_t selected_candidate_index),
               (override));
 };
 
@@ -114,7 +119,19 @@ struct MockInputMethodHost : public ime::mojom::InputMethodHost {
               DisplaySuggestions,
               (const std::vector<ime::TextSuggestion>& suggestions),
               (override));
+  MOCK_METHOD(void,
+              UpdateCandidatesWindow,
+              (mojom::CandidatesWindowPtr window),
+              (override));
   MOCK_METHOD(void, RecordUkm, (mojom::UkmEntryPtr entry), (override));
+  MOCK_METHOD(void,
+              ReportKoreanAction,
+              (mojom::KoreanAction action),
+              (override));
+  MOCK_METHOD(void,
+              ReportKoreanSettings,
+              (mojom::KoreanSettingsPtr settings),
+              (override));
 };
 
 // Sets up the test environment for Mojo and inject a mock ImeEngineMainEntry.

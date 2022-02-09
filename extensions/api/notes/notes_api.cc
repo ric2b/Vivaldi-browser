@@ -234,7 +234,7 @@ NoteNode* ParseNoteId(NotesModel* model,
 
 ExtensionFunction::ResponseAction NotesGetFunction::Run() {
   std::unique_ptr<vivaldi::notes::Get::Params> params(
-      vivaldi::notes::Get::Params::Create(*args_));
+      vivaldi::notes::Get::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<NoteTreeNode> notes;
@@ -303,7 +303,7 @@ void NotesGetTreeFunction::NotesModelBeingDeleted(NotesModel* model) {
 
 ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
   std::unique_ptr<vivaldi::notes::Create::Params> params(
-      vivaldi::notes::Create::Params::Create(*args_));
+      vivaldi::notes::Create::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   NotesModel* model = GetNotesModel(this);
@@ -390,7 +390,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
 
 ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
   std::unique_ptr<vivaldi::notes::Update::Params> params(
-      vivaldi::notes::Update::Params::Create(*args_));
+      vivaldi::notes::Update::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   NotesModel* model = GetNotesModel(this);
@@ -453,7 +453,7 @@ ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
 
 ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
   std::unique_ptr<vivaldi::notes::Remove::Params> params(
-      vivaldi::notes::Remove::Params::Create(*args_));
+      vivaldi::notes::Remove::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   NotesModel* model = GetNotesModel(this);
@@ -519,7 +519,7 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
 
 ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
   std::unique_ptr<vivaldi::notes::Search::Params> params(
-      vivaldi::notes::Search::Params::Create(*args_));
+      vivaldi::notes::Search::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<vivaldi::notes::NoteTreeNode> search_result;
@@ -566,7 +566,7 @@ ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
 
 ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
   std::unique_ptr<vivaldi::notes::Move::Params> params(
-      vivaldi::notes::Move::Params::Create(*args_));
+      vivaldi::notes::Move::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   NotesModel* model = GetNotesModel(this);

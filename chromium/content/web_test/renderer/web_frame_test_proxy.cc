@@ -127,6 +127,9 @@ class TestRenderFrameObserver : public RenderFrameObserver {
   TestRenderFrameObserver(RenderFrame* frame, TestRunner* test_runner)
       : RenderFrameObserver(frame), test_runner_(test_runner) {}
 
+  TestRenderFrameObserver(const TestRenderFrameObserver&) = delete;
+  TestRenderFrameObserver& operator=(const TestRenderFrameObserver&) = delete;
+
   ~TestRenderFrameObserver() override {}
 
  private:
@@ -185,7 +188,7 @@ class TestRenderFrameObserver : public RenderFrameObserver {
     }
   }
 
-  void DidFinishDocumentLoad() override {
+  void DidDispatchDOMContentLoadedEvent() override {
     if (test_runner_->ShouldDumpFrameLoadCallbacks()) {
       std::string description = frame_proxy()->GetFrameDescriptionForWebTests();
       test_runner_->PrintMessage(description +
@@ -221,7 +224,6 @@ class TestRenderFrameObserver : public RenderFrameObserver {
   }
 
   TestRunner* const test_runner_;
-  DISALLOW_COPY_AND_ASSIGN(TestRenderFrameObserver);
 };
 
 }  // namespace
@@ -719,7 +721,7 @@ void WebFrameTestProxy::DidClearWindowObject() {
     test_runner()->Install(this, spell_check_.get());
     accessibility_controller_.Install(frame);
     text_input_controller_.Install(frame);
-    GetLocalRootFrameWidgetTestHelper()->GetEventSender()->Install(frame);
+    GetLocalRootFrameWidgetTestHelper()->GetEventSender()->Install(this);
     blink::WebTestingSupport::InjectInternalsObject(frame);
   }
   RenderFrameImpl::DidClearWindowObject();

@@ -501,7 +501,8 @@
           "system": 0,
           "dialog": 1,
           "melt": 2,
-          "burn": 3
+          "burn": 3,
+          "none": 4
         },
         "default": "dialog",
         "syncable": false
@@ -664,7 +665,8 @@
           "enum_values": {
             "accounts": 0,
             "notifications": 1,
-            "logs": 2
+            "logs": 2,
+            "events": 3
           }
         }
       },
@@ -673,6 +675,12 @@
         "type": "dictionary",
         "default": {},
         "syncable": false
+      },
+      "handle_ics_downloads": {
+        "description": "Whether Calendar should handle downloaded ics files when opened inside Vivaldi",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
       }
     },
     "clear_private_data": {
@@ -752,6 +760,12 @@
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "use_popout": {
+        "description": "Display Downloads in a Popup",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
       }
     },
     "homepage": {
@@ -977,6 +991,18 @@
         "default": false,
         "syncable": false
       },
+      "import": {
+        "selected_pane": {
+          "type": "enum",
+          "default": "import",
+          "syncable": false,
+          "description": "Mail import last selected pane",
+          "enum_values": {
+            "import": 0,
+            "status": 1
+          }
+        }
+      },
       "is_turned_off": {
         "description": "Is mail client turned on or off?",
         "type": "boolean",
@@ -1042,15 +1068,37 @@
         "syncable": true
       },
       "search_ascending": {
-        "description": "Is mail list ordered ascending or descending?",
+        "description": "[DEPRECATED 2021/10] VB-28216 Replaced with search_sort_order",
         "type": "boolean",
         "default": true,
-        "syncable": true
+        "syncable": false
       },
       "search_threading": {
-        "description": "Is mail listed according to discussion threads?",
+        "description": "[DEPRECATED 2021/10] VB-28216 Replaced with search_sort_field",
         "type": "boolean",
         "default": true,
+        "syncable": false
+      },
+      "search_sort_order": {
+        "description": "The order in which mail messages are sorted",
+        "type": "enum",
+        "enum_values": {
+          "ascending": 0,
+          "descending": 1
+        },
+        "default": "ascending",
+        "syncable": true
+      },
+      "search_sort_field": {
+        "description": "The field used when sorting mail messages",
+        "type": "enum",
+        "enum_values": {
+          "sentDate": 0,
+          "sender": 1,
+          "subject": 2,
+          "threads": 3
+        },
+        "default": "threads",
         "syncable": true
       },
       "show_unsubscribed": {
@@ -1428,6 +1476,12 @@
             "forMailOnly": false,
             "width": -1,
             "resizable": false
+          }, {
+            "id": "translate",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
           }
         ],
         "syncable": false
@@ -1468,6 +1522,26 @@
           "panelVisible": false
         },
         "syncable": false
+      },
+      "translate": {
+        "automatic": {
+          "description": "Let panel automatically execute a translation on a selection in document.",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "paste": {
+          "description": "Let panel automatically execute a translation when text is pasted.",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "redirect": {
+          "description": "Let panel execute a translation instead of built-in dialog in document.",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
       },
       "version": {
         "description": "Last upgrade of default panels. Format is browser version",
@@ -1830,13 +1904,13 @@
         "path": {
           "description": "[DEPRECATED 2021/03] Kept for migration",
           "type": "file_path",
-          "default": "../resources/aurora_light.webp",
+          "default": "/resources/aurora_light.webp",
           "syncable": false
         },
         "path_custom": {
           "description": "[DEPRECATED 2021/03] Kept for migration",
           "type": "file_path",
-          "default": "../resources/aurora_light.webp",
+          "default": "/resources/aurora_light.webp",
           "syncable": false
         },
         "repeat": {
@@ -1939,6 +2013,11 @@
           "type": "integer",
           "default": 220,
           "syncable": false
+        },
+        "tracker_suggestion_show": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
         }
       }
     },
@@ -2439,27 +2518,28 @@
     },
     "theme": {
       "color_accent_saturation_limit": {
+        "description": "[DEPRECATED 2021/11] Kept for migration",
         "type": "double",
         "default": 1.0,
         "syncable": true
       },
       "blur_enable": {
-        "description": "Enable blur in backgrounds",
+        "description": "[DEPRECATED 2021/11] Kept for migration",
         "type": "boolean",
         "default": true,
         "syncable": true
       },
       "contrast": {
+        "description": "[DEPRECATED 2021/09] Kept for migration",
         "type": "double",
         "default": 5.0,
-        "syncable": true
+        "syncable": false
       },
       "dim_blurred": {
-        "description": "Fade the colors of content that's not focused",
+        "description": "[DEPRECATED 2021/09] Kept for migration",
         "type": "boolean",
         "default": false,
-        "default_mac": true,
-        "syncable": true
+        "syncable": false
       },
       "private_window": {
         "description": "Theme to use in Private Window",
@@ -2469,25 +2549,25 @@
       },
       "background": {
         "data": {
-          "description": "A valid color, image path, 'user_color', 'user_image', 'desktop_image' or empty string",
+          "description": "[DEPRECATED 2021/11] Kept for migration",
           "type": "string",
           "syncable": false,
-          "default": "../resources/4-0-wallpaper-light.jpg"
+          "default": ""
         },
         "user_color": {
-          "description": "User-defined background color",
+          "description": "[DEPRECATED 2021/11] Kept for migration",
           "type": "string",
           "syncable": false,
-          "default": "#bfb8b0"
+          "default": ""
         },
         "user_image": {
-          "description": "User-defined background image path",
+          "description": "[TO BE DEPRECATED] Kept for migration, also used as temporary holding when selecting image",
           "type": "file_path",
           "syncable": false,
-          "default": "../resources/bg_3.8.light.webp"
+          "default": ""
         },
         "position": {
-          "description": "Controls background image positioning",
+          "description": "[DEPRECATED 2021/11] Kept for migration",
           "type": "enum",
           "enum_values": {
             "stretched": 0,
@@ -2499,7 +2579,7 @@
         }
       },
       "simple_scrollbar": {
-        "description": "Use simple scrollbars on Windows/Linux",
+        "description": "[DEPRECATED 2021/11] Kept for migration",
         "type": "boolean",
         "default": false,
         "syncable": true
@@ -2524,14 +2604,14 @@
               "id": 0,
               "minutes": 30,
               "hours": 7,
-              "themeName": "Vivaldi",
+              "themeId": "Vivaldi1",
               "undeletable": true
             },
             {
               "id": 1,
               "minutes": 0,
               "hours": 20,
-              "themeName": "Dark",
+              "themeId": "Vivaldi2",
               "undeletable": true
             }
           ],
@@ -2541,18 +2621,20 @@
           "description": "Operating System-based theme schedule",
           "type": "dictionary",
           "default": {
-            "light": "Vivaldi",
-            "dark": "Dark"
+            "light": "Vivaldi1",
+            "dark": "Vivaldi2"
           },
           "syncable": false
         }
       },
       "transparency":  {
+        "description": "[DEPRECATED 2021/11] Kept for migration",
         "type": "double",
         "default": 0.95,
         "syncable": false
       },
       "transparent_tab_bar": {
+        "description": "[DEPRECATED 2021/11] Kept for migration",
         "type": "boolean",
         "default": false,
         "syncable": false
@@ -2561,6 +2643,294 @@
         "type": "boolean",
         "default": true,
         "syncable": true
+      }
+    },
+    "themes": {
+      "current": {
+        "type": "string",
+        "default": "Vivaldi1",
+        "syncable": false
+      },
+      "current_private": {
+        "type": "string",
+        "default": "Vivaldi9",
+        "syncable": false
+      },
+      "prefer_system_accent": {
+        "description": "[DEPRECATED 2021/11] Kept for migration",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "user": {
+        "type": "list",
+        "description": "User-defined themes",
+        "syncable": false,
+        "default": []
+      },
+      "preview": {
+        "type": "list",
+        "description": "List of currently previewed themes. Currently only the first element if any is used.",
+        "syncable": false,
+        "default": []
+      },
+      "system": {
+        "type": "list",
+        "description": "Default themes",
+        "syncable": false,
+        "default": [
+          {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi1",
+            "url": "",
+            "name": "Vivaldi",
+            "accentFromPage": true,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/4-0-wallpaper-light.jpg",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#ef3939",
+            "colorBg": "#f6f6f6",
+            "colorFg": "#222222",
+            "colorHighlightBg": "#4c70f0",
+            "colorWindowBg": "#ef3939",
+            "contrast": 2,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.92,
+            "blur": 5,
+            "transparencyTabs": false,
+            "transparencyTabBar": false
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi2",
+            "url": "",
+            "name": "Dark",
+            "accentFromPage": false,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/4-0-wallpaper-dark.jpg",
+            "backgroundPosition": "stretch",
+            "radius": 6,
+            "colorAccentBg": "#44454d",
+            "colorBg": "#2e2f37",
+            "colorFg": "#d3d9e3",
+            "colorHighlightBg": "#6590fd",
+            "colorWindowBg": "#2e2f37",
+            "contrast": 2,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.75,
+            "blur": 10,
+            "transparencyTabs": false,
+            "transparencyTabBar": false
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi3",
+            "url": "",
+            "name": "Human",
+            "accentFromPage": true,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/bg_alt_7.jpg",
+            "backgroundPosition": "stretch",
+            "radius": 0,
+            "colorAccentBg": "#e95421",
+            "colorBg": "#41403b",
+            "colorFg": "#e4e4dc",
+            "colorHighlightBg": "#ed773d",
+            "colorWindowBg": "#e95421",
+            "contrast": 0,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.75,
+            "blur": 10,
+            "transparencyTabs": false,
+            "transparencyTabBar": false
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi3x",
+            "url": "",
+            "name": "Issuna",
+            "accentFromPage": false,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#404040",
+            "colorBg": "#2f2f2f",
+            "colorFg": "#dbdbdb",
+            "colorHighlightBg": "#579c8e",
+            "colorWindowBg": "#1D1E21",
+            "contrast": 2,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.75,
+            "blur": 0,
+            "transparencyTabs": false,
+            "transparencyTabBar": false
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi4",
+            "url": "",
+            "name": "Hot Pink",
+            "accentFromPage": true,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/bg_alt_1.jpg",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#b63e62",
+            "colorBg": "#412d38",
+            "colorFg": "#f5dbef",
+            "colorHighlightBg": "#ff368f",
+            "colorWindowBg": "#b63e62",
+            "contrast": 2,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.75,
+            "blur": 0,
+            "transparencyTabs": false,
+            "transparencyTabBar": true
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi5",
+            "url": "",
+            "name": "Subtle",
+            "accentFromPage": false,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#cccccc",
+            "colorBg": "#f6f6f6",
+            "colorFg": "#333333",
+            "colorHighlightBg": "#4c70f0",
+            "colorWindowBg": "#edeef2",
+            "contrast": 1,
+            "dimBlurred": true,
+            "preferSystemAccent": true,
+            "simpleScrollbar": true,
+            "alpha": 1.0,
+            "blur": 0,
+            "transparencyTabs": false,
+            "transparencyTabBar": false
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi6",
+            "url": "",
+            "name": "Blueprint",
+            "accentFromPage": false,
+            "accentOnWindow": false,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/bg_alt_6.webp",
+            "backgroundPosition": "stretch",
+            "radius": 0,
+            "colorAccentBg": "#ffb608",
+            "colorBg": "#2e3a50",
+            "colorFg": "#ffffff",
+            "colorHighlightBg": "#ffb608",
+            "colorWindowBg": "#2e3a50",
+            "contrast": 5,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.75,
+            "blur": 0,
+            "transparencyTabs": false,
+            "transparencyTabBar": true
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi7",
+            "url": "",
+            "name": "Beach",
+            "accentFromPage": true,
+            "accentOnWindow": false,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/bg_alt_4.webp",
+            "backgroundPosition": "stretch",
+            "radius": 5,
+            "colorAccentBg": "#29b2a4",
+            "colorBg": "#f1efea",
+            "colorFg": "#192419",
+            "colorHighlightBg": "#e9780e",
+            "colorWindowBg": "#29b2a4",
+            "contrast": 5,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.80,
+            "blur": 10,
+            "transparencyTabs": false,
+            "transparencyTabBar": true
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi8",
+            "url": "",
+            "name": "Purple Rain",
+            "accentFromPage": false,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/bg_geometric_1.jpg",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#7F5FEC",
+            "colorBg": "#f6f6f6",
+            "colorFg": "#333333",
+            "colorHighlightBg": "#7F5FEC",
+            "colorWindowBg": "#7F5FEC",
+            "contrast": 3,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 0.95,
+            "blur": 10,
+            "transparencyTabs": false,
+            "transparencyTabBar": true
+          }, {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi9",
+            "url": "",
+            "name": "Private",
+            "accentFromPage": false,
+            "accentOnWindow": false,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#404076",
+            "colorBg": "#23234f",
+            "colorFg": "#c0c0f1",
+            "colorHighlightBg": "#5f79fd",
+            "colorWindowBg": "",
+            "contrast": 2,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "simpleScrollbar": true,
+            "alpha": 1.0,
+            "blur": 0,
+            "transparencyTabs": false,
+            "transparencyTabBar": false
+          }
+        ]
       }
     },
     "toolbars": {
@@ -2904,14 +3274,6 @@
         "default": false,
         "syncable": true
       },
-      "size_cache": {
-        "type": "dictionary",
-        "default": {
-          "width": 1200,
-          "height": 700
-        },
-        "syncable": false
-      },
       "show_window_close_confirmation_dialog": {
         "type": "boolean",
         "default": true,
@@ -3011,9 +3373,9 @@
 
     "system": {
       "accent_color": {
-        "description": "The app accent color, RRGGBB hex values",
+        "description": "The app accent color, RRGGBB hex values. Maps to --colorHighlightBg.",
         "type": "string",
-        "default": "",
+        "default": null,
         "default_linux": "",
         "default_mac": "",
         "syncable": false
@@ -3021,7 +3383,7 @@
       "highlight_color": {
         "description": "The text highlight color, RRGGBB hex values",
         "type": "string",
-        "default": "",
+        "default": null,
         "default_linux": "",
         "default_mac": "",
         "syncable": false

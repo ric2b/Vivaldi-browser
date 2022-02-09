@@ -28,6 +28,9 @@ class VivaldiTranslateLanguageList
  public:
   VivaldiTranslateLanguageList(content::BrowserContext* context);
   ~VivaldiTranslateLanguageList() override;
+  VivaldiTranslateLanguageList(const VivaldiTranslateLanguageList&) = delete;
+  VivaldiTranslateLanguageList& operator=(const VivaldiTranslateLanguageList&) =
+      delete;
 
  private:
   void StartDownload();
@@ -54,10 +57,8 @@ class VivaldiTranslateLanguageList
       resource_request_allowed_notifier_;
 
   base::WeakPtrFactory<VivaldiTranslateLanguageList> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiTranslateLanguageList);
 };
 
-}  // namespace vivaldi_translate
+}  // namespace translate
 
 #endif  // BROWSER_TRANSLATE_VIVALDI_LANGUAGE_LIST_H_

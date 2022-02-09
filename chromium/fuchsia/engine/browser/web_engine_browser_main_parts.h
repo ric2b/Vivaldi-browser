@@ -37,7 +37,8 @@ namespace sys {
 class ComponentInspector;
 }
 
-class MediaResourceProviderService;
+class CdmProviderService;
+class WebEngineMemoryInspector;
 
 class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
     : public content::BrowserMainParts {
@@ -54,8 +55,8 @@ class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
   WebEngineDevToolsController* devtools_controller() const {
     return devtools_controller_.get();
   }
-  MediaResourceProviderService* media_resource_provider_service() const {
-    return media_resource_provider_service_.get();
+  CdmProviderService* cdm_provider_service() const {
+    return cdm_provider_service_.get();
   }
 
   // content::BrowserMainParts overrides.
@@ -87,6 +88,7 @@ class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
 
   // Used to publish diagnostics including the active Contexts and FrameHosts.
   std::unique_ptr<sys::ComponentInspector> component_inspector_;
+  std::unique_ptr<WebEngineMemoryInspector> memory_inspector_;
 
   // Browsing contexts for the connected clients.
   fidl::BindingSet<fuchsia::web::Context, std::unique_ptr<ContextImpl>>
@@ -97,8 +99,7 @@ class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
 
   std::unique_ptr<WebEngineDevToolsController> devtools_controller_;
   std::unique_ptr<cr_fuchsia::LegacyMetricsClient> legacy_metrics_client_;
-  std::unique_ptr<MediaResourceProviderService>
-      media_resource_provider_service_;
+  std::unique_ptr<CdmProviderService> cdm_provider_service_;
 
   // Used to respond to changes to the system's current locale.
   std::unique_ptr<base::FuchsiaIntlProfileWatcher> intl_profile_watcher_;

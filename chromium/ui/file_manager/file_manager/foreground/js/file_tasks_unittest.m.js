@@ -19,7 +19,6 @@ import {EntryLocation} from '../../externs/entry_location.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 import {FilesPasswordDialog} from '../elements/files_password_dialog.js';
 
-import {constants} from './constants.js';
 import {DirectoryModel} from './directory_model.js';
 import {FileTasks} from './file_tasks.js';
 import {FileTransferController} from './file_transfer_controller.js';
@@ -516,75 +515,6 @@ export function testOpenWithMostRecentlyExecuted(callback) {
   reportPromise(promise, callback);
 }
 
-/**
- * Tests opening a .zip file.
- */
-export function testOpenZipWithZipArchiver(callback) {
-  const zipArchiverDescriptor = {
-    appId: 'dmboannefpncccogfdikhmhpmdnddgoe',
-    taskType: 'app',
-    actionId: 'open',
-  };
-
-  window.chrome.fileManagerPrivate.getFileTasks = (entries, callback) => {
-    setTimeout(
-        callback.bind(
-            null,
-            [
-              {
-                descriptor: zipArchiverDescriptor,
-                isDefault: false,
-                isGenericFileHandler: false,
-                title: 'Zip Archiver',
-              },
-            ]),
-        0);
-  };
-
-  // None of the tasks has ever been executed.
-  const taskHistory = /** @type {!TaskHistory} */ ({
-    getLastExecutedTime: function(descriptor) {
-      return 0;
-    },
-    recordTaskExecuted: function(descriptor) {},
-  });
-
-  let executedTask = null;
-  window.chrome.fileManagerPrivate.executeTask =
-      (descriptor, entries, onViewFiles) => {
-        executedTask = descriptor;
-        onViewFiles('success');
-      };
-
-  const mockFileSystem = new MockFileSystem('volumeId');
-  const mockEntry = MockFileEntry.create(mockFileSystem, '/test.zip');
-
-  const promise = new Promise((resolve, reject) => {
-    const fileManager = getMockFileManager();
-    fileManager.ui.defaultTaskPicker = {
-      showDefaultTaskDialog: function(
-          title, message, items, defaultIdx, onSuccess) {
-        failWithMessage('run zip archiver', 'default task picker was shown');
-      },
-    };
-
-    FileTasks
-        .create(
-            fileManager.volumeManager, fileManager.metadataModel,
-            fileManager.directoryModel, fileManager.ui,
-            mockFileTransferController, [mockEntry], [null], taskHistory,
-            fileManager.namingController, fileManager.crostini,
-            fileManager.progressCenter)
-        .then(tasks => {
-          tasks.executeDefault();
-          assertTrue(util.descriptorEqual(zipArchiverDescriptor, executedTask));
-          resolve();
-        });
-  });
-
-  reportPromise(promise, callback);
-}
-
 function setUpInstallLinuxPackage() {
   const fileManager = getMockFileManager();
   fileManager.volumeManager.getLocationInfo = entry => {
@@ -705,18 +635,6 @@ export function testRecordSharingAction() {
       [FileTasks.SharingActionSourceForUMA.CONTEXT_MENU]);
   assertArrayEquals(countMap.get('Share.FileCount'), [3]);
   assertArrayEquals(enumMap.get('Share.FileType'), ['.log', '.doc', 'other']);
-
-  FileTasks.recordSharingActionUMA_(
-      FileTasks.SharingActionSourceForUMA.SHARE_BUTTON, [
-        MockFileEntry.create(mockFileSystem, '/test.log'),
-      ]);
-  assertArrayEquals(enumMap.get('Share.ActionSource'), [
-    FileTasks.SharingActionSourceForUMA.CONTEXT_MENU,
-    FileTasks.SharingActionSourceForUMA.SHARE_BUTTON,
-  ]);
-  assertArrayEquals(countMap.get('Share.FileCount'), [3, 1]);
-  assertArrayEquals(
-      enumMap.get('Share.FileType'), ['.log', '.doc', 'other', '.log']);
 }
 
 /**

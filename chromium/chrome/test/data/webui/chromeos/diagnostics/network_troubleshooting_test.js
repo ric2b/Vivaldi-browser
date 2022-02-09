@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {TroubleshootingInfo} from 'chrome://diagnostics/diagnostics_types.js';
 import {NetworkTroubleshootingElement} from 'chrome://diagnostics/network_troubleshooting.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {assertFalse, assertTrue} from '../../chai_assert.js';
-import {flushTasks} from '../../test_util.m.js';
+import {flushTasks} from '../../test_util.js';
 
 import * as dx_utils from './diagnostics_test_utils.js';
 
@@ -24,10 +24,10 @@ export function networkTroubleshootingTestSuite() {
   });
 
   /**
-   * @param {string} type
+   * @param {!TroubleshootingInfo} info
    * @return {!Promise}
    */
-  function initializeNetworkTroubleshooting(type) {
+  function initializeNetworkTroubleshooting(info) {
     assertFalse(!!networkTroubleshootingElement);
 
     // Add the network troubleshooting element to the DOM.
@@ -35,19 +35,27 @@ export function networkTroubleshootingTestSuite() {
         /** @type {!NetworkTroubleshootingElement} */ (
             document.createElement('network-troubleshooting'));
     assertTrue(!!networkTroubleshootingElement);
-    networkTroubleshootingElement.networkType = type;
+    networkTroubleshootingElement.troubleshootingInfo = info;
     document.body.appendChild(networkTroubleshootingElement);
 
     return flushTasks();
   }
 
-  test('CorrectNetworkTypeDisplayedInMessage', () => {
-    return initializeNetworkTroubleshooting(loadTimeData.getString('wifiLabel'))
+  test('CorrectInfoDisplayedInTroubleshootingElement', () => {
+    return initializeNetworkTroubleshooting({
+             header: 'header',
+             linkText: 'linkText',
+             url: 'https://google.com',
+           })
         .then(() => {
           dx_utils.assertElementContainsText(
               networkTroubleshootingElement.shadowRoot.querySelector(
-                  '#troubleConnectingText'),
-              loadTimeData.getString('wifiLabel'));
+                  '#troubleshootingText'),
+              'header');
+          dx_utils.assertElementContainsText(
+              networkTroubleshootingElement.shadowRoot.querySelector(
+                  '#troubleshootingLinkText'),
+              'linkText');
         });
   });
 }

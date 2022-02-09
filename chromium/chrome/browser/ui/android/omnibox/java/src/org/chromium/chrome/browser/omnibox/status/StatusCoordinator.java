@@ -8,6 +8,7 @@ import android.content.res.Resources;
 import android.view.View;
 
 import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
@@ -15,6 +16,7 @@ import org.chromium.base.FeatureList;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.merchant_viewer.MerchantTrustSignalsCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
@@ -49,11 +51,14 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 public class StatusCoordinator implements View.OnClickListener, LocationBarDataProvider.Observer {
     /** Interface for displaying page info popup on omnibox. */
     public interface PageInfoAction {
+        // TODO(crbug.com/1257656): Create a class to pass highlight info instead of adding more
+        // parameters.
         /**
          * @param tab Tab containing the content to show page info for.
          * @param highlightedPermission The ContentSettingsType to be highlighted on the page.
+         * @param fromStoreIcon Whether user enters page info via the store icon in omnibox.
          */
-        void show(Tab tab, @ContentSettingsType int highlightedPermission);
+        void show(Tab tab, @ContentSettingsType int highlightedPermission, boolean fromStoreIcon);
     }
 
     // TODO(crbug.com/1109369): Do not store the StatusView
@@ -84,6 +89,9 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
      * @param pageInfoAction Displays page info popup.
      * @param userEducationHelper Helper to show in product help UI. Can be null if an in product
      *         help shouldn't be shown, such as when called from a search activity.
+     * @param merchantTrustSignalsCoordinatorSupplier Supplier of {@link
+     *         MerchantTrustSignalsCoordinator}. Can be null if a store icon shouldn't be shown,
+     *         such as when called from a search activity.
      */
     public StatusCoordinator(boolean isTablet, StatusView statusView,
             UrlBarEditingTextStateProvider urlBarEditingTextStateProvider,
@@ -93,7 +101,9 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
             OneshotSupplier<TemplateUrlService> templateUrlServiceSupplier,
             SearchEngineLogoUtils searchEngineLogoUtils, Supplier<Profile> profileSupplier,
             WindowAndroid windowAndroid, PageInfoAction pageInfoAction,
-            UserEducationHelper userEducationHelper) {
+            UserEducationHelper userEducationHelper,
+            @Nullable Supplier<MerchantTrustSignalsCoordinator>
+                    merchantTrustSignalsCoordinatorSupplier) {
         mIsTablet = isTablet;
         mStatusView = statusView;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
@@ -112,7 +122,8 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         mMediator = new StatusMediator(mModel, mStatusView.getResources(), mStatusView.getContext(),
                 urlBarEditingTextStateProvider, isTablet, locationBarDataProvider,
                 PermissionDialogController.getInstance(), searchEngineLogoUtils,
-                templateUrlServiceSupplier, profileSupplier, pageInfoIPHController, windowAndroid);
+                templateUrlServiceSupplier, profileSupplier, pageInfoIPHController, windowAndroid,
+                merchantTrustSignalsCoordinatorSupplier);
 
         Resources res = mStatusView.getResources();
         mMediator.setUrlMinWidth(res.getDimensionPixelSize(R.dimen.location_bar_min_url_width)
@@ -141,6 +152,7 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         mMediator.updateLocationBarIcon(StatusView.IconTransitionType.CROSSFADE);
         mMediator.setStatusClickListener(this);
         mMediator.updateStatusVisibility();
+        mMediator.setStoreIconController();
 
         if (BuildConfig.IS_VIVALDI) {
             SearchEngineIconHandler.get().initialize();
@@ -170,9 +182,12 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         mMediator.setUrlFocusChangePercent(percent);
     }
 
-    /**  @param useDarkColors Whether dark colors should be for the status icon and text. */
-    public void setUseDarkColors(boolean useDarkColors) {
-        mMediator.setUseDarkColors(useDarkColors);
+    /**
+     * @param useDarkForegroundColors Whether dark foreground colors should be for the status icon
+     *                                and text.
+     */
+    public void setUseDarkForegroundColors(boolean useDarkForegroundColors) {
+        mMediator.setUseDarkColors(useDarkForegroundColors);
 
         // TODO(ender): remove this once icon selection has complete set of
         // corresponding properties (for tinting etc).
@@ -294,7 +309,8 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
             return;
         }
 
-        mPageInfoAction.show(mLocationBarDataProvider.getTab(), mMediator.getLastPermission());
+        mPageInfoAction.show(mLocationBarDataProvider.getTab(), mMediator.getLastPermission(),
+                mMediator.isStoreIconShowing());
         mMediator.onPageInfoOpened();
     }
 

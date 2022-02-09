@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/toast_data.h"
 #include "ash/public/cpp/toast_manager.h"
 #include "ash/public/cpp/window_tree_host_lookup.h"
@@ -75,6 +76,11 @@ bool HasEndpoint(const std::vector<ui::DataTransferEndpoint>& saved_endpoints,
     }
   }
   return false;
+}
+
+void OnToastClicked() {
+  ash::NewWindowDelegate::GetInstance()->OpenUrl(
+      GURL(kDlpLearnMoreUrl), /*from_user_interaction=*/true);
 }
 
 }  // namespace
@@ -165,7 +171,7 @@ void DlpClipboardNotifier::WarnOnPaste(
                           base::Unretained(this), CloneEndpoint(data_dst));
 
   ShowWarningBubble(l10n_util::GetStringFUTF16(
-                        IDS_POLICY_DLP_CLIPBOARD_BLOCKED_ON_PASTE, host_name),
+                        IDS_POLICY_DLP_CLIPBOARD_WARN_ON_PASTE, host_name),
                     std::move(proceed_cb), std::move(cancel_cb));
 }
 
@@ -193,7 +199,7 @@ void DlpClipboardNotifier::WarnOnBlinkPaste(
                           base::Unretained(this), CloneEndpoint(data_dst));
 
   ShowWarningBubble(l10n_util::GetStringFUTF16(
-                        IDS_POLICY_DLP_CLIPBOARD_BLOCKED_ON_PASTE, host_name),
+                        IDS_POLICY_DLP_CLIPBOARD_WARN_ON_PASTE, host_name),
                     std::move(proceed_cb), std::move(cancel_cb));
 }
 
@@ -244,14 +250,15 @@ void DlpClipboardNotifier::ResetUserWarnSelection() {
 
 void DlpClipboardNotifier::ShowToast(const std::string& id,
                                      const std::u16string& text) const {
-  ash::ToastData toast(id, text, kClipboardDlpBlockDurationMs,
-                       /*dismiss_text=*/absl::nullopt);
+  ash::ToastData toast(
+      id, text, kClipboardDlpToastDurationMs,
+      l10n_util::GetStringUTF16(IDS_POLICY_DLP_CLIPBOARD_BLOCK_TOAST_BUTTON));
   toast.is_managed = true;
+  toast.dismiss_callback = base::BindRepeating(&OnToastClicked);
   ash::ToastManager::Get()->Show(toast);
 }
 
 void DlpClipboardNotifier::OnClipboardDataChanged() {
-  CloseWidget(widget_.get(), views::Widget::ClosedReason::kUnspecified);
   ResetUserWarnSelection();
 }
 

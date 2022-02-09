@@ -20,8 +20,7 @@ ConfirmInfoBarWebProxy::ConfirmInfoBarWebProxy(
     std::unique_ptr<ConfirmInfoBarDelegate> delegate)
     : infobars::InfoBar(std::move(delegate)) {}
 
-ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {
-}
+ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {}
 
 void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   ConfirmInfoBarDelegate* delegate = GetDelegate();
@@ -41,15 +40,17 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
     button->action = ButtonAction::BUTTON_ACTION_ACCEPT;
     button->prominent = true;
     button->triggers_uac_prompt = delegate->OKButtonTriggersUACPrompt();
-    button->text = base::UTF16ToUTF8(delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
+    button->text = base::UTF16ToUTF8(
+        delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
     infobar.buttons.push_back(std::move(*button));
   }
   if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-    InfobarButton button[1] = { };
+    InfobarButton button[1] = {};
 
     button->action = ButtonAction::BUTTON_ACTION_CANCEL;
     button->triggers_uac_prompt = delegate->OKButtonTriggersUACPrompt();
-    button->text = base::UTF16ToUTF8(delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+    button->text = base::UTF16ToUTF8(
+        delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
 
     if (delegate->GetButtons() == ConfirmInfoBarDelegate::BUTTON_CANCEL) {
       // Apply prominent styling only if the cancel button is the only button.
@@ -71,15 +72,12 @@ ConfirmInfoBarDelegate* ConfirmInfoBarWebProxy::GetDelegate() {
   return delegate()->AsConfirmInfoBarDelegate();
 }
 
-void ConfirmInfoBarWebProxy::PlatformSpecificOnCloseSoon() {
-}
+void ConfirmInfoBarWebProxy::PlatformSpecificOnCloseSoon() {}
 
-void ConfirmInfoBarWebProxy::PlatformSpecificHide(bool animate) {
-}
+void ConfirmInfoBarWebProxy::PlatformSpecificHide(bool animate) {}
 
 InfoBarContainerWebProxy::InfoBarContainerWebProxy(Delegate* delegate)
-  : infobars::InfoBarContainer(delegate) {
-}
+    : infobars::InfoBarContainer(delegate) {}
 
 InfoBarContainerWebProxy::~InfoBarContainerWebProxy() {
   RemoveAllInfoBarsForDestruction();
@@ -87,18 +85,22 @@ InfoBarContainerWebProxy::~InfoBarContainerWebProxy() {
 
 void InfoBarContainerWebProxy::PlatformSpecificAddInfoBar(
     infobars::InfoBar* infobar,
-    size_t position) {
-}
+    size_t position) {}
 
 void InfoBarContainerWebProxy::PlatformSpecificRemoveInfoBar(
     infobars::InfoBar* infobar) {
+  if (infobar->delegate()->GetIdentifier() ==
+      infobars::InfoBarDelegate::INVALID) {
+    // This infobar was handled elsewere. Ie. a devtools window.
+    return;
+  }
   ConfirmInfoBarWebProxy* infobar_proxy =
       static_cast<ConfirmInfoBarWebProxy*>(infobar);
   ConfirmInfoBarDelegate* delegate = infobar_proxy->GetDelegate();
 
   std::vector<base::Value> args(
       extensions::vivaldi::infobars::OnInfobarRemoved::Create(
-        infobar_proxy->tab_id(), delegate->GetIdentifier()));
+          infobar_proxy->tab_id(), delegate->GetIdentifier()));
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
       std::move(args), infobar_proxy->profile());

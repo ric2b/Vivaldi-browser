@@ -24,11 +24,12 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
 bool AddVivaldiNewPage(bool welcome_run_none, std::vector<GURL>* startup_urls);
 
 class VivaldiStartupTabUserData : public base::SupportsUserData::Data {
-public:
+ public:
   VivaldiStartupTabUserData(bool start_as_active)
       : start_as_active_(start_as_active) {}
   bool start_as_active() { return start_as_active_; }
-private:
+
+ private:
   bool start_as_active_ = false;
 };
 

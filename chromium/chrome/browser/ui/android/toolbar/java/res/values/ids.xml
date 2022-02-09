@@ -19,4 +19,6 @@
     <item type="id" name="incognito_tab_menu_id" />
     <item type="id" name="new_tab_menu_id" />
     <item type="id" name="new_incognito_tab_menu_id" />
+    <!-- Vivaldi -->
+    <item type="id" name="vivaldi_create_new_tab_stack" />
 </resources>

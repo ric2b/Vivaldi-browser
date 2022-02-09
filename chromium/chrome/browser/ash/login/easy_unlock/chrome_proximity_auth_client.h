@@ -17,10 +17,15 @@ namespace ash {
 class ChromeProximityAuthClient : public proximity_auth::ProximityAuthClient {
  public:
   explicit ChromeProximityAuthClient(Profile* profile);
+
+  ChromeProximityAuthClient(const ChromeProximityAuthClient&) = delete;
+  ChromeProximityAuthClient& operator=(const ChromeProximityAuthClient&) =
+      delete;
+
   ~ChromeProximityAuthClient() override;
 
   // proximity_auth::ProximityAuthClient:
-  void UpdateSmartLockState(proximity_auth::SmartLockState state) override;
+  void UpdateSmartLockState(SmartLockState state) override;
   void FinalizeUnlock(bool success) override;
   void FinalizeSignin(const std::string& secret) override;
   void GetChallengeForUserAndDevice(
@@ -32,8 +37,6 @@ class ChromeProximityAuthClient : public proximity_auth::ProximityAuthClient {
 
  private:
   Profile* const profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeProximityAuthClient);
 };
 
 }  // namespace ash

@@ -149,6 +149,10 @@ std::wstring GetCurrentTranslation() {
 }
 
 int GetBaseMessageIdForMode(int base_message_id) {
+#if !defined(DO_MODE_STRINGS)
+  // This ID has no per-mode variants.
+  return base_message_id;
+#else
 // Generate the constants holding the mode-specific resource ID arrays.
 #define HANDLE_MODE_STRING(id, ...)                                    \
   static constexpr int k##id##Strings[] = {__VA_ARGS__};               \
@@ -177,6 +181,7 @@ int GetBaseMessageIdForMode(int base_message_id) {
   // Return the variant of |base_message_id| for the current mode.
   return mode_strings[install_static::InstallDetails::Get()
                           .install_mode_index()];
+#endif
 }
 
 }  // namespace installer

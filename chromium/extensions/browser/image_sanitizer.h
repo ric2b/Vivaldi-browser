@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/data_decoder/public/mojom/image_decoder.mojom.h"
 
@@ -68,6 +69,9 @@ class ImageSanitizer {
       SanitizationDoneCallback done_callback,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner);
 
+  ImageSanitizer(const ImageSanitizer&) = delete;
+  ImageSanitizer& operator=(const ImageSanitizer&) = delete;
+
   ~ImageSanitizer();
 
  private:
@@ -85,6 +89,7 @@ class ImageSanitizer {
       std::tuple<std::vector<uint8_t>, bool, bool> read_and_delete_result);
 
   void ImageDecoded(const base::FilePath& image_path,
+                    base::TimeDelta image_decoding_time,
                     const SkBitmap& decoded_image);
 
   void ImageReencoded(const base::FilePath& image_path,
@@ -106,8 +111,6 @@ class ImageSanitizer {
   scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
   mojo::Remote<data_decoder::mojom::ImageDecoder> image_decoder_;
   base::WeakPtrFactory<ImageSanitizer> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ImageSanitizer);
 };
 
 }  // namespace extensions

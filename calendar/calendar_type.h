@@ -184,6 +184,8 @@ class CalendarQueryResults {
 
   CalendarQueryResults();
   ~CalendarQueryResults();
+  CalendarQueryResults(const CalendarQueryResults&) = delete;
+  CalendarQueryResults& operator=(const CalendarQueryResults&) = delete;
 
   size_t size() const { return results_.size(); }
   bool empty() const { return results_.empty(); }
@@ -218,36 +220,34 @@ class CalendarQueryResults {
   // The ordered list of results. The pointers inside this are owned by this
   // CalendarQueryResults object.
   std::vector<CalendarResult> results_;
-
-  DISALLOW_COPY_AND_ASSIGN(CalendarQueryResults);
 };
 
 class CreateCalendarResult {
  public:
   CreateCalendarResult();
+  CreateCalendarResult(const CreateCalendarResult&) = delete;
+  CreateCalendarResult& operator=(const CreateCalendarResult&) = delete;
+
   bool success;
   CalendarRow createdRow;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CreateCalendarResult);
 };
 
 class UpdateCalendarResult {
  public:
   UpdateCalendarResult();
-  bool success;
+  UpdateCalendarResult(const UpdateCalendarResult&) = delete;
+  UpdateCalendarResult& operator=(const UpdateCalendarResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(UpdateCalendarResult);
+  bool success;
 };
 
 class DeleteCalendarResult {
  public:
   DeleteCalendarResult();
-  bool success;
+  DeleteCalendarResult(const DeleteCalendarResult&) = delete;
+  DeleteCalendarResult& operator=(const DeleteCalendarResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteCalendarResult);
+  bool success;
 };
 
 }  // namespace calendar

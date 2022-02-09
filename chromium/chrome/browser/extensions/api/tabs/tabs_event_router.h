@@ -43,6 +43,10 @@ class TabsEventRouter : public TabStripModelObserver,
                         public resource_coordinator::TabLifecycleObserver {
  public:
   explicit TabsEventRouter(Profile* profile);
+
+  TabsEventRouter(const TabsEventRouter&) = delete;
+  TabsEventRouter& operator=(const TabsEventRouter&) = delete;
+
   ~TabsEventRouter() override;
 
   // BrowserTabStripTrackerDelegate:
@@ -161,6 +165,9 @@ class TabsEventRouter : public TabStripModelObserver,
     // |contents|.
     TabEntry(TabsEventRouter* router, content::WebContents* contents);
 
+    TabEntry(const TabEntry&) = delete;
+    TabEntry& operator=(const TabEntry&) = delete;
+
     // Indicate via a list of property names if a tab is loading based on its
     // WebContents. Whether the state has changed or not is used to determine if
     // events need to be sent to extensions during processing of TabChangedAt()
@@ -195,16 +202,12 @@ class TabsEventRouter : public TabStripModelObserver,
     bool was_muted_;
 
     // Previous discarded state, see memory::TabManager.
-    bool was_discarded_;
+    bool was_discarded_ = false;
 
     GURL url_;
 
-    std::u16string title_;
-
     // Event router that the WebContents's noficiations are forwarded to.
     TabsEventRouter* router_;
-
-    DISALLOW_COPY_AND_ASSIGN(TabEntry);
   };
 
   // Gets the TabEntry for the given |contents|. Returns TabEntry* if found,
@@ -226,8 +229,6 @@ class TabsEventRouter : public TabStripModelObserver,
   base::ScopedObservation<resource_coordinator::TabManager,
                           resource_coordinator::TabLifecycleObserver>
       tab_manager_scoped_observation_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(TabsEventRouter);
 };
 
 }  // namespace extensions

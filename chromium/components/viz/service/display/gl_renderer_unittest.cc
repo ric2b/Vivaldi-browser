@@ -49,7 +49,7 @@
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/color_transform.h"
-#include "ui/gfx/transform.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/latency/latency_info.h"
 
 #if defined(OS_WIN)
@@ -2468,7 +2468,6 @@ class MockOutputSurfaceTest : public GLRendererTest {
     output_surface_ =
         std::make_unique<StrictMock<MockOutputSurface>>(std::move(provider));
 
-    cc::FakeOutputSurfaceClient output_surface_client_;
     output_surface_->BindToClient(&output_surface_client_);
 
     resource_provider_ = std::make_unique<DisplayResourceProviderGL>(
@@ -2887,11 +2886,6 @@ class MockOverlayScheduler {
 };
 
 TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
-#if defined(USE_X11)
-  // TODO(1096425): Remove this.
-  if (!features::IsUsingOzonePlatform())
-    GTEST_SKIP();
-#endif
   auto gl_owned = std::make_unique<WaitSyncTokenCountingGLES2Interface>();
   WaitSyncTokenCountingGLES2Interface* gl = gl_owned.get();
 
@@ -3584,7 +3578,7 @@ class GLRendererPartialSwapTest : public GLRendererTest {
     Mock::VerifyAndClearExpectations(gl);
 
     for (int i = 0; i < 2; ++i) {
-      AggregatedRenderPass* root_pass = cc::AddRenderPassWithDamage(
+      root_pass = cc::AddRenderPassWithDamage(
           &render_passes_in_draw_order_, root_pass_id, root_pass_output_rect,
           root_pass_damage_rect, gfx::Transform(), cc::FilterOperations());
       cc::AddQuad(root_pass, gfx::Rect(root_pass_output_rect), SK_ColorGREEN);
@@ -5146,11 +5140,6 @@ TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithRootRenderPassOverlay) {
 
 TEST_F(GLRendererWithGpuFenceTest,
        GpuFenceIdIsUsedOnlyForRootRenderPassOverlay) {
-#if defined(USE_X11)
-  // TODO(1096425): Remove this.
-  if (!features::IsUsingOzonePlatform())
-    GTEST_SKIP();
-#endif
   gfx::Size viewport_size(100, 100);
   AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, AggregatedRenderPassId{1},

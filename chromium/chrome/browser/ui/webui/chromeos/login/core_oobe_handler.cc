@@ -107,8 +107,6 @@ void CoreOobeHandler::GetAdditionalParameters(base::DictionaryValue* dict) {
                base::Value(ash::TabletMode::Get()->InTabletMode()));
   dict->SetKey("isDemoModeEnabled",
                base::Value(DemoSetupController::IsDemoModeAllowed()));
-  // TODO(crbug.com/1202135):: Remove along with JS part.
-  dict->SetKey("newLayoutEnabled", base::Value(true));
   if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
     dict->SetKey("flowType", base::Value("meet"));
   }
@@ -360,10 +358,9 @@ void CoreOobeHandler::SetDialogPaddingMode(
 
 void CoreOobeHandler::OnOobeConfigurationChanged() {
   base::Value configuration(base::Value::Type::DICTIONARY);
-  chromeos::configuration::FilterConfiguration(
+  configuration::FilterConfiguration(
       OobeConfiguration::Get()->GetConfiguration(),
-      chromeos::configuration::ConfigurationHandlerSide::HANDLER_JS,
-      configuration);
+      configuration::ConfigurationHandlerSide::HANDLER_JS, configuration);
   CallJS("cr.ui.Oobe.updateOobeConfiguration", configuration);
 }
 
@@ -384,7 +381,7 @@ void CoreOobeHandler::HandleRaiseTabKeyEvent(bool reverse) {
 
 void CoreOobeHandler::HandleGetPrimaryDisplayNameForTesting(
     const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 

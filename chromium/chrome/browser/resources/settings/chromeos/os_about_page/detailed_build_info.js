@@ -11,7 +11,7 @@ import '//resources/cr_elements/cr_button/cr_button.m.js';
 import '//resources/cr_elements/policy/cr_policy_indicator.m.js';
 import '//resources/cr_elements/policy/cr_tooltip_icon.m.js';
 import '../../settings_shared_css.js';
-import '../localized_link/localized_link.js';
+import '//resources/cr_components/chromeos/localized_link/localized_link.js';
 import './channel_switcher_dialog.js';
 import './edit_hostname_dialog.js';
 
@@ -77,6 +77,7 @@ Polymer({
       type: Object,
       value: () => new Set([
         chromeos.settings.mojom.Setting.kChangeChromeChannel,
+        chromeos.settings.mojom.Setting.kChangeDeviceName,
         chromeos.settings.mojom.Setting.kCopyDetailedBuildInfo,
       ]),
     },
@@ -124,7 +125,7 @@ Polymer({
     if (this.isHostnameSettingEnabled_) {
       this.addWebUIListener(
           'settings.updateDeviceNameMetadata',
-          this.updateDeviceNameMetadata_.bind(this));
+          (data) => this.updateDeviceNameMetadata_(data));
       DeviceNameBrowserProxyImpl.getInstance().notifyReadyForDeviceName();
     }
   },
@@ -165,9 +166,20 @@ Polymer({
     browserProxy.getChannelInfo().then(info => {
       this.channelInfo_ = info;
       // Display the target channel for the 'Currently on' message.
-      this.currentlyOnChannelText_ = this.i18n(
-          'aboutCurrentlyOnChannel',
-          this.i18n(browserChannelToI18nId(info.targetChannel, info.isLts)));
+      const browserChannel =
+          this.i18n(browserChannelToI18nId(info.targetChannel, info.isLts));
+      // TODO(crbug.com/1259245) On LTS we should already show "Currently on
+      // long-term support channel", whereas for other channels we still say
+      // "Currently on stable", without the word "channel". This will be changed
+      // and made consistent with the abovementioned ticket and this if-else
+      // will be refactored.
+      if (info.isLts) {
+        this.currentlyOnChannelText_ =
+            this.i18n('aboutCurrentlyOnChannelInfo', browserChannel);
+      } else {
+        this.currentlyOnChannelText_ =
+            this.i18n('aboutCurrentlyOnChannel', browserChannel);
+      }
     });
   },
 
@@ -192,6 +204,19 @@ Polymer({
   },
 
   /**
+   * @return {string}
+   * @private
+   */
+  getDeviceNameEditButtonA11yDescription_() {
+    if (!this.deviceNameMetadata_) {
+      return '';
+    }
+
+    return this.i18n(
+        'aboutDeviceNameEditBtnA11yDescription', this.getDeviceNameText_());
+  },
+
+  /**
    * @return {boolean}
    * @private
    */
@@ -202,6 +227,36 @@ Polymer({
 
     return this.deviceNameMetadata_.deviceNameState ===
         DeviceNameState.CAN_BE_MODIFIED;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowPolicyIndicator_() {
+    return this.getDeviceNameIndicatorType_() !== CrPolicyIndicatorType.NONE;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getDeviceNameIndicatorType_() {
+    if (!this.deviceNameMetadata_) {
+      return CrPolicyIndicatorType.NONE;
+    }
+
+    if (this.deviceNameMetadata_.deviceNameState ===
+        DeviceNameState.CANNOT_BE_MODIFIED_BECAUSE_OF_POLICIES) {
+      return CrPolicyIndicatorType.DEVICE_POLICY;
+    }
+
+    if (this.deviceNameMetadata_.deviceNameState ===
+        DeviceNameState.CANNOT_BE_MODIFIED_BECAUSE_NOT_DEVICE_OWNER) {
+      return CrPolicyIndicatorType.OWNER;
+    }
+
+    return CrPolicyIndicatorType.NONE;
   },
 
   /**
@@ -260,8 +315,7 @@ Polymer({
     const buildInfo = {
       'application_label': loadTimeData.getString('aboutBrowserVersion'),
       'platform': this.versionInfo_.osVersion,
-      'aboutChannelLabel': this.channelInfo_.targetChannel +
-          (this.channelInfo_.isLts ? ' (trusted tester)' : ''),
+      'aboutChannelLabel': this.channelInfo_.targetChannel,
       'firmware_version': this.versionInfo_.osFirmware,
       'aboutIsArcStatusTitle': loadTimeData.getBoolean('aboutIsArcEnabled'),
       'arc_label': this.versionInfo_.arcVersion,
@@ -299,6 +353,5 @@ Polymer({
   onEditHostnameDialogClosed_() {
     this.showEditHostnameDialog_ = false;
     focusWithoutInk(assert(this.$$('cr-button')));
-    // TODO(jhawkins): Verify hostname property updated at this point.
   },
 });

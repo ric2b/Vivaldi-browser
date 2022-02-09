@@ -21,14 +21,14 @@ namespace content {
 class WebContents;
 }
 
-// A helper to get app ID in a tab for displaying in the shelf.
-absl::optional<std::string> GetShelfAppIdForWebContents(
-    content::WebContents* tab);
-
 // Assists ChromeShelfController with ExtensionService interaction.
 class ShelfControllerHelper : public ExtensionEnableFlowDelegate {
  public:
   explicit ShelfControllerHelper(Profile* profile);
+
+  ShelfControllerHelper(const ShelfControllerHelper&) = delete;
+  ShelfControllerHelper& operator=(const ShelfControllerHelper&) = delete;
+
   ~ShelfControllerHelper() override;
 
   // Helper function to return the title associated with |app_id|.
@@ -77,8 +77,6 @@ class ShelfControllerHelper : public ExtensionEnableFlowDelegate {
   // The currently active profile for the usage of |GetAppID|.
   Profile* profile_;
   std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShelfControllerHelper);
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_SHELF_SHELF_CONTROLLER_HELPER_H_

@@ -92,9 +92,9 @@ void CodecImage::ReleaseTexImage(unsigned target) {}
 bool CodecImage::CopyTexImage(unsigned target) {
   DCHECK_CALLED_ON_VALID_THREAD(gpu_main_thread_checker_);
 
-  // This method is only called for SurfaceTexture implementation for which DrDc
-  // is disabled.
-  DCHECK(!features::IsDrDcEnabled());
+  // This method is only called for SurfaceTexture implementation which can't be
+  // thread-safe.
+  DCHECK(!features::NeedThreadSafeAndroidMedia());
 
   TRACE_EVENT0("media", "CodecImage::CopyTexImage");
   DCHECK_EQ(COPY, ShouldBindOrCopy());
@@ -130,26 +130,6 @@ bool CodecImage::CopyTexSubImage(unsigned target,
                                  const gfx::Point& offset,
                                  const gfx::Rect& rect) {
   return false;
-}
-
-bool CodecImage::ScheduleOverlayPlane(
-    gfx::AcceleratedWidget widget,
-    int z_order,
-    gfx::OverlayTransform transform,
-    const gfx::Rect& bounds_rect,
-    const gfx::RectF& crop_rect,
-    bool enable_blend,
-    std::unique_ptr<gfx::GpuFence> gpu_fence) {
-  TRACE_EVENT0("media", "CodecImage::ScheduleOverlayPlane");
-  if (is_texture_owner_backed_) {
-    DVLOG(1) << "Invalid call to ScheduleOverlayPlane; this image is "
-                "TextureOwner backed.";
-    return false;
-  }
-
-  NotifyOverlayPromotion(true, bounds_rect);
-  RenderToOverlay();
-  return true;
 }
 
 void CodecImage::NotifyOverlayPromotion(bool promotion,

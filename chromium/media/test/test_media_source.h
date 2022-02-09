@@ -49,6 +49,10 @@ class TestMediaSource {
                   const std::string& mimetype,
                   size_t initial_append_size,
                   bool initial_sequence_mode = false);
+
+  TestMediaSource(const TestMediaSource&) = delete;
+  TestMediaSource& operator=(const TestMediaSource&) = delete;
+
   ~TestMediaSource();
 
   std::unique_ptr<Demuxer> GetDemuxer();
@@ -135,8 +139,6 @@ class TestMediaSource {
   base::TimeDelta append_window_end_ = kInfiniteDuration;
   bool do_eos_after_next_append_ = false;
   ExpectedAppendResult expected_append_result_ = ExpectedAppendResult::kSuccess;
-
-  DISALLOW_COPY_AND_ASSIGN(TestMediaSource);
 };
 
 }  // namespace media

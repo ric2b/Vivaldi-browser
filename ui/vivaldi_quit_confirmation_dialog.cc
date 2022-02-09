@@ -71,12 +71,12 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
   widget->Show();
 }
 
-VivaldiQuitConfirmationDialog::~VivaldiQuitConfirmationDialog() {
-}
+VivaldiQuitConfirmationDialog::~VivaldiQuitConfirmationDialog() {}
 
-std::unique_ptr<views::Checkbox> VivaldiQuitConfirmationDialog::CreateExtraView() {
+std::unique_ptr<views::Checkbox>
+VivaldiQuitConfirmationDialog::CreateExtraView() {
   auto checkbox = std::make_unique<views::Checkbox>(
-    l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_DONOTSHOW));
+      l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_DONOTSHOW));
   checkbox->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   return checkbox;
@@ -111,8 +111,8 @@ bool VivaldiQuitConfirmationDialog::ShouldShowCloseButton() const {
 
 gfx::Size VivaldiQuitConfirmationDialog::CalculatePreferredSize() const {
   return gfx::Size(
-    kDefaultWidth,
-    GetLayoutManager()->GetPreferredHeightForWidth(this, kDefaultWidth));
+      kDefaultWidth,
+      GetLayoutManager()->GetPreferredHeightForWidth(this, kDefaultWidth));
 }
 
 }  // namespace vivaldi

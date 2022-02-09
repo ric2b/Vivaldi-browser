@@ -56,6 +56,7 @@ class FrameTreeNode;
 class NavigationHandle;
 class NavigationRequest;
 class NavigationThrottle;
+class RenderFrameHost;
 class RenderFrameHostImpl;
 class RenderProcessHost;
 class SharedWorkerHost;
@@ -74,12 +75,16 @@ class InspectorIssue;
 
 namespace devtools_instrumentation {
 
+// If this function caused the User-Agent header to be overridden,
+// `devtools_user_agent_overridden` will be set to true; otherwise, it will be
+// set to false.
 void ApplyNetworkRequestOverrides(
     FrameTreeNode* frame_tree_node,
     blink::mojom::BeginNavigationParams* begin_params,
     bool* report_raw_headers,
     absl::optional<std::vector<net::SourceStream::SourceType>>*
-        devtools_accepted_stream_types);
+        devtools_accepted_stream_types,
+    bool* devtools_user_agent_overridden);
 
 // Returns true if devtools want |*override_out| to be used.
 // (A true return and |*override_out| being nullopt means no user agent client
@@ -225,6 +230,17 @@ void ReportSameSiteCookieIssue(
     blink::mojom::SameSiteCookieOperation operation,
     const absl::optional<std::string>& devtools_request_id);
 
+enum class AttributionReportingIssueType {
+  kAttributionTriggerDataTooLarge,
+  kAttributionEventSourceTriggerDataTooLarge,
+};
+
+void ReportAttributionReportingIssue(
+    RenderFrameHost* render_frame_host,
+    AttributionReportingIssueType issue_type,
+    const absl::optional<std::string>& request_id,
+    const absl::optional<std::string>& invalid_parameter);
+
 // This function works similar to RenderFrameHostImpl::AddInspectorIssue, in
 // that it reports an InspectorIssue to DevTools clients. The difference is that
 // |ReportBrowserInitiatedIssue| sends issues directly to clients instead of
@@ -265,6 +281,9 @@ void LogWorkletError(RenderFrameHostImpl* frame_host, const std::string& error);
 void ApplyNetworkContextParamsOverrides(
     BrowserContext* browser_context,
     network::mojom::NetworkContextParams* network_context_params);
+
+void DidRejectCrossOriginPortalMessage(
+    RenderFrameHostImpl* render_frame_host_impl);
 
 }  // namespace devtools_instrumentation
 

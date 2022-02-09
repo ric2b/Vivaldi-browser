@@ -129,6 +129,9 @@ class CrasAudioClientImpl : public CrasAudioClient {
                        weak_ptr_factory_.GetWeakPtr()));
   }
 
+  CrasAudioClientImpl(const CrasAudioClientImpl&) = delete;
+  CrasAudioClientImpl& operator=(const CrasAudioClientImpl&) = delete;
+
   ~CrasAudioClientImpl() override = default;
 
   // CrasAudioClient overrides:
@@ -340,6 +343,16 @@ class CrasAudioClientImpl : public CrasAudioClient {
   void SetFixA2dpPacketSize(bool enabled) override {
     dbus::MethodCall method_call(cras::kCrasControlInterface,
                                  cras::kSetFixA2dpPacketSize);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(enabled);
+    cras_proxy_->CallMethod(&method_call,
+                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                            base::DoNothing());
+  }
+
+  void SetFlossEnabled(bool enabled) override {
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kSetFlossEnabled);
     dbus::MessageWriter writer(&method_call);
     writer.AppendBool(enabled);
     cras_proxy_->CallMethod(&method_call,
@@ -1007,8 +1020,6 @@ class CrasAudioClientImpl : public CrasAudioClient {
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.
   base::WeakPtrFactory<CrasAudioClientImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(CrasAudioClientImpl);
 };
 
 }  // namespace

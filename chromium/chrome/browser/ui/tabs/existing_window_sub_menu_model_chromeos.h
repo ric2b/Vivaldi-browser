@@ -14,11 +14,9 @@ class Browser;
 class TabStripModel;
 class TabMenuModelDelegate;
 
-namespace ash {
-class DesksHelper;
-}  // namespace ash
-
 namespace chromeos {
+
+class DesksHelper;
 
 // ExistingWindowSubMenuModel implementation for chromeos specific code.
 class ExistingWindowSubMenuModelChromeOS : public ExistingWindowSubMenuModel {
@@ -41,11 +39,6 @@ class ExistingWindowSubMenuModelChromeOS : public ExistingWindowSubMenuModel {
   // if browsers were provided in MRU order, then within desk groupings browsers
   // will be in MRU order.
   void BuildMenuGroupedByDesk(const std::vector<Browser*>& existing_browsers);
-
-  // Returns true if there are at least 2 desks.
-  bool ShouldGroupByDesk();
-
-  const ash::DesksHelper* const desks_helper_;
 };
 
 }  // namespace chromeos

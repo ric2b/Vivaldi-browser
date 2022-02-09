@@ -332,10 +332,8 @@ bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
   gl::GLImplementationParts swangleImpl = gl::GetSoftwareGLImplementation();
 
   if ((implementation == legacyImpl) ||
-      (useSoftwareGLForTests &&
-       (legacyImpl == gl::init::GetSoftwareGLForTestsImplementation())) ||
-      (useSoftwareGLForHeadless &&
-       (legacyImpl == gl::init::GetSoftwareGLForHeadlessImplementation()))) {
+      ((useSoftwareGLForTests || useSoftwareGLForHeadless) &&
+       (legacyImpl == gl::init::GetSoftwareGLImplementationForPlatform()))) {
     // If using the software GL implementation, use fake vendor and
     // device ids to make sure it never gets blocklisted. It allows us
     // to proceed with loading the blocklist which may have non-device
@@ -352,12 +350,9 @@ bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
 
     return true;
   } else if ((implementation == swangleImpl) ||
-             (useSoftwareGLForTests &&
+             ((useSoftwareGLForTests || useSoftwareGLForHeadless) &&
               (swangleImpl ==
-               gl::init::GetSoftwareGLForTestsImplementation())) ||
-             (useSoftwareGLForHeadless &&
-              (swangleImpl ==
-               gl::init::GetSoftwareGLForHeadlessImplementation()))) {
+               gl::init::GetSoftwareGLImplementationForPlatform()))) {
     // Similarly to the above, use fake vendor and device ids
     // to make sure they never gets blocklisted for SwANGLE as well.
     gpu_info->gpu.vendor_id = 0xffff;
@@ -657,17 +652,26 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
     if (backend_type != wgpu::BackendType::Null &&
         adapter_type != wgpu::AdapterType::Unknown) {
       // Get the adapter and the device name.
-      auto* device = adapter.CreateDevice();
       std::string gpu_str = GetDawnAdapterTypeString(adapter_type);
       gpu_str += " " + GetDawnBackendTypeString(backend_type);
       gpu_str += " - " + adapter_name;
       dawn_info_list->push_back(gpu_str);
 
-      // Get the list of enabled toggles on the device
-      dawn_info_list->push_back("[Default Toggle Names]");
-      std::vector<const char*> toggle_names =
-          dawn_native::GetTogglesUsed(device);
-      AddTogglesToDawnInfoList(instance.get(), toggle_names, dawn_info_list);
+      // Scope the lifetime of |device| to avoid accidental use after release.
+      {
+        auto* device = adapter.CreateDevice();
+        // CreateDevice can return null if the device has been removed or we've
+        // run out of memory. Ensure we don't crash in these instances.
+        if (device) {
+          // Get the list of enabled toggles on the device
+          dawn_info_list->push_back("[Default Toggle Names]");
+          std::vector<const char*> toggle_names =
+              dawn_native::GetTogglesUsed(device);
+          AddTogglesToDawnInfoList(instance.get(), toggle_names,
+                                   dawn_info_list);
+          procs.deviceRelease(device);
+        }
+      }
 
 #if BUILDFLAG(USE_DAWN)
       // Get the list of forced toggles for WebGPU.
@@ -714,14 +718,11 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
       }
 #endif
 
-      // Get supported extensions
-      dawn_info_list->push_back("[Supported Extensions]");
-      for (const char* name : adapter.GetSupportedExtensions()) {
+      // Get supported features
+      dawn_info_list->push_back("[Supported Features]");
+      for (const char* name : adapter.GetSupportedFeatures()) {
         dawn_info_list->push_back(name);
       }
-
-      // Release device.
-      procs.deviceRelease(device);
     }
   }
 #endif

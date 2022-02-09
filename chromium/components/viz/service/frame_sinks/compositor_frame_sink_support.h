@@ -78,6 +78,11 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
                              FrameSinkManagerImpl* frame_sink_manager,
                              const FrameSinkId& frame_sink_id,
                              bool is_root);
+
+  CompositorFrameSinkSupport(const CompositorFrameSinkSupport&) = delete;
+  CompositorFrameSinkSupport& operator=(const CompositorFrameSinkSupport&) =
+      delete;
+
   ~CompositorFrameSinkSupport() override;
 
   const FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
@@ -93,6 +98,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   bool is_root() const { return is_root_; }
 
   FrameSinkManagerImpl* frame_sink_manager() { return frame_sink_manager_; }
+  BeginFrameSource* begin_frame_source() { return begin_frame_source_; }
 
   const FrameTimingDetailsMap& timing_details() {
     return frame_timing_details_;
@@ -403,8 +409,6 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   uint32_t number_clients_capturing_ = 0;
 
   base::WeakPtrFactory<CompositorFrameSinkSupport> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(CompositorFrameSinkSupport);
 };
 
 }  // namespace viz

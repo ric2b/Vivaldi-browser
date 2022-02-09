@@ -133,7 +133,7 @@ IN_PROC_BROWSER_TEST_F(TranslateModelServiceDisabledBrowserTest,
                        LanguageDetectionModelNotCreated) {
   base::HistogramTester histogram_tester;
 
-  ui_test_utils::NavigateToURL(browser(), english_url());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), english_url()));
   RetryForHistogramUntilCountReached(
       &histogram_tester, "Translate.CLD3.TopLanguageEvaluationDuration", 1);
   histogram_tester.ExpectTotalCount(
@@ -184,7 +184,7 @@ class TranslateModelServiceBrowserTest
     if (request.GetURL().path() == "/slow-first-layout.js") {
       std::unique_ptr<net::test_server::DelayedHttpResponse> resp =
           std::make_unique<net::test_server::DelayedHttpResponse>(
-              base::TimeDelta::FromMilliseconds(500));
+              base::Milliseconds(500));
       resp->set_code(net::HTTP_OK);
       resp->set_content_type("application/javascript");
       resp->set_content(std::string());
@@ -305,7 +305,7 @@ IN_PROC_BROWSER_TEST_F(TranslateModelServiceBrowserTest,
 IN_PROC_BROWSER_TEST_F(TranslateModelServiceBrowserTest,
                        LanguageDetectionModelCreated) {
   base::HistogramTester histogram_tester;
-  ui_test_utils::NavigateToURL(browser(), english_url());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), english_url()));
   RetryForHistogramUntilCountReached(
       &histogram_tester,
       "LanguageDetection.TFLiteModel.WasModelAvailableForDetection", 1);

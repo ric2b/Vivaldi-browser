@@ -237,7 +237,8 @@ TabSharingUIViews::~TabSharingUIViews() {
 
 gfx::NativeViewId TabSharingUIViews::OnStarted(
     base::OnceClosure stop_callback,
-    content::MediaStreamUI::SourceCallback source_callback) {
+    content::MediaStreamUI::SourceCallback source_callback,
+    const std::vector<content::DesktopMediaID>& media_ids) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   source_callback_ = std::move(source_callback);
   stop_callback_ = std::move(stop_callback);
@@ -491,7 +492,7 @@ void TabSharingUIViews::FaviconPeriodicUpdate(size_t share_session_seq_num) {
       FROM_HERE,
       base::BindOnce(&TabSharingUIViews::FaviconPeriodicUpdate,
                      weak_factory_.GetWeakPtr(), share_session_seq_num),
-      base::TimeDelta::FromMilliseconds(500));
+      base::Milliseconds(500));
 }
 
 void TabSharingUIViews::RefreshFavicons() {

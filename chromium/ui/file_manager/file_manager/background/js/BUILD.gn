@@ -121,8 +121,10 @@ js_library("app_window_wrapper") {
   visibility += related_apps
   deps = [
     ":app_windows",
+    "//ui/file_manager/file_manager/common/js:api",
     "//ui/file_manager/file_manager/common/js:app_util",
     "//ui/file_manager/file_manager/common/js:async_util",
+    "//ui/file_manager/file_manager/common/js:files_app_state",
     "//ui/webui/resources/js:assert.m",
   ]
 }
@@ -147,6 +149,7 @@ js_library("background") {
     ":mount_metrics",
     ":progress_center",
     ":volume_manager_factory",
+    "//ui/file_manager/file_manager/common/js:files_app_state",
     "//ui/file_manager/file_manager/common/js:importer_common",
     "//ui/file_manager/file_manager/common/js:metrics",
     "//ui/file_manager/file_manager/common/js:url_constants",
@@ -255,6 +258,7 @@ js_unittest("device_handler_unittest.m") {
     "//ui/file_manager/file_manager/common/js:mock_chrome",
     "//ui/file_manager/file_manager/common/js:mock_entry",
     "//ui/file_manager/file_manager/common/js:test_error_reporting",
+    "//ui/file_manager/file_manager/common/js:util",
     "//ui/file_manager/file_manager/common/js:volume_manager_types",
     "//ui/file_manager/file_manager/externs:volume_info",
     "//ui/webui/resources/js:load_time_data.m",
@@ -462,6 +466,7 @@ js_unittest("import_history_unittest.m") {
 js_library("launcher") {
   deps = [
     ":app_window_wrapper",
+    "//ui/file_manager/file_manager/common/js:files_app_state",
     "//ui/file_manager/file_manager/common/js:util",
   ]
 }
@@ -657,6 +662,7 @@ js_library("test_util") {
     ":background",
     ":launcher",
     ":test_util_base",
+    "//ui/file_manager/file_manager/common/js:files_app_state",
     "//ui/file_manager/file_manager/common/js:progress_center_common",
     "//ui/file_manager/file_manager/common/js:util",
   ]
@@ -707,12 +713,16 @@ js_unittest("mount_metrics_unittest.m") {
     "//chrome/test/data/webui:chai_assert",
     "//ui/file_manager/file_manager/common/js:metrics",
     "//ui/file_manager/file_manager/common/js:mock_chrome",
+    "//ui/file_manager/file_manager/common/js:util",
     "//ui/file_manager/file_manager/common/js:volume_manager_types",
   ]
 }
 
 js_library("mount_metrics") {
-  deps = [ "//ui/file_manager/file_manager/common/js:metrics" ]
+  deps = [
+    "//ui/file_manager/file_manager/common/js:metrics",
+    "//ui/file_manager/file_manager/common/js:util",
+  ]
 }
 
 js_library("volume_manager_impl") {

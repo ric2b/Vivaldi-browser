@@ -52,22 +52,22 @@ namespace content {
 // static
 RenderWidgetHostViewChildFrame* RenderWidgetHostViewChildFrame::Create(
     RenderWidgetHost* widget,
-    const display::ScreenInfo& parent_screen_info) {
+    const display::ScreenInfos& parent_screen_infos) {
   RenderWidgetHostViewChildFrame* view =
-      new RenderWidgetHostViewChildFrame(widget, parent_screen_info);
+      new RenderWidgetHostViewChildFrame(widget, parent_screen_infos);
   view->Init();
   return view;
 }
 
 RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
     RenderWidgetHost* widget_host,
-    const display::ScreenInfo& parent_screen_info)
+    const display::ScreenInfos& parent_screen_infos)
     : RenderWidgetHostViewBase(widget_host),
       frame_sink_id_(
           base::checked_cast<uint32_t>(widget_host->GetProcess()->GetID()),
           base::checked_cast<uint32_t>(widget_host->GetRoutingID())),
-      frame_connector_(nullptr),
-      parent_screen_info_(parent_screen_info) {
+      frame_connector_(nullptr) {
+  screen_infos_ = parent_screen_infos;
   GetHostFrameSinkManager()->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
   GetHostFrameSinkManager()->SetFrameSinkDebugLabel(
@@ -97,7 +97,8 @@ void RenderWidgetHostViewChildFrame::Init() {
   if (vivaldi::IsVivaldiRunning() && host() && host()->delegate()) {
     // When delegate is InterstitialPageImpl like for authentication dialogs
     // and similar windows web_contents is null.
-    WebContents* web_contents = host()->delegate()->GetAsWebContents();
+    WebContents* web_contents =
+        WebContents::FromRenderViewHost(RenderViewHostImpl::From(host()));
     vivaldi_skip_text_init =
         web_contents && !web_contents->GetOuterWebContents();
   }
@@ -161,11 +162,7 @@ void RenderWidgetHostViewChildFrame::SetFrameConnector(
     SetParentFrameSinkId(parent_view->GetFrameSinkId());
   }
 
-  // TODO(crbug.com/1182855): Use the parent_view's entire display::DisplayList.
-  display::Display display = display_list_.GetCurrentDisplay();
-  display.set_device_scale_factor(
-      frame_connector_->screen_info().device_scale_factor);
-  display_list_.UpdateDisplay(display);
+  UpdateScreenInfo();
 
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
@@ -373,13 +370,19 @@ RenderWidgetHostViewBase* RenderWidgetHostViewChildFrame::GetRootView() {
 
 void RenderWidgetHostViewChildFrame::InitAsPopup(
     RenderWidgetHostView* parent_host_view,
-    const gfx::Rect& bounds) {
+    const gfx::Rect& bounds,
+    const gfx::Rect& anchor_rect) {
   NOTREACHED();
 }
 
 void RenderWidgetHostViewChildFrame::UpdateCursor(const WebCursor& cursor) {
   if (frame_connector_)
     frame_connector_->UpdateCursor(cursor);
+}
+
+void RenderWidgetHostViewChildFrame::UpdateScreenInfo() {
+  if (frame_connector_)
+    screen_infos_ = frame_connector_->screen_infos();
 }
 
 void RenderWidgetHostViewChildFrame::SendInitialPropertiesIfNeeded() {
@@ -462,6 +465,17 @@ void RenderWidgetHostViewChildFrame::UpdateTooltipFromKeyboard(
   gfx::Rect adjusted_bounds(TransformPointToRootCoordSpace(bounds.origin()),
                             bounds.size());
   root_view->UpdateTooltipFromKeyboard(tooltip_text, adjusted_bounds);
+}
+
+void RenderWidgetHostViewChildFrame::ClearKeyboardTriggeredTooltip() {
+  if (!frame_connector_)
+    return;
+
+  auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
+  if (!root_view)
+    return;
+
+  root_view->ClearKeyboardTriggeredTooltip();
 }
 
 RenderWidgetHostViewBase* RenderWidgetHostViewChildFrame::GetParentView() {
@@ -751,8 +765,8 @@ void RenderWidgetHostViewChildFrame::NotifyHitTestRegionUpdated(
 
 bool RenderWidgetHostViewChildFrame::ScreenRectIsUnstableFor(
     const blink::WebInputEvent& event) {
-  if (event.TimeStamp() - base::TimeDelta::FromMilliseconds(
-                              blink::mojom::kMinScreenRectStableTimeMs) <
+  if (event.TimeStamp() -
+          base::Milliseconds(blink::mojom::kMinScreenRectStableTimeMs) <
       screen_rect_stable_since_) {
     return true;
   }
@@ -1024,8 +1038,16 @@ void RenderWidgetHostViewChildFrame::GetScreenInfo(
   // TODO(crbug.com/1182855): Propagate screen infos from the parent on changes
   // and on connection init; avoid lazily updating the local cache like this.
   if (frame_connector_)
-    parent_screen_info_ = frame_connector_->screen_info();
-  *screen_info = parent_screen_info_;
+    UpdateScreenInfo();
+  *screen_info = screen_infos_.current();
+}
+
+display::ScreenInfos RenderWidgetHostViewChildFrame::GetScreenInfos() {
+  // TODO(crbug.com/1182855): Propagate screen infos from the parent on changes
+  // and on connection init; avoid lazily updating the local cache like this.
+  if (frame_connector_)
+    UpdateScreenInfo();
+  return screen_infos_;
 }
 
 void RenderWidgetHostViewChildFrame::EnableAutoResize(

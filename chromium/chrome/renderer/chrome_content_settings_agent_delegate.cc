@@ -4,6 +4,9 @@
 
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 
+#include "build/chromeos_buildflags.h"
+
+// TODO(b/197163596): Remove File Manager constants
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/webui/file_manager/url_constants.h"
 #endif

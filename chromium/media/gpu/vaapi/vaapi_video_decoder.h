@@ -30,7 +30,6 @@
 #include "media/base/video_frame_layout.h"
 #include "media/gpu/chromeos/video_decoder_pipeline.h"
 #include "media/gpu/decode_surface_handler.h"
-#include "media/gpu/vaapi/vaapi_utils.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -76,11 +75,6 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
 
   // DecodeSurfaceHandler<VASurface> implementation.
   scoped_refptr<VASurface> CreateSurface() override;
-  scoped_refptr<VASurface> CreateDecodeSurface() override;
-  bool IsScalingDecode() override;
-  const gfx::Rect GetOutputVisibleRect(
-      const gfx::Rect& decode_visible_rect,
-      const gfx::Size& output_picture_size) override;
   void SurfaceReady(scoped_refptr<VASurface> va_surface,
                     int32_t buffer_id,
                     const gfx::Rect& visible_rect,
@@ -110,6 +104,8 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
     kDecoding,             // decoding buffers.
     kChangingResolution,   // need to change resolution, waiting for pipeline to
                            // be flushed.
+    kExpectingReset,       // resolution change is aborted, waiting for decoder
+                           // to be reset.
     kResetting,            // resetting decoder.
     kError,                // decoder encountered an error.
   };
@@ -134,7 +130,7 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   // reference frame. Note that this doesn't mean the frame can be reused
   // immediately, as it might still be used by the client.
   void ReleaseVideoFrame(VASurfaceID surface_id);
-  // Callback for |frame_pool_| to notify of available resources.
+  // Callback for the frame pool to notify us when a frame becomes available.
   void NotifyFrameAvailable();
   // Callback from accelerator to indicate the protected state has been updated
   // so we can proceed or fail.
@@ -165,13 +161,6 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   void ApplyResolutionChangeWithScreenSizes(
       const std::vector<gfx::Size>& screen_resolution);
 
-  // Callback for when a VASurface in the decode pool is no longer used as a
-  // reference frame and should then be returned to the pool. We ignore the
-  // VASurfaceID in the normal callback because it is retained in the |surface|
-  // object.
-  void ReturnDecodeSurfaceToPool(std::unique_ptr<ScopedVASurface> surface,
-                                 VASurfaceID);
-
   // Having too many decoder instances at once may cause us to run out of FDs
   // and subsequently crash (b/181264362). To avoid that, we limit the maximum
   // number of decoder instances that can exist at once. |num_instances_| tracks
@@ -200,9 +189,6 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   // Aspect ratio from the config.
   VideoAspectRatio aspect_ratio_;
 
-  // Video frame pool used to allocate and recycle video frames.
-  DmabufVideoFramePool* frame_pool_ = nullptr;
-
   // The time at which each buffer decode operation started. Not each decode
   // operation leads to a frame being output and frames might be reordered, so
   // we don't know when it's safe to drop a timestamp. This means we need to use
@@ -219,10 +205,10 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   // The list of frames currently used as output buffers or reference frames.
   std::map<VASurfaceID, scoped_refptr<VideoFrame>> output_frames_;
 
-  // VASurfaces are created via importing |frame_pool_| resources into libva in
-  // CreateSurface(). The following map keeps those VASurfaces for reuse
-  // according to the expectations of libva vaDestroySurfaces(): "Surfaces can
-  // only be destroyed after all contexts using these surfaces have been
+  // VASurfaces are created via importing resources from a DmabufVideoFramePool
+  // into libva in CreateSurface(). The following map keeps those VASurfaces for
+  // reuse according to the expectations of libva vaDestroySurfaces(): "Surfaces
+  // can only be destroyed after all contexts using these surfaces have been
   // destroyed."
   // TODO(crbug.com/1040291): remove this keep-alive when using SharedImages.
   base::small_map<std::map<gfx::GpuMemoryBufferId, scoped_refptr<VASurface>>>
@@ -252,15 +238,6 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   // TODO(crbug.com/1022246): Instead of having the raw pointer here, getting
   // the pointer from AcceleratedVideoDecoder.
   VaapiVideoDecoderDelegate* decoder_delegate_ = nullptr;
-
-  // When we are doing scaled decoding, this is the pool of surfaces used by the
-  // decoder for reference frames.
-  base::queue<std::unique_ptr<ScopedVASurface>>
-      decode_surface_pool_for_scaling_;
-
-  // When we are doing scaled decoding, this is the scale factor we are using,
-  // and applies the same in both dimensions.
-  absl::optional<float> decode_to_output_scale_factor_;
 
   // This is used on AMD protected content implementations to indicate that the
   // DecoderBuffers we receive have been transcrypted and need special handling.

@@ -123,12 +123,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AppSpecifics& proto) {
   VISIT(app_launch_ordinal);
   VISIT(page_ordinal);
   VISIT_ENUM(launch_type);
-  VISIT(bookmark_app_url);
-  VISIT(bookmark_app_description);
-  VISIT(bookmark_app_icon_color);
   VISIT_REP(linked_app_icons);
-  VISIT(bookmark_app_scope);
-  VISIT(bookmark_app_theme_color);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ArcPackageSpecifics& proto) {
@@ -520,7 +515,6 @@ VISIT_PROTO_FIELDS(const sync_pb::ExtensionSpecifics& proto) {
   VISIT(update_url);
   VISIT(enabled);
   VISIT(incognito_enabled);
-  VISIT(name);
   VISIT(remote_install);
   VISIT(all_urls_enabled);
   VISIT(disable_reasons);
@@ -795,6 +789,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ReadingListSpecifics& proto) {
   VISIT_ENUM(status);
   VISIT(first_read_time_us);
   VISIT(update_title_time_us);
+  VISIT(estimated_read_time_seconds);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SearchEngineSpecifics& proto) {

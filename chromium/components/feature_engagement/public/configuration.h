@@ -105,6 +105,20 @@ struct SessionRateImpact {
   absl::optional<std::vector<std::string>> affected_features;
 };
 
+// A SnoozeParams describes the parameters for snoozable options of in-product
+// help.
+struct SnoozeParams {
+ public:
+  // The maximum number of times an in-product-help can be snoozed.
+  uint32_t max_limit{0};
+  // The minimum time interval between snoozes.
+  uint32_t snooze_interval{0};
+
+  SnoozeParams();
+  SnoozeParams(const SnoozeParams& other);
+  ~SnoozeParams();
+};
+
 bool operator==(const SessionRateImpact& lhs, const SessionRateImpact& rhs);
 std::ostream& operator<<(std::ostream& os, const SessionRateImpact& impact);
 
@@ -146,7 +160,10 @@ struct FeatureConfig {
   // Tracker::ShouldTriggerHelpUI(...) always returns false, but if all
   // other conditions are met, it will still be recorded as having been
   // shown in the internal database and through UMA.
-  bool tracking_only;
+  bool tracking_only{false};
+
+  // Snoozing parameter to decide if in-product help should be shown.
+  SnoozeParams snooze_params;
 };
 
 bool operator==(const FeatureConfig& lhs, const FeatureConfig& rhs);
@@ -159,6 +176,9 @@ class Configuration {
  public:
   // Convenience alias for typical implementations of Configuration.
   using ConfigMap = std::map<std::string, FeatureConfig>;
+
+  Configuration(const Configuration&) = delete;
+  Configuration& operator=(const Configuration&) = delete;
 
   virtual ~Configuration() = default;
 
@@ -180,9 +200,6 @@ class Configuration {
 
  protected:
   Configuration() = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(Configuration);
 };
 
 }  // namespace feature_engagement

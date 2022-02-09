@@ -120,6 +120,11 @@ class UserCloudPolicyManagerAshNotifierFactory
     return base::Singleton<UserCloudPolicyManagerAshNotifierFactory>::get();
   }
 
+  UserCloudPolicyManagerAshNotifierFactory(
+      const UserCloudPolicyManagerAshNotifierFactory&) = delete;
+  UserCloudPolicyManagerAshNotifierFactory& operator=(
+      const UserCloudPolicyManagerAshNotifierFactory&) = delete;
+
  private:
   friend struct base::DefaultSingletonTraits<
       UserCloudPolicyManagerAshNotifierFactory>;
@@ -131,8 +136,6 @@ class UserCloudPolicyManagerAshNotifierFactory
   }
 
   ~UserCloudPolicyManagerAshNotifierFactory() override = default;
-
-  DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerAshNotifierFactory);
 };
 
 }  // namespace
@@ -232,7 +235,7 @@ void UserCloudPolicyManagerAsh::Connect(
           ash::GetDeviceDMTokenForUserPolicyGetter(account_id_));
   CreateComponentCloudPolicyService(
       dm_protocol::kChromeExtensionPolicyType, component_policy_cache_path_,
-      POLICY_SOURCE_CLOUD, cloud_policy_client.get(), schema_registry());
+      cloud_policy_client.get(), schema_registry());
   core()->Connect(std::move(cloud_policy_client));
   client()->AddObserver(this);
 

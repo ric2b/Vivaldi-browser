@@ -17,7 +17,12 @@ import './mojom/shimless_rma.mojom-lite.js';
  * Return type from state progression methods.
  * Convenience type as mojo-lite does not define types for method results and
  * this is used frequently.
- * @typedef {{state: !RmaState, error: !RmadErrorCode}}
+ * @typedef {{
+ *   state: !RmaState,
+ *   canCancel: boolean,
+ *   canGoBack: boolean,
+ *   error: !RmadErrorCode
+ * }}
  */
 export let StateResult;
 
@@ -47,14 +52,38 @@ export let ComponentType = ash.shimlessRma.mojom.ComponentType;
 export let ComponentRepairStatus = ash.shimlessRma.mojom.ComponentRepairStatus;
 
 /**
- * @typedef {ash.shimlessRma.mojom.CalibrationComponent}
+ * @typedef {ash.shimlessRma.mojom.CalibrationSetupInstruction}
  */
-export let CalibrationComponent = ash.shimlessRma.mojom.CalibrationComponent;
+export let CalibrationSetupInstruction =
+    ash.shimlessRma.mojom.CalibrationSetupInstruction;
+
+/**
+ * @typedef {ash.shimlessRma.mojom.CalibrationOverallStatus}
+ */
+export let CalibrationOverallStatus =
+    ash.shimlessRma.mojom.CalibrationOverallStatus;
+
+/**
+ * @typedef {ash.shimlessRma.mojom.CalibrationStatus}
+ */
+export let CalibrationStatus = ash.shimlessRma.mojom.CalibrationStatus;
+
+/**
+ * @typedef {ash.shimlessRma.mojom.CalibrationComponentStatus}
+ */
+export let CalibrationComponentStatus =
+    ash.shimlessRma.mojom.CalibrationComponentStatus;
 
 /**
  * @typedef {ash.shimlessRma.mojom.ProvisioningStep}
  */
 export let ProvisioningStep = ash.shimlessRma.mojom.ProvisioningStep;
+
+/**
+ * Type alias for OsUpdateOperation.
+ * @typedef {ash.shimlessRma.mojom.OsUpdateOperation}
+ */
+export let OsUpdateOperation = ash.shimlessRma.mojom.OsUpdateOperation;
 
 /**
  * @typedef {ash.shimlessRma.mojom.Component}
@@ -66,6 +95,27 @@ export let Component = ash.shimlessRma.mojom.Component;
  * @typedef {ash.shimlessRma.mojom.ErrorObserverRemote}
  */
 export let ErrorObserverRemote = ash.shimlessRma.mojom.ErrorObserverRemote;
+
+/**
+ * Type alias for OsUpdateObserverRemote.
+ * @typedef {ash.shimlessRma.mojom.OsUpdateObserverRemote}
+ */
+export let OsUpdateObserverRemote =
+    ash.shimlessRma.mojom.OsUpdateObserverRemote;
+
+/**
+ * Type alias for OsUpdateObserverReceiver.
+ * @typedef {ash.shimlessRma.mojom.OsUpdateObserverReceiver}
+ */
+export let OsUpdateObserverReceiver =
+    ash.shimlessRma.mojom.OsUpdateObserverReceiver;
+
+/**
+ * Type alias for OsUpdateObserverInterface.
+ * @typedef {ash.shimlessRma.mojom.OsUpdateObserverInterface}
+ */
+export let OsUpdateObserverInterface =
+    ash.shimlessRma.mojom.OsUpdateObserverInterface;
 
 /**
  * Type alias for CalibrationObserverRemote.
@@ -138,6 +188,29 @@ export let HardwareWriteProtectionStateObserverInterface =
  */
 export let PowerCableStateObserverRemote =
     ash.shimlessRma.mojom.PowerCableStateObserverRemote;
+
+/**
+ * Type alias for FinalizationObserverRemote.
+ * @typedef {ash.shimlessRma.mojom.FinalizationObserverRemote}
+ */
+export let FinalizationObserverRemote =
+    ash.shimlessRma.mojom.FinalizationObserverRemote;
+
+/**
+ * Type alias for FinalizationObserverReceiver.
+ * @typedef {ash.shimlessRma.mojom.FinalizationObserverReceiver}
+ */
+export let FinalizationObserverReceiver =
+    ash.shimlessRma.mojom.FinalizationObserverReceiver;
+
+/**
+ * Type alias for FinalizationObserverInterface.
+ * @typedef {
+ *    ash.shimlessRma.mojom.FinalizationObserverInterface
+ * }
+ */
+export let FinalizationObserverInterface =
+    ash.shimlessRma.mojom.FinalizationObserverInterface;
 
 /**
  * Type alias for the ShimlessRmaService.

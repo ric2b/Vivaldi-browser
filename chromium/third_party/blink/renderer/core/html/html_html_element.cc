@@ -33,7 +33,7 @@
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/loader/appcache/application_cache_host_for_frame.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_combine.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -54,7 +54,6 @@ void HTMLHtmlElement::InsertedByParser() {
   if (!GetDocument().Parser())
     return;
 
-  MaybeSetupApplicationCache();
   if (!GetDocument().Parser())
     return;
 
@@ -64,37 +63,6 @@ void HTMLHtmlElement::InsertedByParser() {
     GetDocument().GetFrame()->Loader().RunScriptsAtDocumentElementAvailable();
     // RunScriptsAtDocumentElementAvailable might have invalidated
     // GetDocument().
-  }
-}
-
-void HTMLHtmlElement::MaybeSetupApplicationCache() {
-  if (!GetDocument().GetFrame())
-    return;
-
-  DocumentLoader* document_loader =
-      GetDocument().GetFrame()->Loader().GetDocumentLoader();
-  if (!document_loader ||
-      !GetDocument().Parser()->DocumentWasLoadedAsPartOfNavigation())
-    return;
-
-  if (!GetExecutionContext()->IsSecureContext())
-    return;
-
-  ApplicationCacheHostForFrame* host =
-      document_loader->GetApplicationCacheHost();
-  DCHECK(host);
-
-  const AtomicString& manifest = FastGetAttribute(html_names::kManifestAttr);
-  if (manifest.IsEmpty())
-    host->SelectCacheWithoutManifest();
-  else
-    host->SelectCacheWithManifest(GetDocument().CompleteURL(manifest));
-  bool app_cache_installed =
-      host->GetStatus() !=
-      blink::mojom::AppCacheStatus::APPCACHE_STATUS_UNCACHED;
-  if (app_cache_installed && manifest.IsEmpty()) {
-    UseCounter::Count(GetDocument(),
-                      WebFeature::kApplicationCacheInstalledButNoManifest);
   }
 }
 
@@ -173,10 +141,18 @@ void HTMLHtmlElement::PropagateWritingModeAndDirectionFromBody() {
     for (Node* node = firstChild(); node; node = node->nextSibling()) {
       if (!node->IsTextNode() || node->NeedsReattachLayoutTree())
         continue;
-      if (LayoutObject* layout_text = node->GetLayoutObject())
-        layout_text->SetStyle(new_style);
+      LayoutObject* const layout_text = node->GetLayoutObject();
+      if (!layout_text)
+        continue;
+      auto* const text_combine =
+          DynamicTo<LayoutNGTextCombine>(layout_text->Parent());
+      if (UNLIKELY(text_combine)) {
+        layout_text->SetStyle(text_combine->Style());
+        continue;
+      }
+      layout_text->SetStyle(new_style);
+    }
     }
   }
-}
 
 }  // namespace blink

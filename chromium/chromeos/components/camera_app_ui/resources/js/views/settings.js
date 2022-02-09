@@ -77,8 +77,7 @@ export class BaseSettings extends View {
      * @const {!HTMLElement}
      * @private
      */
-    this.defaultFocus_ =
-        dom.getFrom(this.rootElement_, '[tabindex]', HTMLElement);
+    this.defaultFocus_ = dom.getFrom(this.root, '[tabindex]', HTMLElement);
 
     /**
      * The DOM element to be focused when the focus on view is reset by calling
@@ -401,9 +400,9 @@ export class ResolutionSettings extends BaseSettings {
     });
 
     this.photoPreferrer_.setPreferredResolutionChangeListener(
-        this.updateSelectedPhotoResolution_.bind(this));
+        (...args) => this.updateSelectedPhotoResolution_(...args));
     this.videoPreferrer_.setPreferredResolutionChangeListener(
-        this.updateSelectedVideoResolution_.bind(this));
+        (...args) => this.updateSelectedVideoResolution_(...args));
 
     // Flips 'disabled' of resolution options.
     [state.State.CAMERA_CONFIGURING, state.State.TAKING].forEach((s) => {

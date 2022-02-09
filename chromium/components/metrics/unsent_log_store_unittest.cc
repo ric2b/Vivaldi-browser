@@ -58,11 +58,11 @@ class UnsentLogStoreTest : public testing::Test {
     prefs_.registry()->RegisterDictionaryPref(kTestMetaDataPrefName);
   }
 
+  UnsentLogStoreTest(const UnsentLogStoreTest&) = delete;
+  UnsentLogStoreTest& operator=(const UnsentLogStoreTest&) = delete;
+
  protected:
   TestingPrefServiceSimple prefs_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UnsentLogStoreTest);
 };
 
 class TestUnsentLogStoreMetrics : public UnsentLogStoreMetrics {
@@ -121,15 +121,15 @@ class TestUnsentLogStore : public UnsentLogStore {
                        max_log_size,
                        std::string()) {}
 
+  TestUnsentLogStore(const TestUnsentLogStore&) = delete;
+  TestUnsentLogStore& operator=(const TestUnsentLogStore&) = delete;
+
   // Stages and removes the next log, while testing it's value.
   void ExpectNextLog(const std::string& expected_log) {
     StageNextLog();
     EXPECT_EQ(staged_log(), Compress(expected_log));
     DiscardStagedLog();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestUnsentLogStore);
 };
 
 }  // namespace
@@ -140,7 +140,7 @@ TEST_F(UnsentLogStoreTest, EmptyLogList) {
 
   unsent_log_store.TrimAndPersistUnsentLogs();
   const base::ListValue* list_value = prefs_.GetList(kTestPrefName);
-  EXPECT_EQ(0U, list_value->GetSize());
+  EXPECT_EQ(0U, list_value->GetList().size());
 
   TestUnsentLogStore result_unsent_log_store(&prefs_, kLogByteLimit);
   result_unsent_log_store.LoadPersistedUnsentLogs();

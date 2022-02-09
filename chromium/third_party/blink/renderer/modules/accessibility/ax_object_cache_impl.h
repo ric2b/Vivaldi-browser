@@ -69,6 +69,10 @@ class MODULES_EXPORT AXObjectCacheImpl
   static AXObjectCache* Create(Document&, const ui::AXMode&);
 
   AXObjectCacheImpl(Document&, const ui::AXMode&);
+
+  AXObjectCacheImpl(const AXObjectCacheImpl&) = delete;
+  AXObjectCacheImpl& operator=(const AXObjectCacheImpl&) = delete;
+
   ~AXObjectCacheImpl() override;
   void Trace(Visitor*) const override;
 
@@ -343,6 +347,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   static bool IsRelevantPseudoElement(const Node& node);
   static bool IsRelevantPseudoElementDescendant(
       const LayoutObject& layout_object);
+  static bool IsRelevantSlotElement(const HTMLSlotElement& slot);
 
 #if DCHECK_IS_ON()
   bool HasBeenDisposed() { return has_been_disposed_; }
@@ -463,7 +468,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // LayoutObject and AbstractInlineTextBox are not on the Oilpan heap so we
   // do not use HeapHashMap for those mappings.
   HeapHashMap<Member<AccessibleNode>, AXID> accessible_node_mapping_;
-  HashMap<const LayoutObject*, AXID> layout_object_mapping_;
+  HeapHashMap<Member<const LayoutObject>, AXID> layout_object_mapping_;
   HeapHashMap<Member<const Node>, AXID> node_object_mapping_;
   HashMap<AbstractInlineTextBox*, AXID> inline_text_box_object_mapping_;
   int modification_count_;
@@ -566,6 +571,9 @@ class MODULES_EXPORT AXObjectCacheImpl
   void SelectionChangedWithCleanLayout(Node* node);
   void TextChangedWithCleanLayout(Node* node);
   void ChildrenChangedWithCleanLayout(Node* node);
+  // If the presence of document markers changed for the given text node, then
+  // call children changed.
+  void HandleTextMarkerDataAddedWithCleanLayout(Node*);
   void HandleAttributeChangedWithCleanLayout(const QualifiedName& attr_name,
                                              Element* element);
   void HandleUseMapAttributeChangedWithCleanLayout(Element*);
@@ -643,6 +651,9 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   HeapHashSet<WeakMember<Node>> nodes_with_pending_children_changed_;
 
+  // Nodes with document markers that have received accessibility updates.
+  HeapHashSet<WeakMember<Node>> nodes_with_spelling_or_grammar_markers_;
+
   // If tree_update_callback_queue_ gets improbably large, stop
   // enqueueing updates and fire a single ChildrenChanged event on the
   // document once layout occurs.
@@ -680,8 +691,6 @@ class MODULES_EXPORT AXObjectCacheImpl
   // If false, exposes the internal accessibility tree of a select pop-up
   // instead.
   static bool use_ax_menu_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(AXObjectCacheImpl);
 
   FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, PauseUpdatesAfterMaxNumberQueued);
 };

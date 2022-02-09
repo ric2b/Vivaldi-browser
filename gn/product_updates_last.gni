@@ -1,7 +1,7 @@
 import("//build/toolchain/gcc_toolchain.gni")
 
 if (enable_resource_allowlist_generation && is_win) {
-  update_template_instance("//chrome:resource_whitelist") {
+  update_template_instance("//chrome:resource_allowlist") {
     inputs -= [ "$root_out_dir/chrome.dll.pdb" ]
     inputs += [ "$root_out_dir/vivaldi.dll.pdb" ]
     # Update notifier resources

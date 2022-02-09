@@ -158,10 +158,18 @@ VisibleSelection FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated()
     const {
   // TODO(editing-dev): Hoist UpdateStyleAndLayout
   // to caller. See http://crbug.com/590369 for more details.
-  DisplayLockUtilities::ScopedForcedUpdate base_scope(
-      GetSelectionInDOMTree().Base().AnchorNode());
-  DisplayLockUtilities::ScopedForcedUpdate extent_scope(
-      GetSelectionInDOMTree().Extent().AnchorNode());
+  Position base = GetSelectionInDOMTree().Base();
+  Position extent = GetSelectionInDOMTree().Extent();
+  absl::optional<DisplayLockUtilities::ScopedForcedUpdate> force_locks;
+  if (base != extent && base.ComputeContainerNode() &&
+      extent.ComputeContainerNode()) {
+    force_locks = DisplayLockUtilities::ScopedForcedUpdate(
+        MakeGarbageCollected<Range>(GetDocument(), base, extent),
+        DisplayLockContext::ForcedPhase::kLayout);
+  } else {
+    force_locks = DisplayLockUtilities::ScopedForcedUpdate(
+        base.AnchorNode(), DisplayLockContext::ForcedPhase::kLayout);
+  }
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kSelection);
   return ComputeVisibleSelectionInDOMTree();
 }
@@ -1306,11 +1314,11 @@ void FrameSelection::MarkCacheDirty() {
 
 #if DCHECK_IS_ON()
 
-void showTree(const blink::FrameSelection& sel) {
+void ShowTree(const blink::FrameSelection& sel) {
   sel.ShowTreeForThis();
 }
 
-void showTree(const blink::FrameSelection* sel) {
+void ShowTree(const blink::FrameSelection* sel) {
   if (sel)
     sel->ShowTreeForThis();
   else

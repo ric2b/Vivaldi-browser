@@ -16,7 +16,6 @@
 #include "net/http/http_status_code.h"
 
 namespace base {
-class DictionaryValue;
 class Thread;
 class Value;
 }
@@ -52,6 +51,10 @@ class DevToolsHttpHandler {
       std::unique_ptr<DevToolsSocketFactory> server_socket_factory,
       const base::FilePath& active_port_output_directory,
       const base::FilePath& debug_frontend_dir);
+
+  DevToolsHttpHandler(const DevToolsHttpHandler&) = delete;
+  DevToolsHttpHandler& operator=(const DevToolsHttpHandler&) = delete;
+
   ~DevToolsHttpHandler();
 
  private:
@@ -101,9 +104,8 @@ class DevToolsHttpHandler {
       const std::string& target_id,
       const std::string& host);
 
-  std::unique_ptr<base::DictionaryValue> SerializeDescriptor(
-      scoped_refptr<DevToolsAgentHost> agent_host,
-      const std::string& host);
+  base::Value SerializeDescriptor(scoped_refptr<DevToolsAgentHost> agent_host,
+                                  const std::string& host);
 
   // The thread used by the devtools handler to run server socket.
   std::unique_ptr<base::Thread> thread_;
@@ -116,8 +118,6 @@ class DevToolsHttpHandler {
   DevToolsManagerDelegate* delegate_;
   std::unique_ptr<DevToolsSocketFactory> socket_factory_;
   base::WeakPtrFactory<DevToolsHttpHandler> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(DevToolsHttpHandler);
 };
 
 }  // namespace content

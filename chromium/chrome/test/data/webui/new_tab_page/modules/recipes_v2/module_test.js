@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {recipeTasksV2Descriptor, TaskModuleHandlerProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {$$, recipeTasksV2Descriptor, TaskModuleHandlerProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {assertEquals} from 'chrome://test/chai_assert.js';
+import {installMock} from 'chrome://test/new_tab_page/test_support.js';
 import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.js';
 
 suite('NewTabPageModulesRecipesV2ModuleTest', () => {
-  let testProxy;
-  setup(() => {
-    PolymerTest.clearBody();
+  /** @type {!TestBrowserProxy} */
+  let handler;
 
-    testProxy = TestBrowserProxy.fromClass(TaskModuleHandlerProxy);
-    testProxy.handler =
-        TestBrowserProxy.fromClass(taskModule.mojom.TaskModuleHandlerRemote);
-    TaskModuleHandlerProxy.setInstance(testProxy);
+  setup(() => {
+    document.body.innerHTML = '';
+
+    handler = installMock(
+        taskModule.mojom.TaskModuleHandlerRemote,
+        TaskModuleHandlerProxy.setHandler);
   });
 
   test('module appears on render with recipes', async () => {
@@ -41,17 +45,17 @@ suite('NewTabPageModulesRecipesV2ModuleTest', () => {
         },
       ],
     };
-    testProxy.handler.setResultFor('getPrimaryTask', Promise.resolve({task}));
+    handler.setResultFor('getPrimaryTask', Promise.resolve({task}));
 
     // Act.
-    const moduleElement = await recipeTasksV2Descriptor.initialize();
+    const moduleElement = assert(await recipeTasksV2Descriptor.initialize(0));
     document.body.append(moduleElement);
-    moduleElement.$.recipesRepeat.render();
+    $$(moduleElement, '#recipesRepeat').render();
 
     // Assert.
     const recipes =
         Array.from(moduleElement.shadowRoot.querySelectorAll('.recipe-item'));
-    assertEquals(1, testProxy.handler.getCallCount('getPrimaryTask'));
+    assertEquals(1, handler.getCallCount('getPrimaryTask'));
     assertEquals(3, recipes.length);
     assertEquals(
         'https://apricot.com/img.png', recipes[0].querySelector('img').autoSrc);
@@ -82,11 +86,10 @@ suite('NewTabPageModulesRecipesV2ModuleTest', () => {
 
   test('no module renders if no tasks available', async () => {
     // Arrange.
-    testProxy.handler.setResultFor(
-        'getPrimaryTask', Promise.resolve({task: null}));
+    handler.setResultFor('getPrimaryTask', Promise.resolve({task: null}));
 
     // Act.
-    const moduleElement = await recipeTasksV2Descriptor.initialize();
+    const moduleElement = await recipeTasksV2Descriptor.initialize(0);
 
     // Assert.
     assertEquals(null, moduleElement);

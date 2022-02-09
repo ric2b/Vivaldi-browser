@@ -110,6 +110,10 @@ class ExtensionPrefs : public KeyedService {
     ScopedDictionaryUpdate(ExtensionPrefs* prefs,
                            const std::string& extension_id,
                            const std::string& key);
+
+    ScopedDictionaryUpdate(const ScopedDictionaryUpdate&) = delete;
+    ScopedDictionaryUpdate& operator=(const ScopedDictionaryUpdate&) = delete;
+
     ~ScopedDictionaryUpdate();
 
     // Returns a mutable value for the key, if one exists. Otherwise, returns
@@ -123,8 +127,6 @@ class ExtensionPrefs : public KeyedService {
    private:
     std::unique_ptr<prefs::ScopedDictionaryPrefUpdate> update_;
     const std::string key_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedDictionaryUpdate);
   };
 
   class ScopedListUpdate {
@@ -132,6 +134,10 @@ class ExtensionPrefs : public KeyedService {
     ScopedListUpdate(ExtensionPrefs* prefs,
                      const std::string& extension_id,
                      const std::string& key);
+
+    ScopedListUpdate(const ScopedListUpdate&) = delete;
+    ScopedListUpdate& operator=(const ScopedListUpdate&) = delete;
+
     ~ScopedListUpdate();
 
     // Returns a mutable value for the key (ownership remains with the prefs),
@@ -146,8 +152,6 @@ class ExtensionPrefs : public KeyedService {
    private:
     std::unique_ptr<prefs::ScopedDictionaryPrefUpdate> update_;
     const std::string key_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedListUpdate);
   };
 
   // Creates an ExtensionPrefs object.
@@ -174,6 +178,9 @@ class ExtensionPrefs : public KeyedService {
       bool extensions_disabled,
       const std::vector<EarlyExtensionPrefsObserver*>& early_observers,
       base::Clock* clock);
+
+  ExtensionPrefs(const ExtensionPrefs&) = delete;
+  ExtensionPrefs& operator=(const ExtensionPrefs&) = delete;
 
   ~ExtensionPrefs() override;
 
@@ -376,11 +383,6 @@ class ExtensionPrefs : public KeyedService {
   // TODO(crbug.com/1193695): Remove this method once kPrefBlocklistAcknowledged
   // is removed.
   base::StringPiece GetPrefBlocklistAcknowledgedKey();
-
-  // Gets the key of blocklist pref.
-  // TODO(crbug.com/1193695): Remove this method once kPrefBlocklist
-  // is removed.
-  base::StringPiece GetPrefBlocklistKey();
 
   // Returns the version string for the currently installed extension, or
   // the empty string if not found.
@@ -732,6 +734,11 @@ class ExtensionPrefs : public KeyedService {
   // TODO(devlin): Remove this once clients are migrated over, around M84.
   void MigrateToNewExternalUninstallPref();
 
+  // Migrates kPrefBlocklist with kPrefBlocklistState.
+  // TODO(crbug.com/1232243): Remove this once clients are migrated over, around
+  // M97.
+  void MigrateOldBlocklistPrefs();
+
   // Returns true if the given component extension should be installed, even
   // though it has been obsoleted. Installing it allows us to ensure it is
   // cleaned/deleted up properly. After that cleanup is done, this will return
@@ -891,7 +898,7 @@ class ExtensionPrefs : public KeyedService {
       int install_flags,
       const std::string& install_parameter,
       const declarative_net_request::RulesetInstallPrefs& ruleset_install_prefs,
-      prefs::DictionaryValueUpdate* extension_dict) const;
+      prefs::DictionaryValueUpdate* extension_dict);
 
   void InitExtensionControlledPrefs(const ExtensionsInfo& extensions_info);
 
@@ -933,8 +940,6 @@ class ExtensionPrefs : public KeyedService {
   bool extensions_disabled_;
 
   base::ObserverList<ExtensionPrefsObserver>::Unchecked observer_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionPrefs);
 };
 
 }  // namespace extensions

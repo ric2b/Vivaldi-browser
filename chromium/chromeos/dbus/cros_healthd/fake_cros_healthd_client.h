@@ -31,6 +31,10 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
   // instance will set the global instance for the fake and for the base class,
   // so the static Get() accessor can be used with that pattern.
   FakeCrosHealthdClient();
+
+  FakeCrosHealthdClient(const FakeCrosHealthdClient&) = delete;
+  FakeCrosHealthdClient& operator=(const FakeCrosHealthdClient&) = delete;
+
   ~FakeCrosHealthdClient() override;
 
   // Checks that a FakeCrosHealthdClient instance was initialized and returns
@@ -131,7 +135,10 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
   // remote.
   void RunLanConnectivityRoutineForTesting(
       chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
-          LanConnectivityCallback);
+          RunLanConnectivityCallback);
+
+  // Returns the last created routine by any Run*Routine method.
+  absl::optional<mojom::DiagnosticRoutineEnum> GetLastRunRoutine() const;
 
   // Returns the parameters passed for the most recent call to
   // `GetRoutineUpdate`.
@@ -141,8 +148,6 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
  private:
   FakeCrosHealthdService fake_service_;
   mojo::Receiver<mojom::CrosHealthdServiceFactory> receiver_{&fake_service_};
-
-  DISALLOW_COPY_AND_ASSIGN(FakeCrosHealthdClient);
 };
 
 }  // namespace cros_healthd

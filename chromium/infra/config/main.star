@@ -10,7 +10,7 @@ load("//lib/branches.star", "branches")
 load("//project.star", "settings")
 
 lucicfg.check_version(
-    min = "1.28.0",
+    min = "1.29.1",
     message = "Update depot_tools",
 )
 
@@ -26,6 +26,7 @@ lucicfg.config(
         "cq-usage/default.cfg",
         "cq-usage/full.cfg",
         "luci/commit-queue.cfg",
+        "luci/chops-weetbix.cfg",
         "luci/cr-buildbucket.cfg",
         "luci/luci-logdog.cfg",
         "luci/luci-milo.cfg",
@@ -54,6 +55,13 @@ lucicfg.config(
 lucicfg.emit(
     dest = "luci/tricium-prod.cfg",
     data = io.read_file("tricium-prod.cfg"),
+)
+
+# Weetbix configuration is also copied verbatim to generated
+# outputs.
+lucicfg.emit(
+    dest = "luci/chops-weetbix.cfg",
+    data = io.read_file("chops-weetbix.cfg"),
 )
 
 luci.project(

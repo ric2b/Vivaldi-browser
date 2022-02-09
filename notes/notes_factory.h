@@ -18,10 +18,10 @@ class NotesModel;
 class NotesModelFactory : public BrowserContextKeyedServiceFactory {
  public:
   static NotesModel* GetForBrowserContext(
-    content::BrowserContext* browser_context);
+      content::BrowserContext* browser_context);
 
   static NotesModel* GetForBrowserContextIfExists(
-    content::BrowserContext* browser_context);
+      content::BrowserContext* browser_context);
 
   static NotesModelFactory* GetInstance();
 
@@ -32,6 +32,8 @@ class NotesModelFactory : public BrowserContextKeyedServiceFactory {
 
   NotesModelFactory();
   ~NotesModelFactory() override;
+  NotesModelFactory(const NotesModelFactory&) = delete;
+  NotesModelFactory& operator=(const NotesModelFactory&) = delete;
 
   // BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(
@@ -44,8 +46,6 @@ class NotesModelFactory : public BrowserContextKeyedServiceFactory {
   static const bool kServiceRedirectedInIncognito = true;
 
   int64_t current_max_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesModelFactory);
 };
 
 }  // namespace vivaldi

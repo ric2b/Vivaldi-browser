@@ -24,6 +24,12 @@ class AssistantSuggestionsControllerImpl
       public AssistantStateObserver {
  public:
   AssistantSuggestionsControllerImpl();
+
+  AssistantSuggestionsControllerImpl(
+      const AssistantSuggestionsControllerImpl&) = delete;
+  AssistantSuggestionsControllerImpl& operator=(
+      const AssistantSuggestionsControllerImpl&) = delete;
+
   ~AssistantSuggestionsControllerImpl() override;
 
   // AssistantSuggestionsController:
@@ -48,9 +54,6 @@ class AssistantSuggestionsControllerImpl
       override;
 
   void UpdateConversationStarters();
-  void FetchConversationStarters();
-  void ProvideConversationStarters();
-
   void UpdateOnboardingSuggestions();
 
   AssistantSuggestionsModel model_;
@@ -62,8 +65,6 @@ class AssistantSuggestionsControllerImpl
   // to the server (via the dedicated ConversationStartersClient).
   base::WeakPtrFactory<AssistantSuggestionsControllerImpl>
       conversation_starters_weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AssistantSuggestionsControllerImpl);
 };
 
 }  // namespace ash

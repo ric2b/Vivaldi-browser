@@ -62,54 +62,6 @@ class CalendarService::CalendarBackendDelegate
                                   calendar_service_, event));
   }
 
-  void NotifyEventModified(const EventResult& event) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnEventChanged,
-                                  calendar_service_, event));
-  }
-
-  void NotifyEventDeleted(const EventResult& event) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnEventDeleted,
-                                  calendar_service_, event));
-  }
-
-  void NotifyCalendarCreated(const CalendarRow& row) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnCalendarCreated,
-                                  calendar_service_, row));
-  }
-
-  void NotifyCalendarModified(const CalendarRow& row) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnCalendarChanged,
-                                  calendar_service_, row));
-  }
-
-  void NotifyCalendarDeleted(const CalendarRow& row) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnCalendarDeleted,
-                                  calendar_service_, row));
-  }
-
-  void NotifyEventTypeCreated(const EventTypeRow& row) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnEventTypeCreated,
-                                  calendar_service_, row));
-  }
-
-  void NotifyEventTypeModified(const EventTypeRow& row) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnEventTypeChanged,
-                                  calendar_service_, row));
-  }
-
-  void NotifyEventTypeDeleted(const EventTypeRow& row) override {
-    service_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CalendarService::OnEventTypeDeleted,
-                                  calendar_service_, row));
-  }
-
   void NotifyNotificationChanged(const NotificationRow& row) override {
     service_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&CalendarService::OnNotificationChanged,
@@ -665,53 +617,6 @@ void CalendarService::OnEventCreated(const EventResult& event) {
   }
 }
 
-void CalendarService::OnEventDeleted(const EventResult& event) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventDeleted(this, event);
-  }
-}
-
-void CalendarService::OnEventChanged(const EventResult& event) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventChanged(this, event);
-  }
-}
-
-void CalendarService::OnCalendarCreated(const CalendarRow& row) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnCalendarCreated(this, row);
-  }
-}
-
-void CalendarService::OnCalendarDeleted(const CalendarRow& row) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnCalendarDeleted(this, row);
-  }
-}
-
-void CalendarService::OnCalendarChanged(const CalendarRow& row) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnCalendarChanged(this, row);
-  }
-}
-
-void CalendarService::OnEventTypeCreated(const EventTypeRow& row) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventTypeCreated(this, row);
-  }
-}
-
-void CalendarService::OnEventTypeDeleted(const EventTypeRow& row) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventTypeDeleted(this, row);
-  }
-}
-
-void CalendarService::OnEventTypeChanged(const EventTypeRow& row) {
-  for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventTypeChanged(this, row);
-  }
-}
 void CalendarService::OnNotificationChanged(const NotificationRow& row) {
   for (CalendarModelObserver& observer : observers_) {
     observer.OnNotificationChanged(this, row);

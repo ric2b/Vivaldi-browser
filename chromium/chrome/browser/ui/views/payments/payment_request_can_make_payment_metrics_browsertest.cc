@@ -23,6 +23,12 @@ namespace payments {
 
 class PaymentRequestCanMakePaymentMetricsTest
     : public PaymentRequestBrowserTestBase {
+ public:
+  PaymentRequestCanMakePaymentMetricsTest(
+      const PaymentRequestCanMakePaymentMetricsTest&) = delete;
+  PaymentRequestCanMakePaymentMetricsTest& operator=(
+      const PaymentRequestCanMakePaymentMetricsTest&) = delete;
+
  protected:
   PaymentRequestCanMakePaymentMetricsTest() = default;
 
@@ -50,9 +56,6 @@ class PaymentRequestCanMakePaymentMetricsTest
     // Wait for all callbacks to run.
     base::RunLoop().RunUntilIdle();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PaymentRequestCanMakePaymentMetricsTest);
 };
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
@@ -610,7 +613,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
   ResetEventWaiterForSequence({DialogEvent::DIALOG_CLOSED});
   GURL other_origin_url =
       https_server()->GetURL("b.com", "/payment_request_email_test.html");
-  ui_test_utils::NavigateToURL(browser(), other_origin_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), other_origin_url));
   WaitForObservedEvent();
 
   // Make sure the correct events were logged.

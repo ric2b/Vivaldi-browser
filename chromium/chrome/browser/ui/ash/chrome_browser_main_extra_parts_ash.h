@@ -46,6 +46,7 @@ class TabletModePageBehavior;
 class VpnListForwarder;
 class WallpaperControllerClientImpl;
 class MediaNotificationProviderImpl;
+class ProjectorAppClientImpl;
 class ProjectorClientImpl;
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
@@ -61,6 +62,12 @@ class ChromeShelfControllerInitializer;
 class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
  public:
   ChromeBrowserMainExtraPartsAsh();
+
+  ChromeBrowserMainExtraPartsAsh(const ChromeBrowserMainExtraPartsAsh&) =
+      delete;
+  ChromeBrowserMainExtraPartsAsh& operator=(
+      const ChromeBrowserMainExtraPartsAsh&) = delete;
+
   ~ChromeBrowserMainExtraPartsAsh() override;
 
   // Overridden from ChromeBrowserMainExtraParts:
@@ -99,6 +106,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<TabletModePageBehavior> tablet_mode_page_behavior_;
   std::unique_ptr<VpnListForwarder> vpn_list_forwarder_;
   std::unique_ptr<WallpaperControllerClientImpl> wallpaper_controller_client_;
+  std::unique_ptr<ProjectorAppClientImpl> projector_app_client_;
   std::unique_ptr<ProjectorClientImpl> projector_client_;
   // TODO(stevenjb): Move NetworkPortalNotificationController to c/b/ui/ash and
   // elim chromeos:: namespace. https://crbug.com/798569.
@@ -125,8 +133,6 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<NightLightClient> night_light_client_;
   std::unique_ptr<AmbientClientImpl> ambient_client_;
   std::unique_ptr<QuickAnswersBrowserClientImpl> quick_answers_browser_client_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsAsh);
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_CHROME_BROWSER_MAIN_EXTRA_PARTS_ASH_H_

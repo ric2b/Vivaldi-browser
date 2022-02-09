@@ -65,6 +65,10 @@ web::WebUIIOSDataSource* CreateCrashesUIHTMLSource() {
 class CrashesDOMHandler : public web::WebUIIOSMessageHandler {
  public:
   CrashesDOMHandler();
+
+  CrashesDOMHandler(const CrashesDOMHandler&) = delete;
+  CrashesDOMHandler& operator=(const CrashesDOMHandler&) = delete;
+
   ~CrashesDOMHandler() override;
 
   // WebUIMessageHandler implementation.
@@ -84,8 +88,6 @@ class CrashesDOMHandler : public web::WebUIIOSMessageHandler {
   scoped_refptr<UploadList> upload_list_;
   bool list_available_;
   bool first_load_;
-
-  DISALLOW_COPY_AND_ASSIGN(CrashesDOMHandler);
 };
 
 CrashesDOMHandler::CrashesDOMHandler()
@@ -100,7 +102,7 @@ CrashesDOMHandler::~CrashesDOMHandler() {
 void CrashesDOMHandler::RegisterMessages() {
   upload_list_->Load(base::BindOnce(&CrashesDOMHandler::OnUploadListAvailable,
                                     base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       crash_reporter::kCrashesUIRequestCrashList,
       base::BindRepeating(&CrashesDOMHandler::HandleRequestCrashes,
                           base::Unretained(this)));

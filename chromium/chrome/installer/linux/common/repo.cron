@@ -25,7 +25,6 @@ if [ -r "$DEFAULTS_FILE" ]; then
   . "$DEFAULTS_FILE"
 fi
 
-remove_old_key
 install_key
 install_future_key
 

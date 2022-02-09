@@ -28,13 +28,14 @@ namespace {
 class MockIdleTimeProvider : public content::IdleTimeProvider {
  public:
   MockIdleTimeProvider() = default;
+
+  MockIdleTimeProvider(const MockIdleTimeProvider&) = delete;
+  MockIdleTimeProvider& operator=(const MockIdleTimeProvider&) = delete;
+
   ~MockIdleTimeProvider() override = default;
 
   MOCK_METHOD0(CalculateIdleTime, base::TimeDelta());
   MOCK_METHOD0(CheckIdleStateIsLocked, bool());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockIdleTimeProvider);
 };
 
 class IdleBrowserTest : public InProcessBrowserTest {
@@ -61,7 +62,7 @@ IN_PROC_BROWSER_TEST_F(IdleBrowserTest, Start) {
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   map->SetContentSettingDefaultScope(
       url, url, ContentSettingsType::IDLE_DETECTION, CONTENT_SETTING_ALLOW);
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   // Test that statuses are updated after idleDetector.start().
   std::string script = R"(
@@ -86,11 +87,11 @@ IN_PROC_BROWSER_TEST_F(IdleBrowserTest, Start) {
 
   EXPECT_CALL(*mock_time_provider, CalculateIdleTime())
       // Simulates a user going idle.
-      .WillOnce(testing::Return(base::TimeDelta::FromSeconds(60)))
+      .WillOnce(testing::Return(base::Seconds(60)))
       // Simulates a screen getting locked after the user goes idle.
-      .WillOnce(testing::Return(base::TimeDelta::FromSeconds(60)))
+      .WillOnce(testing::Return(base::Seconds(60)))
       // Simulates a user going back to active.
-      .WillRepeatedly(testing::Return(base::TimeDelta::FromSeconds(0)));
+      .WillRepeatedly(testing::Return(base::Seconds(0)));
 
   EXPECT_CALL(*mock_time_provider, CheckIdleStateIsLocked())
       // Simulates unlocked screen while user goes idle.

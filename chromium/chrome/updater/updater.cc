@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/process/memory.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
@@ -31,6 +32,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if defined(OS_WIN)
+#include "base/win/process_startup_helper.h"
 #include "chrome/updater/app/server/win/server.h"
 #include "chrome/updater/app/server/win/service_main.h"
 #include "chrome/updater/win/win_util.h"
@@ -43,12 +45,12 @@
 // Instructions For Windows.
 // - To install only the updater, run "updatersetup.exe" from the build out dir.
 // - To install Chrome and the updater, do the same but use the --app-id:
-//    updatersetup.exe --app-id={8A69D345-D564-463c-AFF1-A69D9E530F96}
+//    updatersetup.exe --install --app-id={8A69D345-D564-463c-AFF1-A69D9E530F96}
 // - To uninstall, run "updater.exe --uninstall" from its install directory,
 // which is under %LOCALAPPDATA%\Google\GoogleUpdater, or from the |out|
 // directory of the build.
 // - To debug, append the following arguments to any updater command line:
-//    --enable-logging --vmodule=*/chrome/updater/*=2.
+//    --enable-logging --vmodule=*/chrome/updater/*=2,*/components/winhttp/*=2.
 // - To run the `updater --install` from the `out` directory of the build,
 //   use --install-from-out-dir command line switch in addition to other
 //   arguments for --install.
@@ -117,11 +119,17 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
   StartCrashReporter(updater_scope, kUpdaterVersion);
 
   InitializeCrashReporting(updater_scope);
-  base::SingleThreadTaskExecutor main_task_executor(base::MessagePumpType::UI);
 
+  // Make the process more resilient to memory allocation issues.
+  base::EnableTerminationOnHeapCorruption();
+  base::EnableTerminationOnOutOfMemory();
 #if defined(OS_WIN)
+  base::win::RegisterInvalidParamHandler();
+
   VLOG(1) << GetUACState();
 #endif
+
+  base::SingleThreadTaskExecutor main_task_executor(base::MessagePumpType::UI);
 
   if (command_line->HasSwitch(kCrashMeSwitch)) {
     // Records a backtrace in the log, crashes the program, saves a crash dump,

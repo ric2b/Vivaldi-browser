@@ -206,6 +206,9 @@ class CORE_EXPORT DocumentMarkerController final
                              unsigned start_offset,
                              int length,
                              DocumentMarker::MarkerTypes);
+  // Searches `markers_` for `key`. Returns the mapped value if it is present,
+  // otherwise nullptr. Crashes if the value is present and it is nullptr.
+  MarkerLists* FindMarkers(const Text* key) const;
 
   // Called after weak processing of |markers_| is done.
   void DidProcessMarkerMap(const LivenessBroker&);
@@ -220,7 +223,7 @@ class CORE_EXPORT DocumentMarkerController final
 }  // namespace blink
 
 #if DCHECK_IS_ON()
-void showDocumentMarkers(const blink::DocumentMarkerController*);
+void ShowDocumentMarkers(const blink::DocumentMarkerController*);
 #endif
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_MARKERS_DOCUMENT_MARKER_CONTROLLER_H_

@@ -17,6 +17,7 @@
 #include "ash/app_list/views/search_result_list_view.h"
 #include "ash/app_list/views/search_result_page_anchored_dialog.h"
 #include "ash/app_list/views/search_result_tile_item_list_view.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
@@ -42,7 +43,6 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
 #include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -75,8 +75,7 @@ constexpr int kSearchBoxSearchResultShadowElevation = 12;
 
 // The amount of time by which notifications to accessibility framework about
 // result page changes are delayed.
-constexpr base::TimeDelta kNotifyA11yDelay =
-    base::TimeDelta::FromMilliseconds(1500);
+constexpr base::TimeDelta kNotifyA11yDelay = base::Milliseconds(1500);
 
 // A container view that ensures the card background and the shadow are painted
 // in the correct order.
@@ -147,6 +146,9 @@ class SearchResultPageView::HorizontalSeparator : public views::View {
         gfx::Insets(0, kSeparatorPadding, 0, kSeparatorPadding)));
   }
 
+  HorizontalSeparator(const HorizontalSeparator&) = delete;
+  HorizontalSeparator& operator=(const HorizontalSeparator&) = delete;
+
   ~HorizontalSeparator() override = default;
 
   // views::View overrides:
@@ -164,8 +166,6 @@ class SearchResultPageView::HorizontalSeparator : public views::View {
 
  private:
   const int preferred_width_;
-
-  DISALLOW_COPY_AND_ASSIGN(HorizontalSeparator);
 };
 
 SearchResultPageView::SearchResultPageView(SearchModel* search_model)
@@ -227,6 +227,10 @@ void SearchResultPageView::InitializeContainers(
   search_result_list_view_ =
       AddSearchResultContainerView(std::make_unique<SearchResultListView>(
           app_list_main_view, view_delegate));
+  search_result_list_view_->SetListType(
+      features::IsProductivityLauncherEnabled()
+          ? SearchResultListView::SearchResultListType::kBestMatch
+          : SearchResultListView::SearchResultListType::kUnified);
 }
 
 void SearchResultPageView::AddSearchResultContainerViewInternal(
@@ -295,18 +299,36 @@ void SearchResultPageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetValue(value);
 }
 
+void SearchResultPageView::OnThemeChanged() {
+  AppListPage::OnThemeChanged();
+  GetBackground()->SetNativeControlColor(
+      AppListColorProvider::Get()->GetSearchBoxCardBackgroundColor());
+}
+
 void SearchResultPageView::UpdateResultContainersVisibility() {
+  bool should_show_page_view = false;
+
   for (auto* container : result_container_views_) {
     // Containers are wrapped by a `SearchCardView`, so update the parent
     // visibility.
-    container->parent()->SetVisible(container->num_results());
-    container->SetVisible(container->num_results());
+    bool should_show_container_view =
+        container->num_results() && ShouldShowSearchResultView();
+    container->parent()->SetVisible(should_show_container_view);
+    container->SetVisible(should_show_container_view);
+    should_show_page_view = should_show_page_view || should_show_container_view;
   }
 
   result_lists_separator_->SetVisible(
       search_result_tile_item_list_view_->num_results() &&
-      search_result_list_view_->num_results());
+      search_result_list_view_->num_results() && ShouldShowSearchResultView());
+
+  if (features::IsProductivityLauncherEnabled())
+    SetVisible(should_show_page_view);
+
   Layout();
+  AppListPage::contents_view()
+      ->GetSearchBoxView()
+      ->OnResultContainerVisibilityChanged(should_show_page_view);
 }
 
 void SearchResultPageView::SelectedResultChanged() {
@@ -477,6 +499,13 @@ void SearchResultPageView::OnWillBeHidden() {
   anchored_dialog_.reset();
 }
 
+bool SearchResultPageView::ShouldShowSearchResultView() const {
+  return (!features::IsProductivityLauncherEnabled() ||
+          !base::TrimWhitespace(search_model_->search_box()->text(),
+                                base::TrimPositions::TRIM_ALL)
+               .empty());
+}
+
 void SearchResultPageView::OnHidden() {
   // Hide the search results page when it is behind search box to avoid focus
   // being moved onto suggested apps when zero state is enabled.
@@ -486,13 +515,21 @@ void SearchResultPageView::OnHidden() {
   for (auto* container_view : result_container_views_) {
     container_view->SetShown(false);
   }
+
+  AppListPage::contents_view()
+      ->GetSearchBoxView()
+      ->OnResultContainerVisibilityChanged(false);
 }
 
 void SearchResultPageView::OnShown() {
   AppListPage::OnShown();
   for (auto* container_view : result_container_views_) {
-    container_view->SetShown(true);
+    container_view->SetShown(ShouldShowSearchResultView());
   }
+
+  AppListPage::contents_view()
+      ->GetSearchBoxView()
+      ->OnResultContainerVisibilityChanged(ShouldShowSearchResultView());
   ScheduleResultsChangedA11yNotification();
 }
 
@@ -627,29 +664,6 @@ void SearchResultPageView::OnAnimationUpdated(double progress,
 gfx::Size SearchResultPageView::GetPreferredSearchBoxSize() const {
   static gfx::Size size = gfx::Size(kWidth, kSearchBoxHeight);
   return size;
-}
-
-absl::optional<int> SearchResultPageView::GetSearchBoxTop(
-    AppListViewState view_state) const {
-  if (view_state == AppListViewState::kPeeking ||
-      view_state == AppListViewState::kHalf) {
-    return AppListPage::contents_view()
-        ->GetAppListConfig()
-        .search_box_fullscreen_top_padding();
-  }
-  // For other view states, return absl::nullopt so the ContentsView
-  // sets the default search box widget origin.
-  return absl::nullopt;
-}
-
-views::View* SearchResultPageView::GetFirstFocusableView() {
-  return GetFocusManager()->GetNextFocusableView(
-      this, GetWidget(), false /* reverse */, false /* dont_loop */);
-}
-
-views::View* SearchResultPageView::GetLastFocusableView() {
-  return GetFocusManager()->GetNextFocusableView(
-      this, GetWidget(), true /* reverse */, false /* dont_loop */);
 }
 
 void SearchResultPageView::OnAnchoredDialogClosed() {

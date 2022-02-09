@@ -151,6 +151,15 @@ if (is_android) {
     lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
     not_needed(["lint_suppressions_dep"])
   }
+
+  update_template_instance("//chrome/android:chrome_modern_public_bundle") {
+    bundle_name = "Vivaldi.${vivaldi_version_full}"
+    enable_lint = true
+    lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
+    lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
+    lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
+    not_needed(["lint_suppressions_dep"])
+  }
 }
 
 update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {

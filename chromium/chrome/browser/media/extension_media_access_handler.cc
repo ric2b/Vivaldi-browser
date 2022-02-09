@@ -13,6 +13,9 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/permissions_data.h"
 
+#include "app/vivaldi_apptools.h"
+#include "content/public/browser/permission_controller_delegate.h"
+
 using extensions::mojom::APIPermissionID;
 
 namespace {
@@ -63,6 +66,26 @@ bool ExtensionMediaAccessHandler::CheckMediaAccessPermission(
     const GURL& security_origin,
     blink::mojom::MediaStreamType type,
     const extensions::Extension* extension) {
+
+  // Vivaldi has access to audiocapture and videocapture, so we need to check if
+  // the page has access. navigator.mediaDevices checks this before enumerating
+  // through all devices. So we need to check if the page has access to the
+  // device first. VB-84021.
+  if (vivaldi::IsVivaldiApp(extension->id())) {
+    bool is_audio = type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE;
+    content::PermissionType permission =
+        is_audio ? content::PermissionType::AUDIO_CAPTURE
+                 : content::PermissionType::VIDEO_CAPTURE;
+
+    content::WebContents* web_contents =
+        content::WebContents::FromRenderFrameHost(render_frame_host);
+
+    auto* permission_controller =
+        web_contents->GetBrowserContext()->GetPermissionControllerDelegate();
+    return permission_controller->GetPermissionStatusForFrame(
+               permission, render_frame_host, security_origin) ==
+           blink::mojom::PermissionStatus::GRANTED;
+  }
   return extension->permissions_data()->HasAPIPermission(
       type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE
           ? APIPermissionID::kAudioCapture

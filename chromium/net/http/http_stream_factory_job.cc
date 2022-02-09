@@ -317,13 +317,6 @@ bool HttpStreamFactory::Job::using_spdy() const {
   return using_spdy_;
 }
 
-size_t HttpStreamFactory::Job::EstimateMemoryUsage() const {
-  StreamSocket::SocketMemoryStats stats;
-  if (connection_)
-    connection_->DumpMemoryStats(&stats);
-  return stats.total_size;
-}
-
 const SSLConfig& HttpStreamFactory::Job::server_ssl_config() const {
   return server_ssl_config_;
 }
@@ -767,8 +760,7 @@ int HttpStreamFactory::Job::DoInitConnectionImpl() {
           net_log_.AddEvent(NetLogEventType::HTTP_STREAM_JOB_THROTTLED);
           next_state_ = STATE_INIT_CONNECTION;
           base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-              FROM_HERE, resume_callback,
-              base::TimeDelta::FromMilliseconds(kHTTP2ThrottleMs));
+              FROM_HERE, resume_callback, base::Milliseconds(kHTTP2ThrottleMs));
           return ERR_IO_PENDING;
         }
       } else if (enable_ip_based_pooling_) {

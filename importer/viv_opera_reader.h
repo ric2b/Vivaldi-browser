@@ -20,7 +20,8 @@ class OperaAdrFileReader {
   virtual ~OperaAdrFileReader();
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(OperaAdrFileReader);
+  OperaAdrFileReader(const OperaAdrFileReader&) = delete;
+  OperaAdrFileReader& operator=(const OperaAdrFileReader&) = delete;
 };
 
 #endif  // IMPORTER_VIV_OPERA_READER_H_

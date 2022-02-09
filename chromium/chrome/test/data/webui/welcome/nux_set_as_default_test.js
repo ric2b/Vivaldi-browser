@@ -7,7 +7,7 @@ import 'chrome://welcome/set_as_default/nux_set_as_default.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {NuxSetAsDefaultProxyImpl} from 'chrome://welcome/set_as_default/nux_set_as_default_proxy.js';
 
-import {eventToPromise} from '../test_util.m.js';
+import {eventToPromise} from '../test_util.js';
 
 import {TestNuxSetAsDefaultProxy} from './test_nux_set_as_default_proxy.js';
 
@@ -48,7 +48,7 @@ suite('SetAsDefaultTest', function() {
   test(
       'click set-default button and finishes setting default',
       async function() {
-        testElement.$$('.action-button').click();
+        testElement.shadowRoot.querySelector('.action-button').click();
 
         await Promise.all([
           testSetAsDefaultProxy.whenCalled('recordBeginSetDefault'),
@@ -69,7 +69,7 @@ suite('SetAsDefaultTest', function() {
       });
 
   test('click set-default button but gives up and skip', async function() {
-    testElement.$$('.action-button').click();
+    testElement.shadowRoot.querySelector('.action-button').click();
 
     await Promise.all([
       testSetAsDefaultProxy.whenCalled('recordBeginSetDefault'),

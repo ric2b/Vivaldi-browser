@@ -31,6 +31,9 @@ class AssistantStructureWaiter {
  public:
   AssistantStructureWaiter() = default;
 
+  AssistantStructureWaiter(const AssistantStructureWaiter&) = delete;
+  AssistantStructureWaiter& operator=(const AssistantStructureWaiter&) = delete;
+
   void Wait() { loop_.Run(); }
 
   std::unique_ptr<ui::AssistantTree> take_structure() {
@@ -46,8 +49,6 @@ class AssistantStructureWaiter {
  private:
   std::unique_ptr<ui::AssistantTree> structure_;
   base::RunLoop loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(AssistantStructureWaiter);
 };
 
 }  // namespace
@@ -55,13 +56,18 @@ class AssistantStructureWaiter {
 class AssistantContextBrowserTest : public InProcessBrowserTest {
  public:
   AssistantContextBrowserTest() = default;
+
+  AssistantContextBrowserTest(const AssistantContextBrowserTest&) = delete;
+  AssistantContextBrowserTest& operator=(const AssistantContextBrowserTest&) =
+      delete;
+
   ~AssistantContextBrowserTest() override = default;
 
  protected:
   std::unique_ptr<ui::AssistantTree> GetAssistantStructure(
       const std::string& html) {
     GURL url("data:text/html," + html);
-    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
 
     AssistantStructureWaiter waiter;
@@ -72,9 +78,6 @@ class AssistantContextBrowserTest : public InProcessBrowserTest {
     waiter.Wait();
     return waiter.take_structure();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AssistantContextBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AssistantContextBrowserTest,

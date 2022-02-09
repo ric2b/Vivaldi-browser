@@ -59,10 +59,6 @@ class BaselineOptimizerTest(unittest.TestCase):
         # configured ports and their fallback order. Ideally, we should improve
         # MockPortFactory and use it.
         self.host.builders = BuilderList({
-            'Fake Test Win10': {
-                'port_name': 'win-win10.1909',
-                'specifiers': ['Win10.1909', 'Release']
-            },
             'Fake Test Win10.20h2': {
                 'port_name': 'win-win10.20h2',
                 'specifiers': ['Win10.20h2', 'Release']
@@ -72,8 +68,8 @@ class BaselineOptimizerTest(unittest.TestCase):
                 'specifiers': ['Trusty', 'Release']
             },
             'Fake Test Mac11.0': {
-                'port_name': 'mac-mac11.0',
-                'specifiers': ['Mac11.0', 'Release']
+                'port_name': 'mac-mac11',
+                'specifiers': ['Mac11', 'Release']
             },
             'Fake Test Mac10.15': {
                 'port_name': 'mac-mac10.15',
@@ -97,7 +93,7 @@ class BaselineOptimizerTest(unittest.TestCase):
         # tests need to be adjusted accordingly.
         self.assertEqual(sorted(self.host.port_factory.all_port_names()), [
             'linux-trusty', 'mac-mac10.12', 'mac-mac10.13', 'mac-mac10.14',
-            'mac-mac10.15', 'mac-mac11.0', 'win-win10.1909', 'win-win10.20h2'
+            'mac-mac10.15', 'mac-mac11', 'win-win10.20h2'
         ])
 
     def _assert_optimization(self,
@@ -113,7 +109,7 @@ class BaselineOptimizerTest(unittest.TestCase):
             '[{"prefix": "gpu", "bases": ["fast/canvas"], "args": ["--foo"]}]')
 
         for dirname, contents in results_by_directory.items():
-            self.fs.write_binary_file(
+            self.fs.write_text_file(
                 self.fs.join(web_tests_dir, dirname, baseline_name), contents)
 
         baseline_optimizer = BaselineOptimizer(
@@ -131,9 +127,8 @@ class BaselineOptimizerTest(unittest.TestCase):
                     self.fs.exists(path),
                     '%s should not exist after optimization' % path)
             else:
-                self.assertEqual(
-                    self.fs.read_binary_file(path), contents,
-                    'Content of %s != "%s"' % (path, contents))
+                self.assertEqual(self.fs.read_text_file(path), contents,
+                                 'Content of %s != "%s"' % (path, contents))
 
         for dirname in results_by_directory:
             path = self.fs.join(web_tests_dir, dirname, baseline_name)

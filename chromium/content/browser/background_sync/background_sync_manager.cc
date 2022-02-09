@@ -627,7 +627,7 @@ void BackgroundSyncManager::EmulateServiceWorkerOffline(
     return;
   emulated_offline_sw_.erase(service_worker_id);
   FireReadyEvents(BackgroundSyncType::ONE_SHOT, /* reschedule= */ true,
-                  base::DoNothing::Once());
+                  base::DoNothing());
 }
 
 BackgroundSyncManager::BackgroundSyncManager(
@@ -771,9 +771,9 @@ void BackgroundSyncManager::InitDidGetDataFromBackend(
   }
 
   FireReadyEvents(BackgroundSyncType::ONE_SHOT, /* reschedule= */ true,
-                  base::DoNothing::Once());
+                  base::DoNothing());
   FireReadyEvents(BackgroundSyncType::PERIODIC, /* reschedule= */ true,
-                  base::DoNothing::Once());
+                  base::DoNothing());
   proxy_->SendSuspendedPeriodicSyncOrigins(
       std::move(suspended_periodic_sync_origins));
   proxy_->SendRegisteredPeriodicSyncOrigins(std::move(registered_origins));
@@ -992,7 +992,7 @@ void BackgroundSyncManager::RegisterDidGetDelay(
 
   if (registration.sync_type() == BackgroundSyncType::PERIODIC &&
       ShouldLogToDevTools(registration.sync_type())) {
-    devtools_context_->LogBackgroundServiceEventOnCoreThread(
+    devtools_context_->LogBackgroundServiceEvent(
         sw_registration_id, registration.origin(),
         DevToolsBackgroundService::kPeriodicBackgroundSync,
         /* event_name= */ "Got next event delay",
@@ -1237,7 +1237,7 @@ void BackgroundSyncManager::ResolveRegistrationDidCreateKeepAlive(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   FireReadyEvents(BackgroundSyncType::ONE_SHOT, /* reschedule= */ true,
-                  base::DoNothing::Once(), std::move(keepalive));
+                  base::DoNothing(), std::move(keepalive));
   op_scheduler_.CompleteOperationAndRunNext();
 }
 
@@ -1271,7 +1271,7 @@ void BackgroundSyncManager::RemoveActiveRegistration(
 
   if (registration_info.sync_type == BackgroundSyncType::PERIODIC &&
       ShouldLogToDevTools(registration_info.sync_type)) {
-    devtools_context_->LogBackgroundServiceEventOnCoreThread(
+    devtools_context_->LogBackgroundServiceEvent(
         registration_info.service_worker_registration_id, origin,
         DevToolsBackgroundService::kPeriodicBackgroundSync,
         /* event_name= */ "Unregistered periodicsync",
@@ -1301,7 +1301,7 @@ void BackgroundSyncManager::AddOrUpdateActiveRegistration(
       event_metadata["minInterval"] =
           base::NumberToString(sync_registration.options()->min_interval);
     }
-    devtools_context_->LogBackgroundServiceEventOnCoreThread(
+    devtools_context_->LogBackgroundServiceEvent(
         sw_registration_id, origin, GetDevToolsBackgroundService(sync_type),
         /* event_name= */ "Registered " + GetSyncEventName(sync_type),
         /* instance_id= */ sync_registration.options()->tag, event_metadata);
@@ -1363,7 +1363,7 @@ void BackgroundSyncManager::DispatchSyncEvent(
 
   if (devtools_context_->IsRecording(
           DevToolsBackgroundService::kBackgroundSync)) {
-    devtools_context_->LogBackgroundServiceEventOnCoreThread(
+    devtools_context_->LogBackgroundServiceEvent(
         active_version->registration_id(), active_version->key().origin(),
         DevToolsBackgroundService::kBackgroundSync,
         /* event_name= */ "Dispatched sync event",
@@ -1405,7 +1405,7 @@ void BackgroundSyncManager::DispatchPeriodicSyncEvent(
 
   if (devtools_context_->IsRecording(
           DevToolsBackgroundService::kPeriodicBackgroundSync)) {
-    devtools_context_->LogBackgroundServiceEventOnCoreThread(
+    devtools_context_->LogBackgroundServiceEvent(
         active_version->registration_id(), active_version->key().origin(),
         DevToolsBackgroundService::kPeriodicBackgroundSync,
         /* event_name= */ "Dispatched periodicsync event",
@@ -1818,7 +1818,7 @@ void BackgroundSyncManager::ScheduleDelayedProcessingOfRegistrations(
 
   auto fire_events_callback = base::BindOnce(
       &BackgroundSyncManager::FireReadyEvents, weak_ptr_factory_.GetWeakPtr(),
-      sync_type, /* reschedule= */ true, base::DoNothing::Once(),
+      sync_type, /* reschedule= */ true, base::DoNothing(),
       /* keepalive= */ nullptr);
 
   proxy_->ScheduleDelayedProcessing(
@@ -1926,7 +1926,7 @@ void BackgroundSyncManager::FireReadyEventsImpl(
   } else {
     events_fired_callback =
         op_scheduler_.WrapCallbackToRunNext(std::move(callback));
-    events_completed_callback = base::DoNothing::Once();
+    events_completed_callback = base::DoNothing();
   }
 
   // Fire the sync event of the ready registrations and run
@@ -2157,7 +2157,7 @@ void BackgroundSyncManager::EventCompleteDidGetDelay(
     registration->set_num_attempts(0);
     registration_completed = false;
     if (ShouldLogToDevTools(registration->sync_type())) {
-      devtools_context_->LogBackgroundServiceEventOnCoreThread(
+      devtools_context_->LogBackgroundServiceEvent(
           registration_info->service_worker_registration_id, origin,
           GetDevToolsBackgroundService(registration->sync_type()),
           /* event_name= */ "Sync event reregistered",
@@ -2184,7 +2184,7 @@ void BackgroundSyncManager::EventCompleteDidGetDelay(
     }
 
     if (ShouldLogToDevTools(registration->sync_type())) {
-      devtools_context_->LogBackgroundServiceEventOnCoreThread(
+      devtools_context_->LogBackgroundServiceEvent(
           registration_info->service_worker_registration_id, origin,
           GetDevToolsBackgroundService(registration->sync_type()), event_name,
           /* instance_id= */ registration_info->tag, event_metadata);
@@ -2196,7 +2196,7 @@ void BackgroundSyncManager::EventCompleteDidGetDelay(
         succeeded, registration->num_attempts());
 
     if (ShouldLogToDevTools(registration->sync_type())) {
-      devtools_context_->LogBackgroundServiceEventOnCoreThread(
+      devtools_context_->LogBackgroundServiceEvent(
           registration_info->service_worker_registration_id, origin,
           GetDevToolsBackgroundService(registration->sync_type()),
           /* event_name= */ "Sync completed",
@@ -2248,7 +2248,7 @@ void BackgroundSyncManager::EventCompleteDidStore(
   }
 
   // Fire any ready events and call RunInBackground if anything is waiting.
-  FireReadyEvents(sync_type, /* reschedule= */ true, base::DoNothing::Once());
+  FireReadyEvents(sync_type, /* reschedule= */ true, base::DoNothing());
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(callback));
 }
@@ -2298,14 +2298,14 @@ void BackgroundSyncManager::OnNetworkChanged() {
     return;
 
   FireReadyEvents(BackgroundSyncType::ONE_SHOT, /* reschedule= */ true,
-                  base::DoNothing::Once());
+                  base::DoNothing());
   FireReadyEvents(BackgroundSyncType::PERIODIC, /* reschedule= */ true,
-                  base::DoNothing::Once());
+                  base::DoNothing());
 }
 
 base::OnceClosure BackgroundSyncManager::MakeEmptyCompletion() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return op_scheduler_.WrapCallbackToRunNext(base::DoNothing::Once());
+  return op_scheduler_.WrapCallbackToRunNext(base::BindOnce([] {}));
 }
 
 blink::ServiceWorkerStatusCode BackgroundSyncManager::CanEmulateSyncEvent(

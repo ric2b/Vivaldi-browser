@@ -247,6 +247,10 @@ class PermissionManager::PermissionResponseCallback {
         permission_id_(permission_id),
         request_answered_(false) {}
 
+  PermissionResponseCallback(const PermissionResponseCallback&) = delete;
+  PermissionResponseCallback& operator=(const PermissionResponseCallback&) =
+      delete;
+
   ~PermissionResponseCallback() {
     if (!request_answered_ &&
         permission_manager_->pending_requests_.Lookup(request_local_id_)) {
@@ -265,8 +269,6 @@ class PermissionManager::PermissionResponseCallback {
   PendingRequestLocalId request_local_id_;
   int permission_id_;
   bool request_answered_;
-
-  DISALLOW_COPY_AND_ASSIGN(PermissionResponseCallback);
 };
 
 struct PermissionManager::Subscription {
@@ -611,6 +613,9 @@ PermissionManager::SubscribePermissionStatusChange(
   // The RFH may be null if the request is for a worker.
   GURL embedding_origin;
   if (render_frame_host) {
+    // Permissions API must be deferred during the prerendering.
+    DCHECK_NE(render_frame_host->GetLifecycleState(),
+              content::RenderFrameHost::LifecycleState::kPrerendering);
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(render_frame_host);
     embedding_origin =
@@ -677,6 +682,9 @@ void PermissionManager::OnPermissionChanged(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(primary_pattern.IsValid());
+  DCHECK(secondary_pattern.IsValid());
+
   std::vector<base::OnceClosure> callbacks;
   callbacks.reserve(subscriptions_.size());
   base::AutoReset<bool> reset(&is_processing_permission_change_, true);
@@ -701,12 +709,10 @@ void PermissionManager::OnPermissionChanged(
       embedding_origin = subscription->requesting_origin;
     }
 
-    if (primary_pattern.IsValid() &&
-        !primary_pattern.Matches(subscription->requesting_origin))
+    if (!primary_pattern.Matches(subscription->requesting_origin) ||
+        !secondary_pattern.Matches(embedding_origin)) {
       continue;
-    if (secondary_pattern.IsValid() &&
-        !secondary_pattern.Matches(embedding_origin))
-      continue;
+    }
 
     ContentSetting new_value;
     if (rfh) {

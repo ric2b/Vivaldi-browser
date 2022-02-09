@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/ui/passwords/settings/password_ui_view.h"
 #include "chrome/browser/ui/passwords/settings/password_manager_presenter.h"
+#include "chrome/browser/ui/passwords/settings/password_ui_view.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/web_ui.h"
@@ -35,8 +35,6 @@ class SavedpasswordsGetListFunction
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
       override;
-
-  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetListFunction);
 };
 
 class SavedpasswordsRemoveFunction
@@ -58,9 +56,7 @@ class SavedpasswordsRemoveFunction
       override;
 
   size_t id_to_remove_;
-  scoped_refptr<password_manager::PasswordStore> password_store_;
-
-  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsRemoveFunction);
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store_;
 };
 
 class SavedpasswordsAddFunction : public ExtensionFunction {
@@ -72,8 +68,6 @@ class SavedpasswordsAddFunction : public ExtensionFunction {
   ~SavedpasswordsAddFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsAddFunction);
 };
 
 class SavedpasswordsGetFunction
@@ -93,8 +87,6 @@ class SavedpasswordsGetFunction
       override;
 
   std::string username_;
-
-  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetFunction);
 };
 
 class SavedpasswordsDeleteFunction : public ExtensionFunction {
@@ -106,8 +98,6 @@ class SavedpasswordsDeleteFunction : public ExtensionFunction {
   ~SavedpasswordsDeleteFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsDeleteFunction);
 };
 
 class SavedpasswordsAuthenticateFunction : public ExtensionFunction {
@@ -121,7 +111,7 @@ class SavedpasswordsAuthenticateFunction : public ExtensionFunction {
 
   ResponseAction Run() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsAuthenticateFunction);
+  void AuthenticationComplete(bool authenticated);
 };
 
 }  // namespace extensions

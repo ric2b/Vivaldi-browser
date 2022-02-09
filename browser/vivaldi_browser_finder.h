@@ -10,7 +10,7 @@ class VivaldiBrowserWindow;
 namespace content {
 class WebContents;
 class RenderWidgetHostView;
-}
+}  // namespace content
 
 namespace vivaldi {
 

@@ -77,7 +77,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace gfx {
-class ScrollOffset;
+class Vector2dF;
 }
 
 namespace viz {
@@ -309,7 +309,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
                                            float bottom_ratio) override;
   float CurrentTopControlsShownRatio() const override;
   float CurrentBottomControlsShownRatio() const override;
-  gfx::ScrollOffset ViewportScrollOffset() const override;
+  gfx::Vector2dF ViewportScrollOffset() const override;
   void DidChangeBrowserControlsPosition() override;
   void DidObserveScrollDelay(base::TimeDelta scroll_delay,
                              base::TimeTicks scroll_timestamp);
@@ -340,11 +340,12 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   virtual void BeginMainFrameAborted(
       CommitEarlyOutReason reason,
       std::vector<std::unique_ptr<SwapPromise>> swap_promises,
-      const viz::BeginFrameArgs& args);
+      const viz::BeginFrameArgs& args,
+      bool scroll_and_viewport_changes_synced);
   virtual void ReadyToCommit(
       const viz::BeginFrameArgs& commit_args,
       const BeginMainFrameMetrics* begin_main_frame_metrics);
-  virtual void BeginCommit();
+  virtual void BeginCommit(int source_frame_number);
   virtual void CommitComplete();
   virtual void UpdateAnimationState(bool start_ready_animations);
   bool Mutate(base::TimeTicks monotonic_time);
@@ -405,6 +406,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   void SetPrefersReducedMotion(bool prefers_reduced_motion);
 
+  void SetMayThrottleIfUndrawnFrames(bool may_throttle_if_undrawn_frames);
+
   // Updates registered ElementIds present in |changed_list|. Call this after
   // changing the property trees for the |changed_list| trees.
   void UpdateElements(ElementListType changed_list);
@@ -417,7 +420,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   void SetTreeLayerScrollOffsetMutated(ElementId element_id,
                                        LayerTreeImpl* tree,
-                                       const gfx::ScrollOffset& scroll_offset);
+                                       const gfx::Vector2dF& scroll_offset);
   void SetNeedUpdateGpuRasterizationStatus();
   bool NeedUpdateGpuRasterizationStatusForTesting() const {
     return need_update_gpu_rasterization_status_;
@@ -444,7 +447,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   void SetElementScrollOffsetMutated(
       ElementId element_id,
       ElementListType list_type,
-      const gfx::ScrollOffset& scroll_offset) override;
+      const gfx::Vector2dF& scroll_offset) override;
   void ElementIsAnimatingChanged(const PropertyToElementIdMap& element_id_map,
                                  ElementListType list_type,
                                  const PropertyAnimationState& mask,
@@ -457,7 +460,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
       PaintWorkletInput::PropertyValue property_value) override;
 
   void ScrollOffsetAnimationFinished() override;
-  gfx::ScrollOffset GetScrollOffsetForAnimation(
+  gfx::Vector2dF GetScrollOffsetForAnimation(
       ElementId element_id) const override;
 
   void NotifyAnimationWorkletStateChange(AnimationWorkletMutationState state,
@@ -663,10 +666,10 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // See comment in equivalent ThreadedInputHandler method for what this means.
   ActivelyScrollingType GetActivelyScrollingType() const;
   bool ScrollAffectsScrollHandler() const;
-  bool CurrentScrollDidCheckerboardLargeArea() const {
+  bool CurrentScrollCheckerboardsDueToNoRecording() const {
     return current_scroll_did_checkerboard_large_area_;
   }
-  void SetCurrentScrollDidCheckerboardLargeArea() {
+  void SetCurrentScrollCheckerboardsDueToNoRecording() {
     current_scroll_did_checkerboard_large_area_ = true;
   }
   void SetExternalPinchGestureActive(bool active);
@@ -1179,6 +1182,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   bool is_viewport_mobile_optimized_ = false;
 
   bool prefers_reduced_motion_ = false;
+
+  bool may_throttle_if_undrawn_frames_ = true;
 
   std::unique_ptr<PendingTreeRasterDurationHistogramTimer>
       pending_tree_raster_duration_timer_;

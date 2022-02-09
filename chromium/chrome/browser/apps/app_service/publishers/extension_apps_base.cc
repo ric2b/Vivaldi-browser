@@ -11,7 +11,6 @@
 #include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/callback.h"
-#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observation.h"
 #include "build/chromeos_buildflags.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/extension_uninstaller.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/apps/app_service/publishers/extension_apps_enable_flow.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
@@ -36,7 +36,6 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -114,71 +113,31 @@ ash::ShelfLaunchSource ConvertLaunchSource(
   }
 }
 
-apps::mojom::InstallSource GetInstallSource(
+apps::mojom::InstallReason GetInstallReason(
     const Profile* profile,
     const extensions::Extension* extension) {
   if (extensions::Manifest::IsComponentLocation(extension->location())) {
-    return apps::mojom::InstallSource::kSystem;
+    return apps::mojom::InstallReason::kSystem;
   }
 
   if (extensions::Manifest::IsPolicyLocation(extension->location())) {
-    return apps::mojom::InstallSource::kPolicy;
+    return apps::mojom::InstallReason::kPolicy;
   }
 
   if (extension->was_installed_by_oem()) {
-    return apps::mojom::InstallSource::kOem;
+    return apps::mojom::InstallReason::kOem;
   }
 
   if (extension->was_installed_by_default()) {
-    return apps::mojom::InstallSource::kDefault;
+    return apps::mojom::InstallReason::kDefault;
   }
 
-  return apps::mojom::InstallSource::kUser;
+  return apps::mojom::InstallReason::kUser;
 }
 
 }  // namespace
 
 namespace apps {
-
-// Attempts to enable and launch an extension app.
-class ExtensionAppsEnableFlow : public ExtensionEnableFlowDelegate {
- public:
-  ExtensionAppsEnableFlow(Profile* profile, const std::string& app_id)
-      : profile_(profile), app_id_(app_id) {}
-
-  ~ExtensionAppsEnableFlow() override = default;
-
-  ExtensionAppsEnableFlow(const ExtensionAppsEnableFlow&) = delete;
-  ExtensionAppsEnableFlow& operator=(const ExtensionAppsEnableFlow&) = delete;
-
-  void Run(base::OnceClosure callback) {
-    callback_ = std::move(callback);
-
-    if (!flow_) {
-      flow_ = std::make_unique<ExtensionEnableFlow>(profile_, app_id_, this);
-      flow_->Start();
-    }
-  }
-
- private:
-  // ExtensionEnableFlowDelegate overrides.
-  void ExtensionEnableFlowFinished() override {
-    flow_.reset();
-    // Automatically launch app after enabling.
-    if (!callback_.is_null()) {
-      std::move(callback_).Run();
-    }
-  }
-
-  void ExtensionEnableFlowAborted(bool user_initiated) override {
-    flow_.reset();
-  }
-
-  Profile* const profile_;
-  const std::string app_id_;
-  base::OnceClosure callback_;
-  std::unique_ptr<ExtensionEnableFlow> flow_;
-};
 
 ExtensionAppsBase::ExtensionAppsBase(
     const mojo::Remote<apps::mojom::AppService>& app_service,
@@ -235,9 +194,10 @@ void ExtensionAppsBase::SetShowInFields(
 apps::mojom::AppPtr ExtensionAppsBase::ConvertImpl(
     const extensions::Extension* extension,
     apps::mojom::Readiness readiness) {
-  apps::mojom::AppPtr app = PublisherBase::MakeApp(
-      apps::mojom::AppType::kExtension, extension->id(), readiness,
-      extension->name(), GetInstallSource(profile_, extension));
+  auto install_reason = GetInstallReason(profile_, extension);
+  apps::mojom::AppPtr app =
+      PublisherBase::MakeApp(apps::mojom::AppType::kExtension, extension->id(),
+                             readiness, extension->name(), install_reason);
 
   app->short_name = extension->short_name();
   app->description = extension->description();
@@ -250,6 +210,9 @@ apps::mojom::AppPtr ExtensionAppsBase::ConvertImpl(
       app->install_time = prefs->GetInstallTime(extension->id());
     }
   }
+  app->install_source = install_reason == apps::mojom::InstallReason::kSystem
+                            ? apps::mojom::InstallSource::kSystem
+                            : apps::mojom::InstallSource::kChromeWebStore;
 
   app->is_platform_app = extension->is_platform_app()
                              ? apps::mojom::OptionalBool::kTrue
@@ -576,6 +539,11 @@ void ExtensionAppsBase::OnExtensionLoaded(
   app->app_id = extension->id();
   app->readiness = apps::mojom::Readiness::kReady;
   app->name = extension->name();
+  app->install_reason = GetInstallReason(profile_, extension);
+  app->install_source =
+      app->install_reason == apps::mojom::InstallReason::kSystem
+          ? apps::mojom::InstallSource::kSystem
+          : apps::mojom::InstallSource::kChromeWebStore;
   Publish(std::move(app), subscribers_);
 }
 
@@ -639,8 +607,21 @@ bool ExtensionAppsBase::RunExtensionEnableFlow(const std::string& app_id,
         std::make_unique<ExtensionAppsEnableFlow>(profile_, app_id);
   }
 
-  enable_flow_map_[app_id]->Run(std::move(callback));
+  enable_flow_map_[app_id]->Run(
+      base::BindOnce(&ExtensionAppsBase::ExtensionEnableFlowFinished,
+                     weak_factory_.GetWeakPtr(), std::move(callback), app_id));
   return true;
+}
+
+void ExtensionAppsBase::ExtensionEnableFlowFinished(base::OnceClosure callback,
+                                                    const std::string& app_id,
+                                                    bool enabled) {
+  // If the extension was not enabled, we intentionally drop the callback on the
+  // floor and do nothing with it.
+  if (enabled) {
+    std::move(callback).Run();
+  }
+  enable_flow_map_.erase(app_id);
 }
 
 // static
@@ -665,9 +646,8 @@ void ExtensionAppsBase::PopulateIntentFilters(
     const absl::optional<GURL>& app_scope,
     std::vector<mojom::IntentFilterPtr>* target) {
   if (app_scope != absl::nullopt) {
-    target->push_back(apps_util::CreateIntentFilterForUrlScope(
-        app_scope.value(),
-        base::FeatureList::IsEnabled(features::kIntentHandlingSharing)));
+    target->push_back(
+        apps_util::CreateIntentFilterForUrlScope(app_scope.value()));
   }
 }
 

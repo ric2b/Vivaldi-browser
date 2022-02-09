@@ -98,17 +98,19 @@ struct PasswordForm {
   };
 
   // Enum to differentiate between manually filled forms, forms with auto-
-  // generated passwords, and forms generated from the DOM API.
+  // generated passwords, forms generated from the Credential Management
+  // API and credentials manually added from setting.
   //
   // Always append new types at the end. This enum is converted to int and
   // stored in password store backends, so it is important to keep each
   // value assigned to the same integer.
   enum class Type {
-    kManual,
-    kGenerated,
-    kApi,
-    kMinValue = kManual,
-    kMaxValue = kApi,
+    kFormSubmission = 0,
+    kGenerated = 1,
+    kApi = 2,
+    kManuallyAdded = 3,
+    kMinValue = kFormSubmission,
+    kMaxValue = kManuallyAdded,
   };
 
   // Enum to keep track of what information has been sent to the server about
@@ -279,7 +281,7 @@ struct PasswordForm {
   bool blocked_by_user = false;
 
   // The form type.
-  Type type = Type::kManual;
+  Type type = Type::kFormSubmission;
 
   // The number of times that this username/password has been used to
   // authenticate the user.
@@ -343,6 +345,10 @@ struct PasswordForm {
   // password generation eligibility.
   bool is_new_password_reliable = false;
 
+  // True iff the form may be filled with webauthn credentials from an active
+  // webauthn request.
+  bool accepts_webauthn_credentials = false;
+
   // Serialized to prefs, so don't change numeric values!
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -402,7 +408,7 @@ struct PasswordForm {
 
   // Utility method to check whether the form represents an insecure credential
   // of insecure type `type`.
-  bool IsInsecureCredential(InsecureType type) const;
+  bool IsInsecureCredential(InsecureType insecure_type) const;
 
   PasswordForm();
   PasswordForm(const PasswordForm& other);

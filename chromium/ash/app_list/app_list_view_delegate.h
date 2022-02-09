@@ -15,7 +15,6 @@
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/callback_forward.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/event_constants.h"
@@ -116,6 +115,9 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   virtual void GetContextMenuModel(const std::string& id,
                                    GetContextMenuModelCallback callback) = 0;
 
+  // Sorts app list items (including apps and folders) with the given order.
+  virtual void SortAppList(AppListSortOrder order) = 0;
+
   // Returns an animation observer if the |target_state| is interesting to the
   // delegate.
   virtual ui::ImplicitAnimationObserver* GetAnimationObserver(
@@ -177,8 +179,10 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Called when the app list view state is updated.
   virtual void OnViewStateChanged(AppListViewState state) = 0;
 
-  // Called when the app list view animation is completed.
-  virtual void OnStateTransitionAnimationCompleted(AppListViewState state) = 0;
+  // Called when the app list state transition animation is completed.
+  virtual void OnStateTransitionAnimationCompleted(
+      AppListViewState state,
+      bool was_animation_interrupted) = 0;
 
   // Fills the given AppLaunchedMetricParams with info known by the delegate.
   virtual void GetAppLaunchedMetricParams(

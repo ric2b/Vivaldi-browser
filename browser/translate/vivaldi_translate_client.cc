@@ -70,12 +70,12 @@ VivaldiTranslateClient::VivaldiTranslateClient(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
   translate_driver_ = std::make_unique<translate::ContentTranslateDriver>(
-      *web_contents, & web_contents->GetController(),
+      *web_contents, &web_contents->GetController(),
       UrlLanguageHistogramFactory::GetForBrowserContext(
           web_contents->GetBrowserContext()),
-          TranslateModelServiceFactory::GetOrBuildForKey(
-              Profile::FromBrowserContext(web_contents->GetBrowserContext())
-                  ->GetProfileKey()));
+      TranslateModelServiceFactory::GetOrBuildForKey(
+          Profile::FromBrowserContext(web_contents->GetBrowserContext())
+              ->GetProfileKey()));
   translate_manager_ = std::make_unique<translate::TranslateManager>(
       this,
       translate::TranslateRankerFactory::GetForBrowserContext(
@@ -116,13 +116,14 @@ namespace {
 std::string ReplaceServerUrl(std::string& script) {
   const std::string search_pattern = "$OVERRIDE_TRANSLATE_SERVER";
   const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  std::string server = cmd_line.GetSwitchValueASCII(switches::kTranslateServerUrl);
+  std::string server =
+      cmd_line.GetSwitchValueASCII(switches::kTranslateServerUrl);
 
   base::ReplaceSubstringsAfterOffset(&script, 0, search_pattern, server);
 
   return script;
 }
-}
+}  // namespace
 
 /* static */
 void VivaldiTranslateClient::LoadTranslationScript() {
@@ -130,7 +131,7 @@ void VivaldiTranslateClient::LoadTranslationScript() {
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(apps::kLoadAndLaunchApp)) {
     base::CommandLine::StringType path =
-      command_line.GetSwitchValueNative(apps::kLoadAndLaunchApp);
+        command_line.GetSwitchValueNative(apps::kLoadAndLaunchApp);
     base::FilePath filepath(path);
 
     filepath = filepath.Append(kTranslateBundleName);
@@ -466,4 +467,4 @@ ShowTranslateBubbleResult VivaldiTranslateClient::ShowBubble(
 #endif
 #endif
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiTranslateClient)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiTranslateClient);

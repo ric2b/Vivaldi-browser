@@ -29,6 +29,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/gtest_prod_util.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -40,6 +41,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
+#include "third_party/blink/renderer/core/frame/csp/content_security_policy_violation_type.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -62,6 +64,7 @@ class OrdinalNumber;
 
 namespace blink {
 
+class AuditsIssue;
 class ConsoleMessage;
 class DOMWrapperWorld;
 class Element;
@@ -121,7 +124,7 @@ class CORE_EXPORT ContentSecurityPolicyDelegate : public GarbageCollectedMixin {
   virtual void Count(WebFeature) = 0;
 
   virtual void AddConsoleMessage(ConsoleMessage*) = 0;
-  virtual void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) = 0;
+  virtual void AddInspectorIssue(AuditsIssue) = 0;
   virtual void DisableEval(const String& error_message) = 0;
   virtual void ReportBlockedScriptExecutionToInspector(
       const String& directive_text) = 0;
@@ -133,21 +136,6 @@ class CORE_EXPORT ContentSecurityPolicy final
     : public GarbageCollected<ContentSecurityPolicy> {
  public:
   enum ExceptionStatus { kWillThrowException, kWillNotThrowException };
-
-  // This covers the possible values of a violation's 'resource', as defined in
-  // https://w3c.github.io/webappsec-csp/#violation-resource. By the time we
-  // generate a report, we're guaranteed that the value isn't 'null', so we
-  // don't need that state in this enum.
-  //
-  // Trusted Types violation's 'resource' values are defined in
-  // https://wicg.github.io/trusted-types/dist/spec/#csp-violation-object-hdr.
-  enum ContentSecurityPolicyViolationType {
-    kInlineViolation,
-    kEvalViolation,
-    kURLViolation,
-    kTrustedTypesSinkViolation,
-    kTrustedTypesPolicyViolation
-  };
 
   // The |type| argument given to inline checks, e.g.:
   // https://w3c.github.io/webappsec-csp/#should-block-inline
@@ -241,9 +229,11 @@ class CORE_EXPORT ContentSecurityPolicy final
       CheckHeaderType = CheckHeaderType::kCheckAll);
   bool AllowWorkerContextFromSource(const KURL&);
 
-  bool AllowTrustedTypePolicy(const String& policy_name,
-                              bool is_duplicate,
-                              AllowTrustedTypePolicyDetails& violation_details);
+  bool AllowTrustedTypePolicy(
+      const String& policy_name,
+      bool is_duplicate,
+      AllowTrustedTypePolicyDetails& violation_details,
+      absl::optional<base::UnguessableToken> issue_id = absl::nullopt);
 
   // Passing 'String()' into the |nonce| arguments in the following methods
   // represents an unnonced resource load.
@@ -374,16 +364,14 @@ class CORE_EXPORT ContentSecurityPolicy final
   // isolated world should use the isolated world CSP instead of bypassing the
   // main world CSP. See
   // ExecutionContext::GetContentSecurityPolicyForCurrentWorld.
-  // TODO(karandeepb): Rename to ShouldBypassMainWorldDeprecated.
-  static bool ShouldBypassMainWorld(const ExecutionContext*);
+  static bool ShouldBypassMainWorldDeprecated(const ExecutionContext*);
 
   // Whether the main world's CSP should be bypassed for operations in the given
   // |world|.
   // Note: This is deprecated. New usages should not be added. Operations in an
   // isolated world should use the isolated world CSP instead of bypassing the
   // main world CSP. See ExecutionContext::GetContentSecurityPolicyForWorld.
-  // TODO(karandeepb): Rename to ShouldBypassMainWorldDeprecated.
-  static bool ShouldBypassMainWorld(const DOMWrapperWorld* world);
+  static bool ShouldBypassMainWorldDeprecated(const DOMWrapperWorld* world);
 
   static bool IsNonceableElement(const Element*);
 
@@ -482,16 +470,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   // TODO: Consider replacing 'ContentSecurityPolicy::ViolationType' with the
   // mojo enum.
   mojom::blink::ContentSecurityPolicyViolationType BuildCSPViolationType(
-      ContentSecurityPolicy::ContentSecurityPolicyViolationType violation_type);
-
-  void ReportContentSecurityPolicyIssue(
-      const blink::SecurityPolicyViolationEventInit& violation_data,
-      network::mojom::ContentSecurityPolicyType header_type,
-      ContentSecurityPolicyViolationType violation_type,
-      LocalFrame*,
-      Element*,
-      SourceLocation*,
-      absl::optional<base::UnguessableToken> issue_id);
+      ContentSecurityPolicyViolationType violation_type);
 
   Member<ContentSecurityPolicyDelegate> delegate_;
   bool override_inline_style_allowed_ = false;

@@ -20,7 +20,6 @@
 #include "chrome/browser/ash/login/easy_unlock/smartlock_state_handler.h"
 #include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
-#include "chromeos/components/proximity_auth/smartlock_state.h"
 // TODO(https://crbug.com/1164001): move to forward declaration
 #include "chromeos/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -49,6 +48,8 @@ class PrefRegistrySimple;
 
 namespace ash {
 
+enum class SmartLockState;
+
 class EasyUnlockService : public KeyedService {
  public:
   enum Type { TYPE_REGULAR, TYPE_SIGNIN };
@@ -59,6 +60,9 @@ class EasyUnlockService : public KeyedService {
   // Gets EasyUnlockService instance associated with a user if the user is
   // logged in and their profile is initialized.
   static EasyUnlockService* GetForUser(const user_manager::User& user);
+
+  EasyUnlockService(const EasyUnlockService&) = delete;
+  EasyUnlockService& operator=(const EasyUnlockService&) = delete;
 
   // Registers Easy Unlock profile preferences.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
@@ -131,7 +135,7 @@ class EasyUnlockService : public KeyedService {
 
   // Updates the user pod on the signin/lock screen for the user associated with
   // the service to reflect the provided Smart Lock state.
-  bool UpdateSmartLockState(proximity_auth::SmartLockState state);
+  bool UpdateSmartLockState(SmartLockState state);
 
   // Starts an auth attempt for the user associated with the service. The
   // attempt type (unlock vs. signin) will depend on the service type. Returns
@@ -292,8 +296,6 @@ class EasyUnlockService : public KeyedService {
   bool tpm_key_checked_;
 
   base::WeakPtrFactory<EasyUnlockService> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(EasyUnlockService);
 };
 
 }  // namespace ash

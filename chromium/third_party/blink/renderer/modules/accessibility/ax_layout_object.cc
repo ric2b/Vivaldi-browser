@@ -115,6 +115,11 @@ AXLayoutObject::~AXLayoutObject() {
   DCHECK(IsDetached());
 }
 
+void AXLayoutObject::Trace(Visitor* visitor) const {
+  visitor->Trace(layout_object_);
+  AXNodeObject::Trace(visitor);
+}
+
 LayoutObject* AXLayoutObject::GetLayoutObject() const {
   return layout_object_;
 }
@@ -135,7 +140,7 @@ ScrollableArea* AXLayoutObject::GetScrollableAreaIfScrollable() const {
   if (!layout_object_ || !layout_object_->IsBox())
     return nullptr;
 
-  auto* box = To<LayoutBox>(layout_object_);
+  auto* box = To<LayoutBox>(layout_object_.Get());
 
   // This should possibly use box->CanBeScrolledAndHasScrollableArea() as it
   // used to; however, accessibility must consider any kind of non-visible
@@ -240,13 +245,21 @@ ax::mojom::blink::Role AXLayoutObject::RoleFromLayoutObjectOrNode() const {
   if (IsA<HTMLCanvasElement>(node))
     return ax::mojom::blink::Role::kCanvas;
 
-  if (IsA<LayoutView>(layout_object_))
+  if (IsA<LayoutView>(*layout_object_))
     return ax::mojom::blink::Role::kRootWebArea;
 
-  if (layout_object_->IsSVGImage())
-    return ax::mojom::blink::Role::kImage;
-  if (layout_object_->IsSVGRoot())
-    return ax::mojom::blink::Role::kSvgRoot;
+  if (node && node->IsSVGElement()) {
+    if (layout_object_->IsSVGImage())
+      return ax::mojom::blink::Role::kImage;
+    if (layout_object_->IsSVGRoot())
+      return ax::mojom::blink::Role::kSvgRoot;
+    if (layout_object_->IsSVGShape())
+      return ax::mojom::blink::Role::kGraphicsSymbol;
+    if (layout_object_->IsSVGForeignObject() || IsA<SVGGElement>(node))
+      return ax::mojom::blink::Role::kGroup;
+    if (IsA<SVGUseElement>(node))
+      return ax::mojom::blink::Role::kGraphicsObject;
+  }
 
   if (layout_object_->IsHR())
     return ax::mojom::blink::Role::kSplitter;
@@ -491,6 +504,13 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
     }
   }
 
+  // The SVG-AAM says the foreignObject element is normally presentational.
+  if (layout_object_->IsSVGForeignObject()) {
+    if (ignored_reasons)
+      ignored_reasons->push_back(IgnoredReason(kAXPresentational));
+    return true;
+  }
+
   // Make sure renderers with layers stay in the tree.
   if (GetLayoutObject() && GetLayoutObject()->HasLayer() && node &&
       node->hasChildren()) {
@@ -517,15 +537,26 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
     return false;
 
   if (layout_object_->IsText()) {
-    // Ignore TextAlternative of the list marker for SUMMARY because:
-    //  - TextAlternatives for disclosure-* are triangle symbol characters used
-    //    to visually indicate the expansion state.
-    //  - It's redundant. The host DETAILS exposes the expansion state.
-    if (layout_object_->Parent()->IsListMarkerForSummary()) {
-      if (ignored_reasons)
-        ignored_reasons->push_back(IgnoredReason(kAXPresentational));
-      return true;
+    if (layout_object_->IsInListMarker()) {
+      // Ignore TextAlternative of the list marker for SUMMARY because:
+      //  - TextAlternatives for disclosure-* are triangle symbol characters
+      //  used to visually indicate the expansion state.
+      //  - It's redundant. The host DETAILS exposes the expansion state.
+      // Also ignore text descendants of any non-ignored list marker because the
+      // text descendants do not provide any extra information than the
+      // TextAlternative on the list marker. Besides, with 'speak-as', they will
+      // be inconsistent with the list marker.
+      const AXObject* list_marker_object =
+          ContainerListMarkerIncludingIgnored();
+      if (list_marker_object &&
+          (list_marker_object->GetLayoutObject()->IsListMarkerForSummary() ||
+           !list_marker_object->AccessibilityIsIgnored())) {
+        if (ignored_reasons)
+          ignored_reasons->push_back(IgnoredReason(kAXPresentational));
+        return true;
+      }
     }
+
     // Ignore text inside of an ignored <label>.
     // To save processing, only walk up the ignored objects.
     // This means that other interesting objects inside the <label> will
@@ -623,8 +654,41 @@ ax::mojom::blink::ListStyle AXLayoutObject::GetListStyle() const {
   if (style_image && !style_image->ErrorOccurred())
     return ax::mojom::blink::ListStyle::kImage;
 
-  // TODO(crbug.com/1166766): Use the 'speak-as' descriptor value following
-  // https://drafts.csswg.org/css-counter-styles-3/#counter-style-speak-as
+  if (RuntimeEnabledFeatures::CSSAtRuleCounterStyleSpeakAsDescriptorEnabled()) {
+    if (!computed_style->ListStyleType())
+      return ax::mojom::blink::ListStyle::kNone;
+    if (computed_style->ListStyleType()->IsString())
+      return ax::mojom::blink::ListStyle::kOther;
+
+    DCHECK(computed_style->ListStyleType()->IsCounterStyle());
+    const CounterStyle& counter_style =
+        ListMarker::GetCounterStyle(*GetDocument(), *computed_style);
+    switch (counter_style.EffectiveSpeakAs()) {
+      case CounterStyleSpeakAs::kBullets: {
+        // See |ua_counter_style_map.cc| for predefined symbolic counter styles.
+        UChar symbol = counter_style.GenerateTextAlternative(0)[0];
+        switch (symbol) {
+          case 0x2022:
+            return ax::mojom::blink::ListStyle::kDisc;
+          case 0x25E6:
+            return ax::mojom::blink::ListStyle::kCircle;
+          case 0x25A0:
+            return ax::mojom::blink::ListStyle::kSquare;
+          default:
+            return ax::mojom::blink::ListStyle::kOther;
+        }
+      }
+      case CounterStyleSpeakAs::kNumbers:
+        return ax::mojom::blink::ListStyle::kNumeric;
+      case CounterStyleSpeakAs::kWords:
+        return ax::mojom::blink::ListStyle::kOther;
+      case CounterStyleSpeakAs::kAuto:
+      case CounterStyleSpeakAs::kReference:
+        NOTREACHED();
+        return ax::mojom::blink::ListStyle::kOther;
+    }
+  }
+
   switch (ListMarker::GetListStyleCategory(*GetDocument(), *computed_style)) {
     case ListMarker::ListStyleCategory::kNone:
       return ax::mojom::blink::ListStyle::kNone;
@@ -952,7 +1016,7 @@ AXObject* AXLayoutObject::PreviousOnLine() const {
                                    : nullptr;
   if (previous_sibling && previous_sibling->GetLayoutObject() &&
       previous_sibling->GetLayoutObject()->IsLayoutNGOutsideListMarker()) {
-    // A list item should be proceeded by a list marker on the same line.
+    // A list item should be preceded by a list marker on the same line.
     return GetDeepestAXChildInLayoutTree(previous_sibling, false);
   }
 
@@ -1037,7 +1101,7 @@ String AXLayoutObject::TextAlternative(
       found_text_alternative = true;
     } else if (layout_object_->IsText() &&
                (!recursive || !layout_object_->IsCounter())) {
-      auto* layout_text = To<LayoutText>(layout_object_);
+      auto* layout_text = To<LayoutText>(layout_object_.Get());
       String visible_text = layout_text->PlainText();  // Actual rendered text.
       // If no text boxes we assume this is unrendered end-of-line whitespace.
       // TODO find robust way to deterministically detect end-of-line space.
@@ -1058,7 +1122,7 @@ String AXLayoutObject::TextAlternative(
       found_text_alternative = true;
     } else if (layout_object_->IsListMarkerForNormalContent() && !recursive) {
       text_alternative =
-          To<LayoutListMarker>(layout_object_)->TextAlternative();
+          To<LayoutListMarker>(layout_object_.Get())->TextAlternative();
       found_text_alternative = true;
     } else if (!recursive) {
       if (ListMarker* marker = ListMarker::Get(layout_object_)) {
@@ -1098,7 +1162,7 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
             DocumentLifecycle::kPrePaintClean);
 #endif
 
-  PaintLayer* layer = To<LayoutBox>(layout_object_)->Layer();
+  PaintLayer* layer = To<LayoutBox>(layout_object_.Get())->Layer();
 
   HitTestRequest request(HitTestRequest::kReadOnly | HitTestRequest::kActive |
                          HitTestRequest::kRetargetForInert);
@@ -1639,6 +1703,31 @@ AXObject* AXLayoutObject::HeaderObject() const {
   }
 
   return nullptr;
+}
+
+void AXLayoutObject::GetWordBoundaries(Vector<int>& word_starts,
+                                       Vector<int>& word_ends) const {
+  if (!layout_object_ || !layout_object_->IsListMarkerIncludingAll())
+    return;
+
+  String text_alternative;
+  if (layout_object_->IsListMarkerForNormalContent()) {
+    text_alternative =
+        To<LayoutListMarker>(layout_object_.Get())->TextAlternative();
+  } else if (ListMarker* marker = ListMarker::Get(layout_object_)) {
+    text_alternative = marker->TextAlternative(*layout_object_);
+  }
+  if (text_alternative.ContainsOnlyWhitespaceOrEmpty())
+    return;
+
+  Vector<AbstractInlineTextBox::WordBoundaries> boundaries;
+  AbstractInlineTextBox::GetWordBoundariesForText(boundaries, text_alternative);
+  word_starts.ReserveCapacity(boundaries.size());
+  word_ends.ReserveCapacity(boundaries.size());
+  for (const auto& boundary : boundaries) {
+    word_starts.push_back(boundary.start_index);
+    word_ends.push_back(boundary.end_index);
+  }
 }
 
 //

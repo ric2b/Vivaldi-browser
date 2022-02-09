@@ -36,6 +36,12 @@ namespace translate {
 class TranslateBubbleViewBrowserTest : public InProcessBrowserTest {
  public:
   TranslateBubbleViewBrowserTest() {}
+
+  TranslateBubbleViewBrowserTest(const TranslateBubbleViewBrowserTest&) =
+      delete;
+  TranslateBubbleViewBrowserTest& operator=(
+      const TranslateBubbleViewBrowserTest&) = delete;
+
   ~TranslateBubbleViewBrowserTest() override {}
 
   void SetUp() override {
@@ -63,7 +69,7 @@ class TranslateBubbleViewBrowserTest : public InProcessBrowserTest {
  protected:
   void NavigateAndWaitForLanguageDetection(const GURL& url,
                                            const std::string& expected_lang) {
-    ui_test_utils::NavigateToURL(browser(), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
     while (expected_lang !=
            ChromeTranslateClient::FromWebContents(
@@ -76,9 +82,6 @@ class TranslateBubbleViewBrowserTest : public InProcessBrowserTest {
           ->Wait();
     }
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TranslateBubbleViewBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(TranslateBubbleViewBrowserTest,

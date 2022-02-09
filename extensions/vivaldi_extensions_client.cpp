@@ -21,8 +21,11 @@ namespace {
 
 class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
  public:
-  VivaldiExtensionsAPIProvider() {}
-  ~VivaldiExtensionsAPIProvider() override {}
+  VivaldiExtensionsAPIProvider() = default;
+  ~VivaldiExtensionsAPIProvider() override = default;
+  VivaldiExtensionsAPIProvider(const VivaldiExtensionsAPIProvider&) = delete;
+  VivaldiExtensionsAPIProvider& operator=(const VivaldiExtensionsAPIProvider&) =
+      delete;
 
   // ExtensionsAPIProvider:
   void AddAPIFeatures(FeatureProvider* provider) override {}
@@ -52,9 +55,6 @@ class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
   }
 
   void RegisterManifestHandlers() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionsAPIProvider);
 };
 
 }  // namespace

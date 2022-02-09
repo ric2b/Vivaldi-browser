@@ -23,6 +23,7 @@
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/test/test_condition_waiter.h"
+#include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
@@ -133,17 +134,20 @@ std::string GetLocalizedConsentString(const int id) {
   return sanitized_string;
 }
 
-class SyncConsentTest : public OobeBaseTest {
+class SyncConsentTest
+    : public OobeBaseTest,
+      public SyncConsentScreen::SyncConsentScreenExitTestDelegate {
  public:
-  SyncConsentTest()
-      : force_branded_build_(
-            WizardController::ForceBrandedBuildForTesting(true)) {
-    login_manager_mixin_.set_session_restore_enabled();
-  }
+  SyncConsentTest(const SyncConsentTest&) = delete;
+  SyncConsentTest& operator=(const SyncConsentTest&) = delete;
+
+  SyncConsentTest() { login_manager_mixin_.set_session_restore_enabled(); }
   ~SyncConsentTest() override = default;
 
   void SetUpOnMainThread() override {
     OobeBaseTest::SetUpOnMainThread();
+    LoginDisplayHost::default_host()->GetWizardContext()->is_branded_build =
+        true;
     if (features::IsSyncConsentOptionalEnabled()) {
       expected_consent_ids_ = {
           IDS_LOGIN_SYNC_CONSENT_SCREEN_TITLE,
@@ -181,11 +185,12 @@ class SyncConsentTest : public OobeBaseTest {
       }
     }
 
-    ReplaceExitCallback();
-    GetSyncConsentScreen()->SetProfileSyncDisabledByPolicyForTesting(false);
+    SyncConsentScreen::SetSyncConsentScreenExitTestDelegate(this);
+    SyncConsentScreen::SetProfileSyncDisabledByPolicyForTesting(false);
   }
 
   void TearDownOnMainThread() override {
+    SyncConsentScreen::SetSyncConsentScreenExitTestDelegate(nullptr);
     // If the login display is still showing, exit gracefully.
     if (LoginDisplayHost::default_host()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -209,28 +214,45 @@ class SyncConsentTest : public OobeBaseTest {
     OobeScreenWaiter(SyncConsentScreenView::kScreenId).Wait();
   }
 
-  void ReplaceExitCallback() {
-    original_callback_ =
-        GetSyncConsentScreen()->get_exit_callback_for_testing();
-    GetSyncConsentScreen()->set_exit_callback_for_testing(base::BindRepeating(
-        &SyncConsentTest::HandleScreenExit, base::Unretained(this)));
+  void LoginAndWaitForSyncConsentScreen() {
+    login_manager_mixin_.LoginAsNewRegularUser();
+    // No need to explicitly show the screen as it is the first "stable" one
+    // after login. Screen may "skip", so OobeScreenWaiter will not stop. Use
+    // custom predicate instead.
+    test::TestPredicateWaiter(
+        base::BindRepeating(
+            [](SyncConsentTest* self) {
+              if (self->screen_exited_)
+                return true;
+
+              if (!LoginDisplayHost::default_host()->GetOobeUI())
+                return false;
+
+              return LoginDisplayHost::default_host()
+                         ->GetOobeUI()
+                         ->current_screen() == SyncConsentScreenView::kScreenId;
+            },
+            base::Unretained(this)))
+        .Wait();
   }
 
   void LoginAsNewRegularUser() {
     login_manager_mixin_.LoginAsNewRegularUser();
     OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
-    // No need to explicitly show the screen as it is the first one after login.
   }
 
+  // Attempts to log in to sync consent screen if it is not to be skipped
   void LoginToSyncConsentScreen() {
-    LoginAsNewRegularUser();
+    LoginAndWaitForSyncConsentScreen();
     SetIsMinorUser(is_minor_user_);
     GetSyncConsentScreen()->SetProfileSyncEngineInitializedForTesting(true);
-    GetSyncConsentScreen()->OnStateChanged(nullptr);
+    if (!GetSyncConsentScreen()->IsProfileSyncDisabledByPolicyForTest() &&
+        LoginDisplayHost::default_host()->GetWizardContext()->is_branded_build)
+      GetSyncConsentScreen()->OnStateChanged(nullptr);
   }
 
   void LoginToSyncConsentScreenWithUnknownCapability() {
-    LoginAsNewRegularUser();
+    LoginAndWaitForSyncConsentScreen();
     GetSyncConsentScreen()->SetProfileSyncEngineInitializedForTesting(true);
     GetSyncConsentScreen()->OnStateChanged(nullptr);
   }
@@ -265,11 +287,14 @@ class SyncConsentTest : public OobeBaseTest {
   }
 
  private:
-  void HandleScreenExit(SyncConsentScreen::Result result) {
+  // SyncConsentScreen::SyncConsentScreenExitTestDelegate
+  void OnSyncConsentScreenExit(
+      SyncConsentScreen::Result result,
+      SyncConsentScreen::ScreenExitCallback& original_callback) override {
     ASSERT_FALSE(screen_exited_);
     screen_exited_ = true;
     screen_result_ = result;
-    original_callback_.Run(result);
+    original_callback.Run(result);
     if (screen_exit_callback_)
       std::move(screen_exit_callback_).Run();
   }
@@ -286,16 +311,15 @@ class SyncConsentTest : public OobeBaseTest {
 
   bool screen_exited_ = false;
   base::RepeatingClosure screen_exit_callback_;
-  SyncConsentScreen::ScreenExitCallback original_callback_;
 
   LoginManagerMixin login_manager_mixin_{&mixin_host_};
 
   std::unique_ptr<base::AutoReset<bool>> force_branded_build_;
-  DISALLOW_COPY_AND_ASSIGN(SyncConsentTest);
 };
 
 IN_PROC_BROWSER_TEST_F(SyncConsentTest, SkippedNotBrandedBuild) {
-  auto autoreset = WizardController::ForceBrandedBuildForTesting(false);
+  LoginDisplayHost::default_host()->GetWizardContext()->is_branded_build =
+      false;
   LoginToSyncConsentScreen();
 
   WaitForScreenExit();
@@ -307,9 +331,7 @@ IN_PROC_BROWSER_TEST_F(SyncConsentTest, SkippedNotBrandedBuild) {
 
 IN_PROC_BROWSER_TEST_F(SyncConsentTest, SkippedSyncDisabledByPolicy) {
   // Set up screen and policy.
-  auto autoreset = WizardController::ForceBrandedBuildForTesting(true);
-  SyncConsentScreen* screen = GetSyncConsentScreen();
-  screen->SetProfileSyncDisabledByPolicyForTesting(true);
+  SyncConsentScreen::SetProfileSyncDisabledByPolicyForTesting(true);
 
   LoginToSyncConsentScreen();
 
@@ -345,7 +367,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentTest, AbortedSetup) {
 class SyncConsentRecorderTest : public SyncConsentTest {
  public:
   SyncConsentRecorderTest() {
-    features_.InitAndDisableFeature(features::kSyncConsentOptional);
+    features_.InitWithFeatures(
+        /*enabled_features=*/{features::kSyncSettingsCategorization},
+        /*disabled_features=*/{features::kSyncConsentOptional});
   }
   ~SyncConsentRecorderTest() override = default;
 
@@ -396,10 +420,12 @@ class SyncConsentTestWithParams
       public ::testing::WithParamInterface<std::string> {
  public:
   SyncConsentTestWithParams() = default;
-  ~SyncConsentTestWithParams() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(SyncConsentTestWithParams);
+  SyncConsentTestWithParams(const SyncConsentTestWithParams&) = delete;
+  SyncConsentTestWithParams& operator=(const SyncConsentTestWithParams&) =
+      delete;
+
+  ~SyncConsentTestWithParams() override = default;
 };
 
 IN_PROC_BROWSER_TEST_P(SyncConsentTestWithParams, SyncConsentTestWithLocale) {
@@ -442,13 +468,14 @@ class SyncConsentPolicyDisabledTest : public SyncConsentTest,
 IN_PROC_BROWSER_TEST_P(SyncConsentPolicyDisabledTest,
                        SyncConsentPolicyDisabled) {
   LoginToSyncConsentScreen();
+  WaitForScreenShown();
 
   SyncConsentScreen* screen = GetSyncConsentScreen();
 
   OobeScreenExitWaiter waiter(SyncConsentScreenView::kScreenId);
 
-  screen->SetProfileSyncDisabledByPolicyForTesting(true);
-  screen->SetProfileSyncEngineInitializedForTesting(GetParam());
+  SyncConsentScreen::SetProfileSyncDisabledByPolicyForTesting(true);
+  SyncConsentScreen::SetProfileSyncEngineInitializedForTesting(GetParam());
   screen->OnStateChanged(nullptr);
 
   waiter.Wait();
@@ -535,16 +562,13 @@ IN_PROC_BROWSER_TEST_F(SyncConsentOptionalTest, MAYBE_DefaultFlow) {
   EXPECT_THAT(consent_recorded_waiter.consent_description_ids_,
               testing::UnorderedElementsAreArray(expected_ids));
 
-  // OS sync should be on if SplitSettingsSync is enabled.
-  // TODO(https://crbug.com/1229582): Migrate to SyncSettingsCategorization and
-  // create an additional test suite when SyncSettingsCategorization enabled.
-  EXPECT_EQ(prefs->GetBoolean(syncer::prefs::kOsSyncFeatureEnabled),
-            features::IsSplitSettingsSyncEnabled());
+  // OS sync should be on.
+  syncer::SyncUserSettings* settings = GetSyncUserSettings();
+  EXPECT_TRUE(settings->IsOsSyncFeatureEnabled());
 
   // Browser sync is on.
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
   EXPECT_TRUE(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
-  syncer::SyncUserSettings* settings = GetSyncUserSettings();
   EXPECT_TRUE(settings->IsSyncRequested());
   EXPECT_TRUE(settings->IsFirstSetupComplete());
   EXPECT_TRUE(settings->IsSyncEverythingEnabled());
@@ -656,17 +680,15 @@ IN_PROC_BROWSER_TEST_F(SyncConsentOptionalTest, LanguageVariant) {
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentOptionalTest, SkippedNotBrandedBuild) {
-  auto autoreset = WizardController::ForceBrandedBuildForTesting(false);
+  LoginDisplayHost::default_host()->GetWizardContext()->is_branded_build =
+      false;
   LoginToSyncConsentScreen();
   WaitForScreenExit();
   EXPECT_EQ(screen_result_.value(), SyncConsentScreen::Result::NOT_APPLICABLE);
 
-  // OS sync should be on if SplitSettingsSync is enabled.
-  // TODO(https://crbug.com/1229582): Migrate to SyncSettingsCategorization and
-  // create an additional test suite when SyncSettingsCategorization enabled.
+  // OS sync should be on.
   syncer::SyncUserSettings* settings = GetSyncUserSettings();
-  if (features::IsSplitSettingsSyncEnabled())
-    EXPECT_TRUE(settings->IsOsSyncFeatureEnabled());
+  EXPECT_TRUE(settings->IsOsSyncFeatureEnabled());
 
   // Browser sync is on.
   EXPECT_TRUE(settings->IsSyncRequested());
@@ -684,19 +706,14 @@ IN_PROC_BROWSER_TEST_F(SyncConsentOptionalTest, SkippedNotBrandedBuild) {
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentOptionalTest, SkippedSyncDisabledByPolicy) {
-  SyncConsentScreen* screen = GetSyncConsentScreen();
-  screen->SetProfileSyncDisabledByPolicyForTesting(true);
+  SyncConsentScreen::SetProfileSyncDisabledByPolicyForTesting(true);
   LoginToSyncConsentScreen();
   WaitForScreenExit();
   EXPECT_EQ(screen_result_.value(), SyncConsentScreen::Result::NOT_APPLICABLE);
 
-  // OS sync should be off if SplitSettingsSync is enabled. The function DCHECKs
-  // if SplitSettingsSync is disabled.
-  // TODO(https://crbug.com/1229582): Migrate to SyncSettingsCategorization and
-  // create an additional test suite when SyncSettingsCategorization enabled.
+  // OS sync should be off.
   syncer::SyncUserSettings* settings = GetSyncUserSettings();
-  if (features::IsSplitSettingsSyncEnabled())
-    EXPECT_FALSE(settings->IsOsSyncFeatureEnabled());
+  EXPECT_FALSE(settings->IsOsSyncFeatureEnabled());
 
   // Browser sync is off.
   EXPECT_FALSE(settings->IsSyncRequested());
@@ -745,8 +762,7 @@ IN_PROC_BROWSER_TEST_F(SyncConsentActiveDirectoryTest, LoginDoesNotStartSync) {
 
   // OS sync is off.
   syncer::SyncUserSettings* settings = GetSyncUserSettings();
-  if (features::IsSplitSettingsSyncEnabled())
-    EXPECT_FALSE(settings->IsOsSyncFeatureEnabled());
+  EXPECT_FALSE(settings->IsOsSyncFeatureEnabled());
 
   // Browser sync is off.
   EXPECT_FALSE(settings->IsSyncRequested());
@@ -965,6 +981,7 @@ IN_PROC_BROWSER_TEST_F(SyncConsentTimeoutTest,
   auto overviewDialogWaiter =
       test::OobeJS().CreateVisibilityWaiter(true, {kOverviewDialog});
   LoginAsNewRegularUser();
+  // No need to explicitly show the screen as it is the first one after login.
   WaitForScreenShown();
   syncWaiter->Wait();
   overviewDialogWaiter->Wait();

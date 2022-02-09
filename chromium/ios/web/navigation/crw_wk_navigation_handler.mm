@@ -15,8 +15,7 @@
 #import "ios/net/url_scheme_util.h"
 #include "ios/web/common/features.h"
 #import "ios/web/common/url_scheme_util.h"
-#import "ios/web/js_messaging/crw_js_injector.h"
-#import "ios/web/js_messaging/web_frames_manager_impl.h"
+#import "ios/web/js_messaging/web_frames_manager_java_script_feature.h"
 #import "ios/web/navigation/crw_error_page_helper.h"
 #import "ios/web/navigation/crw_navigation_item_holder.h"
 #import "ios/web/navigation/crw_pending_navigation_info.h"
@@ -36,6 +35,7 @@
 #import "ios/web/security/crw_cert_verification_controller.h"
 #import "ios/web/security/wk_web_view_security_util.h"
 #import "ios/web/session/session_certificate_policy_cache_impl.h"
+#import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/user_interaction_state.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "ios/web/web_view/content_type_util.h"
@@ -105,8 +105,6 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     CRWCertVerificationController* certVerificationController;
 // Returns the docuemnt URL from self.delegate.
 @property(nonatomic, readonly, assign) GURL documentURL;
-// Returns the js injector from self.delegate.
-@property(nonatomic, readonly, weak) CRWJSInjector* JSInjector;
 
 @end
 
@@ -438,7 +436,7 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
         web::GURLOriginWithWKSecurityOrigin(action.targetFrame.securityOrigin));
     isCrossOriginTargetFrame = !sourceOrigin.IsSameOriginWith(targetOrigin);
   }
-  web::WebStatePolicyDecider::RequestInfo requestInfo(
+  const web::WebStatePolicyDecider::RequestInfo requestInfo(
       transition, isMainFrameNavigationAction, isCrossOriginTargetFrame,
       userInteractedWithRequestMainFrame);
 
@@ -483,9 +481,6 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
   [self updatePendingNavigationInfoFromNavigationResponse:WKResponse
                                               HTTPHeaders:headers];
 
-  web::WebStatePolicyDecider::PolicyDecision policyDecision =
-      web::WebStatePolicyDecider::PolicyDecision::Allow();
-
   __weak CRWPendingNavigationInfo* weakPendingNavigationInfo =
       self.pendingNavigationInfo;
   auto callback = base::BindOnce(
@@ -503,8 +498,10 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
       });
 
   if ([self shouldRenderResponse:WKResponse]) {
-    self.webStateImpl->ShouldAllowResponse(
-        WKResponse.response, WKResponse.forMainFrame, std::move(callback));
+    const web::WebStatePolicyDecider::ResponseInfo response_info(
+        WKResponse.forMainFrame);
+    self.webStateImpl->ShouldAllowResponse(WKResponse.response, response_info,
+                                           std::move(callback));
     return;
   }
 
@@ -734,7 +731,7 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
           provisionalLoad:YES];
   }
 
-  self.webStateImpl->GetWebFramesManagerImpl().RemoveAllWebFrames();
+  self.webStateImpl->RemoveAllWebFrames();
   // This must be reset at the end, since code above may need information about
   // the pending load.
   self.pendingNavigationInfo = nil;
@@ -843,7 +840,7 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
 
   [self commitPendingNavigationInfoInWebView:webView];
 
-  self.webStateImpl->GetWebFramesManagerImpl().RemoveAllWebFrames();
+  self.webStateImpl->RemoveAllWebFrames();
 
   // This point should closely approximate the document object change, so reset
   // the list of injected scripts to those that are automatically injected.  For
@@ -855,8 +852,11 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     // In unit tests MIME type will be empty, because loadHTML:forURL: does
     // not notify web view delegate about received response, so web controller
     // does not get a chance to properly update MIME type.
-    [self.JSInjector injectWindowID];
-    self.webStateImpl->GetWebFramesManagerImpl().RegisterExistingFrames();
+    [self.webStateImpl->GetWebController() injectWindowID];
+
+    web::BrowserState* browserState = self.webStateImpl->GetBrowserState();
+    web::WebFramesManagerJavaScriptFeature::FromBrowserState(browserState)
+        ->RegisterExistingFrames(self.webStateImpl);
   }
 
   if (committedNavigation) {
@@ -1009,6 +1009,18 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
             withError:(NSError*)error {
   [self didReceiveWKNavigationDelegateCallback];
 
+  // |webView:didFailNavigation:withError:| may be called after the document has
+  // already loaded which should be ignored. This can happen when navigating
+  // back to a page which loads from the back forward cache. See
+  // crbug.com/1249735 for more details. This will also be called when the user
+  // cancels an active page load.
+  if (self.navigationState == web::WKNavigationState::FINISHED &&
+      error.code == NSURLErrorCancelled &&
+      [error.domain isEqualToString:NSURLErrorDomain]) {
+    _certVerificationErrors->Clear();
+    return;
+  }
+
   [self.navigationStates setState:web::WKNavigationState::FAILED
                     forNavigation:navigation];
 
@@ -1016,7 +1028,7 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
           forNavigation:navigation
                 webView:webView
         provisionalLoad:NO];
-  self.webStateImpl->GetWebFramesManagerImpl().RemoveAllWebFrames();
+  self.webStateImpl->RemoveAllWebFrames();
   _certVerificationErrors->Clear();
   [self forgetNullWKNavigation:navigation];
 }
@@ -1101,7 +1113,7 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
 
   _certVerificationErrors->Clear();
   _webProcessCrashed = YES;
-  self.webStateImpl->GetWebFramesManagerImpl().RemoveAllWebFrames();
+  self.webStateImpl->RemoveAllWebFrames();
 
   [self.delegate navigationHandlerWebProcessDidCrash:self];
 }
@@ -1167,10 +1179,6 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
 
 - (web::UserInteractionState*)userInteractionState {
   return [self.delegate userInteractionStateForWebViewHandler:self];
-}
-
-- (CRWJSInjector*)JSInjector {
-  return [self.delegate JSInjectorForNavigationHandler:self];
 }
 
 - (CRWCertVerificationController*)certVerificationController {
@@ -1974,18 +1982,22 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
         if (errorHTML) {
           CRWErrorPageHelper* errorPageHelper =
               [[CRWErrorPageHelper alloc] initWithError:context->GetError()];
-
-          [webView evaluateJavaScript:[errorPageHelper
-                                          scriptForInjectingHTML:errorHTML
-                                              addAutomaticReload:YES]
-                    completionHandler:^(id result, NSError* error) {
-                      if (error) {
-                        DCHECK(error.code == WKErrorWebViewInvalidated ||
-                               error.code == WKErrorWebContentProcessTerminated)
-                            << "Error injecting error page HTML: "
-                            << base::SysNSStringToUTF8(error.description);
-                      }
-                    }];
+          [webView
+              evaluateJavaScript:[errorPageHelper
+                                     scriptForInjectingHTML:errorHTML
+                                         addAutomaticReload:YES]
+               completionHandler:^(id result, NSError* error) {
+                 if (error) {
+                   // WKErrorJavaScriptResultTypeIsUnsupported can be received
+                   // if the WKWebView is released during this call.
+                   DCHECK(error.code == WKErrorWebViewInvalidated ||
+                          error.code == WKErrorWebContentProcessTerminated ||
+                          error.code ==
+                              WKErrorJavaScriptResultTypeIsUnsupported)
+                       << "Error injecting error page HTML: "
+                       << base::SysNSStringToUTF8(error.description);
+                 }
+               }];
         }
 
         // TODO(crbug.com/973765): This is a workaround because |item| might

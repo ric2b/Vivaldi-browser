@@ -48,6 +48,10 @@ class FakeCrosHealthdService final
   };
 
   FakeCrosHealthdService();
+
+  FakeCrosHealthdService(const FakeCrosHealthdService&) = delete;
+  FakeCrosHealthdService& operator=(const FakeCrosHealthdService&) = delete;
+
   ~FakeCrosHealthdService() override;
 
   // CrosHealthdServiceFactory overrides:
@@ -134,6 +138,10 @@ class FakeCrosHealthdService final
   void RunVideoConferencingRoutine(
       const absl::optional<std::string>& stun_server_hostname,
       RunVideoConferencingRoutineCallback callback) override;
+  void RunArcHttpRoutine(RunArcHttpRoutineCallback callback) override;
+  void RunArcPingRoutine(RunArcPingRoutineCallback callback) override;
+  void RunArcDnsResolutionRoutine(
+      RunArcDnsResolutionRoutineCallback callback) override;
 
   // CrosHealthdEventService overrides:
   void AddBluetoothObserver(
@@ -251,7 +259,10 @@ class FakeCrosHealthdService final
   // Calls the LanConnectivity routine on |network_diagnostics_routines_|.
   void RunLanConnectivityRoutineForTesting(
       chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
-          LanConnectivityCallback callback);
+          RunLanConnectivityCallback callback);
+
+  // Returns the last created routine by any Run*Routine method.
+  absl::optional<mojom::DiagnosticRoutineEnum> GetLastRunRoutine() const;
 
   // Returns the parameters passed for the most recent call to
   // `GetRoutineUpdate`.
@@ -260,6 +271,8 @@ class FakeCrosHealthdService final
  private:
   // Used as the response to any GetAvailableRoutines IPCs received.
   std::vector<mojom::DiagnosticRoutineEnum> available_routines_;
+  // Used to store last created routine by any Run*Routine method.
+  absl::optional<mojom::DiagnosticRoutineEnum> last_run_routine_;
   // Used as the response to any RunSomeRoutine IPCs received.
   mojom::RunRoutineResponsePtr run_routine_response_{
       mojom::RunRoutineResponse::New()};
@@ -305,8 +318,6 @@ class FakeCrosHealthdService final
       network_diagnostics_routines_;
 
   base::TimeDelta callback_delay_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeCrosHealthdService);
 };
 
 }  // namespace cros_healthd

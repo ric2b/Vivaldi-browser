@@ -21,7 +21,11 @@ struct FilteredRequestInfo {
       const network::ResourceRequest& request,
       content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
       bool is_async,
+      bool is_webtransport,
       absl::optional<int64_t> navigation_id);
+
+  FilteredRequestInfo(FilteredRequestInfo&&);
+  FilteredRequestInfo& operator=(FilteredRequestInfo&&) = delete;
 
   ~FilteredRequestInfo();
 
@@ -49,11 +53,11 @@ struct FilteredRequestInfo {
   // Indicates if this request is asynchronous.
   const bool is_async;
 
+  // Indicate whether this is a web transport request.
+  const bool is_webtransport;
+
   // Valid if this request corresponds to a navigation.
   const absl::optional<int64_t> navigation_id;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FilteredRequestInfo);
 };
 
 }  // namespace vivaldi

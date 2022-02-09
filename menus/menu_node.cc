@@ -4,7 +4,7 @@
 
 namespace menus {
 
-int64_t Menu_Node::id_counter =  Menu_Node::kFirstDynamicNodeId;
+int64_t Menu_Node::id_counter = Menu_Node::kFirstDynamicNodeId;
 
 const char Menu_Node::kRootNodeGuid[] = "00000000-0000-5000-a000-000000000001";
 const char Menu_Node::kMainmenuNodeGuid[] =
@@ -14,10 +14,7 @@ Menu_Control::Menu_Control() {}
 Menu_Control::~Menu_Control() {}
 
 Menu_Node::Menu_Node(const std::string& guid, int64_t id)
-  : type_(UNKNOWN),
-    origin_(BUNDLE),
-    guid_(guid),
-    id_(id) {}
+    : type_(UNKNOWN), origin_(BUNDLE), guid_(guid), id_(id) {}
 
 Menu_Node::~Menu_Node() {}
 
@@ -35,7 +32,7 @@ Menu_Node* Menu_Node::GetById(int64_t id) {
 }
 
 Menu_Node* Menu_Node::GetByGuid(const std::string& guid) {
-if (guid_ == guid) {
+  if (guid_ == guid) {
     return this;
   }
   for (auto& child : children()) {
@@ -80,15 +77,15 @@ void Menu_Node::SetShowShortcut(absl::optional<bool> show_shortcut) {
 void Menu_Node::DumpTree(int indent) {
   if (type_ == CONTAINER) {
     printf("%*s%d %d (mode: %s)\n", indent, "", type_, static_cast<int>(id_),
-            container_mode_.c_str());
+           container_mode_.c_str());
   } else if (type_ == RADIO) {
     printf("%*s%d %d (radio group: %s)\n", indent, "", type_,
-            static_cast<int>(id_), radio_group_.c_str());
-  } else if (type_== SEPARATOR) {
+           static_cast<int>(id_), radio_group_.c_str());
+  } else if (type_ == SEPARATOR) {
     printf("%*s%d %s\n", indent, "", type_, "separator");
   } else {
     printf("%*s%d %d %s\n", indent, "", type_, static_cast<int>(id_),
-            action_.c_str());
+           action_.c_str());
   }
   if (children().size() > 0) {
     for (const auto& child : children()) {

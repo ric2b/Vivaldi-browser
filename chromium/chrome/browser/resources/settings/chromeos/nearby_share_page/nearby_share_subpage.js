@@ -91,6 +91,13 @@ Polymer({
         chromeos.settings.mojom.Setting.kNearbyShareDataUsage,
       ]),
     },
+
+    /** @private */
+    shouldShowFastInititationNotificationToggle_: {
+      type: Boolean,
+      value: () =>
+          loadTimeData.getBoolean('isNearbyShareBackgroundScanningEnabled')
+    },
   },
 
   listeners: {'onboarding-cancelled': 'onOnboardingCancelled_'},
@@ -98,6 +105,7 @@ Polymer({
   /** @private {?nearbyShare.mojom.ReceiveObserverReceiver} */
   receiveObserver_: null,
 
+  /** @override */
   attached() {
     // TODO(b/166779043): Check whether the Account Manager is enabled and fall
     // back to profile name, or just hide the row. This is not urgent because
@@ -114,11 +122,20 @@ Polymer({
         });
     this.receiveObserver_ = nearby_share.observeReceiveManager(
         /** @type {!nearbyShare.mojom.ReceiveObserverInterface} */ (this));
+  },
 
-    // Trigger a contact sync whenever the Nearby subpage is opened to improve
-    // consistency. This should help avoid scenarios where a share is attempted
-    // and contacts are stale on the receiver.
-    nearby_share.getContactManager().downloadContacts();
+  /**
+   * Called when component is attached and all settings values have been
+   * retrieved.
+   */
+  onSettingsRetrieved() {
+    if (this.settings.enabled) {
+      // Trigger a contact sync whenever the Nearby subpage is opened and
+      // onboarding is complete to improve consistency. This should help avoid
+      // scenarios where a share is attempted and contacts are stale on the
+      // receiver.
+      nearby_share.getContactManager().downloadContacts();
+    }
   },
 
   /** @private */
@@ -377,9 +394,7 @@ Polymer({
     }
 
     if (queryParams.has('onboarding')) {
-      this.showReceiveDialog_ = true;
-      Polymer.dom.flush();
-      this.$$('#receiveDialog').showOnboarding();
+      this.showOnboarding_();
     }
 
     this.attemptDeepLink();
@@ -419,5 +434,47 @@ Polymer({
   onOnboardingCancelled_() {
     // Return to main settings page multidevice section
     settings.Router.getInstance().navigateTo(settings.routes.MULTIDEVICE);
+  },
+
+  /** @private */
+  onFastInitiationNotificationToggledByUser_() {
+    this.set(
+        'settings.fastInitiationNotificationState',
+        this.isFastInitiationNotificationEnabled_() ?
+            nearbyShare.mojom.FastInitiationNotificationState.kDisabledByUser :
+            nearbyShare.mojom.FastInitiationNotificationState.kEnabled);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isFastInitiationNotificationEnabled_() {
+    return this.get('settings.fastInitiationNotificationState') ===
+        nearbyShare.mojom.FastInitiationNotificationState.kEnabled;
+  },
+
+  /**
+   * @param {boolean} isNearbySharingEnabled
+   * @param {boolean} isOnboardingComplete
+   * @param {boolean} shouldShowFastInititationNotificationToggle
+   * @return {boolean}
+   * @private
+   */
+  shouldShowSubpageContent_(
+      isNearbySharingEnabled, isOnboardingComplete,
+      shouldShowFastInititationNotificationToggle) {
+    if (!isOnboardingComplete) {
+      return false;
+    }
+    return isNearbySharingEnabled ||
+        shouldShowFastInititationNotificationToggle;
+  },
+
+  /** @private */
+  showOnboarding_() {
+    this.showReceiveDialog_ = true;
+    Polymer.dom.flush();
+    this.$$('#receiveDialog').showOnboarding();
   },
 });

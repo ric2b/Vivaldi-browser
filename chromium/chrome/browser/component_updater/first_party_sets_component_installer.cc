@@ -114,7 +114,7 @@ bool FirstPartySetsComponentInstallerPolicy::RequiresNetworkEncryption() const {
 
 update_client::CrxInstaller::Result
 FirstPartySetsComponentInstallerPolicy::OnCustomInstall(
-    const base::DictionaryValue& manifest,
+    const base::Value& manifest,
     const base::FilePath& install_dir) {
   return update_client::CrxInstaller::Result(0);  // Nothing custom here.
 }
@@ -129,14 +129,10 @@ base::FilePath FirstPartySetsComponentInstallerPolicy::GetInstalledPath(
 void FirstPartySetsComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
-    std::unique_ptr<base::DictionaryValue> manifest) {
-  if (install_dir.empty())
+    base::Value manifest) {
+  if (install_dir.empty() || !GetConfigPathInstance().empty())
     return;
 
-  if (component_installed_)
-    return;
-
-  component_installed_ = true;
   VLOG(1) << "First-Party Sets Component ready, version " << version.GetString()
           << " in " << install_dir.value();
 
@@ -147,7 +143,7 @@ void FirstPartySetsComponentInstallerPolicy::ComponentReady(
 
 // Called during startup and installation before ComponentReady().
 bool FirstPartySetsComponentInstallerPolicy::VerifyInstallation(
-    const base::DictionaryValue& manifest,
+    const base::Value& manifest,
     const base::FilePath& install_dir) const {
   // No need to actually validate the sets here, since we'll do the validation
   // in the Network Service.
@@ -180,9 +176,12 @@ FirstPartySetsComponentInstallerPolicy::GetInstallerAttributes() const {
   };
 }
 
+// static
+void FirstPartySetsComponentInstallerPolicy::ResetForTesting() {
+  GetConfigPathInstance().clear();
+}
+
 void RegisterFirstPartySetsComponent(ComponentUpdateService* cus) {
-  if (!base::FeatureList::IsEnabled(net::features::kFirstPartySets))
-    return;
   VLOG(1) << "Registering First-Party Sets component.";
   auto installer = base::MakeRefCounted<ComponentInstaller>(
       std::make_unique<FirstPartySetsComponentInstallerPolicy>(
@@ -192,6 +191,15 @@ void RegisterFirstPartySetsComponent(ComponentUpdateService* cus) {
                 content::GetNetworkService()->SetFirstPartySets(raw_sets);
               })));
   installer->Register(cus, base::OnceClosure());
+}
+
+// static
+void FirstPartySetsComponentInstallerPolicy::WriteComponentForTesting(
+    const base::FilePath& install_dir,
+    base::StringPiece contents) {
+  CHECK(base::WriteFile(GetInstalledPath(install_dir), contents));
+
+  GetConfigPathInstance() = GetInstalledPath(install_dir);
 }
 
 }  // namespace component_updater

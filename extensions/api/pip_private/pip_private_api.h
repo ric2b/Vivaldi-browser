@@ -5,12 +5,9 @@
 
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
-#include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_event_histogram_value.h"
+#include "extensions/browser/extension_function.h"
 
-namespace extensions {
-
-
-}  // namespace extensions
+namespace extensions {}  // namespace extensions
 
 #endif  // EXTENSIONS_API_PIP_PRIVATE_PIP_PRIVATE_API_H_

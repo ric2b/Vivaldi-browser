@@ -12,7 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "components/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/gfx/image/image_skia.h"
@@ -79,6 +79,10 @@ inline IconEffects operator&=(IconEffects& a, uint32_t b) {
   return a;
 }
 
+static const int kInvalidIconResource = 0;
+
+apps::ScaleToSize GetScaleToSize(const gfx::ImageSkia& image_skia);
+
 // Returns a callback that converts compressed data to an ImageSkia.
 base::OnceCallback<void(std::vector<uint8_t> compressed_data)>
 CompressedDataToImageSkiaCallback(
@@ -111,8 +115,8 @@ void ArcActivityIconsToImageSkias(
     base::OnceCallback<void(const std::vector<gfx::ImageSkia>& icons)>
         callback);
 
-// TODO(crbug.com/1189994): Unify this function with IconLoadingPipeline class.
-// It's the same as IconLoadingPipeline::OnReadWebAppIcon().
+// TODO(crbug.com/1189994): Unify this function with AppIconLoader class.
+// It's the same as AppIconLoader::OnReadWebAppIcon().
 gfx::ImageSkia ConvertSquareBitmapsToImageSkia(
     const std::map<SquareSizePx, SkBitmap>& icon_bitmaps,
     IconEffects icon_effects,

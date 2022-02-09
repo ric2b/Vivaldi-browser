@@ -28,7 +28,7 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_table_info.h"
 #include "ui/accessibility/ax_tree_observer.h"
-#include "ui/gfx/transform.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace ui {
 
@@ -108,7 +108,7 @@ void CallIfAttributeValuesChanged(const std::vector<std::pair<K, V>>& pairs1,
 }
 
 bool IsCollapsed(const AXNode* node) {
-  return node && node->data().HasState(ax::mojom::State::kCollapsed);
+  return node && node->HasState(ax::mojom::State::kCollapsed);
 }
 
 }  // namespace
@@ -779,10 +779,10 @@ gfx::RectF AXTree::RelativeToTreeBoundsInternal(const AXNode* node,
 
     int scroll_x = 0;
     int scroll_y = 0;
-    if (container->data().GetIntAttribute(ax::mojom::IntAttribute::kScrollX,
-                                          &scroll_x) &&
-        container->data().GetIntAttribute(ax::mojom::IntAttribute::kScrollY,
-                                          &scroll_y)) {
+    if (container->GetIntAttribute(ax::mojom::IntAttribute::kScrollX,
+                                   &scroll_x) &&
+        container->GetIntAttribute(ax::mojom::IntAttribute::kScrollY,
+                                   &scroll_y)) {
       bounds.Offset(-scroll_x, -scroll_y);
     }
 
@@ -793,8 +793,7 @@ gfx::RectF AXTree::RelativeToTreeBoundsInternal(const AXNode* node,
     // Calculate the clipped bounds to determine offscreen state.
     gfx::RectF clipped = bounds;
     // If this node has the kClipsChildren attribute set, clip the rect to fit.
-    if (container->data().GetBoolAttribute(
-            ax::mojom::BoolAttribute::kClipsChildren)) {
+    if (container->GetBoolAttribute(ax::mojom::BoolAttribute::kClipsChildren)) {
       if (!intersection.IsEmpty()) {
         // We can simply clip it to the container.
         clipped = intersection;
@@ -821,8 +820,7 @@ gfx::RectF AXTree::RelativeToTreeBoundsInternal(const AXNode* node,
     if (clip_bounds)
       bounds = clipped;
 
-    if (container->data().GetBoolAttribute(
-            ax::mojom::BoolAttribute::kClipsChildren) &&
+    if (container->GetBoolAttribute(ax::mojom::BoolAttribute::kClipsChildren) &&
         intersection.IsEmpty() && !clipped.IsEmpty()) {
       // If it is offscreen with respect to its parent, and the node itself is
       // not empty, label it offscreen.
@@ -858,10 +856,9 @@ gfx::RectF AXTree::RelativeToTreeBoundsInternal(const AXNode* node,
 
     if (ancestor && allow_recursion) {
       bool ignore_offscreen;
-      bool allow_recursion = false;
       ancestor_bounds = RelativeToTreeBoundsInternal(
           ancestor, gfx::RectF(), &ignore_offscreen, clip_bounds,
-          allow_recursion);
+          /* allow_recursion = */ false);
 
       gfx::RectF original_bounds = original_node->data().relative_bounds.bounds;
       if (original_bounds.x() == 0 && original_bounds.y() == 0) {
@@ -2077,7 +2074,7 @@ void AXTree::RecursivelyPopulateOrderedSetItemsMap(
   // </div>
   // This optimization won't apply, we will end up populating items from all
   // levels.
-  if (ordered_set->data().role == local_parent->data().role &&
+  if (ordered_set->GetRole() == local_parent->GetRole() &&
       ordered_set != local_parent)
     return;
 
@@ -2102,10 +2099,10 @@ void AXTree::RecursivelyPopulateOrderedSetItemsMap(
     // Add child to |items_map_to_be_populated| if role matches with the role of
     // |ordered_set|. If role of node is kRadioButton, don't add items of other
     // roles, even if item role matches the role of |ordered_set|.
-    if (child->data().role == ax::mojom::Role::kComment ||
-        (original_node.data().role == ax::mojom::Role::kRadioButton &&
-         child->data().role == ax::mojom::Role::kRadioButton) ||
-        (original_node.data().role != ax::mojom::Role::kRadioButton &&
+    if (child->GetRole() == ax::mojom::Role::kComment ||
+        (original_node.GetRole() == ax::mojom::Role::kRadioButton &&
+         child->GetRole() == ax::mojom::Role::kRadioButton) ||
+        (original_node.GetRole() != ax::mojom::Role::kRadioButton &&
          child->SetRoleMatchesItemRole(ordered_set))) {
       // According to WAI-ARIA spec, some ordered set items do not support
       // hierarchical level while its ordered set container does. For example,
@@ -2178,9 +2175,9 @@ void AXTree::ComputeSetSizePosInSetAndCache(const AXNode& node,
 
   // Set items role::kComment and role::kRadioButton are special cases and do
   // not necessarily need to be contained in an ordered set.
-  if (node.data().role != ax::mojom::Role::kComment &&
-      node.data().role != ax::mojom::Role::kRadioButton &&
-      !node.SetRoleMatchesItemRole(ordered_set) && !IsSetLike(node.data().role))
+  if (node.GetRole() != ax::mojom::Role::kComment &&
+      node.GetRole() != ax::mojom::Role::kRadioButton &&
+      !node.SetRoleMatchesItemRole(ordered_set) && !IsSetLike(node.GetRole()))
     return;
 
   // Find all items within ordered_set and add to |items_map_to_be_populated|.
@@ -2191,7 +2188,7 @@ void AXTree::ComputeSetSizePosInSetAndCache(const AXNode& node,
   // would like it to inherit the SetSize from the kMenuListPopUp it wraps. To
   // do this, we treat the kMenuListPopUp as the ordered_set and eventually
   // assign its SetSize value to the kPopUpButton.
-  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+  if (node.GetRole() == ax::mojom::Role::kPopUpButton &&
       node.GetUnignoredChildCount() > 0) {
     // kPopUpButtons are only allowed to contain one kMenuListPopUp.
     // The single element is guaranteed to be a kMenuListPopUp because that is
@@ -2201,7 +2198,7 @@ void AXTree::ComputeSetSizePosInSetAndCache(const AXNode& node,
         items_map_to_be_populated.GetFirstOrderedSetContent();
     if (set_content && set_content->set_items_.size() == 1) {
       const AXNode* menu_list_popup = set_content->set_items_.front();
-      if (menu_list_popup->data().role == ax::mojom::Role::kMenuListPopup) {
+      if (menu_list_popup->GetRole() == ax::mojom::Role::kMenuListPopup) {
         items_map_to_be_populated.Clear();
         PopulateOrderedSetItemsMap(node, menu_list_popup,
                                    &items_map_to_be_populated);
@@ -2308,7 +2305,7 @@ void AXTree::ComputeSetSizePosInSetAndCacheHelper(
 }
 
 absl::optional<int> AXTree::GetPosInSet(const AXNode& node) {
-  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+  if (node.GetRole() == ax::mojom::Role::kPopUpButton &&
       node.GetUnignoredChildCount() == 0 &&
       node.HasIntAttribute(ax::mojom::IntAttribute::kPosInSet)) {
     return node.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet);
@@ -2343,7 +2340,7 @@ absl::optional<int> AXTree::GetPosInSet(const AXNode& node) {
 }
 
 absl::optional<int> AXTree::GetSetSize(const AXNode& node) {
-  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+  if (node.GetRole() == ax::mojom::Role::kPopUpButton &&
       node.GetUnignoredChildCount() == 0 &&
       node.HasIntAttribute(ax::mojom::IntAttribute::kSetSize)) {
     return node.GetIntAttribute(ax::mojom::IntAttribute::kSetSize);
@@ -2369,16 +2366,16 @@ absl::optional<int> AXTree::GetSetSize(const AXNode& node) {
   // If |node| is item-like, find its outerlying ordered set. Otherwise,
   // |node| is the ordered set.
   const AXNode* ordered_set = &node;
-  if (IsItemLike(node.data().role))
+  if (IsItemLike(node.GetRole()))
     ordered_set = node.GetOrderedSet();
   if (!ordered_set)
     return absl::nullopt;
 
   // For popup buttons that control a single element, inherit the controlled
   // item's SetSize. Skip this block if the popup button controls itself.
-  if (node.data().role == ax::mojom::Role::kPopUpButton) {
-    const auto& controls_ids = node.data().GetIntListAttribute(
-        ax::mojom::IntListAttribute::kControlsIds);
+  if (node.GetRole() == ax::mojom::Role::kPopUpButton) {
+    const auto& controls_ids =
+        node.GetIntListAttribute(ax::mojom::IntListAttribute::kControlsIds);
     if (controls_ids.size() == 1 && GetFromId(controls_ids[0]) &&
         controls_ids[0] != node.id()) {
       const AXNode& controlled_item = *GetFromId(controls_ids[0]);

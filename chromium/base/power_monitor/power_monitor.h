@@ -5,6 +5,8 @@
 #ifndef BASE_POWER_MONITOR_POWER_MONITOR_H_
 #define BASE_POWER_MONITOR_POWER_MONITOR_H_
 
+#include <memory>
+
 #include "base/base_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -30,6 +32,9 @@ class BASE_EXPORT PowerMonitor {
   // - no other PowerMonitor methods may be called on any thread while calling
   // Initialize(). |source| must not be nullptr.
   static void Initialize(std::unique_ptr<PowerMonitorSource> source);
+
+  PowerMonitor(const PowerMonitor&) = delete;
+  PowerMonitor& operator=(const PowerMonitor&) = delete;
 
   // Returns true if Initialize() has been called. Safe to call on any thread,
   // but must not be called while Initialize() or ShutdownForTesting() is being
@@ -128,8 +133,6 @@ class BASE_EXPORT PowerMonitor {
   scoped_refptr<ObserverListThreadSafe<PowerThermalObserver>>
       thermal_state_observers_;
   std::unique_ptr<PowerMonitorSource> source_;
-
-  DISALLOW_COPY_AND_ASSIGN(PowerMonitor);
 };
 
 }  // namespace base

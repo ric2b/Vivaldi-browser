@@ -103,6 +103,10 @@ void LayoutSVGInlineText::StyleDidChange(StyleDifference diff,
   }
 }
 
+bool LayoutSVGInlineText::IsFontFallbackValid() const {
+  return LayoutText::IsFontFallbackValid() && ScaledFont().IsFallbackValid();
+}
+
 void LayoutSVGInlineText::InvalidateSubtreeLayoutForFontUpdates() {
   NOT_DESTROYED();
   if (!IsFontFallbackValid()) {
@@ -114,8 +118,8 @@ void LayoutSVGInlineText::InvalidateSubtreeLayoutForFontUpdates() {
 
 InlineTextBox* LayoutSVGInlineText::CreateTextBox(int start, uint16_t length) {
   NOT_DESTROYED();
-  InlineTextBox* box =
-      new SVGInlineTextBox(LineLayoutItem(this), start, length);
+  InlineTextBox* box = MakeGarbageCollected<SVGInlineTextBox>(
+      LineLayoutItem(this), start, length);
   box->SetHasVirtualLogicalHeight();
   return box;
 }
@@ -189,7 +193,7 @@ FloatRect LayoutSVGInlineText::ObjectBoundingBox() const {
   for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
     const NGFragmentItem& item = *cursor.CurrentItem();
     if (item.Type() == NGFragmentItem::kSvgText)
-      bounds.Unite(item.ObjectBoundingBox());
+      bounds.Unite(cursor.Current().ObjectBoundingBox(cursor));
   }
   return bounds;
 }

@@ -91,6 +91,10 @@ content::WebUIDataSource* CreateWebRtcLogsUIHTMLSource() {
 class WebRtcLogsDOMHandler final : public WebUIMessageHandler {
  public:
   explicit WebRtcLogsDOMHandler(Profile* profile);
+
+  WebRtcLogsDOMHandler(const WebRtcLogsDOMHandler&) = delete;
+  WebRtcLogsDOMHandler& operator=(const WebRtcLogsDOMHandler&) = delete;
+
   ~WebRtcLogsDOMHandler() override;
 
   // WebUIMessageHandler implementation.
@@ -159,8 +163,6 @@ class WebRtcLogsDOMHandler final : public WebUIMessageHandler {
 
   // Factory for creating weak references to instances of this class.
   base::WeakPtrFactory<WebRtcLogsDOMHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(WebRtcLogsDOMHandler);
 };
 
 WebRtcLogsDOMHandler::WebRtcLogsDOMHandler(Profile* profile)
@@ -184,7 +186,7 @@ WebRtcLogsDOMHandler::~WebRtcLogsDOMHandler() {
 void WebRtcLogsDOMHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "requestWebRtcLogsList",
       base::BindRepeating(&WebRtcLogsDOMHandler::HandleRequestWebRtcLogs,
                           base::Unretained(this)));

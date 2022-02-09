@@ -13,15 +13,6 @@
 [submodule "chrome/installer/mac/third_party/xz/xz"]
 	path = chrome/installer/mac/third_party/xz/xz
 	url = ../deps/xz.git
-[submodule "chrome/test/data/perf/canvas_bench"]
-	path = chrome/test/data/perf/canvas_bench
-	url = ../canvas_bench.git
-[submodule "chrome/test/data/perf/frame_rate/content"]
-	path = chrome/test/data/perf/frame_rate/content
-	url = ../frame_rate/content.git
-[submodule "chrome/test/data/xr/webvr_info"]
-	path = chrome/test/data/xr/webvr_info
-	url = ../../external/github.com/toji/webvr.info.git
 [submodule "media/cdm/api"]
 	path = media/cdm/api
 	url = ../cdm.git
@@ -34,9 +25,9 @@
 [submodule "third_party/breakpad/breakpad"]
 	path = third_party/breakpad/breakpad
 	url = ../../breakpad/breakpad.git
-[submodule "third_party/catapult"]
-	path = third_party/catapult
-	url = ../../catapult.git
+[submodule "third_party/cast_core/public/src"]
+	path = third_party/cast_core/public/src
+	url = ../../cast_core/public.git
 [submodule "third_party/ced/src"]
 	path = third_party/ced/src
 	url = ../../external/github.com/google/compact_enc_det.git
@@ -61,9 +52,6 @@
 [submodule "third_party/devtools-frontend/src"]
 	path = third_party/devtools-frontend/src
 	url = ../../devtools/devtools-frontend.git
-[submodule "third_party/distributed_point_functions/src"]
-	path = third_party/distributed_point_functions/src
-	url = ../../external/github.com/google/distributed_point_functions.git
 [submodule "third_party/dom_distiller_js/dist"]
 	path = third_party/dom_distiller_js/dist
 	url = ../dom-distiller/dist.git
@@ -94,9 +82,6 @@
 [submodule "third_party/fp16/src"]
 	path = third_party/fp16/src
 	url = ../../external/github.com/Maratyszcza/FP16.git
-[submodule "third_party/freetype-testing/src"]
-	path = third_party/freetype-testing/src
-	url = ../../external/github.com/freetype/freetype2-testing.git
 [submodule "third_party/freetype/src"]
 	path = third_party/freetype/src
 	url = ../src/third_party/freetype2.git
@@ -136,9 +121,6 @@
 [submodule "third_party/leveldatabase/src"]
 	path = third_party/leveldatabase/src
 	url = ../../external/leveldb.git
-[submodule "third_party/libFuzzer/src"]
-	path = third_party/libFuzzer/src
-	url = ../llvm-project/compiler-rt/lib/fuzzer.git
 [submodule "third_party/libaddressinput/src"]
 	path = third_party/libaddressinput/src
 	url = ../../external/libaddressinput.git
@@ -172,9 +154,6 @@
 [submodule "third_party/libphonenumber/dist"]
 	path = third_party/libphonenumber/dist
 	url = ../../external/libphonenumber.git
-[submodule "third_party/libprotobuf-mutator/src"]
-	path = third_party/libprotobuf-mutator/src
-	url = ../../external/github.com/google/libprotobuf-mutator.git
 [submodule "third_party/libsrtp"]
 	path = third_party/libsrtp
 	url = ../deps/libsrtp.git
@@ -190,9 +169,6 @@
 [submodule "third_party/libyuv"]
 	path = third_party/libyuv
 	url = ../../libyuv/libyuv.git
-[submodule "third_party/lighttpd"]
-	path = third_party/lighttpd
-	url = ../deps/lighttpd.git
 [submodule "third_party/lss"]
 	path = third_party/lss
 	url = ../../linux-syscall-support.git
@@ -214,6 +190,9 @@
 [submodule "third_party/openh264/src"]
 	path = third_party/openh264/src
 	url = ../../external/github.com/cisco/openh264.git
+[submodule "third_party/openxr/src"]
+	path = third_party/openxr/src
+	url = ../../external/github.com/KhronosGroup/OpenXR-SDK.git
 [submodule "third_party/ots/src"]
 	path = third_party/ots/src
 	url = ../../external/github.com/khaledhosny/ots.git
@@ -283,9 +262,6 @@
 [submodule "third_party/wayland/src"]
 	path = third_party/wayland/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland.git
-[submodule "third_party/webdriver/pylib"]
-	path = third_party/webdriver/pylib
-	url = ../../external/github.com/SeleniumHQ/selenium/py.git
 [submodule "third_party/webgl/src"]
 	path = third_party/webgl/src
 	url = ../../external/khronosgroup/webgl.git
@@ -304,12 +280,6 @@
 [submodule "third_party/xdg-utils"]
 	path = third_party/xdg-utils
 	url = ../deps/xdg-utils.git
-[submodule "tools/page_cycler/acid3"]
-	path = tools/page_cycler/acid3
-	url = ../deps/acid3.git
-[submodule "tools/swarming_client"]
-	path = tools/swarming_client
-	url = ../../infra/luci/client-py.git
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
@@ -325,3 +295,9 @@
 [submodule "third_party/vulkan-deps"]
 	path = third_party/vulkan-deps
 	url = ../../vulkan-deps.git
+[submodule "third_party/catapult"]
+	path = third_party/catapult
+	url = ../../catapult.git
+[submodule "third_party/distributed_point_functions/src"]
+	path = third_party/distributed_point_functions/src
+	url = ../../external/github.com/google/distributed_point_functions.git

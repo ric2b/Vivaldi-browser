@@ -16,8 +16,8 @@ namespace vivaldi {
 namespace skia_utils {
 
 enum class ImageFormat {
-    kPNG,
-    kJPEG,
+  kPNG,
+  kJPEG,
 };
 
 SkBitmap SmartCropAndSize(const SkBitmap& capture,

@@ -11,6 +11,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/unguessable_token.h"
+#include "build/build_config.h"
 #include "media/base/overlay_info.h"
 #include "media/base/supported_video_decoder_config.h"
 #include "media/media_buildflags.h"
@@ -42,6 +43,9 @@ class VideoDecoder;
 // the media components.
 class MEDIA_MOJO_EXPORT MojoMediaClient {
  public:
+  using SupportedVideoDecoderConfigsCallback =
+      base::OnceCallback<void(SupportedVideoDecoderConfigs)>;
+
   // Called before the host application is scheduled to quit.
   // The application message loop is still valid at this point, so all clean
   // up tasks requiring the message loop must be completed before returning.
@@ -53,8 +57,8 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  virtual std::vector<SupportedVideoDecoderConfig>
-  GetSupportedVideoDecoderConfigs();
+  virtual void GetSupportedVideoDecoderConfigs(
+      SupportedVideoDecoderConfigsCallback callback);
 
   virtual VideoDecoderType GetDecoderImplementationType();
 
@@ -91,6 +95,7 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   virtual std::unique_ptr<Renderer> CreateMediaFoundationRenderer(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       mojom::FrameInterfaceFactory* frame_interfaces,
+      mojo::PendingRemote<mojom::MediaLog> media_log_remote,
       mojo::PendingReceiver<mojom::MediaFoundationRendererExtension>
           renderer_extension_receiver);
 #endif  // defined(OS_WIN)

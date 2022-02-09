@@ -12,6 +12,22 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
+TEST(VideoEncodeAcceleratorSupportedProfile, RoundTrip) {
+  ::media::VideoEncodeAccelerator::SupportedProfile input;
+  input.profile = VP9PROFILE_PROFILE0;
+  input.min_resolution = gfx::Size(64, 64);
+  input.max_resolution = gfx::Size(4096, 4096);
+  input.max_framerate_numerator = 30;
+  input.max_framerate_denominator = 1;
+  input.scalability_modes.push_back(::media::SVCScalabilityMode::kL1T3);
+  input.scalability_modes.push_back(::media::SVCScalabilityMode::kL3T3Key);
+
+  ::media::VideoEncodeAccelerator::SupportedProfile output;
+  ASSERT_TRUE(mojo::test::SerializeAndDeserialize<
+              mojom::VideoEncodeAcceleratorSupportedProfile>(input, output));
+  EXPECT_EQ(input, output);
+}
+
 TEST(VideoEncoderInfoStructTraitTest, RoundTrip) {
   ::media::VideoEncoderInfo input;
   input.implementation_name = "FakeVideoEncodeAccelerator";
@@ -104,7 +120,7 @@ TEST(BitstreamBufferMetadataTraitTest, RoundTrip) {
   ::media::BitstreamBufferMetadata input_metadata;
   input_metadata.payload_size_bytes = 1234;
   input_metadata.key_frame = true;
-  input_metadata.timestamp = base::TimeDelta::FromMilliseconds(123456);
+  input_metadata.timestamp = base::Milliseconds(123456);
   ::media::BitstreamBufferMetadata output_metadata;
   ASSERT_TRUE(
       mojo::test::SerializeAndDeserialize<mojom::BitstreamBufferMetadata>(

@@ -13,13 +13,18 @@
 
 #include "base/check_op.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/url_handler_info.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkColor.h"
+
+namespace apps {
+struct ShareTarget;
+}  // namespace apps
 
 namespace web_app {
 
@@ -100,9 +105,20 @@ class WebAppRegistrar : public ProfileManagerObserver {
       ExternalInstallSource install_source) const;
 
   // Returns true if the web app with the |app_id| contains |protocol_scheme|
-  // as one of its approved launch protocols.
-  bool IsApprovedLaunchProtocol(const AppId& app_id,
-                                std::string protocol_scheme) const;
+  // as one of its allowed launch protocols.
+  bool IsAllowedLaunchProtocol(const AppId& app_id,
+                               std::string protocol_scheme) const;
+
+  // Returns true if the web app with the |app_id| contains |protocol_scheme|
+  // as one of its disallowed launch protocols.
+  bool IsDisallowedLaunchProtocol(const AppId& app_id,
+                                  std::string protocol_scheme) const;
+
+  // Gets all allowed launch protocols from all installed apps.
+  base::flat_set<std::string> GetAllAllowedLaunchProtocols() const;
+
+  // Gets all disallowed launch protocols from all installed apps.
+  base::flat_set<std::string> GetAllDisallowedLaunchProtocols() const;
 
   // Count a number of all apps which are installed by user (non-default).
   // Requires app registry to be in a ready state.
@@ -113,6 +129,7 @@ class WebAppRegistrar : public ProfileManagerObserver {
   std::string GetAppDescription(const AppId& app_id) const;
   absl::optional<SkColor> GetAppThemeColor(const AppId& app_id) const;
   absl::optional<SkColor> GetAppBackgroundColor(const AppId& app_id) const;
+  absl::optional<SkColor> GetAppDarkModeThemeColor(const AppId& app_id) const;
   const GURL& GetAppStartUrl(const AppId& app_id) const;
   absl::optional<std::string> GetAppManifestId(const AppId& app_id) const;
   const std::string* GetAppLaunchQueryParams(const AppId& app_id) const;
@@ -144,8 +161,7 @@ class WebAppRegistrar : public ProfileManagerObserver {
 
   // Returns the "icons" field from the app manifest, use |WebAppIconManager| to
   // load icon bitmap data.
-  std::vector<WebApplicationIconInfo> GetAppIconInfos(
-      const AppId& app_id) const;
+  std::vector<apps::IconInfo> GetAppIconInfos(const AppId& app_id) const;
 
   // Represents which icon sizes we successfully downloaded from the IconInfos.
   SortedSizesPx GetAppDownloadedIconSizesAny(const AppId& app_id) const;
@@ -215,15 +231,13 @@ class WebAppRegistrar : public ProfileManagerObserver {
   // Returns whether the app should be opened in tabbed window mode.
   bool IsTabbedWindowModeEnabled(const AppId& app_id) const;
 
-  // TODO(crbug.com/897314): This can be removed once feature has launched.
-  bool IsInExperimentalTabbedWindowMode(const AppId& app_id) const;
-
   void AddObserver(AppRegistrarObserver* observer);
   void RemoveObserver(AppRegistrarObserver* observer);
 
   void NotifyWebAppInstalled(const AppId& app_id);
   void NotifyWebAppManifestUpdated(const AppId& app_id,
                                    base::StringPiece old_name);
+  void NotifyWebAppProtocolSettingsChanged();
   void NotifyWebAppsWillBeUpdatedFromSync(
       const std::vector<const WebApp*>& new_apps_state);
   void NotifyWebAppUninstalled(const AppId& app_id);
@@ -232,6 +246,8 @@ class WebAppRegistrar : public ProfileManagerObserver {
                                                 bool is_locally_installed);
   void NotifyWebAppDisabledStateChanged(const AppId& app_id, bool is_disabled);
   void NotifyWebAppsDisabledModeChanged();
+  void NotifyWebAppLastBadgingTimeChanged(const AppId& app_id,
+                                          const base::Time& time);
   void NotifyWebAppLastLaunchTimeChanged(const AppId& app_id,
                                          const base::Time& time);
   void NotifyWebAppInstallTimeChanged(const AppId& app_id,
@@ -241,8 +257,6 @@ class WebAppRegistrar : public ProfileManagerObserver {
   void NotifyWebAppInstalledWithOsHooks(const AppId& app_id);
   void NotifyWebAppUserDisplayModeChanged(const AppId& app_id,
                                           DisplayMode user_display_mode);
-  void NotifyWebAppExperimentalTabbedWindowModeChanged(const AppId& app_id,
-                                                       bool enabled);
 
   // ProfileManagerObserver:
   void OnProfileMarkedForPermanentDeletion(

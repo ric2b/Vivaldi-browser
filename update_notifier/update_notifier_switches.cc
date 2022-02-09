@@ -4,6 +4,9 @@
 
 namespace vivaldi_update_notifier {
 
+const char kAutoCheck[] = "auto-check";
+const char kBrowserStartup[] = "browser-startup";
+
 // Cryptic on purpose; it is internal.
 const char kCheckForUpdates[] = "c";
 

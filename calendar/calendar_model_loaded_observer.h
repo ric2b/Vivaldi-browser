@@ -21,12 +21,13 @@ namespace calendar {
 class CalendarModelLoadedObserver : public CalendarModelObserver {
  public:
   CalendarModelLoadedObserver();
+  CalendarModelLoadedObserver(const CalendarModelLoadedObserver&) = delete;
+  CalendarModelLoadedObserver& operator=(const CalendarModelLoadedObserver&) =
+      delete;
 
  private:
   void CalendarModelLoaded(CalendarService* service) override;
   void CalendarModelBeingDeleted(CalendarService* service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(CalendarModelLoadedObserver);
 };
 
 }  // namespace calendar

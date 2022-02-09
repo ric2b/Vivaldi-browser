@@ -30,7 +30,6 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
   void RegisterBrowserInterfaceBindersForFrame(
       content::RenderFrameHost* render_frame_host,
       mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
-
 };
 
 #endif  // EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_

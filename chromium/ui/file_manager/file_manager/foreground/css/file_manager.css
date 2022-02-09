@@ -538,7 +538,7 @@ html.pointer-active .dialog-header.files-ng cr-button:not(:active):hover {
   width: 48px;
 }
 
-.dialog-header.files-ng button[menu-shown] {
+.dialog-header.files-ng *[menu-shown] {
   background-color: rgba(0, 0, 0, 12%);
 }
 
@@ -695,16 +695,6 @@ html[dir='rtl'] .dialog-header button.icon-button > files-toggle-ripple {
 
 .dialog-header.files-ng #search-button > .icon {
   -webkit-mask-image: url(../images/files/ui/search.svg);
-}
-
-.dialog-header.files-ng #share-menu-button > .icon {
-  -webkit-mask-image: url(../images/files/ui/share_ng.svg);
-  height: 48px;
-  margin-inline-end: -7px;
-  margin-inline-start: -7px;
-  margin-top: -7px;
-  position: absolute;
-  width: 48px;
 }
 
 .dialog-header.files-ng #sharesheet-button > .icon {
@@ -1216,7 +1206,7 @@ body.files-ng .dialog-footer .select {
   background: -webkit-image-set(
      url(../images/common/disclosure_arrow_dk_grey_down.png) 1x,
      url(../images/common/2x/disclosure_arrow_dk_grey_down.png) 2x) no-repeat
-     right transparent;
+     calc(100% - 10px) transparent;
   background-color: var(--google-grey-100);
   border: 0;
   border-radius: 4px;
@@ -1226,7 +1216,7 @@ body.files-ng .dialog-footer .select {
   min-height: 32px;
   min-width: 104px;
   outline: none;
-  padding: 0 12px 0 16px;
+  padding: 0 36px 0 16px;
   position: relative;
 }
 
@@ -2293,23 +2283,13 @@ body.check-select #list-container list li[selected] .detail-thumbnail
   opacity: 0;
 }
 
-#share-menu cr-menu-item,
-#share-sub-menu cr-menu-item,
 #tasks-menu cr-menu-item:not(.change-default) {
   background-position: left 10px center;
   padding-inline-start: 32px;
 }
 
-html[dir='rtl'] #share-menu cr-menu-item,
-html[dir='rtl'] #share-sub-menu cr-menu-item,
 html[dir='rtl'] #tasks-menu cr-menu-item:not(.change-default) {
   background-position: right 10px center;
-}
-
-#share-menu cr-menu-item[command='#share'] {
-  background-image: -webkit-image-set(
-      url(../images/files/ui/person_add.png) 1x,
-      url(../images/files/ui/2x/person_add.png) 2x);
 }
 
 #action-bar {
@@ -2966,4 +2946,36 @@ html.focus-outline-visible .file-type-filter-button:focus {
 cr-input:not(:defined),
 files-tooltip:not(:defined) {
   display: none;
+}
+
+/*
+ * Banner styles.
+ */
+#banners > * {
+  align-items: center;
+  display: flex !important;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 300ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 150ms ease 50ms;
+  visibility: hidden;
+}
+
+#banners > *:not([hidden]) {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(var(--google-grey-800-rgb), 0.3),
+              0 1px 3px 1px rgba(var(--google-grey-800-rgb), 0.15);
+  height: auto;
+  margin-bottom: 4px;
+  margin-inline-end: 16px;
+  margin-inline-start: 0;
+  margin-top: 16px;
+  max-height: 300px;
+  min-height: 46px;
+  opacity: 1;
+  padding-bottom: 12px;
+  padding-inline-end: 8px;
+  padding-inline-start: 0;
+  padding-top: 12px;
+  visibility: visible;
 }

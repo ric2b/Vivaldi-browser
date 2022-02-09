@@ -26,9 +26,8 @@ class VivaldiWebViewWithGuestFunction : public ExtensionFunction {
 
   WebViewGuest* guest_ = nullptr;
 
-private:
+ private:
   bool PreRunValidation(std::string* error) override;
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWebViewWithGuestFunction);
 };
 
 class WebViewPrivateGetThumbnailFunction
@@ -56,8 +55,6 @@ class WebViewPrivateGetThumbnailFunction
   // The format (JPEG vs PNG) of the resulting image.  Set in RunImpl().
   ::vivaldi::skia_utils::ImageFormat image_format_ =
       ::vivaldi::skia_utils::ImageFormat::kJPEG;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetThumbnailFunction);
 };
 
 class WebViewPrivateShowPageInfoFunction
@@ -70,7 +67,6 @@ class WebViewPrivateShowPageInfoFunction
  private:
   ~WebViewPrivateShowPageInfoFunction() override = default;
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateShowPageInfoFunction);
 };
 
 class WebViewPrivateSetIsFullscreenFunction
@@ -78,12 +74,11 @@ class WebViewPrivateSetIsFullscreenFunction
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setIsFullscreen",
                              WEBVIEWINTERNAL_SETISFULLSCREEN)
-  WebViewPrivateSetIsFullscreenFunction()= default;
+  WebViewPrivateSetIsFullscreenFunction() = default;
 
  private:
   ~WebViewPrivateSetIsFullscreenFunction() override = default;
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetIsFullscreenFunction);
 };
 
 class WebViewPrivateGetPageHistoryFunction
@@ -96,25 +91,6 @@ class WebViewPrivateGetPageHistoryFunction
  private:
   ~WebViewPrivateGetPageHistoryFunction() override = default;
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetPageHistoryFunction);
-};
-
-class WebViewPrivateGetFocusedElementInfoFunction
-  : public VivaldiWebViewWithGuestFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
-                             WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
-  WebViewPrivateGetFocusedElementInfoFunction();
-
- private:
-  ~WebViewPrivateGetFocusedElementInfoFunction() override;
-  ResponseAction Run() override;
-  void FocusedElementInfoReceived(const std::string& tagname,
-                                  const std::string& type,
-                                  bool editable,
-                                  const std::string& role);
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
 };
 
 class WebViewPrivateAllowBlockedInsecureContentFunction
@@ -127,7 +103,6 @@ class WebViewPrivateAllowBlockedInsecureContentFunction
  private:
   ~WebViewPrivateAllowBlockedInsecureContentFunction() override = default;
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
 };
 
 class WebViewPrivateSendRequestFunction
@@ -140,7 +115,6 @@ class WebViewPrivateSendRequestFunction
  private:
   ~WebViewPrivateSendRequestFunction() override = default;
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSendRequestFunction);
 };
 
 }  // namespace vivaldi

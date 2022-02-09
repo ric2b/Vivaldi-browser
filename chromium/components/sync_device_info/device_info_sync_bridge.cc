@@ -16,6 +16,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
@@ -32,7 +33,6 @@
 namespace syncer {
 
 using base::Time;
-using base::TimeDelta;
 using sync_pb::DeviceInfoSpecifics;
 using sync_pb::FeatureSpecificFields;
 using sync_pb::ModelTypeState;
@@ -46,7 +46,7 @@ using ClientIdToSpecifics =
 
 namespace {
 
-constexpr base::TimeDelta kExpirationThreshold = base::TimeDelta::FromDays(56);
+constexpr base::TimeDelta kExpirationThreshold = base::Days(56);
 
 // Find the timestamp for the last time this |device_info| was edited.
 Time GetLastUpdateTime(const DeviceInfoSpecifics& specifics) {
@@ -57,14 +57,15 @@ Time GetLastUpdateTime(const DeviceInfoSpecifics& specifics) {
   }
 }
 
-TimeDelta GetPulseIntervalFromSpecifics(const DeviceInfoSpecifics& specifics) {
+base::TimeDelta GetPulseIntervalFromSpecifics(
+    const DeviceInfoSpecifics& specifics) {
   if (specifics.has_pulse_interval_in_minutes()) {
-    return TimeDelta::FromMinutes(specifics.pulse_interval_in_minutes());
+    return base::Minutes(specifics.pulse_interval_in_minutes());
   }
   // If the interval is not set on the specifics it must be an old device, so we
   // fall back to the value used by old devices. We really do not want to use
   // the default int value of 0.
-  return TimeDelta::FromDays(1);
+  return base::Days(1);
 }
 
 absl::optional<DeviceInfo::SharingInfo> SpecificsToSharingInfo(
@@ -463,9 +464,14 @@ absl::optional<ModelError> DeviceInfoSyncBridge::ApplySyncChanges(
     device_info_synced_callback_list_.clear();
   }
 
-  if (has_tombstone_for_local_device && !reuploaded_on_tombstone_) {
-    SendLocalData();
-    reuploaded_on_tombstone_ = true;
+  if (has_tombstone_for_local_device) {
+    const bool should_reupload_device_info = !reuploaded_on_tombstone_;
+    base::UmaHistogramBoolean("Sync.LocalDeviceInfoDeletionReuploaded",
+                              should_reupload_device_info);
+    if (should_reupload_device_info) {
+      SendLocalData();
+      reuploaded_on_tombstone_ = true;
+    }
   }
 
   return absl::nullopt;
@@ -549,9 +555,9 @@ std::unique_ptr<DeviceInfo> DeviceInfoSyncBridge::GetDeviceInfo(
 std::vector<std::unique_ptr<DeviceInfo>>
 DeviceInfoSyncBridge::GetAllDeviceInfo() const {
   std::vector<std::unique_ptr<DeviceInfo>> list;
-  for (auto iter = all_data_.begin(); iter != all_data_.end(); ++iter) {
-    if (IsChromeClient(*iter->second)) {
-      list.push_back(SpecificsToModel(*iter->second));
+  for (const auto& id_and_specifics : all_data_) {
+    if (IsChromeClient(*id_and_specifics.second)) {
+      list.push_back(SpecificsToModel(*id_and_specifics.second));
     }
   }
   return list;
@@ -775,7 +781,7 @@ bool DeviceInfoSyncBridge::ReconcileLocalAndStored() {
       return false;
     }
 
-    const TimeDelta pulse_delay(DeviceInfoUtil::CalculatePulseDelay(
+    const base::TimeDelta pulse_delay(DeviceInfoUtil::CalculatePulseDelay(
         GetLastUpdateTime(*iter->second), Time::Now()));
     if (!pulse_delay.is_zero()) {
       pulse_timer_.Start(FROM_HERE, pulse_delay,

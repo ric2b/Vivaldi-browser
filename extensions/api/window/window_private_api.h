@@ -22,7 +22,6 @@ class VivaldiWindowsAPI {
 
   // Is closing because a profile is closing or not?
   static bool IsWindowClosingBecauseProfileClose(Browser* browser);
-
 };
 
 class WindowPrivateCreateFunction : public ExtensionFunction {
@@ -39,8 +38,6 @@ class WindowPrivateCreateFunction : public ExtensionFunction {
 
   // Fired when the ui-document has loaded. |Window| is now valid.
   void OnAppUILoaded(VivaldiBrowserWindow* window);
-
-  DISALLOW_COPY_AND_ASSIGN(WindowPrivateCreateFunction);
 };
 
 class WindowPrivateGetCurrentIdFunction : public ExtensionFunction {
@@ -55,14 +52,11 @@ class WindowPrivateGetCurrentIdFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowPrivateGetCurrentIdFunction);
 };
 
 class WindowPrivateSetStateFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("windowPrivate.setState",
-                             WINDOW_PRIVATE_SET_STATE)
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.setState", WINDOW_PRIVATE_SET_STATE)
 
   WindowPrivateSetStateFunction() = default;
 
@@ -71,8 +65,21 @@ class WindowPrivateSetStateFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
+};
 
-  DISALLOW_COPY_AND_ASSIGN(WindowPrivateSetStateFunction);
+class WindowPrivateGetFocusedElementInfoFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.getFocusedElementInfo",
+                             WINDOW_PRIVATE_GET_FOCUSED_ELEMENT_INFO)
+  WindowPrivateGetFocusedElementInfoFunction() = default;
+
+ private:
+  ~WindowPrivateGetFocusedElementInfoFunction() override = default;
+  ResponseAction Run() override;
+  void FocusedElementInfoReceived(const std::string& tag_name,
+                                  const std::string& type,
+                                  bool editable,
+                                  const std::string& role);
 };
 
 }  // namespace extensions

@@ -104,6 +104,8 @@ class NoteNode : public ui::TreeNode<NoteNode> {
            const base::GUID& guid,
            Type type,
            bool is_permanent_node);
+  NoteNode(const NoteNode&) = delete;
+  NoteNode& operator=(const NoteNode&) = delete;
 
  private:
   friend class NotesModel;
@@ -128,8 +130,6 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   int64_t id_;
 
   const bool is_permanent_node_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteNode);
 };
 
 // Node used for the permanent folders (excluding the root).
@@ -151,7 +151,8 @@ class PermanentNoteNode : public NoteNode {
                     Type type,
                     const base::GUID& guid,
                     const std::u16string& title);
-  DISALLOW_COPY_AND_ASSIGN(PermanentNoteNode);
+  PermanentNoteNode(const PermanentNoteNode&) = delete;
+  PermanentNoteNode& operator=(const PermanentNoteNode&) = delete;
 };
 
 }  // namespace vivaldi

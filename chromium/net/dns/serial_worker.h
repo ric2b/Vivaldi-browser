@@ -36,6 +36,9 @@ class NET_EXPORT_PRIVATE SerialWorker
  public:
   SerialWorker();
 
+  SerialWorker(const SerialWorker&) = delete;
+  SerialWorker& operator=(const SerialWorker&) = delete;
+
   // Unless already scheduled, post |DoWork| to ThreadPool.
   // Made virtual to allow mocking.
   virtual void WorkNow();
@@ -43,7 +46,7 @@ class NET_EXPORT_PRIVATE SerialWorker
   // Stop scheduling jobs.
   void Cancel();
 
-  bool IsCancelled() const { return state_ == CANCELLED; }
+  bool IsCancelled() const { return state_ == State::kCancelled; }
 
  protected:
   friend class base::DeleteHelper<SerialWorker>;
@@ -62,11 +65,11 @@ class NET_EXPORT_PRIVATE SerialWorker
   SEQUENCE_CHECKER(sequence_checker_);
 
  private:
-  enum State {
-    CANCELLED = -1,
-    IDLE = 0,
-    WORKING,  // |DoWorkJob| posted to ThreadPool, until |OnWorkJobFinished|
-    PENDING,  // |WorkNow| while WORKING, must re-do work
+  enum class State {
+    kCancelled = -1,
+    kIdle = 0,
+    kWorking,  // |DoWorkJob| posted to ThreadPool, until |OnWorkJobFinished|
+    kPending,  // |WorkNow| while WORKING, must re-do work
   };
 
   // Called on the the origin thread after |DoWork| completes.
@@ -75,8 +78,6 @@ class NET_EXPORT_PRIVATE SerialWorker
   State state_;
 
   base::WeakPtrFactory<SerialWorker> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SerialWorker);
 };
 
 }  // namespace net

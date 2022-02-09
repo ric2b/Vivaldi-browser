@@ -44,6 +44,10 @@ class WebViewPermissionHelper
  public:
   explicit WebViewPermissionHelper(WebViewGuest* guest);
   explicit WebViewPermissionHelper(GuestViewBase* guest);
+
+  WebViewPermissionHelper(const WebViewPermissionHelper&) = delete;
+  WebViewPermissionHelper& operator=(const WebViewPermissionHelper&) = delete;
+
   ~WebViewPermissionHelper() override;
   using PermissionResponseCallback =
       base::OnceCallback<void(bool /* allow */,
@@ -154,8 +158,6 @@ class WebViewPermissionHelper
   bool default_media_access_permission_;
 
   base::WeakPtrFactory<WebViewPermissionHelper> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewPermissionHelper);
 };
 
 }  // namespace extensions

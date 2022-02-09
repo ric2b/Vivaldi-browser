@@ -22,6 +22,8 @@ class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
  public:
   WMFVideoDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~WMFVideoDecoder() override;
+  WMFVideoDecoder(const WMFVideoDecoder&) = delete;
+  WMFVideoDecoder& operator=(const WMFVideoDecoder&) = delete;
 
   // VideoDecoder implementation.
   void Initialize(const VideoDecoderConfig& config,
@@ -36,8 +38,6 @@ class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
 
  private:
   WMFDecoderImpl<DemuxerStream::VIDEO> impl_;
-
-  DISALLOW_COPY_AND_ASSIGN(WMFVideoDecoder);
 };
 
 }  // namespace media

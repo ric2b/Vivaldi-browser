@@ -2,28 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {
+  Effect,  // eslint-disable-line no-unused-vars
+} from '/media/capture/video/chromeos/mojom/camera_app.mojom-webui.js';
+
 import {bitmapToJpegBlob} from '../util.js';
 import {WaitableEvent} from '../waitable_event.js';
 
 import {DeviceOperator} from './device_operator.js';
 import {closeEndpoint} from './util.js';
-
-/**
- * Extended PhotoCapabilities type used by Chrome OS HAL3 VCD.
- * @extends {PhotoCapabilities}
- * @record
- */
-export class CrosPhotoCapabilities {
-  /**
-   * @public
-   */
-  constructor() {
-    /**
-     * @type {!Array<string>}
-     */
-    this.supportedEffects;
-  }
-}
 
 /**
  * Creates the wrapper of JS image-capture and Mojo image-capture.
@@ -51,26 +38,11 @@ export class CrosImageCapture {
 
   /**
    * Gets the photo capabilities with the available options/effects.
-   * @return {!Promise<!PhotoCapabilities|!CrosPhotoCapabilities>} Promise
+   * @return {!Promise<!PhotoCapabilities>} Promise
    *     for the result.
    */
   async getPhotoCapabilities() {
-    const deviceOperator = await DeviceOperator.getInstance();
-    if (!deviceOperator) {
-      return this.capture_.getPhotoCapabilities();
-    }
-
-    const supportedEffects = [cros.mojom.Effect.NO_EFFECT];
-    const isPortraitModeSupported =
-        await deviceOperator.isPortraitModeSupported(this.deviceId_);
-    if (isPortraitModeSupported) {
-      supportedEffects.push(cros.mojom.Effect.PORTRAIT_MODE);
-    }
-    const baseCapabilities = await this.capture_.getPhotoCapabilities();
-
-    const extendedCapabilities = /** @type{!CrosPhotoCapabilities} */ (
-        Object.assign({}, baseCapabilities, {supportedEffects}));
-    return extendedCapabilities;
+    return this.capture_.getPhotoCapabilities();
   }
 
   /**
@@ -81,28 +53,19 @@ export class CrosImageCapture {
    * received the shutter event.
    * @param {!PhotoSettings} photoSettings Photo settings for ImageCapture's
    *     takePhoto().
-   * @param {!Array<!cros.mojom.Effect>=} photoEffects Photo effects to be
+   * @param {!Array<!Effect>=} photoEffects Photo effects to be
    *     applied.
    * @return {!Promise<!Array<!Promise<!Blob>>>} A promise of the array
    *     containing promise of each blob result.
    */
   async takePhoto(photoSettings, photoEffects = []) {
-    /** @type {!Array<!Promise<!Blob>>} */
-    const takes = [];
     const deviceOperator = await DeviceOperator.getInstance();
     if (deviceOperator === null && photoEffects.length > 0) {
       throw new Error('Applying effects is not supported on this device');
     }
 
-    for (const effect of photoEffects) {
-      const take = (async () => {
-        const {data, mimeType} =
-            await deviceOperator.setReprocessOption(this.deviceId_, effect);
-        return new Blob([new Uint8Array(data)], {type: mimeType});
-      })();
-      takes.push(take);
-    }
-
+    const takes =
+        await deviceOperator.setReprocessOptions(this.deviceId_, photoEffects);
     if (deviceOperator !== null) {
       const onShutterDone = new WaitableEvent();
       const shutterObserver =

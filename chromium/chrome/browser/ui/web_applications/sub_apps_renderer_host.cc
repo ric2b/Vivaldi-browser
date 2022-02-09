@@ -8,7 +8,7 @@
 
 #include "base/check.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 
@@ -19,7 +19,7 @@ namespace web_app {
 SubAppsRendererHost::SubAppsRendererHost(
     content::RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<blink::mojom::SubAppsProvider> receiver)
-    : DocumentServiceBase(render_frame_host, std::move(receiver)) {}
+    : DocumentService(render_frame_host, std::move(receiver)) {}
 
 SubAppsRendererHost::~SubAppsRendererHost() = default;
 
@@ -38,7 +38,7 @@ void SubAppsRendererHost::CreateIfAllowed(
   }
 
   // The object is bound to the lifetime of |render_frame_host| and the mojo
-  // connection. See DocumentServiceBase for details.
+  // connection. See DocumentService for details.
   new SubAppsRendererHost(render_frame_host, std::move(receiver));
 }
 

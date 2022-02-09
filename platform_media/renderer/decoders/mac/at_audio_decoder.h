@@ -39,6 +39,8 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
 
   explicit ATAudioDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~ATAudioDecoder() override;
+  ATAudioDecoder(const ATAudioDecoder&) = delete;
+  ATAudioDecoder& operator=(const ATAudioDecoder&) = delete;
 
   // AudioDecoder implementation.
   AudioDecoderType GetDecoderType() const override;
@@ -66,12 +68,11 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
   std::unique_ptr<FormatDetection> format_detection_;
   AudioStreamBasicDescription output_format_;
   AudioConverterRef converter_ = nullptr;
-  std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
+  std::deque<DecoderBuffer::TimeInfo> queued_input_timing_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;
   OutputCB output_cb_;
 
   DebugBufferLogger debug_buffer_logger_;
-  DISALLOW_COPY_AND_ASSIGN(ATAudioDecoder);
 };
 
 }  // namespace media

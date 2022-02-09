@@ -138,7 +138,7 @@ PageActionsSetScriptOverrideForTabFunction::RunWithService(
     page_actions::Service* service) {
   namespace Results = vivaldi::page_actions::SetScriptOverrideForTab::Results;
   using vivaldi::page_actions::SetScriptOverrideForTab::Params;
-  std::unique_ptr<Params> params(Params::Create(*args_));
+  std::unique_ptr<Params> params(Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -160,7 +160,7 @@ PageActionsGetScriptOverridesForTabFunction::RunWithService(
     page_actions::Service* service) {
   namespace Results = vivaldi::page_actions::GetScriptOverridesForTab::Results;
   using vivaldi::page_actions::GetScriptOverridesForTab::Params;
-  std::unique_ptr<Params> params(Params::Create(*args_));
+  std::unique_ptr<Params> params(Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 

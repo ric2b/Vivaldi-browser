@@ -17,5 +17,4 @@ std::string getSystemHighlightColor();
 
 }  // namespace vivaldi
 
-
 #endif  // PREFS_VIVALDI_BROWSERPREFS_UTIL_H_

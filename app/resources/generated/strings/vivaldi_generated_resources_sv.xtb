@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Cacheminne för bilder</translation>
 <translation id="1601560923496285236">Verkställ</translation>
 <translation id="1603914832182249871">(Privat fönster)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Filbeskrielser</translation>
 <translation id="1682548588986054654">Nytt inkognitofönster</translation>
-<translation id="1706625117072057435">Zoomnivåer</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
 <translation id="1723824996674794290">&amp;Nytt fönster</translation>
-<translation id="1725149567830788547">Visa &amp;kontroller</translation>
 <translation id="1729533290416704613">Det styr också vilken sida som visas när du söker i adressfältet.</translation>
 <translation id="174123615272205933">Anpassade</translation>
 <translation id="1744108098763830590">bakgrundssida</translation>
@@ -89,11 +86,9 @@
 <translation id="2445081178310039857">Tilläggets rotkatalog måste anges.</translation>
 <translation id="2470702053775288986">Tillägg som inte stöds har inaktiverats</translation>
 <translation id="2476578072172137802">Inställningar för webbplatsen</translation>
-<translation id="2482878487686419369">Aviseringar</translation>
 <translation id="2498539833203011245">Minimera</translation>
 <translation id="2509495747794740764">Förstoringsgraden måste vara ett tal mellan 10 och 200.</translation>
 <translation id="253557089021624350">Keepalive-antal</translation>
-<translation id="2546283357679194313">Kakor och webbplatsdata</translation>
 <translation id="2550212893339833758">Swappat-minne</translation>
 <translation id="2553440850688409052">Dölj det här insticksprogrammet</translation>
 <translation id="26224892172169984">Tillåt inte att någon webbplats hanterar protokoll</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">CSS-cacheminne</translation>
 <translation id="3008272652534848354">Återställ behörigheter</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">MIDI-enheter</translation>
 <translation id="3021678814754966447">&amp;Visa ramkälla</translation>
 <translation id="3036546437875325427">Aktivera Flash</translation>
 <translation id="3046910703532196514">Webbsida, fullständig</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Öppna länk som</translation>
 <translation id="3154429428035006212">Offline i mer än en månad</translation>
 <translation id="3222066309010235055">För-renderare <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Välj rotkatalogen för tillägget som ska packas. Om du vill uppdatera ett tillägg väljer du också den privata nyckel som ska återanvändas.</translation>
 <translation id="3280237271814976245">Spara &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;flik</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">Tillåt inte stängda webbplatser att slutföra sändning eller mottagning av data</translation>
 <translation id="3711931198657368127">Klistra in och &amp;gå till <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspektera popup-fönster</translation>
-<translation id="3744111561329211289">Synkronisera i bakgrunden</translation>
 <translation id="3760460896538743390">Inspektera &amp;bakgrundssida</translation>
 <translation id="3797900183766075808">&amp;Sök på <ph name="SEARCH_ENGINE" /> efter ”<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3800806661949714323">Visa alla (rekommenderas)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Offline i mer än ett år</translation>
 <translation id="3905761538810670789">Reparera appen</translation>
 <translation id="3908501907586732282">Aktivera tillägg</translation>
+<translation id="3909701002594999354">Visa alla &amp;kontroller</translation>
 <translation id="3909791450649380159">&amp;Klipp ut</translation>
 <translation id="3927932062596804919">Neka</translation>
 <translation id="3936390757709632190">&amp;Öppna ljud i ny flik</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Inaktivera</translation>
 <translation id="4409697491990005945">Marginaler</translation>
 <translation id="4423376891418188461">Återställ inställningar</translation>
-<translation id="4434045419905280838">Popup-fönster och omdirigeringar</translation>
 <translation id="4478664379124702289">Spara l&amp;änk som...</translation>
 <translation id="4579581181964204535">Det gick inte att casta <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Öppna <ph name="URL" /></translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Logg</translation>
 <translation id="5627086634964711283">Det styr också vilken sida som visas när du klickar på knappen Startsida.</translation>
 <translation id="563535393368633106">Fråga innan informationen används (rekommenderas)</translation>
-<translation id="5649053991847567735">Automatiska hämtningar</translation>
 <translation id="5677928146339483299">Blockerad</translation>
-<translation id="5689516760719285838">Plats</translation>
 <translation id="5707185214361380026">Misslyckades läsa tillägg från:</translation>
 <translation id="5715711091495208045">Agent för insticksprogram: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Spara som PDF</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">&amp;Översätt till <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Töm webbplatsdata</translation>
 <translation id="6042308850641462728">Mer</translation>
-<translation id="6059925163896151826">USB-enheter</translation>
 <translation id="6086846494333236931">Installerades av din administratör</translation>
 <translation id="6101226222197207147">En ny app har lagts till (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Din internetanslutning kontrolleras</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kopiera &amp;bild</translation>
 <translation id="6550675742724504774">Alternativ</translation>
-<translation id="6612358246767739896">Skyddat innehåll</translation>
+<translation id="6579369886355986318">Visa alla &amp;kontroller</translation>
 <translation id="6639554308659482635">SQLite-minne</translation>
 <translation id="6686817083349815241">Spara ditt lösenord</translation>
 <translation id="6691936601825168937">&amp;Framåt</translation>
@@ -359,8 +348,6 @@
 <translation id="7270858098575133036">Fråga när en webbplats vill använda systemexklusiva meddelanden för att komma åt MIDI-enheter</translation>
 <translation id="7287143125007575591">Åtkomst nekad.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">Visa &amp;kontroller</translation>
-<translation id="7374461526650987610">Protokollhanterare</translation>
 <translation id="7385854874724088939">Det uppstod ett problem vid utskriften.  Kontrollera skrivaren och försök igen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">&amp;Visa sidkälla</translation>
@@ -368,7 +355,6 @@
 <translation id="7427348830195639090">Bakgrundssida: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Genom att välja den här skrivaren ger du följande tillägg behörighet att komma åt skrivaren:</translation>
 <translation id="749028671485790643">Person <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Avsluta process</translation>
 <translation id="7576690715254076113">Kollationera</translation>
 <translation id="7629827748548208700">Flik: <ph name="TAB_NAME" /></translation>
@@ -420,7 +406,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
         =1 {Hämtning pågår} other {Hämtningar pågår}}</translation>
 <translation id="8230134520748321204">Vill du spara lösenordet för <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Det här tillägget finns inte i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> och kan ha lagts till utan att du vet om det.</translation>
-<translation id="8270242299912238708">PDF-dokument</translation>
 <translation id="8339059274628563283">Lokalt lagrade data för <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Detta tillägg har tagit kontroll över dina proxyinställningar, vilket innebär att det kan ändra, knäcka eller tjuvlyssna på allt du gör på webben. Om du inte vet varför den här ändringen inträffade är den troligen inte önskvärd.</translation>
 <translation id="8382913212082956454">Kopiera &amp;e-postadress</translation>
@@ -468,8 +453,8 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="9170848237812810038">&amp;Ångra</translation>
 <translation id="9215293857209265904"><ph name="EXTENSION_NAME" /> har lagts till</translation>
 <translation id="9218430445555521422">Använd som standard</translation>
-<translation id="9219103736887031265">Bilder</translation>
 <translation id="93766956588638423">Reparera tillägg</translation>
+<translation id="961012016278832836">Äldre Microsoft Edge</translation>
 <translation id="98515147261107953">Liggande</translation>
 <translation id="994289308992179865">&amp;Repetera</translation>
 <translation id="998747458861718449">I&amp;nspektera</translation>

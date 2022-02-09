@@ -39,6 +39,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/prerender_test_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -74,7 +75,7 @@ class AccuracyTipBubbleViewBrowserTest : public InProcessBrowserTest {
     https_server_.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
     https_server_.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
     ASSERT_TRUE(https_server_.Start());
-    SetUpFeatureList(feature_list_);
+    SetUpFeatureList();
 
     // Disable "close on deactivation" since there seems to be an issue with
     // windows losing focus during tests.
@@ -98,9 +99,10 @@ class AccuracyTipBubbleViewBrowserTest : public InProcessBrowserTest {
   }
 
   base::HistogramTester* histogram_tester() { return &histogram_tester_; }
+  net::EmbeddedTestServer* https_server() { return &https_server_; }
 
  private:
-  virtual void SetUpFeatureList(base::test::ScopedFeatureList& feature_list) {
+  virtual void SetUpFeatureList() {
     const base::FieldTrialParams accuracy_tips_params = {
         {accuracy_tips::features::kSampleUrl.name,
          GetUrl(kAccuracyTipUrl).spec()},
@@ -108,7 +110,7 @@ class AccuracyTipBubbleViewBrowserTest : public InProcessBrowserTest {
     const base::FieldTrialParams accuracy_survey_params = {
         {accuracy_tips::features::kMinPromptCountRequiredForSurvey.name, "2"},
         {"probability", "1.000"}};
-    feature_list.InitWithFeaturesAndParameters(
+    feature_list_.InitWithFeaturesAndParameters(
         {{safe_browsing::kAccuracyTipsFeature, accuracy_tips_params},
          {accuracy_tips::features::kAccuracyTipsSurveyFeature,
           accuracy_survey_params}},
@@ -121,15 +123,15 @@ class AccuracyTipBubbleViewBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, NoShowOnRegularUrl) {
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kRegularUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kRegularUrl)));
   EXPECT_FALSE(IsUIShowing());
 
   histogram_tester()->ExpectUniqueSample("Privacy.AccuracyTip.PageStatus",
                                          AccuracyTipStatus::kNone, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, ShowOnBadUrl) {
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, ShowOnUrlInList) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
 
   histogram_tester()->ExpectUniqueSample(
@@ -137,7 +139,7 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, ShowOnBadUrl) {
 }
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
-                       DontShowOnBadUrlWithEngagement) {
+                       DontShowOnUrlInListWithEngagement) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   const GURL url = GetUrl(kAccuracyTipUrl);
   auto* engagement_service =
@@ -147,7 +149,7 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
       GetUrl(kAccuracyTipUrl),
       site_engagement::SiteEngagementScore::GetMediumEngagementBoundary());
 
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_FALSE(IsUIShowing());
 
   histogram_tester()->ExpectUniqueSample(
@@ -165,7 +167,7 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, PressIgnoreButton) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   const GURL url = GetUrl(kAccuracyTipUrl);
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(IsUIShowing());
 
   auto* view = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
@@ -197,7 +199,7 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, PressIgnoreButton) {
 }
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, PressEsc) {
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
 
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
@@ -229,7 +231,7 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, OptOut) {
   service->SetClockForTesting(&clock);
 
   // The first time the dialog is shown, it has an "ignore" button.
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
   ClickExtraButton();
   EXPECT_FALSE(IsUIShowing());
@@ -238,12 +240,12 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, OptOut) {
       AccuracyTipInteraction::kIgnore, 1);
 
   // The ui won't show again on an immediate navigation.
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_FALSE(IsUIShowing());
 
   // But a week later it shows up again with an opt-out button.
-  clock.Advance(base::TimeDelta::FromDays(7));
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  clock.Advance(base::Days(7));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
   ClickExtraButton();
   EXPECT_FALSE(IsUIShowing());
@@ -255,13 +257,13 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, OptOut) {
 }
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, DisappearOnNavigate) {
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
 
   // Tip disappears when navigating somewhere else.
   auto* view = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
   views::test::WidgetDestroyedWaiter waiter(view->GetWidget());
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kRegularUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kRegularUrl)));
   waiter.Wait();
   EXPECT_FALSE(IsUIShowing());
 
@@ -272,14 +274,14 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, DisappearOnNavigate) {
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
                        CloseBrowserWhileTipIsOpened) {
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
 
   CloseAllBrowsers();
 }
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, OpenLearnMoreLink) {
-  ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
   EXPECT_TRUE(IsUIShowing());
 
   // Click "learn more" and expect help center to open.
@@ -297,8 +299,14 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest, OpenLearnMoreLink) {
       AccuracyTipInteraction::kLearnMore, 1);
 }
 
+// Test is flaky on MSAN. https://crbug.com/1241933
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_SurveyShownAfterShowingTip DISABLED_SurveyShownAfterShowingTip
+#else
+#define MAYBE_SurveyShownAfterShowingTip SurveyShownAfterShowingTip
+#endif
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
-                       SurveyShownAfterShowingTip) {
+                       MAYBE_SurveyShownAfterShowingTip) {
   auto* tips_service =
       AccuracyServiceFactory::GetForProfile(browser()->profile());
   auto* hats_service =
@@ -311,8 +319,9 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
   for (int i = 0;
        i < accuracy_tips::features::kMinPromptCountRequiredForSurvey.Get();
        i++) {
-    clock.Advance(base::TimeDelta::FromDays(7));
-    ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+    clock.Advance(base::Days(7));
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
     EXPECT_TRUE(IsUIShowing());
 
     ui_test_utils::NavigateToURLWithDisposition(
@@ -326,8 +335,8 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
   bool enable_metrics = true;
   ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
       &enable_metrics);
-  browser()->profile()->SetCreationTimeForTesting(
-      base::Time::Now() - base::TimeDelta::FromDays(45));
+  browser()->profile()->SetCreationTimeForTesting(base::Time::Now() -
+                                                  base::Days(45));
 
   clock.Advance(accuracy_tips::features::kMinTimeToShowSurvey.Get());
   ui_test_utils::NavigateToURLWithDisposition(
@@ -352,8 +361,9 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
   for (int i = 0;
        i < accuracy_tips::features::kMinPromptCountRequiredForSurvey.Get();
        i++) {
-    clock.Advance(base::TimeDelta::FromDays(7));
-    ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl));
+    clock.Advance(base::Days(7));
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
     EXPECT_TRUE(IsUIShowing());
 
     ui_test_utils::NavigateToURLWithDisposition(
@@ -367,8 +377,8 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewBrowserTest,
   bool enable_metrics = true;
   ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
       &enable_metrics);
-  browser()->profile()->SetCreationTimeForTesting(
-      base::Time::Now() - base::TimeDelta::FromDays(45));
+  browser()->profile()->SetCreationTimeForTesting(base::Time::Now() -
+                                                  base::Days(45));
 
   // Delete all history...
   tips_service->OnURLsDeleted(nullptr, history::DeletionInfo::ForAllHistory());
@@ -396,21 +406,23 @@ class AccuracyTipBubbleViewHttpBrowserTest
   }
 
  private:
-  void SetUpFeatureList(base::test::ScopedFeatureList& feature_list) override {
+  void SetUpFeatureList() override {
     const base::FieldTrialParams accuraty_tips_params = {
         {accuracy_tips::features::kSampleUrl.name,
          GetHttpUrl(kAccuracyTipUrl).spec()},
         {accuracy_tips::features::kNumIgnorePrompts.name, "1"}};
-    feature_list.InitWithFeaturesAndParameters(
+    feature_list_.InitWithFeaturesAndParameters(
         {{safe_browsing::kAccuracyTipsFeature, accuraty_tips_params}}, {});
   }
 
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewHttpBrowserTest,
-                       ShowOnBadUrlHttpNotSecure) {
-  ui_test_utils::NavigateToURL(browser(), GetHttpUrl(kAccuracyTipUrl));
+                       ShowOnUrlInListButNotSecure) {
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GetHttpUrl(kAccuracyTipUrl)));
   EXPECT_FALSE(IsUIShowing());
 
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
@@ -441,4 +453,56 @@ IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewDialogBrowserTest,
 IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewDialogBrowserTest,
                        InvokeUi_ignore_button) {
   ShowAndVerifyUi();
+}
+
+class AccuracyTipBubbleViewPrerenderBrowserTest
+    : public AccuracyTipBubbleViewBrowserTest {
+ public:
+  AccuracyTipBubbleViewPrerenderBrowserTest()
+      : prerender_helper_(base::BindRepeating(
+            &AccuracyTipBubbleViewPrerenderBrowserTest::web_contents,
+            base::Unretained(this))) {}
+  ~AccuracyTipBubbleViewPrerenderBrowserTest() override = default;
+
+  void SetUp() override {
+    prerender_helper_.SetUp(https_server());
+    AccuracyTipBubbleViewBrowserTest::SetUp();
+  }
+
+  content::WebContents* web_contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+ protected:
+  content::test::PrerenderTestHelper prerender_helper_;
+
+ private:
+  void SetUpFeatureList() override {
+    const base::FieldTrialParams accuraty_tips_params = {
+        {accuracy_tips::features::kSampleUrl.name,
+         GetUrl(kAccuracyTipUrl).spec()}};
+    feature_list_.InitWithFeaturesAndParameters(
+        {{safe_browsing::kAccuracyTipsFeature, accuraty_tips_params}}, {});
+  }
+
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(AccuracyTipBubbleViewPrerenderBrowserTest,
+                       StillShowAfterPrerenderNavigation) {
+  // Generate a Accuracy Tip.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl(kAccuracyTipUrl)));
+  EXPECT_TRUE(IsUIShowing());
+  histogram_tester()->ExpectUniqueSample(
+      "Privacy.AccuracyTip.PageStatus", AccuracyTipStatus::kShowAccuracyTip, 1);
+
+  // Start a prerender.
+  prerender_helper_.AddPrerender(
+      https_server()->GetURL(kAccuracyTipUrl, "/title2.html"));
+
+  // Ensure the tip isn't closed by prerender navigation and isn't from the
+  // prerendered page.
+  EXPECT_TRUE(IsUIShowing());
+  histogram_tester()->ExpectUniqueSample(
+      "Privacy.AccuracyTip.PageStatus", AccuracyTipStatus::kShowAccuracyTip, 1);
 }

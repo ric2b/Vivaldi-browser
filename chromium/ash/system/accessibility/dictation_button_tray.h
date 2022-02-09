@@ -30,6 +30,10 @@ class ASH_EXPORT DictationButtonTray : public TrayBackgroundView,
                                        public SessionObserver {
  public:
   explicit DictationButtonTray(Shelf* shelf);
+
+  DictationButtonTray(const DictationButtonTray&) = delete;
+  DictationButtonTray& operator=(const DictationButtonTray&) = delete;
+
   ~DictationButtonTray() override;
 
   // ActionableView:
@@ -51,6 +55,7 @@ class ASH_EXPORT DictationButtonTray : public TrayBackgroundView,
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
+  void OnThemeChanged() override;
 
   // views::View:
   const char* GetClassName() const override;
@@ -74,8 +79,6 @@ class ASH_EXPORT DictationButtonTray : public TrayBackgroundView,
 
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
-
-  DISALLOW_COPY_AND_ASSIGN(DictationButtonTray);
 };
 
 }  // namespace ash

@@ -4,20 +4,36 @@
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/i18n/case_conversion.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "net/base/mime_util.h"
 #include "url/gurl.h"
 
 #include "app/vivaldi_constants.h"
+#include "components/datasource/resource_reader.h"
 
 namespace vivaldi_data_url_utils {
 
 const char* const kTypeNames[PathTypeCount] = {
-    "local-image", "thumbnail", "css-mods", "notes-attachment", "desktop-image",
+    "local-image",       // kLocalPath
+    "thumbnail",         // kImage, for historical reasons the name is not image
+    "css-mods",          // kCCSMod
+    "notes-attachment",  // kNotesAttachment
+    "desktop-image",     // kDesktopWallpaper
 };
 
+static_assert(sizeof(kTypeNames) / sizeof(kTypeNames[0]) ==
+                  static_cast<size_t>(PathType::kLastType) + 1,
+              "the name array must match the number of enum names");
+
 namespace {
+
+const char kMimeTypePNG[] = "image/png";
 
 const char kCSSModsData[] = "css";
 const char kCSSModsExtension[] = ".css";
@@ -26,8 +42,7 @@ const char kOldThumbnailFormatPrefix[] = "/http://bookmark_thumbnail/";
 
 }  // namespace
 
-absl::optional<PathType> ParsePath(base::StringPiece path,
-                                   std::string* data) {
+absl::optional<PathType> ParsePath(base::StringPiece path, std::string* data) {
   if (path.length() < 2 || path[0] != '/')
     return absl::nullopt;
 
@@ -52,7 +67,7 @@ absl::optional<PathType> ParsePath(base::StringPiece path,
     // was a full http: URL.
     base::StringPiece prefix = kOldThumbnailFormatPrefix;
     if (base::StartsWith(path, prefix)) {
-      type = PathType::kThumbnail;
+      type = PathType::kImage;
       data_piece = path.substr(prefix.length());
     } else {
       return absl::nullopt;
@@ -71,7 +86,7 @@ absl::optional<PathType> ParsePath(base::StringPiece path,
 
   // Remap old /local-image/small-number path to thumbnail
   if (type == PathType::kLocalPath && isOldFormatThumbnailId(data_piece)) {
-    type = PathType::kThumbnail;
+    type = PathType::kImage;
     if (data) {
       *data += ".png";
     }
@@ -84,8 +99,9 @@ absl::optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
   if (url.empty())
     return absl::nullopt;
 
-  // Short-circuit relative resource URLs to avoid the warning below.
-  if (base::StartsWith(url, "/resources/"))
+  // Short-circuit relative resource URLs to avoid the warning below as resource
+  // URL is a relative URL.
+  if (ResourceReader::IsResourceURL(url))
     return absl::nullopt;
 
   GURL gurl(url);
@@ -109,12 +125,34 @@ absl::optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
 std::string GetPathMimeType(base::StringPiece path) {
   std::string data;
   absl::optional<PathType> type = ParsePath(path, &data);
-  if (type == PathType::kCSSMod) {
-    if (data == kCSSModsData ||
-        base::EndsWith(data, kCSSModsExtension))
-      return "text/css";
+  if (type) {
+    switch (*type) {
+      case PathType::kLocalPath:
+      case PathType::kImage: {
+        base::FilePath::StringType extension =
+            base::FilePath::FromUTF8Unsafe(data).Extension();
+        if (extension.empty()) {
+          // Compatibility with old thumbnails and local image paths without the
+          // extension.
+          return kMimeTypePNG;
+        }
+        extension.erase(0, 1);
+        std::string mime_type;
+        if (!net::GetMimeTypeFromExtension(extension, &mime_type))
+          return std::string();
+        return mime_type;
+      }
+      case PathType::kCSSMod:
+        if (data == kCSSModsData || base::EndsWith(data, kCSSModsExtension))
+          return "text/css";
+        break;
+      case PathType::kNotesAttachment:
+        break;
+      case PathType::kDesktopWallpaper:
+        break;
+    }
   }
-  return "image/png";
+  return kMimeTypePNG;
 }
 
 bool isOldFormatThumbnailId(base::StringPiece id) {
@@ -123,9 +161,9 @@ bool isOldFormatThumbnailId(base::StringPiece id) {
          bookmark_id > 0;
 }
 
-bool IsBookmarkCapureUrl(base::StringPiece url) {
+bool IsBookmarkCaptureUrl(base::StringPiece url) {
   absl::optional<PathType> type = ParseUrl(url);
-  return type == PathType::kThumbnail;
+  return type == PathType::kImage;
 }
 
 std::string MakeUrl(PathType type, base::StringPiece data) {
@@ -137,45 +175,45 @@ std::string MakeUrl(PathType type, base::StringPiece data) {
   return url;
 }
 
-bool ReadFileOnBlockingThread(const base::FilePath& file_path,
-                              std::vector<unsigned char>* buffer) {
+scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
+    const base::FilePath& file_path,
+    bool log_not_found) {
   base::File file(file_path, base::File::FLAG_READ | base::File::FLAG_OPEN);
   if (!file.IsValid()) {
-    // Treat the file that does not exist as an empty file and do not log the
-    // error.
-    if (file.error_details() != base::File::FILE_ERROR_NOT_FOUND) {
+    if (file.error_details() == base::File::FILE_ERROR_NOT_FOUND) {
+      if (log_not_found) {
+        LOG(ERROR) << "File not found - " << file_path.value();
+      }
+    } else {
       LOG(ERROR) << "Failed to open file " << file_path.value()
                  << " for reading";
     }
-    return false;
+    return nullptr;
   }
   int64_t len64 = file.GetLength();
-  if (len64 < 0 || len64 >= (static_cast<int64_t>(1) << 31)) {
-    LOG(ERROR) << "Unexpected file length for " << file_path.value() << " - "
-               << len64;
-    return false;
+  if (len64 < 0) {
+    // Realistically this can happen for named pipes or other special files.
+    LOG(ERROR) << "Attempt to read from a file with no length defined "
+               << file_path;
+    return nullptr;
   }
+  if (len64 > kMaxAllowedRead) {
+    LOG(ERROR) << "File length for " << file_path << " (" << len64
+               << ") exceeded " << kMaxAllowedRead;
+    return nullptr;
+  }
+  static_assert(kMaxAllowedRead <= INT_MAX, "check that cast to int is OK");
   int len = static_cast<int>(len64);
-  if (len == 0)
-    return false;
-
-  buffer->resize(static_cast<size_t>(len));
-  int read_len = file.Read(0, reinterpret_cast<char*>(buffer->data()), len);
-  if (read_len != len) {
-    LOG(ERROR) << "Failed to read " << len << "bytes from "
-               << file_path.value();
-    return false;
-  }
-  return true;
-}
-
-scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
-    const base::FilePath& file_path) {
   std::vector<unsigned char> buffer;
-  if (ReadFileOnBlockingThread(file_path, &buffer)) {
-    return base::RefCountedBytes::TakeVector(&buffer);
+  if (len) {
+    buffer.resize(len);
+    int read_len = file.Read(0, reinterpret_cast<char*>(buffer.data()), len);
+    if (read_len != len) {
+      LOG(ERROR) << "Failed to read " << len << "bytes from " << file_path;
+      return nullptr;
+    }
   }
-  return nullptr;
+  return base::RefCountedBytes::TakeVector(&buffer);
 }
 
-}  // vivaldi_data_url_utils
+}  // namespace vivaldi_data_url_utils

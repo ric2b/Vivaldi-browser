@@ -13,8 +13,8 @@
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "content/public/test/browser_test.h"
-#include "notes/notes_model.h"
 #include "notes/note_node.h"
+#include "notes/notes_model.h"
 #include "sync/test/fake_server/notes_entity_builder.h"
 #include "sync/test/integration/notes_helper.h"
 #include "sync/test/integration/notes_sync_test.h"
@@ -35,9 +35,9 @@ class SingleClientNotesSyncTest : public NotesSyncTest {
  public:
   SingleClientNotesSyncTest() : NotesSyncTest(SINGLE_CLIENT) {}
   ~SingleClientNotesSyncTest() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientNotesSyncTest);
+  SingleClientNotesSyncTest(const SingleClientNotesSyncTest&) = delete;
+  SingleClientNotesSyncTest& operator=(const SingleClientNotesSyncTest&) =
+      delete;
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
@@ -70,7 +70,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
 
   NoteNode* trash_node = GetNotesModel(0)->trash_node();
   const NoteNode* trash_1_url0 = AddNote(0, trash_node, 0, "trash_1_url0",
-                                           GURL("http://www.microsoft.com"));
+                                         GURL("http://www.microsoft.com"));
 
   // Setup sync, wait for its completion, and make sure changes were synced.
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -149,7 +149,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   Move(0, porsche, top, 3);
   const NoteNode* tier3_b = AddFolder(0, tier2_b, 1, "tier3_b");
   const NoteNode* leafs = AddNote(0, tier1_a, 0, "Toronto Maple Leafs",
-                                    GURL("http://mapleleafs.nhl.com"));
+                                  GURL("http://mapleleafs.nhl.com"));
   const NoteNode* wynn =
       AddNote(0, top, 1, "Wynn", GURL("http://www.wynnlasvegas.com"));
 

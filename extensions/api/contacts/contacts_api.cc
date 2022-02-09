@@ -214,9 +214,8 @@ void ContactEventRouter::OnContactChanged(ContactService* service,
 }
 
 // Helper to actually dispatch an event to extension listeners.
-void ContactEventRouter::DispatchEvent(
-    const std::string& event_name,
-    std::vector<base::Value> event_args) {
+void ContactEventRouter::DispatchEvent(const std::string& event_name,
+                                       std::vector<base::Value> event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(base::WrapUnique(
@@ -349,7 +348,7 @@ Profile* ContactAsyncFunction::GetProfile() const {
 
 ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
   std::unique_ptr<vivaldi::contacts::Update::Params> params(
-      vivaldi::contacts::Update::Params::Create(*args_));
+      vivaldi::contacts::Update::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
   contact::ContactID contact_id;
@@ -421,7 +420,7 @@ void ContactsUpdateFunction::UpdateContactComplete(
 
 ExtensionFunction::ResponseAction ContactsDeleteFunction::Run() {
   std::unique_ptr<vivaldi::contacts::Delete::Params> params(
-      vivaldi::contacts::Delete::Params::Create(*args_));
+      vivaldi::contacts::Delete::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
   contact::ContactID contact_id;
@@ -451,7 +450,7 @@ void ContactsDeleteFunction::DeleteContactComplete(
 
 ExtensionFunction::ResponseAction ContactsCreateFunction::Run() {
   std::unique_ptr<vivaldi::contacts::Create::Params> params(
-      vivaldi::contacts::Create::Params::Create(*args_));
+      vivaldi::contacts::Create::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::ContactRow createContact = GetContactRow(params->contact);
@@ -478,7 +477,7 @@ void ContactsCreateFunction::CreateComplete(
 
 ExtensionFunction::ResponseAction ContactsCreateManyFunction::Run() {
   std::unique_ptr<vivaldi::contacts::CreateMany::Params> params(
-      vivaldi::contacts::CreateMany::Params::Create(*args_));
+      vivaldi::contacts::CreateMany::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<vivaldi::contacts::CreateUpdateDetails>& contacts =
@@ -498,8 +497,7 @@ ExtensionFunction::ResponseAction ContactsCreateManyFunction::Run() {
 
   model->CreateContacts(
       contact_rows,
-      base::BindOnce(&ContactsCreateManyFunction::CreateManyComplete,
-                          this),
+      base::BindOnce(&ContactsCreateManyFunction::CreateManyComplete, this),
       &task_tracker_);
 
   return RespondLater();
@@ -516,7 +514,7 @@ void ContactsCreateManyFunction::CreateManyComplete(
 
 ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
   std::unique_ptr<vivaldi::contacts::AddPropertyItem::Params> params(
-      vivaldi::contacts::AddPropertyItem::Params::Create(*args_));
+      vivaldi::contacts::AddPropertyItem::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::AddPropertyObject add_property;
@@ -539,7 +537,7 @@ ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
   model->AddProperty(
       add_property,
       base::BindOnce(&ContactsAddPropertyItemFunction::AddPropertyComplete,
-                          this),
+                     this),
       &task_tracker_);
   return RespondLater();
 }
@@ -557,7 +555,7 @@ void ContactsAddPropertyItemFunction::AddPropertyComplete(
 
 ExtensionFunction::ResponseAction ContactsUpdatePropertyItemFunction::Run() {
   std::unique_ptr<vivaldi::contacts::UpdatePropertyItem::Params> params(
-      vivaldi::contacts::UpdatePropertyItem::Params::Create(*args_));
+      vivaldi::contacts::UpdatePropertyItem::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::UpdatePropertyObject update_property;
@@ -609,7 +607,7 @@ void ContactsUpdatePropertyItemFunction::UpdatePropertyComplete(
 
 ExtensionFunction::ResponseAction ContactsRemovePropertyItemFunction::Run() {
   std::unique_ptr<vivaldi::contacts::RemovePropertyItem::Params> params(
-      vivaldi::contacts::RemovePropertyItem::Params::Create(*args_));
+      vivaldi::contacts::RemovePropertyItem::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::RemovePropertyObject remove_property;
@@ -657,7 +655,7 @@ void ContactsRemovePropertyItemFunction::RemovePropertyComplete(
 
 ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
   std::unique_ptr<vivaldi::contacts::AddEmailAddress::Params> params(
-      vivaldi::contacts::AddEmailAddress::Params::Create(*args_));
+      vivaldi::contacts::AddEmailAddress::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::EmailAddressRow add_email;
@@ -696,8 +694,8 @@ ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
 
   model->AddEmailAddress(
       add_email,
-      base::BindOnce(
-          &ContactsAddEmailAddressFunction::AddEmailAddressComplete, this),
+      base::BindOnce(&ContactsAddEmailAddressFunction::AddEmailAddressComplete,
+                     this),
       &task_tracker_);
   return RespondLater();
 }
@@ -715,7 +713,7 @@ void ContactsAddEmailAddressFunction::AddEmailAddressComplete(
 
 ExtensionFunction::ResponseAction ContactsRemoveEmailAddressFunction::Run() {
   std::unique_ptr<vivaldi::contacts::RemoveEmailAddress::Params> params(
-      vivaldi::contacts::RemoveEmailAddress::Params::Create(*args_));
+      vivaldi::contacts::RemoveEmailAddress::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::ContactID contact_id;
@@ -754,7 +752,7 @@ void ContactsRemoveEmailAddressFunction::RemoveEmailAddressComplete(
 
 ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
   std::unique_ptr<vivaldi::contacts::UpdateEmailAddress::Params> params(
-      vivaldi::contacts::UpdateEmailAddress::Params::Create(*args_));
+      vivaldi::contacts::UpdateEmailAddress::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   contact::EmailAddressRow updated_email;

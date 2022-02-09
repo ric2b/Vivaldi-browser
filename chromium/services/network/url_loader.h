@@ -29,9 +29,10 @@
 #include "net/url_request/url_request.h"
 #include "services/network/keepalive_statistics_recorder.h"
 #include "services/network/network_service.h"
+#include "services/network/public/cpp/corb/corb_api.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
-#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
+#include "services/network/public/cpp/private_network_access_check_result.h"
 #include "services/network/public/mojom/accept_ch_frame_observer.mojom.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom-forward.h"
@@ -103,6 +104,30 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   using DeleteCallback = base::OnceCallback<void(mojom::URLLoader* loader)>;
 
+  // Holds a sync and async implementation of URLLoaderClient. The sync
+  // implementation can be used if present to avoid posting a task to call back
+  // into CorsURLLoader.
+  class MaybeSyncURLLoaderClient {
+   public:
+    MaybeSyncURLLoaderClient(
+        mojo::PendingRemote<mojom::URLLoaderClient> mojo_client,
+        base::WeakPtr<mojom::URLLoaderClient> sync_client);
+    ~MaybeSyncURLLoaderClient();
+
+    // Resets both URLLoaderClients.
+    void Reset();
+
+    // Rebinds the mojo URLLoaderClient and uses it for future calls.
+    mojo::PendingReceiver<mojom::URLLoaderClient> BindNewPipeAndPassReceiver();
+
+    // Gets the sync URLLoaderClient if available, otherwise the mojo remote.
+    mojom::URLLoaderClient* Get();
+
+   private:
+    mojo::Remote<mojom::URLLoaderClient> mojo_client_;
+    base::WeakPtr<mojom::URLLoaderClient> sync_client_;
+  };
+
   // |delete_callback| tells the URLLoader's owner to destroy the URLLoader.
   // The URLLoader must be destroyed before the |url_request_context|.
   // The |origin_policy_manager| must always be provided for requests that
@@ -122,6 +147,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       int32_t options,
       const ResourceRequest& request,
       mojo::PendingRemote<mojom::URLLoaderClient> url_loader_client,
+      base::WeakPtr<mojom::URLLoaderClient> sync_url_loader_client,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       const mojom::URLLoaderFactoryParams* factory_params,
       mojom::CrossOriginEmbedderPolicyReporter* reporter,
@@ -141,6 +167,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
       mojo::PendingRemote<mojom::AcceptCHFrameObserver>
           accept_ch_frame_observer);
+
+  URLLoader(const URLLoader&) = delete;
+  URLLoader& operator=(const URLLoader&) = delete;
+
   ~URLLoader() override;
 
   // mojom::URLLoader implementation:
@@ -370,7 +400,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
     // processing the request (e.g. by calling ReadMore as necessary).
     kContinueRequest,
   };
-  BlockResponseForCorbResult BlockResponseForCorb();
+  BlockResponseForCorbResult BlockResponseForCorb(
+      bool should_report_corb_blocking);
 
   void ReportFlaggedResponseCookies();
   void StartReading();
@@ -383,13 +414,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // net::URLRequest.
   bool ShouldForceIgnoreTopFramePartyForCookies() const;
 
-  // Returns whether the request initiator should be allowed to make requests to
-  // an endpoint in |resource_address_space|.
+  // Applies Private Network Access checks to the current request.
   //
-  // See the CORS-RFC1918 spec: https://wicg.github.io/cors-rfc1918.
+  // `resource_address_space` specifies the IP address space of the remote
+  // endpoint.
   //
-  // Helper for OnConnected().
-  bool CanConnectToAddressSpace(
+  // Helper for `OnConnected()`.
+  PrivateNetworkAccessCheckResult PrivateNetworkAccessCheck(
       mojom::IPAddressSpace resource_address_space) const;
 
   mojom::DevToolsObserver* GetDevToolsObserver() const;
@@ -437,7 +468,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       auth_challenge_responder_receiver_{this};
   mojo::Receiver<mojom::ClientCertificateResponder>
       client_cert_responder_receiver_{this};
-  mojo::Remote<mojom::URLLoaderClient> url_loader_client_;
+  MaybeSyncURLLoaderClient url_loader_client_;
   int64_t total_written_bytes_ = 0;
 
   mojo::ScopedDataPipeProducerHandle response_body_stream_;
@@ -459,7 +490,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
 
   // Sniffing state.
-  std::unique_ptr<CrossOriginReadBlocking::ResponseAnalyzer> corb_analyzer_;
+  std::unique_ptr<corb::ResponseAnalyzer> corb_analyzer_;
   bool is_more_corb_sniffing_needed_ = false;
   bool is_more_mime_sniffing_needed_ = false;
 
@@ -526,6 +557,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // network::ResourceRequest::fetch_window_id for details.
   absl::optional<base::UnguessableToken> fetch_window_id_;
 
+  // See |ResourceRequest::target_ip_address_space_|.
+  mojom::IPAddressSpace target_ip_address_space_ =
+      mojom::IPAddressSpace::kUnknown;
+
   mojo::Remote<mojom::TrustedHeaderClient> header_client_;
 
   std::unique_ptr<FileOpenerForUpload> file_opener_for_upload_;
@@ -583,8 +618,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojo::Remote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer_;
 
   base::WeakPtrFactory<URLLoader> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(URLLoader);
 };
 
 }  // namespace network

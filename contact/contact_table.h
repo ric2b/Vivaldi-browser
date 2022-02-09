@@ -34,6 +34,10 @@ class ContactTable {
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
   virtual ~ContactTable();
+
+  ContactTable(const ContactTable&) = delete;
+  ContactTable& operator=(const ContactTable&) = delete;
+
   ContactID CreateContact(ContactRow row);
   bool GetAllContacts(ContactRows* contacts);
   bool GetRowForContact(ContactID contact_id, ContactRow* out_contact);
@@ -43,10 +47,6 @@ class ContactTable {
  protected:
   virtual sql::Database& GetDB() = 0;
   bool CreateContactTable();
-
- private:
-
-  DISALLOW_COPY_AND_ASSIGN(ContactTable);
 };
 
 }  // namespace contact

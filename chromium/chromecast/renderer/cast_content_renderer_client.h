@@ -22,9 +22,14 @@
 
 namespace extensions {
 class ExtensionsClient;
-class ExtensionsGuestViewContainerDispatcher;
 class CastExtensionsRendererClient;
 }  // namespace extensions
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+namespace guest_view {
+class GuestViewContainerDispatcher;
+}
+#endif
 
 namespace chromecast {
 class IdentificationSettingsManager;
@@ -48,6 +53,10 @@ class CastContentRendererClient
   // Creates an implementation of CastContentRendererClient. Platform should
   // link in an implementation as needed.
   static std::unique_ptr<CastContentRendererClient> Create();
+
+  CastContentRendererClient(const CastContentRendererClient&) = delete;
+  CastContentRendererClient& operator=(const CastContentRendererClient&) =
+      delete;
 
   ~CastContentRendererClient() override;
 
@@ -127,7 +136,7 @@ class CastContentRendererClient
   std::unique_ptr<extensions::ExtensionsClient> extensions_client_;
   std::unique_ptr<extensions::CastExtensionsRendererClient>
       extensions_renderer_client_;
-  std::unique_ptr<extensions::ExtensionsGuestViewContainerDispatcher>
+  std::unique_ptr<guest_view::GuestViewContainerDispatcher>
       guest_view_container_dispatcher_;
 #endif
 
@@ -140,8 +149,6 @@ class CastContentRendererClient
   base::flat_map<int, scoped_refptr<IdentificationSettingsManager>>
       settings_managers_;
   std::unique_ptr<CastActivityUrlFilterManager> activity_url_filter_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(CastContentRendererClient);
 };
 
 }  // namespace shell

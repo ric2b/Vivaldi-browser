@@ -62,8 +62,9 @@ class VivaldiInstallDialog {
   };
 
   VivaldiInstallDialog(HINSTANCE instance, VivaldiInstallUIOptions options);
-
   virtual ~VivaldiInstallDialog();
+  VivaldiInstallDialog(const VivaldiInstallDialog&) = delete;
+  VivaldiInstallDialog& operator=(const VivaldiInstallDialog&) = delete;
 
   DlgResult ShowModal();
 
@@ -135,8 +136,6 @@ class VivaldiInstallDialog {
   bool changed_language_ = false;
 
   static VivaldiInstallDialog* this_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiInstallDialog);
 };
 
 }  // namespace installer

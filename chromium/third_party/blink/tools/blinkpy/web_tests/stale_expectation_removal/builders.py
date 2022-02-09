@@ -17,7 +17,12 @@ class WebTestBuilders(builders.Builders):
     def GetIsolateNames(self):
         return {
             'blink_web_tests',
-            'webgpu_blink_web_tests',
+            # We would like to support the WebGPU tests, but they currently
+            # report a temporary file instead of the WebGPU expectation file
+            # and the names in ResultDB do not currently match what is in
+            # the expectation file due to subtests not being exposed to
+            # ResultDB.
+            # 'webgpu_blink_web_tests',
         }
 
     def GetFakeCiBuilders(self):
@@ -50,9 +55,6 @@ class WebTestBuilders(builders.Builders):
             },
             'win7-blink-rel-dummy': {
                 'win7-blink-rel',
-            },
-            'win10-blink-rel-dummy': {
-                'win10-blink-rel',
             },
             'win10.20h2-blink-rel-dummy': {
                 'win10.20h2-blink-rel',

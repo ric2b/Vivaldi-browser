@@ -28,6 +28,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/model/data_type_activation_request.h"
@@ -103,15 +104,15 @@ void BuildTabSpecifics(const std::string& tag,
 
 testing::AssertionResult CheckSessionModels(const base::ListValue& devices,
                                             size_t num_sessions) {
-  EXPECT_EQ(5u, devices.GetSize());
+  EXPECT_EQ(5u, devices.GetList().size());
   const base::DictionaryValue* device = NULL;
   const base::ListValue* sessions = NULL;
-  for (size_t i = 0; i < devices.GetSize(); ++i) {
+  for (size_t i = 0; i < devices.GetList().size(); ++i) {
     EXPECT_TRUE(devices.GetDictionary(i, &device));
     EXPECT_EQ(kSessionTags[i], api_test_utils::GetString(device, "info"));
     EXPECT_EQ(kSessionTags[i], api_test_utils::GetString(device, "deviceName"));
     EXPECT_TRUE(device->GetList("sessions", &sessions));
-    EXPECT_EQ(num_sessions, sessions->GetSize());
+    EXPECT_EQ(num_sessions, sessions->GetList().size());
     // Because this test is hurried, really there are only ever 0 or 1
     // sessions, and if 1, that will be a Window. Grab it.
     if (num_sessions == 0)
@@ -123,8 +124,8 @@ testing::AssertionResult CheckSessionModels(const base::ListValue& devices,
     // Only the tabs are interesting.
     const base::ListValue* tabs = NULL;
     EXPECT_TRUE(window->GetList("tabs", &tabs));
-    EXPECT_EQ(base::size(kTabIDs), tabs->GetSize());
-    for (size_t j = 0; j < tabs->GetSize(); ++j) {
+    EXPECT_EQ(base::size(kTabIDs), tabs->GetList().size());
+    for (size_t j = 0; j < tabs->GetList().size(); ++j) {
       const base::DictionaryValue* tab = NULL;
       EXPECT_TRUE(tabs->GetDictionary(j, &tab));
       EXPECT_FALSE(tab->HasKey("id"));  // sessions API does not give tab IDs
@@ -246,8 +247,7 @@ void ExtensionSessionsTest::CreateSessionModels() {
     header_entity_data.id =
         "FakeId:" + header_entity_data.client_tag_hash.value();
     header_entity_data.specifics = header_entity;
-    header_entity_data.creation_time =
-        time_now - base::TimeDelta::FromSeconds(index);
+    header_entity_data.creation_time = time_now - base::Seconds(index);
     header_entity_data.modification_time = header_entity_data.creation_time;
 
     syncer::UpdateResponseData header_update;
@@ -299,7 +299,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, GetDevicesListEmpty) {
 
   ASSERT_TRUE(result);
   base::ListValue* devices = result.get();
-  EXPECT_EQ(0u, devices->GetSize());
+  EXPECT_EQ(0u, devices->GetList().size());
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, RestoreForeignSessionWindow) {
@@ -317,13 +317,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, RestoreForeignSessionWindow) {
   ASSERT_TRUE(result);
 
   base::ListValue* windows = result.get();
-  EXPECT_EQ(2u, windows->GetSize());
+  EXPECT_EQ(2u, windows->GetList().size());
   base::DictionaryValue* restored_window = NULL;
-  EXPECT_TRUE(restored_window_session->GetDictionary("window",
-                                                     &restored_window));
+  EXPECT_TRUE(
+      restored_window_session->GetDictionary("window", &restored_window));
   base::DictionaryValue* window = NULL;
   int restored_id = api_test_utils::GetInteger(restored_window, "id");
-  for (size_t i = 0; i < windows->GetSize(); ++i) {
+  for (size_t i = 0; i < windows->GetList().size(); ++i) {
     EXPECT_TRUE(windows->GetDictionary(i, &window));
     if (api_test_utils::GetInteger(window, "id") == restored_id)
       break;
@@ -344,10 +344,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, RestoreForeignSessionInvalidId) {
 IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, RestoreInIncognito) {
   CreateSessionModels();
 
-  EXPECT_TRUE(base::MatchPattern(utils::RunFunctionAndReturnError(
-      CreateFunction<SessionsRestoreFunction>(true).get(),
-      "[\"1\"]",
-      CreateIncognitoBrowser()),
+  EXPECT_TRUE(base::MatchPattern(
+      utils::RunFunctionAndReturnError(
+          CreateFunction<SessionsRestoreFunction>(true).get(), "[\"1\"]",
+          CreateIncognitoBrowser()),
       "Can not restore sessions in incognito mode."));
 }
 
@@ -358,7 +358,49 @@ IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, GetRecentlyClosedIncognito) {
           CreateIncognitoBrowser())));
   ASSERT_TRUE(result);
   base::ListValue* sessions = result.get();
-  EXPECT_EQ(0u, sessions->GetSize());
+  EXPECT_EQ(0u, sessions->GetList().size());
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionSessionsTest, GetRecentlyClosedMaxResults) {
+  const size_t kTabCount = 3;
+  ASSERT_EQ(1, browser()->tab_strip_model()->count());
+  for (size_t i = 0; i < kTabCount; ++i) {
+    ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL("data:text/html"),
+        WindowOpenDisposition::NEW_FOREGROUND_TAB,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+    int tab_index = 1;
+    content::WebContentsDestroyedWatcher destroyed_watcher(
+        browser()->tab_strip_model()->GetWebContentsAt(tab_index));
+    browser()->tab_strip_model()->CloseWebContentsAt(
+        tab_index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
+    destroyed_watcher.Wait();
+  }
+
+  {
+    std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
+        CreateFunction<SessionsGetRecentlyClosedFunction>(true).get(), "[]",
+        browser()));
+    ASSERT_TRUE(result);
+    ASSERT_TRUE(result->is_list());
+    EXPECT_EQ(kTabCount, result->GetList().size());
+  }
+  {
+    std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
+        CreateFunction<SessionsGetRecentlyClosedFunction>(true).get(),
+        "[{\"maxResults\": 0}]", browser()));
+    ASSERT_TRUE(result);
+    ASSERT_TRUE(result->is_list());
+    EXPECT_EQ(0u, result->GetList().size());
+  }
+  {
+    std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
+        CreateFunction<SessionsGetRecentlyClosedFunction>(true).get(),
+        "[{\"maxResults\": 2}]", browser()));
+    ASSERT_TRUE(result);
+    ASSERT_TRUE(result->is_list());
+    EXPECT_EQ(2u, result->GetList().size());
+  }
 }
 
 // http://crbug.com/251199

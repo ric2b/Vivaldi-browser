@@ -26,20 +26,20 @@ class MenuStorage;
 
 class Menu_Model : public KeyedService {
  public:
-  enum Mode {
-    kMainMenu,
-    kContextMenu
-  };
+  enum Mode { kMainMenu, kContextMenu };
 
   explicit Menu_Model(content::BrowserContext* context, Mode mode);
   ~Menu_Model() override;
+  Menu_Model(const Menu_Model&) = delete;
+  Menu_Model& operator=(const Menu_Model&) = delete;
 
   void Load();
   bool Save();
   void LoadFinished(std::unique_ptr<MenuLoadDetails> details);
 
   bool Move(const Menu_Node* node, const Menu_Node* new_parent, size_t index);
-  Menu_Node* Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
+  Menu_Node* Add(std::unique_ptr<Menu_Node> node,
+                 Menu_Node* parent,
                  size_t index);
   bool SetTitle(Menu_Node* node, const std::u16string& title);
   bool SetParameter(Menu_Node* node, const std::string& parameter);
@@ -60,13 +60,13 @@ class Menu_Model : public KeyedService {
 
   Menu_Node* GetNamedMenu(const std::string& named_menu);
   // Returns the parent of all fixed nodes.
-  Menu_Node& root_node() {return root_;}
+  Menu_Node& root_node() { return root_; }
   // Returns the fixed node that is the ancestor of main menus.
-  Menu_Node* mainmenu_node() {return mainmenu_node_;}
+  Menu_Node* mainmenu_node() { return mainmenu_node_; }
   // Returns the fixed node that is the ancestor of context menus.
-  Menu_Node* contextmenu_node() {return contextmenu_node_;}
+  Menu_Node* contextmenu_node() { return contextmenu_node_; }
 
-  Menu_Control* GetControl() {return control_.get();}
+  Menu_Control* GetControl() { return control_.get(); }
 
  private:
   void RemoveBundleTag(Menu_Node* node, bool include_children);
@@ -85,8 +85,6 @@ class Menu_Model : public KeyedService {
   Menu_Node* mainmenu_node_ = nullptr;
   Menu_Node* contextmenu_node_ = nullptr;
   std::unique_ptr<Menu_Control> control_;
-
-  DISALLOW_COPY_AND_ASSIGN(Menu_Model);
 };
 
 }  // namespace menus

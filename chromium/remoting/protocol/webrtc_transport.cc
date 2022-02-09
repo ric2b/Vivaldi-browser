@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -55,6 +56,9 @@ namespace protocol {
 class ScopedAllowThreadJoinForWebRtcTransport
     : public base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {};
 
+class ScopedAllowSyncPrimitivesForWebRtcTransport
+    : public base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {};
+
 namespace {
 
 using DataChannelState = webrtc::DataChannelInterface::DataState;
@@ -73,17 +77,15 @@ const int kMaxBitrateBps = 1e8;  // 100 Mbps.
 // Frequency of polling the event and control data channels for their current
 // state while waiting for them to close.
 constexpr base::TimeDelta kDefaultDataChannelStatePollingInterval =
-    base::TimeDelta::FromMilliseconds(50);
+    base::Milliseconds(50);
 
 // The maximum amount of time we will wait for the data channels to close before
 // closing the PeerConnection.
-constexpr base::TimeDelta kWaitForDataChannelsClosedTimeout =
-    base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta kWaitForDataChannelsClosedTimeout = base::Seconds(5);
 
 // The maximum amount of time we will wait for a thread join before we crash the
 // host.
-constexpr base::TimeDelta kWaitForThreadJoinTimeout =
-    base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kWaitForThreadJoinTimeout = base::Seconds(30);
 
 base::TimeDelta data_channel_state_polling_interval =
     kDefaultDataChannelStatePollingInterval;
@@ -161,6 +163,11 @@ class CreateSessionDescriptionObserver
         std::move(result_callback));
   }
 
+  CreateSessionDescriptionObserver(const CreateSessionDescriptionObserver&) =
+      delete;
+  CreateSessionDescriptionObserver& operator=(
+      const CreateSessionDescriptionObserver&) = delete;
+
   void OnSuccess(webrtc::SessionDescriptionInterface* desc) override {
     std::move(result_callback_).Run(base::WrapUnique(desc), std::string());
   }
@@ -176,8 +183,6 @@ class CreateSessionDescriptionObserver
 
  private:
   ResultCallback result_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(CreateSessionDescriptionObserver);
 };
 
 // A webrtc::SetSessionDescriptionObserver implementation used to receive the
@@ -192,6 +197,10 @@ class SetSessionDescriptionObserver
     return new rtc::RefCountedObject<SetSessionDescriptionObserver>(
         std::move(result_callback));
   }
+
+  SetSessionDescriptionObserver(const SetSessionDescriptionObserver&) = delete;
+  SetSessionDescriptionObserver& operator=(
+      const SetSessionDescriptionObserver&) = delete;
 
   void OnSuccess() override {
     std::move(result_callback_).Run(true, std::string());
@@ -208,8 +217,6 @@ class SetSessionDescriptionObserver
 
  private:
   ResultCallback result_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(SetSessionDescriptionObserver);
 };
 
 class RtcEventLogOutput : public webrtc::RtcEventLogOutput {
@@ -321,21 +328,34 @@ class WebrtcTransport::PeerConnectionWrapper
     thread_join_watchdog_ = std::make_unique<ThreadJoinWatchdog>();
   }
 
+  PeerConnectionWrapper(const PeerConnectionWrapper&) = delete;
+  PeerConnectionWrapper& operator=(const PeerConnectionWrapper&) = delete;
+
   ~PeerConnectionWrapper() override {
     thread_join_watchdog_->Arm();
 
-    // PeerConnection creates threads internally, which are joined when the
-    // connection is closed. See crbug.com/660081.
-    ScopedAllowThreadJoinForWebRtcTransport allow_thread_join;
-    peer_connection_->Close();
-    peer_connection_ = nullptr;
-    peer_connection_factory_ = nullptr;
+    {
+      // |peer_connection_| creates threads internally, which are joined when
+      // the connection is closed. See crbug.com/660081.
+      ScopedAllowThreadJoinForWebRtcTransport allow_thread_join;
+      peer_connection_->Close();
+      peer_connection_ = nullptr;
+      peer_connection_factory_ = nullptr;
+    }
+
     audio_module_ = nullptr;
 
     if (before_disarm_thread_join_watchdog_callback_) {
       std::move(before_disarm_thread_join_watchdog_callback_).Run();
     }
     thread_join_watchdog_->Disarm();
+
+    {
+      // |thread_join_watchdog_| uses a lock internally so we need to allow sync
+      // primitives when destroying the watchdog.
+      ScopedAllowSyncPrimitivesForWebRtcTransport allow_sync_primitives;
+      thread_join_watchdog_.reset();
+    }
   }
 
   WebrtcAudioModule* audio_module() {
@@ -412,8 +432,6 @@ class WebrtcTransport::PeerConnectionWrapper
   base::OnceClosure before_disarm_thread_join_watchdog_callback_;
 
   base::WeakPtr<WebrtcTransport> transport_;
-
-  DISALLOW_COPY_AND_ASSIGN(PeerConnectionWrapper);
 };
 
 WebrtcTransport::WebrtcTransport(
@@ -552,20 +570,24 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
     UpdateCodecParameters(&sdp_message, /*incoming=*/true);
 
     webrtc::SdpParseError error;
-    std::unique_ptr<webrtc::SessionDescriptionInterface> session_description(
-        webrtc::CreateSessionDescription(type, sdp_message.ToString(), &error));
-    if (!session_description) {
+    std::unique_ptr<webrtc::SessionDescriptionInterface>
+        webrtc_session_description(webrtc::CreateSessionDescription(
+            type, sdp_message.ToString(), &error));
+    if (!webrtc_session_description) {
       LOG(ERROR) << "Failed to parse the session description: "
                  << error.description << " line: " << error.line;
       return false;
     }
 
-    peer_connection()->SetRemoteDescription(
-        SetSessionDescriptionObserver::Create(base::BindOnce(
-            &WebrtcTransport::OnRemoteDescriptionSet,
-            weak_factory_.GetWeakPtr(),
-            type == webrtc::SessionDescriptionInterface::kOffer)),
-        session_description.release());
+    {
+      ScopedAllowThreadJoinForWebRtcTransport allow_wait;
+      peer_connection()->SetRemoteDescription(
+          SetSessionDescriptionObserver::Create(base::BindOnce(
+              &WebrtcTransport::OnRemoteDescriptionSet,
+              weak_factory_.GetWeakPtr(),
+              type == webrtc::SessionDescriptionInterface::kOffer)),
+          webrtc_session_description.release());
+    }
 
     // SetRemoteDescription() might overwrite any bitrate caps previously set,
     // so (re)apply them here. This might happen if ICE state were already
@@ -1166,9 +1188,9 @@ void WebrtcTransport::EnsurePendingTransportInfoMessage() {
 
     // Delay sending the new candidates in case we get more candidates
     // that we can send in one message.
-    transport_info_timer_.Start(
-        FROM_HERE, base::TimeDelta::FromMilliseconds(kTransportInfoSendDelayMs),
-        this, &WebrtcTransport::SendTransportInfo);
+    transport_info_timer_.Start(FROM_HERE,
+                                base::Milliseconds(kTransportInfoSendDelayMs),
+                                this, &WebrtcTransport::SendTransportInfo);
   }
 }
 
@@ -1215,6 +1237,7 @@ void WebrtcTransport::StartRtcEventLogging() {
 void WebrtcTransport::StopRtcEventLogging() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (peer_connection()) {
+    ScopedAllowThreadJoinForWebRtcTransport allow_wait;
     peer_connection()->StopRtcEventLog();
   }
 }

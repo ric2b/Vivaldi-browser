@@ -59,6 +59,9 @@ const int kTitleLineHeight = 20;      // In DIPs.
 const int kMessageFontSize = 12;      // For everything but title.
 const int kMessageLineHeight = 18;    // In DIPs.
 
+// Title.
+constexpr int kMinPixelsPerTitleCharacter = 4;
+
 // For list notifications.
 // Not used when --enabled-new-style-notification is set.
 const size_t kNotificationMaximumItems = 5;
@@ -108,6 +111,7 @@ constexpr int kMarginBetweenPopups = 10;
 // The corners are only rounded in Chrome OS.
 constexpr int kNotificationCornerRadius = 2;
 
+constexpr char kIdSuffixForGroupContainerNotification[] = "_copy";
 }  // namespace message_center
 
 #endif  // UI_MESSAGE_CENTER_PUBLIC_CPP_MESSAGE_CENTER_CONSTANTS_H_

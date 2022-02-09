@@ -32,6 +32,9 @@ import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * This class represents the location bar where the user types in URLs and
  * search terms.
@@ -303,6 +306,8 @@ public class LocationBarLayout extends FrameLayout {
         mUrlActionContainer.setVisibility(visibility);
     }
 
+    public void notifyVoiceRecognitionCanceled() {}
+
     /** Vivaldi */
     /* package */ void setQrCodeButtonTint(ColorStateList colorStateList) {
         ApiCompatibilityUtils.setImageTintList(mQrCodeButton, colorStateList);
@@ -310,6 +315,7 @@ public class LocationBarLayout extends FrameLayout {
 
     /** Vivaldi */
     /* package */ void setQrCodeButtonVisibility(boolean shouldShow) {
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return; // No camera on automotive, no QR button.
         mQrCodeButton.setVisibility(shouldShow ? VISIBLE : GONE);
     }
 }

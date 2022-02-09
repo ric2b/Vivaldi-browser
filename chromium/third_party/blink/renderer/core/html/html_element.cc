@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment.h"
+#include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_recalc_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -344,8 +345,16 @@ void HTMLElement::CollectStyleForPresentationAttribute(
           style, CSSPropertyID::kWebkitUserModify, CSSValueID::kReadOnly);
     }
   } else if (name == html_names::kHiddenAttr) {
-    AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kDisplay,
-                                            CSSValueID::kNone);
+    if (RuntimeEnabledFeatures::BeforeMatchEventEnabled(
+            GetExecutionContext()) &&
+        EqualIgnoringASCIICase(value, "until-found")) {
+      AddPropertyToPresentationAttributeStyle(
+          style, CSSPropertyID::kContentVisibility, CSSValueID::kHidden);
+      EnsureDisplayLockContext().SetActivateForFindInPage(true);
+    } else {
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kDisplay,
+                                              CSSValueID::kNone);
+    }
   } else if (name == html_names::kDraggableAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kDraggableAttribute);
     if (EqualIgnoringASCIICase(value, "true")) {
@@ -927,17 +936,35 @@ void HTMLElement::setOuterText(const String& text,
 void HTMLElement::ApplyAspectRatioToStyle(const AtomicString& width,
                                           const AtomicString& height,
                                           MutableCSSPropertyValueSet* style) {
-  HTMLDimension width_dim, height_dim;
-  if (!ParseDimensionValue(width, width_dim))
+  HTMLDimension width_dim;
+  if (!ParseDimensionValue(width, width_dim) || !width_dim.IsAbsolute())
     return;
-  if (!ParseDimensionValue(height, height_dim))
+  HTMLDimension height_dim;
+  if (!ParseDimensionValue(height, height_dim) || !height_dim.IsAbsolute())
     return;
-  if (!width_dim.IsAbsolute() || !height_dim.IsAbsolute())
+  ApplyAspectRatioToStyle(width_dim.Value(), height_dim.Value(), style);
+}
+
+void HTMLElement::ApplyIntegerAspectRatioToStyle(
+    const AtomicString& width,
+    const AtomicString& height,
+    MutableCSSPropertyValueSet* style) {
+  unsigned width_val = 0;
+  if (!ParseHTMLNonNegativeInteger(width, width_val))
     return;
+  unsigned height_val = 0;
+  if (!ParseHTMLNonNegativeInteger(height, height_val))
+    return;
+  ApplyAspectRatioToStyle(width_val, height_val, style);
+}
+
+void HTMLElement::ApplyAspectRatioToStyle(double width,
+                                          double height,
+                                          MutableCSSPropertyValueSet* style) {
   CSSValue* width_val = CSSNumericLiteralValue::Create(
-      width_dim.Value(), CSSPrimitiveValue::UnitType::kNumber);
+      width, CSSPrimitiveValue::UnitType::kNumber);
   CSSValue* height_val = CSSNumericLiteralValue::Create(
-      height_dim.Value(), CSSPrimitiveValue::UnitType::kNumber);
+      height, CSSPrimitiveValue::UnitType::kNumber);
   CSSValueList* ratio_list = CSSValueList::CreateSlashSeparated();
   ratio_list->Append(*width_val);
   ratio_list->Append(*height_val);
@@ -957,7 +984,8 @@ void HTMLElement::ApplyAlignmentAttributeToStyle(
   CSSValueID float_value = CSSValueID::kInvalid;
   CSSValueID vertical_align_value = CSSValueID::kInvalid;
 
-  if (EqualIgnoringASCIICase(alignment, "absmiddle")) {
+  if (EqualIgnoringASCIICase(alignment, "absmiddle") ||
+      EqualIgnoringASCIICase(alignment, "abscenter")) {
     vertical_align_value = CSSValueID::kMiddle;
   } else if (EqualIgnoringASCIICase(alignment, "absbottom")) {
     vertical_align_value = CSSValueID::kBottom;
@@ -1177,6 +1205,11 @@ static inline bool ElementAffectsDirectionality(const Node* node) {
 
 void HTMLElement::ChildrenChanged(const ChildrenChange& change) {
   Element::ChildrenChanged(change);
+
+  if (HasDirectionAuto()) {
+    SetSelfOrAncestorHasDirAutoAttribute();
+    GetDocument().SetDirAttributeDirty();
+  }
 
   if (GetDocument().IsDirAttributeDirty()) {
     AdjustDirectionalityIfNeededAfterChildrenChanged(change);
@@ -1874,7 +1907,9 @@ void HTMLElement::OnFormAttrChanged(const AttributeModificationParams& params) {
 
 void HTMLElement::OnInertAttrChanged(
     const AttributeModificationParams& params) {
-  UpdateDistributionForUnknownReasons();
+  // The |PropagateInertToChildFrames()| function might need to walk the flat
+  // tree to check for inert parent elements. So update slot assignments here.
+  GetDocument().GetSlotAssignmentEngine().RecalcSlotAssignments();
   if (GetDocument().GetFrame()) {
     GetDocument().GetFrame()->SetIsInert(GetDocument().LocalOwner() &&
                                          GetDocument().LocalOwner()->IsInert());
@@ -2014,18 +2049,15 @@ void HTMLElement::FinishParsingChildren() {
 void HTMLElement::BeginParsingChildren() {
   Element::BeginParsingChildren();
 
-  if (GetDocument().IsDirAttributeDirty()) {
-    if (HasDirectionAuto()) {
-      SetSelfOrAncestorHasDirAutoAttribute();
-    } else if (!ElementAffectsDirectionality(this)) {
-      bool needs_slot_assignment_recalc = false;
-      auto* parent =
-          GetParentForDirectionality(*this, needs_slot_assignment_recalc);
-      if (needs_slot_assignment_recalc)
-        SetNeedsInheritDirectionalityFromParent();
-      else if (parent)
-        SetCachedDirectionality(parent->CachedDirectionality());
-    }
+  if (GetDocument().IsDirAttributeDirty() && !HasDirectionAuto() &&
+      !ElementAffectsDirectionality(this)) {
+    bool needs_slot_assignment_recalc = false;
+    auto* parent =
+        GetParentForDirectionality(*this, needs_slot_assignment_recalc);
+    if (needs_slot_assignment_recalc)
+      SetNeedsInheritDirectionalityFromParent();
+    else if (parent)
+      SetCachedDirectionality(parent->CachedDirectionality());
   }
 }
 

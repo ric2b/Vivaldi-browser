@@ -26,6 +26,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_H_
 
 #include "base/dcheck_is_on.h"
+#include "base/gtest_prod_util.h"
+#include "base/unguessable_token.h"
 #include "third_party/blink/public/common/input/pointer_id.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
@@ -54,6 +56,7 @@ namespace blink {
 class AccessibleNode;
 class Attr;
 class Attribute;
+class ContainerQueryData;
 class ContainerQueryEvaluator;
 class CSSPropertyName;
 class CSSPropertyValueSet;
@@ -118,8 +121,11 @@ enum class ElementFlags {
   kContainsFullScreenElement = 1 << 3,
   kIsInTopLayer = 1 << 4,
   kContainsPersistentVideo = 1 << 5,
-
-  kNumberOfElementFlags = 6,  // Size of bitfield used to store the flags.
+  kDidAttachInternals = 1 << 6,
+  kShouldForceLegacyLayoutForChild = 1 << 7,
+  kStyleShouldForceLegacyLayout = 1 << 8,
+  kHasUndoStack = 1 << 9,
+  kNumberOfElementFlags = 10,  // Size of bitfield used to store the flags.
 };
 
 enum class ShadowRootType;
@@ -144,6 +150,8 @@ enum class NamedItemType {
 typedef HeapVector<Member<Attr>> AttrNodeList;
 
 typedef HashMap<AtomicString, SpecificTrustedType> AttrNameToTrustedType;
+
+typedef base::UnguessableToken RegionCaptureCropId;
 
 class CORE_EXPORT Element : public ContainerNode, public Animatable {
   DEFINE_WRAPPERTYPEINFO();
@@ -528,6 +536,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout);
   virtual bool LayoutObjectIsNeeded(const ComputedStyle&) const;
+
+  const ComputedStyle* ParentComputedStyle() const;
+
   void RecalcStyle(const StyleRecalcChange, const StyleRecalcContext&);
   void RecalcStyleForTraversalRootAncestor();
   void RebuildLayoutTreeForTraversalRootAncestor() {
@@ -548,6 +559,16 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void SetNeedsCompositingUpdate();
 
+  // Generates a unique crop ID and returns the new value. Not all element
+  // types have a region capture crop id, however using it here allows access
+  // to the element rare data struct. Currently, once an element is marked for
+  // region capture it cannot be unmarked, and repeated calls to this API will
+  // return the same token.
+  RegionCaptureCropId MarkWithRegionCaptureCropId();
+
+  // Returns a null token if not marked for capture.
+  RegionCaptureCropId GetRegionCaptureCropId() const;
+
   ShadowRoot* attachShadow(const ShadowRootInit*, ExceptionState&);
 
   void AttachDeclarativeShadowRoot(HTMLTemplateElement*,
@@ -560,6 +581,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       ShadowRootType,
       FocusDelegation focus_delegation = FocusDelegation::kNone,
       SlotAssignmentMode slot_assignment_mode = SlotAssignmentMode::kNamed);
+  void InitializeShadowRootInternal(ShadowRoot&,
+                                    FocusDelegation,
+                                    SlotAssignmentMode);
 
   // Returns the shadow root attached to this element if it is a shadow host.
   ShadowRoot* GetShadowRoot() const;
@@ -569,6 +593,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   ShadowRoot* UserAgentShadowRoot() const;
 
   ShadowRoot& EnsureUserAgentShadowRoot();
+
+  // Implements manual slot assignment for user agent shadow roots.
+  virtual void ManuallyAssignSlots() { DCHECK(false); }
 
   bool IsInDescendantTreeOf(const Element* shadow_host) const;
 
@@ -944,15 +971,16 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
   DisplayLockContext& EnsureDisplayLockContext();
 
-  ContainerQueryEvaluator* GetContainerQueryEvaluator() const;
-  void SetContainerQueryEvaluator(ContainerQueryEvaluator*);
-
   bool ChildStyleRecalcBlockedByDisplayLock() const;
 
   // Activates all activatable (for a given reason) locked ancestors for this
   // element. Return true if we activated at least one previously locked
   // element.
   bool ActivateDisplayLockIfNeeded(DisplayLockActivationReason reason);
+
+  ContainerQueryData* GetContainerQueryData() const;
+  void SetContainerQueryEvaluator(ContainerQueryEvaluator*);
+  ContainerQueryEvaluator* GetContainerQueryEvaluator() const;
 
   virtual void SetActive(bool active);
   virtual void SetHovered(bool hovered);
@@ -1106,6 +1134,15 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // StyleRecalcChange for propagation/traversal into child nodes.
   StyleRecalcChange RecalcOwnStyle(const StyleRecalcChange,
                                    const StyleRecalcContext&);
+
+  // Returns true if we should skip style recalc for the subtree because this
+  // element is a container for size container queries and we are guaranteed to
+  // reach this element during the subsequent layout to continue doing
+  // interleaved style and layout.
+  bool SkipStyleRecalcForContainer(const ComputedStyle& style,
+                                   const StyleRecalcChange& child_change);
+
+  void MarkNonSlottedHostChildrenForStyleRecalc();
 
   void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
   void RebuildFirstLetterLayoutTree();

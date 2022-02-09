@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/types/pass_key.h"
 #include "storage/browser/blob/scoped_file.h"
 #include "storage/browser/file_system/file_system_operation.h"
 #include "storage/browser/file_system/file_system_operation_context.h"
@@ -25,12 +26,24 @@ namespace storage {
 
 class AsyncFileUtil;
 class FileSystemContext;
+class FileSystemOperation;
 class RecursiveOperationDelegate;
 
 // The default implementation of FileSystemOperation for file systems.
 class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
     : public FileSystemOperation {
  public:
+  // Exposed for use with std::make_unique. Instances should be obtained from
+  // the factory method FileSystemOperation::Create().
+  FileSystemOperationImpl(
+      const FileSystemURL& url,
+      FileSystemContext* file_system_context,
+      std::unique_ptr<FileSystemOperationContext> operation_context,
+      base::PassKey<FileSystemOperation>);
+
+  FileSystemOperationImpl(const FileSystemOperationImpl&) = delete;
+  FileSystemOperationImpl& operator=(const FileSystemOperationImpl&) = delete;
+
   ~FileSystemOperationImpl() override;
 
   // FileSystemOperation overrides.
@@ -106,12 +119,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
   FileSystemContext* file_system_context() const {
     return file_system_context_.get();
   }
-
- protected:
-  FileSystemOperationImpl(
-      const FileSystemURL& url,
-      FileSystemContext* file_system_context,
-      std::unique_ptr<FileSystemOperationContext> operation_context);
 
  private:
   friend class FileSystemOperation;
@@ -206,8 +213,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
 
   base::WeakPtr<FileSystemOperationImpl> weak_ptr_;
   base::WeakPtrFactory<FileSystemOperationImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(FileSystemOperationImpl);
 };
 
 }  // namespace storage

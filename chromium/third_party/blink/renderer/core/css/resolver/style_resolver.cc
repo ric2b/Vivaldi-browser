@@ -32,6 +32,7 @@
 
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/renderer/core/animation/css/compositor_keyframe_value_factory.h"
+#include "third_party/blink/renderer/core/animation/css/css_animation_update_scope.h"
 #include "third_party/blink/renderer/core/animation/css/css_animations.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
@@ -113,24 +114,40 @@ namespace blink {
 
 namespace {
 
-void SetAnimationUpdateIfNeeded(StyleResolverState& state, Element& element) {
+bool ShouldStoreOldStyle(const StyleRecalcContext& style_recalc_context,
+                         StyleResolverState& state) {
+  // Storing the old style is only relevant if we risk computing the style
+  // more than once for the same element. This is only possible if we are
+  // currently inside a container.
+  //
+  // If we are not inside a container, we can fall back to the default
+  // behavior (in CSSAnimations) of using the current style on Element
+  // as the old style.
+  return style_recalc_context.container && state.CanAffectAnimations();
+}
+
+void SetAnimationUpdateIfNeeded(const StyleRecalcContext& style_recalc_context,
+                                StyleResolverState& state,
+                                Element& element) {
+  if (RuntimeEnabledFeatures::CSSDelayedAnimationUpdatesEnabled()) {
+    if (auto* data = CSSAnimationUpdateScope::CurrentData()) {
+      if (ShouldStoreOldStyle(style_recalc_context, state))
+        data->StoreOldStyleIfNeeded(element);
+    }
+  }
+
   // If any changes to CSS Animations were detected, stash the update away for
   // application after the layout object is updated if we're in the appropriate
   // scope.
   if (state.AnimationUpdate().IsEmpty())
     return;
 
-  auto& element_animations = element.EnsureElementAnimations();
-  auto& document_animations = state.GetDocument().GetDocumentAnimations();
-
-  element_animations.CssAnimations().SetPendingUpdate(state.AnimationUpdate());
-
-  if (RuntimeEnabledFeatures::CSSIsolatedAnimationUpdatesEnabled()) {
-    if (document_animations.AnimationUpdatesAllowed()) {
-      state.GetDocument()
-          .GetDocumentAnimations()
-          .AddElementWithPendingAnimationUpdate(element);
-    }
+  if (RuntimeEnabledFeatures::CSSDelayedAnimationUpdatesEnabled()) {
+    if (auto* data = CSSAnimationUpdateScope::CurrentData())
+      data->SetPendingUpdate(element, state.AnimationUpdate());
+  } else {
+    element.EnsureElementAnimations().CssAnimations().SetPendingUpdate(
+        state.AnimationUpdate());
   }
 }
 
@@ -502,7 +519,8 @@ static void MatchElementScopeRules(const Element& element,
     // Inline style is immutable as long as there is no CSSOM wrapper.
     bool is_inline_style_cacheable = !element.InlineStyle()->IsMutable();
     collector.AddElementStyleProperties(element.InlineStyle(),
-                                        is_inline_style_cacheable);
+                                        is_inline_style_cacheable,
+                                        true /* is_inline_style */);
   }
 
   collector.FinishAddingAuthorRulesForTreeScope(
@@ -763,8 +781,6 @@ scoped_refptr<ComputedStyle> StyleResolver::ResolveStyle(
     return nullptr;
   }
 
-  DCHECK(!style_request.IsPseudoStyleRequest() ||
-         style_request.parent_override);
   DCHECK(GetDocument().GetFrame());
   DCHECK(GetDocument().GetSettings());
 
@@ -816,7 +832,7 @@ scoped_refptr<ComputedStyle> StyleResolver::ResolveStyle(
   }
 
   if (Element* animating_element = state.GetAnimatingElement())
-    SetAnimationUpdateIfNeeded(state, *animating_element);
+    SetAnimationUpdateIfNeeded(style_recalc_context, state, *animating_element);
 
   if (state.Style()->HasViewportUnits())
     GetDocument().SetHasViewportUnits();
@@ -844,11 +860,22 @@ static bool AllowsInheritance(const StyleRequest& style_request,
   return parent_style && style_request.pseudo_id != kPseudoIdBackdrop;
 }
 
-void StyleResolver::InitStyleAndApplyInheritance(
-    Element& element,
-    const StyleRequest& style_request,
-    StyleResolverState& state) {
-  if (AllowsInheritance(style_request, state.ParentStyle())) {
+void StyleResolver::ApplyInheritance(Element& element,
+                                     const StyleRequest& style_request,
+                                     StyleResolverState& state) {
+  if (RuntimeEnabledFeatures::HighlightInheritanceEnabled() &&
+      IsHighlightPseudoElement(style_request.pseudo_id)) {
+    // When resolving highlight styles for children, we need to default all
+    // properties (whether or not defined as inherited) to parent values.
+
+    // Sadly, ComputedStyle creation is unavoidable until ElementRuleCollector
+    // and friends stop relying on ComputedStyle mutation. The good news is that
+    // if the element has no rules for this highlight pseudo, we skip resolution
+    // entirely (leaving the scoped_refptr untouched). The bad news is that if
+    // the element has rules but no matched properties, we currently clone.
+
+    state.SetStyle(ComputedStyle::Clone(*state.ParentStyle()));
+  } else {
     scoped_refptr<ComputedStyle> style = CreateComputedStyle();
     style->InheritFrom(
         *state.ParentStyle(),
@@ -865,6 +892,15 @@ void StyleResolver::InitStyleAndApplyInheritance(
           state.Style()->SetUserModify(shadow_host_style->UserModify());
       }
     }
+  }
+}
+
+void StyleResolver::InitStyleAndApplyInheritance(
+    Element& element,
+    const StyleRequest& style_request,
+    StyleResolverState& state) {
+  if (AllowsInheritance(style_request, state.ParentStyle())) {
+    ApplyInheritance(element, style_request, state);
   } else {
     state.SetStyle(InitialStyleForElement());
     state.SetParentStyle(ComputedStyle::Clone(*state.Style()));
@@ -999,6 +1035,8 @@ void StyleResolver::ApplyBaseStyle(
 
     if (collector.MatchedResult().DependsOnContainerQueries())
       state.Style()->SetDependsOnContainerQueries(true);
+    if (collector.MatchedResult().ConditionallyAffectsAnimations())
+      state.SetCanAffectAnimations();
 
     ApplyCallbackSelectors(state);
 
@@ -1083,7 +1121,8 @@ scoped_refptr<const ComputedStyle> StyleResolver::StyleForPage(
                               cascade.MutableMatchResult());
 
   collector.MatchPageRules(
-      CSSDefaultStyleSheets::Instance().DefaultPrintStyle());
+      CSSDefaultStyleSheets::Instance().DefaultPrintStyle(),
+      nullptr /* layer_map */);
 
   if (ScopedStyleResolver* scoped_resolver =
           GetDocument().GetScopedStyleResolver())
@@ -1114,6 +1153,12 @@ scoped_refptr<ComputedStyle> StyleResolver::InitialStyleForElement() const {
       frame && !GetDocument().Printing() ? frame->PageZoomFactor() : 1);
   initial_style->SetEffectiveZoom(initial_style->Zoom());
   initial_style->SetInForcedColorsMode(GetDocument().InForcedColorsMode());
+  if (auto* settings = GetDocument().GetSettings()) {
+    if (settings->GetForceDarkModeEnabled()) {
+      initial_style->SetDarkColorScheme(true);
+      initial_style->SetColorSchemeForced(true);
+    }
+  }
   initial_style->SetTapHighlightColor(
       ComputedStyleInitialValues::InitialTapHighlightColor());
 
@@ -1289,6 +1334,8 @@ bool StyleResolver::ApplyAnimatedStyle(StyleResolverState& state,
 
   CSSAnimations::SnapshotCompositorKeyframes(
       element, state.AnimationUpdate(), *state.Style(), state.ParentStyle());
+  CSSAnimations::UpdateAnimationFlags(
+      *animating_element, state.AnimationUpdate(), state.StyleRef());
 
   if (state.AnimationUpdate().IsEmpty())
     return false;
@@ -1730,7 +1777,18 @@ StyleResolver::CreateInheritedDisplayContentsStyleIfNeeded(
     const ComputedStyle& layout_parent_style) {
   if (parent_style.InheritedEqual(layout_parent_style))
     return nullptr;
-  return CreateAnonymousStyleWithDisplay(parent_style, EDisplay::kInline);
+  scoped_refptr<ComputedStyle> text_style =
+      CreateAnonymousStyleWithDisplay(parent_style, EDisplay::kInline);
+  // If the parent with display:contents has its own text-decoration,
+  // remove it from AppliedTextDecorations.
+  wtf_size_t parent_decorations = parent_style.AppliedTextDecorations().size();
+  if (parent_decorations >
+      layout_parent_style.AppliedTextDecorations().size()) {
+    text_style->ClearAppliedTextDecorations();
+    if (parent_decorations > 1u)
+      text_style->RestoreParentTextDecorations(layout_parent_style);
+  }
+  return text_style;
 }
 
 #define PROPAGATE_FROM(source, getter, setter, initial) \
@@ -1974,6 +2032,8 @@ void StyleResolver::PropagateStyleToViewport() {
                    mojom::blink::ScrollBehavior::kAuto);
     PROPAGATE_FROM(document_element_style, DarkColorScheme, SetDarkColorScheme,
                    false);
+    PROPAGATE_FROM(document_element_style, ColorSchemeForced,
+                   SetColorSchemeForced, false);
     PROPAGATE_FROM(document_element_style, ScrollbarGutter, SetScrollbarGutter,
                    kScrollbarGutterAuto);
     PROPAGATE_FROM(document_element_style, ForcedColorAdjust,

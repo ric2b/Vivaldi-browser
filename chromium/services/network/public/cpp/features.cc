@@ -6,6 +6,7 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 
@@ -83,7 +84,7 @@ const base::Feature kProactivelyThrottleLowPriorityRequests{
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginEmbedderPolicyCredentialless{
     "CrossOriginEmbedderPolicyCredentialless",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables Cross-Origin-Embedder-Policy credentialless origin trial. It will be
 // used as a kill switch during the experiment.
@@ -99,22 +100,6 @@ const base::Feature kCrossOriginEmbedderPolicyCredentiallessOriginTrial{
 // Currently this feature is enabled for all platforms except WebView.
 const base::Feature kCrossOriginOpenerPolicy{"CrossOriginOpenerPolicy",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables Cross-Origin-Opener-Policy reporting API origin trial. It will be
-// used as a kill switch during the experiment.
-const base::Feature kCrossOriginOpenerPolicyReportingOriginTrial{
-    "CrossOriginOpenerPolicyReportingOriginTrial",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables Cross-Origin Opener Policy (COOP) reporting.
-// https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
-const base::Feature kCrossOriginOpenerPolicyReporting{
-    "CrossOriginOpenerPolicyReporting", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables Cross-Origin Opener Policy (COOP) access reporting.
-// https://github.com/camillelamy/explainers/blob/master/coop_reporting.md#report-blocked-accesses-to-other-windows
-const base::Feature kCrossOriginOpenerPolicyAccessReporting{
-    "CrossOriginOpenerPolicyAccessReporting", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Shift's COOP's default from `unsafe-none` to `same-origin-allow-popups`.
 // https://github.com/mikewest/coop-by-default/
@@ -209,7 +194,7 @@ const base::Feature kWebSocketReassembleShortMessages{
 // See:
 // https://tools.ietf.org/html/draft-davidben-http-client-hint-reliability-02#section-4.3
 const base::Feature kAcceptCHFrame{"AcceptCHFrame",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSCTAuditingRetryAndPersistReports{
     "SCTAuditingRetryAndPersistReports", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -237,7 +222,12 @@ constexpr base::FeatureParam<int> kLoaderChunkSize{
 }  // namespace
 
 // static
-uint32_t GetDataPipeDefaultAllocationSize() {
+uint32_t GetDataPipeDefaultAllocationSize(DataPipeAllocationSize option) {
+  if (option == DataPipeAllocationSize::kDefaultSizeOnly)
+    return kDataPipeDefaultAllocationSize;
+  // For low-memory devices, always use the (smaller) default buffer size.
+  if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
+    return kDataPipeDefaultAllocationSize;
   return base::saturated_cast<uint32_t>(kDataPipeAllocationSize.Get());
 }
 

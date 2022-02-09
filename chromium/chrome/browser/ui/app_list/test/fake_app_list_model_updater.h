@@ -38,9 +38,12 @@ class FakeAppListModelUpdater : public AppListModelUpdater {
       bool update_folder) override;
   void RemoveItem(const std::string& id) override;
   void RemoveUninstalledItem(const std::string& id) override;
-  void MoveItemToFolder(const std::string& id,
-                        const std::string& folder_id) override;
   void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) override;
+  void SetItemFolderId(const std::string& id,
+                       const std::string& folder_id) override;
+  void SetItemPosition(const std::string& id,
+                       const syncer::StringOrdinal& new_position) override;
+  void SetItemName(const std::string& id, const std::string& new_name) override;
   // For SearchModel:
   void SetSearchEngineIsGoogle(bool is_google) override;
   void PublishSearchResults(
@@ -61,6 +64,7 @@ class FakeAppListModelUpdater : public AppListModelUpdater {
   void GetContextMenuModel(const std::string& id,
                            GetMenuModelCallback callback) override;
   size_t BadgedItemCount() override;
+  void OnSortRequested(ash::AppListSortOrder order) override {}
   // For SearchModel:
   bool SearchEngineIsGoogle() override;
   const std::vector<ChromeSearchResult*>& search_results() const {

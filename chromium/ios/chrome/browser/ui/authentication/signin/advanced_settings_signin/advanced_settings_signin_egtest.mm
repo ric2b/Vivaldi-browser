@@ -4,7 +4,6 @@
 
 #include "base/ios/ios_util.h"
 #import "base/test/ios/wait_util.h"
-#import "components/signin/public/base/account_consistency_method.h"
 #import "ios/chrome/browser/ui/authentication/signin/advanced_settings_signin/advanced_settings_signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
@@ -29,12 +28,12 @@
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::GoogleServicesSettingsView;
+using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SettingsLink;
-using chrome_test_util::SyncSettingsConfirmButton;
+using chrome_test_util::AdvancedSyncSettingsDoneButtonMatcher;
 using l10n_util::GetNSString;
 using testing::ButtonWithAccessibilityLabel;
 using base::test::ios::WaitUntilConditionOrTimeout;
@@ -42,13 +41,14 @@ using base::test::ios::kWaitForUIElementTimeout;
 
 namespace {
 
+NSString* const kPassphrase = @"hello";
+
 // Timeout in seconds to wait for asynchronous sync operations.
 const NSTimeInterval kSyncOperationTimeout = 5.0;
 
 }  // namespace
 
-// Interaction tests for advanced settings sign-in with
-// |kMobileIdentityConsistency| feature enabled.
+// Interaction tests for advanced settings sign-in.
 @interface AdvancedSettingsSigninTestCase : WebHttpServerChromeTestCase
 @end
 
@@ -77,9 +77,9 @@ const NSTimeInterval kSyncOperationTimeout = 5.0;
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
   [[EarlGrey selectElementWithMatcher:SettingsLink()] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SyncSettingsConfirmButton()]
+  [[EarlGrey selectElementWithMatcher:AdvancedSyncSettingsDoneButtonMatcher()]
       performAction:grey_tap()];
-
+  [SigninEarlGreyUI tapSigninConfirmationDialog];
   // Test the user is signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 }
@@ -94,9 +94,9 @@ const NSTimeInterval kSyncOperationTimeout = 5.0;
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
   [[EarlGrey selectElementWithMatcher:SettingsLink()] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SyncSettingsConfirmButton()]
+  [[EarlGrey selectElementWithMatcher:AdvancedSyncSettingsDoneButtonMatcher()]
       performAction:grey_tap()];
-
+  [SigninEarlGreyUI tapSigninConfirmationDialog];
   // Test the user is signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 
@@ -140,9 +140,9 @@ const NSTimeInterval kSyncOperationTimeout = 5.0;
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
   [[EarlGrey selectElementWithMatcher:SettingsLink()] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SyncSettingsConfirmButton()]
+  [[EarlGrey selectElementWithMatcher:AdvancedSyncSettingsDoneButtonMatcher()]
       performAction:grey_tap()];
-
+  [SigninEarlGreyUI tapSigninConfirmationDialog];
   // Test the user is signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 
@@ -197,16 +197,16 @@ const NSTimeInterval kSyncOperationTimeout = 5.0;
 // Tests that a user account with a sync password displays a sync error
 // message after sign-in.
 - (void)testSigninOpenSyncSettingsWithPasswordError {
-  [ChromeEarlGrey addBookmarkWithSyncPassphrase:@"hello"];
+  [ChromeEarlGrey addBookmarkWithSyncPassphrase:kPassphrase];
   FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
   [[EarlGrey selectElementWithMatcher:SettingsLink()] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SyncSettingsConfirmButton()]
+  [[EarlGrey selectElementWithMatcher:AdvancedSyncSettingsDoneButtonMatcher()]
       performAction:grey_tap()];
-
+  [SigninEarlGreyUI tapSigninConfirmationDialog];
   // Test the user is signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 
@@ -230,26 +230,33 @@ const NSTimeInterval kSyncOperationTimeout = 5.0;
              @"Could not find the Sync Error text");
 }
 
-// Verifies that advanced sign-in shows an alert dialog when being swiped to
-// dismiss.
-- (void)testSwipeDownToCancelAdvancedSignin {
+// Tests that no sync error will be displayed after a user introduces the sync
+// passphrase correctly from Advanced Settings and then signs in.
+- (void)testSigninWithPassword {
+  [ChromeEarlGrey addBookmarkWithSyncPassphrase:kPassphrase];
   FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
   [[EarlGrey selectElementWithMatcher:SettingsLink()] performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   kManageSyncTableViewAccessibilityIdentifier)]
-      performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
-  [[EarlGrey
-      selectElementWithMatcher:
-          ButtonWithAccessibilityLabel(GetNSString(
-              IDS_IOS_ADVANCED_SIGNIN_SETTINGS_CANCEL_SYNC_ALERT_CANCEL_SYNC_BUTTON))]
+  // Scroll and select the Encryption item.
+  [[[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                           IDS_IOS_MANAGE_SYNC_ENCRYPTION)]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 200)
+      onElementWithMatcher:grey_accessibilityID(
+                               kManageSyncTableViewAccessibilityIdentifier)]
       performAction:grey_tap()];
 
-  [SigninEarlGrey verifySignedOut];
+  // Type and submit the sync passphrase.
+  [SigninEarlGreyUI submitSyncPassphrase:kPassphrase];
+
+  [[EarlGrey selectElementWithMatcher:AdvancedSyncSettingsDoneButtonMatcher()]
+      performAction:grey_tap()];
+  [SigninEarlGreyUI tapSigninConfirmationDialog];
+  // Check Sync On label is visible and user is signed in.
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
+  [SigninEarlGrey verifySyncUIEnabled:YES];
 }
 
 // Tests interrupting sign-in by opening an URL from another app.
@@ -333,12 +340,12 @@ const NSTimeInterval kSyncOperationTimeout = 5.0;
   [[EarlGrey selectElementWithMatcher:SettingsLink()] performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kSyncSettingsCancelButtonId)]
+  [[EarlGrey selectElementWithMatcher:AdvancedSyncSettingsDoneButtonMatcher()]
       performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   @"Cancel Sync")] performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON)]
+      performAction:grey_tap()];
 
   [SigninEarlGrey verifySignedOut];
 }

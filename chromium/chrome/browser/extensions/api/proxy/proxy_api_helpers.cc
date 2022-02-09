@@ -27,6 +27,8 @@
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "extensions/common/error_utils.h"
 #include "net/base/data_url.h"
+#include "net/base/proxy_server.h"
+#include "net/base/proxy_string_util.h"
 #include "net/proxy_resolution/proxy_config.h"
 
 namespace extensions {
@@ -169,8 +171,7 @@ bool GetProxyServer(const base::DictionaryValue* proxy_server,
   proxy_server->GetStringASCII(proxy_api_constants::kProxyConfigRuleScheme,
                                &scheme_string);
 
-  net::ProxyServer::Scheme scheme =
-      net::ProxyServer::GetSchemeFromURI(scheme_string);
+  net::ProxyServer::Scheme scheme = net::GetSchemeFromUriScheme(scheme_string);
   if (scheme == net::ProxyServer::SCHEME_INVALID)
     scheme = default_scheme;
 
@@ -249,7 +250,8 @@ bool GetProxyRulesStringFromExtensionPref(
         return false;
       }
     }
-    *out = proxy_server[proxy_api_constants::SCHEME_ALL].ToURI();
+    *out = net::ProxyServerToProxyUri(
+        proxy_server[proxy_api_constants::SCHEME_ALL]);
     return true;
   }
 
@@ -264,7 +266,7 @@ bool GetProxyRulesStringFromExtensionPref(
         proxy_pref.append(";");
       proxy_pref.append(proxy_api_constants::scheme_name[i]);
       proxy_pref.append("=");
-      proxy_pref.append(proxy_server[i].ToURI());
+      proxy_pref.append(net::ProxyServerToProxyUri(proxy_server[i]));
     }
   }
 
@@ -278,7 +280,7 @@ bool JoinUrlList(const base::ListValue* list,
                  std::string* error,
                  bool* bad_message) {
   std::string result;
-  for (size_t i = 0; i < list->GetSize(); ++i) {
+  for (size_t i = 0; i < list->GetList().size(); ++i) {
     if (!result.empty())
       result.append(joiner);
 
@@ -518,7 +520,7 @@ std::unique_ptr<base::ListValue> TokenizeToStringList(
   auto out = std::make_unique<base::ListValue>();
   base::StringTokenizer entries(in, delims);
   while (entries.GetNext())
-    out->AppendString(entries.token_piece());
+    out->Append(entries.token_piece());
   return out;
 }
 

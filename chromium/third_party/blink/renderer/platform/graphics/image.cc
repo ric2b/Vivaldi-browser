@@ -234,7 +234,7 @@ void Image::DrawPattern(GraphicsContext& context,
 
   // Fetch orientation data if needed.
   ImageOrientation orientation = ImageOrientationEnum::kDefault;
-  if (draw_options.respect_image_orientation)
+  if (draw_options.respect_orientation)
     orientation = CurrentFrameOrientation();
 
   // |tiling_info.image_rect| is in source image space, unscaled but oriented.
@@ -290,7 +290,7 @@ void Image::DrawPattern(GraphicsContext& context,
   flags.setColor(tile_shader ? SK_ColorBLACK : SK_ColorTRANSPARENT);
   flags.setShader(std::move(tile_shader));
 
-  context.DrawRect(dest_rect, flags);
+  context.DrawRect(dest_rect, flags, AutoDarkMode(draw_options));
 
   StartAnimation();
 
@@ -320,7 +320,9 @@ PaintImageBuilder Image::CreatePaintImageBuilder() {
       .set_is_multipart(is_multipart_);
 }
 
-bool Image::ApplyShader(PaintFlags& flags, const SkMatrix& local_matrix) {
+bool Image::ApplyShader(PaintFlags& flags,
+                        const SkMatrix& local_matrix,
+                        const ImageDrawOptions&) {
   // Default shader impl: attempt to build a shader based on the current frame
   // SkImage.
   PaintImage image = PaintImageForCurrentFrame();

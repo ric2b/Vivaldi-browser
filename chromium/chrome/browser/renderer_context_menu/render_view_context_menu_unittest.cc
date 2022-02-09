@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -162,6 +163,10 @@ class RenderViewContextMenuTest : public testing::Test {
     // TODO(mgiuca): Add tests with DesktopPWAs enabled.
   }
 
+  RenderViewContextMenuTest(const RenderViewContextMenuTest&) = delete;
+  RenderViewContextMenuTest& operator=(const RenderViewContextMenuTest&) =
+      delete;
+
   // Proxy defined here to minimize friend classes in RenderViewContextMenu
   static bool ExtensionContextAndPatternMatch(
       const content::ContextMenuParams& params,
@@ -189,8 +194,6 @@ class RenderViewContextMenuTest : public testing::Test {
 
  private:
   content::RenderViewHostTestEnabler rvh_test_enabler_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenuTest);
 };
 
 // Generates a URLPatternSet with a single pattern
@@ -368,6 +371,11 @@ class RenderViewContextMenuExtensionsTest : public RenderViewContextMenuTest {
       : RenderViewContextMenuTest(
             std::make_unique<extensions::TestExtensionEnvironment>()) {}
 
+  RenderViewContextMenuExtensionsTest(
+      const RenderViewContextMenuExtensionsTest&) = delete;
+  RenderViewContextMenuExtensionsTest& operator=(
+      const RenderViewContextMenuExtensionsTest&) = delete;
+
   void SetUp() override {
     RenderViewContextMenuTest::SetUp();
     // TestingProfile does not provide a protocol registry.
@@ -385,8 +393,6 @@ class RenderViewContextMenuExtensionsTest : public RenderViewContextMenuTest {
 
  protected:
   std::unique_ptr<ProtocolHandlerRegistry> registry_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenuExtensionsTest);
 };
 
 TEST_F(RenderViewContextMenuExtensionsTest,
@@ -429,6 +435,11 @@ class RenderViewContextMenuPrefsTest : public ChromeRenderViewHostTestHarness {
  public:
   RenderViewContextMenuPrefsTest() = default;
 
+  RenderViewContextMenuPrefsTest(const RenderViewContextMenuPrefsTest&) =
+      delete;
+  RenderViewContextMenuPrefsTest& operator=(
+      const RenderViewContextMenuPrefsTest&) = delete;
+
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     registry_ = std::make_unique<ProtocolHandlerRegistry>(profile(), nullptr);
@@ -466,10 +477,14 @@ class RenderViewContextMenuPrefsTest : public ChromeRenderViewHostTestHarness {
     menu->AppendImageItems();
   }
 
-  void SetUserSelectedDefaultSearchProvider(const std::string& base_url) {
+  void SetUserSelectedDefaultSearchProvider(const std::string& base_url,
+                                            bool supports_image_search) {
     TemplateURLData data;
     data.SetShortName(u"t");
     data.SetURL(base_url + "?q={searchTerms}");
+    if (supports_image_search) {
+      data.image_url = base_url;
+    }
     TemplateURL* template_url =
         template_url_service_->Add(std::make_unique<TemplateURL>(data));
     template_url_service_->SetUserSelectedDefaultSearchProvider(template_url);
@@ -478,8 +493,6 @@ class RenderViewContextMenuPrefsTest : public ChromeRenderViewHostTestHarness {
  private:
   std::unique_ptr<ProtocolHandlerRegistry> registry_;
   TemplateURLService* template_url_service_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenuPrefsTest);
 };
 
 // Verifies when Incognito Mode is not available (disabled by policy),
@@ -495,8 +508,8 @@ TEST_F(RenderViewContextMenuPrefsTest,
       menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD));
 
   // Disable Incognito mode.
-  IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
-                                      IncognitoModePrefs::DISABLED);
+  IncognitoModePrefs::SetAvailability(
+      profile()->GetPrefs(), IncognitoModePrefs::Availability::kDisabled);
   menu = CreateContextMenu();
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD));
   EXPECT_FALSE(
@@ -708,17 +721,19 @@ TEST_F(RenderViewContextMenuPrefsTest, ShowAllPasswordsIncognito) {
   EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SHOWALLSAVEDPASSWORDS));
 }
 
-// TODO(crbug/1229334): Add Mac support for Lens Region Search feature.
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Verify that the Lens Region Search menu item is displayed when the feature
 // is enabled.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearch) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(lens::features::kLensRegionSearch);
-  SetUserSelectedDefaultSearchProvider("https://www.google.com");
-  std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  menu.Init();
 
-  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
 
 // Verify that the Lens Region Search menu item is disabled when the user's
@@ -727,12 +742,15 @@ TEST_F(RenderViewContextMenuPrefsTest,
        LensRegionSearchEnterprisePoicyDisabled) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(lens::features::kLensRegionSearch);
-  SetUserSelectedDefaultSearchProvider("https://www.google.com");
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
   // Set enterprise policy to false.
   profile()->GetPrefs()->SetBoolean(prefs::kLensRegionSearchEnabled, false);
-  std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  menu.Init();
 
-  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
 
 // Verify that the Lens Region Search menu item is disabled when the user
@@ -740,26 +758,47 @@ TEST_F(RenderViewContextMenuPrefsTest,
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchDisabledOnImage) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(lens::features::kLensRegionSearch);
-  SetUserSelectedDefaultSearchProvider("https://www.google.com");
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
   params.has_image_contents = true;
-  auto menu = std::make_unique<TestRenderViewContextMenu>(
-      web_contents()->GetMainFrame(), params);
-  AppendImageItems(menu.get());
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  AppendImageItems(&menu);
 
-  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
 }
 
-// Verify that the Lens Region Search menu item is disabled when the user's
-// default browser is not Google.
+// Verify that the web region search menu item is enabled for a non-Google
+// search engine that supports visual search.
 TEST_F(RenderViewContextMenuPrefsTest,
-       LensRegionSearchNonGoogleDefaultSearchEngine) {
+       LensRegionSearchNonGoogleDefaultSearchEngineSupportsImageSearch) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(lens::features::kLensRegionSearch);
-  SetUserSelectedDefaultSearchProvider("https://www.search.com");
-  std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
+  SetUserSelectedDefaultSearchProvider("https://www.search.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  menu.Init();
 
-  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+}
+
+// Verify that region search menu items are disabled for a search engine that
+// does not support visual search.
+TEST_F(RenderViewContextMenuPrefsTest,
+       LensRegionSearchDefaultSearchEngineDoesNotSupportImageSearch) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  SetUserSelectedDefaultSearchProvider("https://www.search.com",
+                                       /*supports_image_search=*/false);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
 
 // Verify that the Lens Region Search menu item is disabled when the feature
@@ -767,11 +806,30 @@ TEST_F(RenderViewContextMenuPrefsTest,
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchExperimentDisabled) {
   base::test::ScopedFeatureList features;
   features.InitAndDisableFeature(lens::features::kLensRegionSearch);
-  SetUserSelectedDefaultSearchProvider("https://www.google.com");
-  std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  menu.Init();
 
-  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
+
+// Verify that the Lens Region Search menu item is disabled for any page with a
+// Chrome UI Scheme.
+TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchChromeUIScheme) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  params.page_url = GURL(chrome::kChromeUISettingsURL);
+  TestRenderViewContextMenu menu(web_contents()->GetMainFrame(), params);
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+}
+
 #endif
 
 // Test FormatUrlForClipboard behavior

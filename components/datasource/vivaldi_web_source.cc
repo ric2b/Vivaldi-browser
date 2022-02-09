@@ -20,14 +20,12 @@ const char kHtmlStyleStart[] = "<style type=\"text/css\">\n";
 const char kHtmlStyleEnd[] = "</style>\n";
 const char kHtmlBody[] = "</head>\n<body>\n";
 const char kHtmlFooter[] = "</body>\n</html>\n";
-}
+}  // namespace
 
 VivaldiWebSource::VivaldiWebSource(Profile* profile)
-    : weak_ptr_factory_(this) {
-}
+    : weak_ptr_factory_(this) {}
 
-VivaldiWebSource::~VivaldiWebSource() {
-}
+VivaldiWebSource::~VivaldiWebSource() {}
 
 std::string VivaldiWebSource::GetSource() {
   return vivaldi::kVivaldiWebUIHost;

@@ -105,6 +105,9 @@ class VivaldiWindowNativeWidgetMac : public views::NativeWidgetMac {
   VivaldiWindowNativeWidgetMac(views::Widget* widget, bool is_frameless)
       : NativeWidgetMac(widget), is_frameless_(is_frameless) {}
   ~VivaldiWindowNativeWidgetMac() override {}
+  VivaldiWindowNativeWidgetMac(const VivaldiWindowNativeWidgetMac&) = delete;
+  VivaldiWindowNativeWidgetMac& operator=(const VivaldiWindowNativeWidgetMac&) =
+      delete;
 
  protected:
   // NativeWidgetMac:
@@ -122,8 +125,6 @@ class VivaldiWindowNativeWidgetMac : public views::NativeWidgetMac {
 
  private:
   bool is_frameless_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWindowNativeWidgetMac);
 };
 
 bool NSWindowIsMaximized(NSWindow* window) {
@@ -137,7 +138,7 @@ bool NSWindowIsMaximized(NSWindow* window) {
   return NSEqualRects([window frame], [[window screen] visibleFrame]);
 }
 
-}  //namespace
+}  // namespace
 
 // static
 std::unique_ptr<VivaldiNativeAppWindowViews>
@@ -152,8 +153,8 @@ VivaldiNativeAppWindowViewsMac::~VivaldiNativeAppWindowViewsMac() {
 }
 
 void VivaldiNativeAppWindowViewsMac::OnWindowWillEnterFullScreen() {
-    menubarTracker_.reset([[VivaldiFullscreenMenubarTracker alloc]
-        initWithVivaldiNativeAppWindow:this]);
+  menubarTracker_.reset([[VivaldiFullscreenMenubarTracker alloc]
+      initWithVivaldiNativeAppWindow:this]);
 }
 
 void VivaldiNativeAppWindowViewsMac::OnWindowWillStartLiveResize() {
@@ -262,8 +263,9 @@ void VivaldiNativeAppWindowViewsMac::DispatchFullscreenMenubarChangedEvent(
     return;
   }
   ::vivaldi::BroadcastEvent(
-    extensions::vivaldi::window_private::OnFullscreenMenubarChanged::kEventName,
-    extensions::vivaldi::window_private::OnFullscreenMenubarChanged::Create(
-        browser->session_id().id(), shown),
-    browser->profile());
+      extensions::vivaldi::window_private::OnFullscreenMenubarChanged::
+          kEventName,
+      extensions::vivaldi::window_private::OnFullscreenMenubarChanged::Create(
+          browser->session_id().id(), shown),
+      browser->profile());
 }

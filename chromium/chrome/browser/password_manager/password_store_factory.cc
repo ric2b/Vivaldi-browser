@@ -11,7 +11,9 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/password_manager/affiliation_service_factory.h"
 #include "chrome/browser/password_manager/credentials_cleaner_runner_factory.h"
+#include "chrome/browser/password_manager/password_store_utils.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -35,31 +37,13 @@
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#if defined(OS_WIN)
-#include "chrome/browser/password_manager/password_manager_util_win.h"
-#endif
-#if defined(OS_ANDROID)
-#include "chrome/browser/password_manager/android/password_store_android_backend_bridge_impl.h"
-#endif
-
 using password_manager::PasswordStore;
 using password_manager::PasswordStoreInterface;
 
-// TODO(crbug.com/1218413): Delete this method when the migration to
-// PasswordStoreInterface is complete and rename the method below to
-// GetForProfile.
 // static
-scoped_refptr<PasswordStore> PasswordStoreFactory::GetForProfile(
+scoped_refptr<PasswordStoreInterface> PasswordStoreFactory::GetForProfile(
     Profile* profile,
     ServiceAccessType access_type) {
-  return base::WrapRefCounted(static_cast<PasswordStore*>(
-      GetInterfaceForProfile(profile, access_type).get()));
-}
-
-// static
-scoped_refptr<PasswordStoreInterface>
-PasswordStoreFactory::GetInterfaceForProfile(Profile* profile,
-                                             ServiceAccessType access_type) {
   // |profile| gets always redirected to a non-Incognito profile below, so
   // Incognito & IMPLICIT_ACCESS means that incognito browsing session would
   // result in traces in the normal profile without the user knowing it.
@@ -75,27 +59,11 @@ PasswordStoreFactory* PasswordStoreFactory::GetInstance() {
   return base::Singleton<PasswordStoreFactory>::get();
 }
 
-// static
-void PasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged(
-    Profile* profile) {
-  scoped_refptr<PasswordStore> password_store =
-      GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
-  if (!password_store)
-    return;
-  syncer::SyncService* sync_service =
-      SyncServiceFactory::GetForProfile(profile);
-
-  password_manager::ToggleAffiliationBasedMatchingBasedOnPasswordSyncedState(
-      password_store.get(), sync_service,
-      profile->GetDefaultStoragePartition()
-          ->GetURLLoaderFactoryForBrowserProcess(),
-      content::GetNetworkConnectionTracker(), profile->GetPath());
-}
-
 PasswordStoreFactory::PasswordStoreFactory()
     : RefcountedBrowserContextKeyedServiceFactory(
           "PasswordStore",
           BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(AffiliationServiceFactory::GetInstance());
   DependsOn(WebDataServiceFactory::GetInstance());
 }
 
@@ -104,9 +72,6 @@ PasswordStoreFactory::~PasswordStoreFactory() = default;
 scoped_refptr<RefcountedKeyedService>
 PasswordStoreFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-#if defined(OS_WIN)
-  password_manager_util_win::DelayReportOsPassword();
-#endif
   Profile* profile = static_cast<Profile*>(context);
 
   std::unique_ptr<password_manager::LoginDatabase> login_db(
@@ -114,8 +79,8 @@ PasswordStoreFactory::BuildServiceInstanceFor(
           profile->GetPath()));
 
   scoped_refptr<PasswordStore> ps;
-#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID) || \
-    defined(OS_MAC) || defined(USE_X11) || defined(USE_OZONE)
+#if defined(OS_WIN) || defined(OS_ANDROID) || defined(OS_MAC) || \
+    defined(USE_OZONE)
 
   // TODO(crbug.com/1217071): Remove feature-guard once PasswordStoreImpl does
   // not implement the PasswordStore abstract class anymore.
@@ -124,7 +89,9 @@ PasswordStoreFactory::BuildServiceInstanceFor(
     ps = new password_manager::PasswordStore(
         password_manager::PasswordStoreBackend::Create(std::move(login_db)));
   } else {
-    ps = new password_manager::PasswordStoreImpl(std::move(login_db));
+    ps = new password_manager::PasswordStore(
+        std::make_unique<password_manager::PasswordStoreImpl>(
+            std::move(login_db)));
   }
 #else
   NOTIMPLEMENTED();
@@ -146,21 +113,13 @@ PasswordStoreFactory::BuildServiceInstanceFor(
       profile);
   password_manager_util::RemoveUselessCredentials(
       CredentialsCleanerRunnerFactory::GetForProfile(profile), ps,
-      profile->GetPrefs(), base::TimeDelta::FromSeconds(60),
-      network_context_getter);
+      profile->GetPrefs(), base::Seconds(60), network_context_getter);
 
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kFillingAcrossAffiliatedWebsites)) {
-    // Try to create affiliation service without awaiting synced state changes.
-    // TODO(http://crbug.com/1202699): Remove sync service completely after
-    // launching HashAffiliationLookup.
-    password_manager::ToggleAffiliationBasedMatchingBasedOnPasswordSyncedState(
-        ps.get(), /*sync_service=*/nullptr,
-        profile->GetDefaultStoragePartition()
-            ->GetURLLoaderFactoryForBrowserProcess(),
-        content::GetNetworkConnectionTracker(), profile->GetPath());
-  }
-
+  password_manager::AffiliationService* affiliation_service =
+      AffiliationServiceFactory::GetForProfile(profile);
+  password_manager::EnableAffiliationBasedMatching(ps.get(),
+                                                   affiliation_service);
+  DelayReportingPasswordStoreMetrics(profile);
   return ps;
 }
 

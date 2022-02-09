@@ -154,6 +154,15 @@ static_library("browser") {
   }
 }
 
+source_set("internal_handlers") {
+  sources = [
+    "vivaldi_internal_handlers.cc",
+    "vivaldi_internal_handlers_util.h",
+  ]
+
+  deps = [ "//components/download/public/common:public" ]
+}
+
 static_library("clipboard") {
   sources = [
     "vivaldi_clipboard_utils.cc",

@@ -222,7 +222,7 @@ stage_install_common() {
       buildfile="${OUTPUTDIR}/${file}"
       strippedfile="${buildfile}.stripped"
       debugfile="${buildfile}.debug"
-      if [ $ARCHITECTURE == "armhf" ]; then
+      if [ $ARCHITECTURE == "armhf" ] || [ $ARCHITECTURE == "armv7hl" ]; then
         arm-linux-gnueabihf-strip -s -o "${strippedfile}" "${buildfile}"
       else
         "${OUTPUTDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"

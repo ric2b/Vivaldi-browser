@@ -24,8 +24,9 @@ struct RequestFilterRule {
     kFont,
     kMedia,
     kWebSocket,
-    kWebRTC,  //  Currently unsupported
+    kWebRTC,
     kPing,
+    kWebTransport,
     kOther,
     kTypeCount
   };

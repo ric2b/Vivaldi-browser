@@ -108,8 +108,8 @@ Polymer({
     debuggingLinkVisible_: Boolean,
 
     /**
-     * Used to save the function instance created when doing
-     * this.maybeGiveChromeVoxHint.bind(this).
+     * Used to save the function instance created when for binded
+     * maybeGiveChromeVoxHint.
      * @private {function(this:SpeechSynthesis, Event): *|null|undefined}
      */
     voicesChangedListenerMaybeGiveChromeVoxHint_: {type: Function},
@@ -134,7 +134,18 @@ Polymer({
      * Tracks if we've given the ChromeVox hint yet.
      * @private
      */
-    chromeVoxHintGiven_: {type: Boolean, value: false}
+    chromeVoxHintGiven_: {type: Boolean, value: false},
+
+    /**
+     * Whether the subtitle for the language section should be shown.
+     */
+    shouldShowLanguageSectionSubtitle_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.valueExists('languagePacksEnabled') &&
+            loadTimeData.getBoolean('languagePacksEnabled');
+      },
+    },
   },
 
   /** Overridden from LoginScreenBehavior. */
@@ -176,7 +187,7 @@ Polymer({
     this.debuggingLinkVisible_ =
         data && 'isDeveloperMode' in data && data['isDeveloperMode'];
 
-    window.setTimeout(this.applyOobeConfiguration_.bind(this), 0);
+    window.setTimeout(() => void this.applyOobeConfiguration_(), 0);
   },
 
   /**
@@ -211,7 +222,7 @@ Polymer({
     var configuration = Oobe.getInstance().getOobeConfiguration();
     if (configuration && configuration.language &&
         configuration.language == currentLanguage) {
-      window.setTimeout(this.applyOobeConfiguration_.bind(this), 0);
+      window.setTimeout(() => void this.applyOobeConfiguration_(), 0);
     }
   },
 
@@ -222,7 +233,7 @@ Polymer({
    */
   updateOobeConfiguration(configuration) {
     if (!this.configuration_applied_)
-      window.setTimeout(this.applyOobeConfiguration_.bind(this), 0);
+      window.setTimeout(() => void this.applyOobeConfiguration_(), 0);
   },
 
   /**
@@ -269,13 +280,6 @@ Polymer({
   },
 
   /**
-   * Window-resize event listener (delivered through the display_manager).
-   */
-  onWindowResize() {
-    this.$.welcomeScreen.onWindowResize();
-  },
-
-  /**
    * Returns true if timezone button should be visible.
    * @private
    */
@@ -290,15 +294,6 @@ Polymer({
    */
   onWelcomeNextButtonClicked_() {
     this.userActed('continue');
-  },
-
-  /**
-   * Handle OS install button for "Welcome" screen.
-   *
-   * @private
-   */
-  onOsInstallButtonClicked_() {
-    this.userActed('startOsInstall');
   },
 
   /**
@@ -501,6 +496,8 @@ Polymer({
     this.currentKeyboard = getSelectedTitle(this.keyboards);
   },
 
+  /** ******************** Language section ******************* */
+
   /**
    * Handle "OK" button for "LanguageSelection" screen.
    *
@@ -508,6 +505,20 @@ Polymer({
    */
   closeLanguageSection_() {
     this.setUIStep(UIState.GREETING);
+  },
+
+  /**
+   * On-tap event handler for "learn more" link about language packs.
+   *
+   * @private
+   */
+  onLanguageLearnMoreLinkClicked_(e) {
+    // TODO(b/200128583): Open the OOBE help app with the help centre article
+    // for language packs, or pop up a <oobe-modal-dialog> with similar content.
+
+    // Can't use this.$.languagesLearnMore here as the element is in a <dom-if>.
+    this.$$('#languagesLearnMore').focus();
+    e.stopPropagation();
   },
 
   /** ******************** Accessibility section ******************* */
@@ -685,8 +696,8 @@ Polymer({
     if (this.voicesChangedListenerMaybeGiveChromeVoxHint_ === undefined) {
       // Add voiceschanged listener that tries to give the hint when new voices
       // are loaded.
-      this.voicesChangedListenerMaybeGiveChromeVoxHint_ =
-          this.maybeGiveChromeVoxHint.bind(this);
+      this.voicesChangedListenerMaybeGiveChromeVoxHint_ = () =>
+          this.maybeGiveChromeVoxHint();
       window.speechSynthesis.addEventListener(
           'voiceschanged', this.voicesChangedListenerMaybeGiveChromeVoxHint_,
           false);
@@ -699,8 +710,8 @@ Polymer({
         extensionId: DEFAULT_CHROMEVOX_HINT_VOICE_EXTENSION_ID
       });
       this.defaultChromeVoxHintTimeoutId_ = window.setTimeout(
-          this.giveChromeVoxHint_.bind(
-              this, DEFAULT_CHROMEVOX_HINT_LOCALE, ttsOptions, true),
+          () => this.giveChromeVoxHint_(
+              DEFAULT_CHROMEVOX_HINT_LOCALE, ttsOptions, true),
           this.DEFAULT_CHROMEVOX_HINT_TIMEOUT_MS_);
     }
   },

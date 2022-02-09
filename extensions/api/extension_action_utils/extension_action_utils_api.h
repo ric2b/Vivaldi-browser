@@ -22,6 +22,7 @@
 #include "extensions/schema/browser_action_utilities.h"
 
 class PrefChangeRegistrar;
+class VivaldiDocumentLoader;
 
 namespace extensions {
 
@@ -49,11 +50,10 @@ class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* context) const override;
 };
 
-class ExtensionActionUtil
-    : public KeyedService,
-      public extensions::ExtensionActionAPI::Observer,
-      public extensions::ExtensionRegistryObserver,
-      public CommandService::Observer {
+class ExtensionActionUtil : public KeyedService,
+                            public extensions::ExtensionActionAPI::Observer,
+                            public extensions::ExtensionRegistryObserver,
+                            public CommandService::Observer {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
 
  public:
@@ -87,17 +87,16 @@ class ExtensionActionUtil
                               extensions::UninstallReason reason) override;
   void OnExtensionLoaded(content::BrowserContext* browser_context,
                          const extensions::Extension* extension) override;
-  void OnExtensionUnloaded(
-      content::BrowserContext* browser_context,
-      const extensions::Extension* extension,
-      extensions::UnloadedExtensionReason reason) override;
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const extensions::Extension* extension,
+                           extensions::UnloadedExtensionReason reason) override;
 
   // Overridden from CommandService::Observer
   void OnExtensionCommandAdded(const std::string& extension_id,
-      const Command& added_command) override;
+                               const Command& added_command) override;
 
   void OnExtensionCommandRemoved(const std::string& extension_id,
-      const Command& removed_command) override;
+                                 const Command& removed_command) override;
 
   void PrefsChange();
 
@@ -106,11 +105,11 @@ class ExtensionActionUtil
 
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
 
+  std::unique_ptr<VivaldiDocumentLoader> vivaldi_document_loader_;
+
   Profile* profile_;
 
   SessionID last_active_tab_window_ = SessionID::InvalidValue();
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtil);
 };
 
 class ExtensionActionUtilsGetToolbarExtensionsFunction
@@ -125,7 +124,6 @@ class ExtensionActionUtilsGetToolbarExtensionsFunction
 
   // ExtensionFunction:
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsGetToolbarExtensionsFunction);
 };
 
 class ExtensionActionUtilsExecuteExtensionActionFunction
@@ -140,8 +138,6 @@ class ExtensionActionUtilsExecuteExtensionActionFunction
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsExecuteExtensionActionFunction);
 };
 
 class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
@@ -158,9 +154,6 @@ class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(
-      ExtensionActionUtilsToggleBrowserActionVisibilityFunction);
 };
 
 class ExtensionActionUtilsRemoveExtensionFunction : public ExtensionFunction {
@@ -174,8 +167,6 @@ class ExtensionActionUtilsRemoveExtensionFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsRemoveExtensionFunction);
 };
 
 class ExtensionActionUtilsShowExtensionOptionsFunction
@@ -190,8 +181,6 @@ class ExtensionActionUtilsShowExtensionOptionsFunction
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsShowExtensionOptionsFunction);
 };
 
 class ExtensionActionUtilsGetExtensionMenuFunction : public ExtensionFunction {
@@ -205,8 +194,6 @@ class ExtensionActionUtilsGetExtensionMenuFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsGetExtensionMenuFunction);
 };
 
 class ExtensionActionUtilsExecuteMenuActionFunction : public ExtensionFunction {
@@ -220,8 +207,6 @@ class ExtensionActionUtilsExecuteMenuActionFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsExecuteMenuActionFunction);
 };
 
 }  // namespace extensions

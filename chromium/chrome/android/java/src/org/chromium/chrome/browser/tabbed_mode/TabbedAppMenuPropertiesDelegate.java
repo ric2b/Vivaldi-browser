@@ -17,6 +17,7 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.datareduction.DataReductionMainMenuItem;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
 import org.chromium.chrome.browser.feed.shared.FeedFeatures;
+import org.chromium.chrome.browser.feed.webfeed.WebFeedFaviconFetcher;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedMainMenuItem;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -29,8 +30,8 @@ import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -55,11 +56,13 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
             AppMenuDelegate appMenuDelegate,
             OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            OneshotSupplier<StartSurface> startSurfaceSupplier,
             ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
             WebFeedSnackbarController.FeedLauncher feedLauncher,
             ModalDialogManager modalDialogManager, SnackbarManager snackbarManager) {
         super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
-                toolbarManager, decorView, overviewModeBehaviorSupplier, bookmarkBridgeSupplier);
+                toolbarManager, decorView, overviewModeBehaviorSupplier, startSurfaceSupplier,
+                bookmarkBridgeSupplier);
         mAppMenuDelegate = appMenuDelegate;
         mFeedLauncher = feedLauncher;
         mModalDialogManager = modalDialogManager;
@@ -107,7 +110,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         if (view instanceof WebFeedMainMenuItem) {
             ((WebFeedMainMenuItem) view)
                     .initialize(mActivityTabProvider.get(), appMenuHandler,
-                            new LargeIconBridge(Profile.getLastUsedRegularProfile()), mFeedLauncher,
+                            WebFeedFaviconFetcher.createDefault(), mFeedLauncher,
                             mModalDialogManager, mSnackbarManager);
         }
 
@@ -156,8 +159,8 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     protected boolean shouldShowManagedByMenuItem(Tab currentTab) {
-        return ManagedBrowserUtils.hasBrowserPoliciesApplied(
-                Profile.fromWebContents(currentTab.getWebContents()));
+        Profile profile = Profile.fromWebContents(currentTab.getWebContents());
+        return profile != null && ManagedBrowserUtils.hasBrowserPoliciesApplied(profile);
     }
 
     @Override

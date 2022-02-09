@@ -45,8 +45,9 @@ class NotesModel : public KeyedService {
 
  public:
   explicit NotesModel(sync_notes::NoteSyncService* sync_service);
-
   ~NotesModel() override;
+  NotesModel(const NotesModel&) = delete;
+  NotesModel& operator=(const NotesModel&) = delete;
 
   // Triggers the loading of notes, which is an asynchronous operation with
   // most heavy-lifting taking place in a background sequence. Upon completion,
@@ -271,8 +272,6 @@ class NotesModel : public KeyedService {
   sync_notes::NoteSyncService* sync_service_;
 
   base::WeakPtrFactory<NotesModel> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NotesModel);
 };
 
 const NoteNode* GetNotesNodeByID(const NotesModel* model, int64_t id);

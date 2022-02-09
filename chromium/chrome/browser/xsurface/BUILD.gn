@@ -8,9 +8,9 @@ android_library("java") {
   sources = [
     "android/java/src/org/chromium/chrome/browser/xsurface/FeedActionsHandler.java",
     "android/java/src/org/chromium/chrome/browser/xsurface/FeedLaunchReliabilityLogger.java",
-    "android/java/src/org/chromium/chrome/browser/xsurface/FeedLoggingDependencyProvider.java",
     "android/java/src/org/chromium/chrome/browser/xsurface/FeedNetworkRequestReliabilityLogger.java",
     "android/java/src/org/chromium/chrome/browser/xsurface/HybridListRenderer.java",
+    "android/java/src/org/chromium/chrome/browser/xsurface/ImageCacheHelper.java",
     "android/java/src/org/chromium/chrome/browser/xsurface/ImageFetchClient.java",
     "android/java/src/org/chromium/chrome/browser/xsurface/ImagePrefetcher.java",
     "android/java/src/org/chromium/chrome/browser/xsurface/ListContentManager.java",

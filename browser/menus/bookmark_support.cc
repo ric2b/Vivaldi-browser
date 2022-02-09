@@ -10,12 +10,9 @@
 
 namespace vivaldi {
 
-BookmarkSupport::BookmarkSupport()
-  :icons(kMax), observer_enabled(false) {
-}
+BookmarkSupport::BookmarkSupport() : icons(kMax), observer_enabled(false) {}
 
-BookmarkSupport::~BookmarkSupport() {
-}
+BookmarkSupport::~BookmarkSupport() {}
 
 void BookmarkSupport::initIcons(const std::vector<std::string>& src_icons) {
   if (src_icons.size() == kMax) {
@@ -39,4 +36,4 @@ const gfx::Image& BookmarkSupport::iconForNode(
   return icons[kUrl];
 }
 
-}  // vivaldi
+}  // namespace vivaldi

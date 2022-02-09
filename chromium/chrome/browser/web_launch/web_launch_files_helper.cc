@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_util.h"
@@ -28,6 +30,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "storage/browser/file_system/external_mount_points.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_directory_handle.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 #include "third_party/blink/public/mojom/web_launch/web_launch.mojom.h"
@@ -35,7 +38,7 @@
 
 namespace web_launch {
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(WebLaunchFilesHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(WebLaunchFilesHelper);
 
 namespace {
 
@@ -67,7 +70,7 @@ class EntriesBuilder {
                            ->GetProcess()
                            ->GetStoragePartition()
                            ->GetFileSystemAccessEntryFactory()),
-        context_(url::Origin::Create(launch_url),
+        context_(blink::StorageKey(url::Origin::Create(launch_url)),
                  launch_url,
                  content::GlobalRenderFrameHostId(
                      web_contents->GetMainFrame()->GetProcess()->GetID(),
@@ -169,18 +172,27 @@ void WebLaunchFilesHelper::SetLaunchPathsIfPermitted(
     const GURL& launch_url,
     base::FilePath launch_dir,
     std::vector<base::FilePath> launch_paths) {
+  const bool using_settings = base::FeatureList::IsEnabled(
+      features::kDesktopPWAsFileHandlingSettingsGated);
+
   // Don't even bother creating the object if the permission is blocked.
-  if (PermissionManagerFactory::GetForProfile(
+  if (!using_settings &&
+      PermissionManagerFactory::GetForProfile(
           Profile::FromBrowserContext(web_contents->GetBrowserContext()))
-          ->GetPermissionStatus(ContentSettingsType::FILE_HANDLING, launch_url,
-                                launch_url)
-          .content_setting == CONTENT_SETTING_BLOCK) {
+              ->GetPermissionStatus(ContentSettingsType::FILE_HANDLING,
+                                    launch_url, launch_url)
+              .content_setting == CONTENT_SETTING_BLOCK) {
     return;
   }
 
   auto helper = base::WrapUnique(
       new WebLaunchFilesHelper(web_contents, launch_url, std::move(launch_dir),
                                std::move(launch_paths)));
+  // When using settings instead of permissions, the setting should have
+  // been checked/prompt shown by this point.
+  if (using_settings)
+    helper->passed_permission_check_ = true;
+
   WebLaunchFilesHelper* helper_ptr = helper.get();
   web_contents->SetUserData(UserDataKey(), std::move(helper));
   helper_ptr->MaybeSendLaunchEntries();
@@ -190,7 +202,7 @@ void WebLaunchFilesHelper::MaybeSendLaunchEntries() {
   const GURL current_url =
       permissions::PermissionUtil::GetLastCommittedOriginAsURL(web_contents());
   if (launch_url_.GetOrigin() == current_url.GetOrigin()) {
-    if (!permission_was_checked_) {
+    if (!permission_was_checked_ && !passed_permission_check_) {
       permission_was_checked_ = true;
       content::RenderFrameHost* frame = web_contents()->GetMainFrame();
       permissions::PermissionManager* permission_manager =
@@ -199,9 +211,8 @@ void WebLaunchFilesHelper::MaybeSendLaunchEntries() {
       permission_manager->RequestPermission(
           ContentSettingsType::FILE_HANDLING, frame, current_url,
           /*user_gesture=*/true,
-          base::BindOnce(
-              &WebLaunchFilesHelper::MaybeSendLaunchEntriesWithPermission,
-              weak_ptr_factory_.GetWeakPtr()));
+          base::BindOnce(&WebLaunchFilesHelper::OnPermissionRequestResponse,
+                         weak_ptr_factory_.GetWeakPtr()));
     } else if (passed_permission_check_) {
       // If the permission was checked and passed, and then a same-site
       // navigation (e.g. redirect) occurred, set the launch queue again.
@@ -213,14 +224,22 @@ void WebLaunchFilesHelper::MaybeSendLaunchEntries() {
   }
 }
 
-void WebLaunchFilesHelper::MaybeSendLaunchEntriesWithPermission(
-    ContentSetting content_setting) {
-  passed_permission_check_ = content_setting == CONTENT_SETTING_ALLOW;
+void WebLaunchFilesHelper::OnPermissionRequestResponse(ContentSetting setting) {
+  passed_permission_check_ = setting == CONTENT_SETTING_ALLOW;
 
-  if (passed_permission_check_)
+  if (passed_permission_check_) {
     SendLaunchEntries();
-  else
-    web_contents()->RemoveUserData(UserDataKey());
+  } else {
+    // Close the app asynchronously since it deletes the `PermissionManager`.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&WebLaunchFilesHelper::CloseApp,
+                                  weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void WebLaunchFilesHelper::CloseApp() {
+  web_contents()->Close();
+  // `this` is deleted.
 }
 
 void WebLaunchFilesHelper::SendLaunchEntries() {

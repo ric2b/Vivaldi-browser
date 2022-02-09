@@ -9545,24 +9545,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Compositing.Browser.GPUMemoryForTilingsInKb" units="Kb"
-    expires_after="M87">
-  <obsolete>
-    Removed September, 2020. Memory.GPU.PeakMemoryUsage.PageLoad can be used to
-    track overall GPU memory usage.
-  </obsolete>
-  <owner>pdr@chromium.org</owner>
-  <owner>paint-dev@chromium.org</owner>
-  <summary>
-    The GPU memory allocated for tilings (in a browser process), summed over all
-    picture layers. Emitted once per drawing. Nothing is recorded if there are
-    no picture layers.
-
-    Tilings are used for decomposition of the layer's entire contents at a
-    picture screenspace resolution to do threaded rasterization.
-  </summary>
-</histogram>
-
 <histogram name="Compositing.Browser.PictureMemoryUsageKb" units="KB"
     expires_after="M85">
   <obsolete>
@@ -85727,35 +85709,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     State of the user settings for Sync and Google services, recorded at
     startup. Multiple samples may be recorded at once, except for 'None' which
     is recorded when no other bucket is used.
-  </summary>
-</histogram>
-
-<histogram name="Uptime.LoginPromptSetupTimeAfterLogout" units="ms"
-    expires_after="M85">
-  <obsolete>
-    Removed 09/2020. No direct replacement.
-  </obsolete>
-  <owner>hajimehoshi@chromium.org</owner>
-  <owner>kouhei@chromium.org</owner>
-  <summary>
-    Measures the time elapsed on Chrome OS for setting up for a login after a
-    logout. More specifically, it is the time between when the Cryptohome is
-    unmounted (the last step in the logout process) and when the login prompt is
-    again visible after a logout.
-  </summary>
-</histogram>
-
-<histogram name="Uptime.Logout" units="ms" expires_after="M85">
-  <obsolete>
-    Removed 09/2020. No direct replacement.
-  </obsolete>
-  <owner>hajimehoshi@chromium.org</owner>
-  <owner>kouhei@chromium.org</owner>
-  <summary>
-    Measures the time elapsed on Chrome OS when performing a logout. More
-    specifically, it is the time between when a logout is initiated and when the
-    Cryptohome is unmounted, signaling the last step in the logout process. This
-    statistic is not collected when the logout is part of a restart or shutdown.
   </summary>
 </histogram>
 

@@ -40,7 +40,10 @@ void TabHandleLayer::SetProperties(
     float close_button_alpha,
     bool is_loading,
     float spinner_rotation,
-    float brightness) {
+    float brightness,
+    float tab_alpha, // Vivaldi
+    bool is_shown_as_favicon, // Vivaldi
+    float title_offset) { // Vivaldi
   if (brightness != brightness_ || foreground != foreground_) {
     brightness_ = brightness;
     foreground_ = foreground;
@@ -136,6 +139,13 @@ void TabHandleLayer::SetProperties(
                   title_layer->size().height() / 2;
     int title_x = is_rtl ? padding_left + close_width : padding_left;
     title_x += is_rtl ? 0 : content_offset_x;
+    // Note(david@vivaldi.com): When close button is not visible we can increase
+    // the title space in order to see more of the title. Also pass the show
+    // favicon information.
+    title_layer->SetTitleOffset(title_offset);
+    title_layer->ShowOnlyFavicon(is_shown_as_favicon);
+    title_layer->SetIsCloseButtonVisible(close_button_alpha == 1.f);
+
     title_layer->setBounds(gfx::Size(
         width - padding_right - padding_left - close_width - content_offset_x,
         height));
@@ -166,11 +176,19 @@ void TabHandleLayer::SetProperties(
       close_x += original_x;
     }
 
+    // Note(david@vivaldi.com): Add an offset here as in Vivaldi the close
+    // button is shifted.
+    title_offset /= 2;
+    close_x = is_rtl ? close_x - title_offset : close_x + title_offset;
+
     close_button_->SetPosition(gfx::PointF(close_x, close_y));
     close_button_->SetOpacity(close_button_alpha);
   }
-  if (vivaldi::IsVivaldiRunning())
-    layer_->SetOpacity(foreground_ ? 1.f : 0.5f);
+  if (vivaldi::IsVivaldiRunning()) {
+    decoration_tab_->SetOpacity(tab_alpha);
+    title_layer->setOpacity(foreground_ ? 1.f : 0.5f);
+    close_button_->SetOpacity(foreground_ ? 1.f : 0.5f);
+  }
 }
 
 scoped_refptr<cc::Layer> TabHandleLayer::layer() {

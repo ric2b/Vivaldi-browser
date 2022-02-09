@@ -14,18 +14,18 @@ namespace vivaldi {
 // Called by Dispatcher::GetJsResources()
 void VivaldiAddScriptResources(
     std::vector<extensions::Dispatcher::JsResourceInfo>* resources) {
-  resources->push_back({"webViewPrivateImpl",
-                        IDR_WEB_VIEW_PRIVATE_API_IMPL_JS});
-  resources->push_back({"webViewPrivateMethods",
-                        IDR_WEB_VIEW_PRIVATE_API_METHODS_JS});
+  resources->push_back(
+      {"webViewPrivateImpl", IDR_WEB_VIEW_PRIVATE_API_IMPL_JS});
+  resources->push_back(
+      {"webViewPrivateMethods", IDR_WEB_VIEW_PRIVATE_API_METHODS_JS});
 
+  resources->push_back(
+      {"webViewEventsPrivate", IDR_WEB_VIEW_PRIVATE_EVENTS_JS});
 
-  resources->push_back({"webViewEventsPrivate", IDR_WEB_VIEW_PRIVATE_EVENTS_JS});
-
-  resources->push_back({"webViewAttributesPrivate",
-                        IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS});
-  resources->push_back({"webViewConstantsPrivate",
-                        IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS});
+  resources->push_back(
+      {"webViewAttributesPrivate", IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS});
+  resources->push_back(
+      {"webViewConstantsPrivate", IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS});
 }
 
 // Called by Dispatcher::RequireGuestViewModules()

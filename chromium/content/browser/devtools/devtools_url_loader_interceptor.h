@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/protocol/network.h"
+#include "content/public/browser/global_request_id.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -160,26 +161,31 @@ class DevToolsURLLoaderInterceptor {
                 std::vector<Pattern> patterns,
                 RequestInterceptedCallback callback);
     FilterEntry(FilterEntry&&);
+
+    FilterEntry(const FilterEntry&) = delete;
+    FilterEntry& operator=(const FilterEntry&) = delete;
+
     ~FilterEntry();
 
     const base::UnguessableToken target_id;
     std::vector<Pattern> patterns;
     const RequestInterceptedCallback callback;
-
-    DISALLOW_COPY_AND_ASSIGN(FilterEntry);
   };
 
   using HandleAuthRequestCallback =
       base::OnceCallback<void(bool use_fallback,
                               const absl::optional<net::AuthCredentials>&)>;
   // Can only be called on the IO thread.
-  static void HandleAuthRequest(int32_t process_id,
-                                int32_t routing_id,
-                                int32_t request_id,
+  static void HandleAuthRequest(GlobalRequestID req_id,
                                 const net::AuthChallengeInfo& auth_info,
                                 HandleAuthRequestCallback callback);
 
   explicit DevToolsURLLoaderInterceptor(RequestInterceptedCallback callback);
+
+  DevToolsURLLoaderInterceptor(const DevToolsURLLoaderInterceptor&) = delete;
+  DevToolsURLLoaderInterceptor& operator=(const DevToolsURLLoaderInterceptor&) =
+      delete;
+
   ~DevToolsURLLoaderInterceptor();
 
   void SetPatterns(std::vector<Pattern> patterns, bool handle_auth);
@@ -244,8 +250,6 @@ class DevToolsURLLoaderInterceptor {
   std::map<std::string, InterceptionJob*> jobs_;
 
   base::WeakPtrFactory<DevToolsURLLoaderInterceptor> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(DevToolsURLLoaderInterceptor);
 };
 
 // The purpose of this class is to have a thin wrapper around

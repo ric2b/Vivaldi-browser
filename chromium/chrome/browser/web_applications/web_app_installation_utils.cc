@@ -12,12 +12,12 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
@@ -83,14 +83,18 @@ void SetWebAppManifestFields(const WebApplicationInfo& web_app_info,
          SkColorGetA(*web_app_info.background_color) == SK_AlphaOPAQUE);
   web_app.SetBackgroundColor(web_app_info.background_color);
 
+  DCHECK(!web_app_info.dark_mode_theme_color.has_value() ||
+         SkColorGetA(*web_app_info.dark_mode_theme_color) == SK_AlphaOPAQUE);
+  web_app.SetDarkModeThemeColor(web_app_info.dark_mode_theme_color);
+
   WebApp::SyncFallbackData sync_fallback_data;
   sync_fallback_data.name = base::UTF16ToUTF8(web_app_info.title);
   sync_fallback_data.theme_color = web_app_info.theme_color;
   sync_fallback_data.scope = web_app_info.scope;
-  sync_fallback_data.icon_infos = web_app_info.icon_infos;
+  sync_fallback_data.icon_infos = web_app_info.manifest_icons;
   web_app.SetSyncFallbackData(std::move(sync_fallback_data));
 
-  web_app.SetIconInfos(web_app_info.icon_infos);
+  web_app.SetManifestIcons(web_app_info.manifest_icons);
   web_app.SetDownloadedIconSizes(
       IconPurpose::ANY, GetSquareSizePxs(web_app_info.icon_bitmaps.any));
   web_app.SetDownloadedIconSizes(
@@ -100,6 +104,8 @@ void SetWebAppManifestFields(const WebApplicationInfo& web_app_info,
       IconPurpose::MONOCHROME,
       GetSquareSizePxs(web_app_info.icon_bitmaps.monochrome));
   web_app.SetIsGeneratedIcon(web_app_info.is_generated_icon);
+
+  web_app.SetStorageIsolated(web_app_info.is_storage_isolated);
 
   web_app.SetShortcutsMenuItemInfos(web_app_info.shortcuts_menu_item_infos);
   web_app.SetDownloadedShortcutsMenuIconsSizes(

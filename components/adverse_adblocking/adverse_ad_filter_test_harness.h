@@ -35,6 +35,9 @@ class AdverseAdFilterTestHarness : public ChromeRenderViewHostTestHarness {
 
   AdverseAdFilterTestHarness();
   ~AdverseAdFilterTestHarness() override;
+  AdverseAdFilterTestHarness(const AdverseAdFilterTestHarness&) = delete;
+  AdverseAdFilterTestHarness& operator=(const AdverseAdFilterTestHarness&) =
+      delete;
 
   // ChromeRenderViewHostTestHarness:
   void SetUp() override;
@@ -58,9 +61,8 @@ class AdverseAdFilterTestHarness : public ChromeRenderViewHostTestHarness {
   subresource_filter::testing::ScopedSubresourceFilterConfigurator
       scoped_configuration_;
 
-  //scoped_refptr<FakeSafeBrowsingDatabaseManager> fake_safe_browsing_database_;
-
-  DISALLOW_COPY_AND_ASSIGN(AdverseAdFilterTestHarness);
+  // scoped_refptr<FakeSafeBrowsingDatabaseManager>
+  // fake_safe_browsing_database_;
 };
 
 #endif  // ADVERSE_AD_FILTER_TEST_HARNESS_H_

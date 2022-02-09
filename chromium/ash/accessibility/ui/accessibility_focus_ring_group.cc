@@ -20,9 +20,8 @@ namespace ash {
 
 namespace {
 
-// The number of pixels the focus ring is outset from the object it outlines,
+// The number of DIPs the focus ring is outset from the object it outlines,
 // which also determines the border radius of the rounded corners.
-// TODO(dmazzoni): take display resolution into account.
 constexpr int kAccessibilityFocusRingMargin = 7;
 
 // Time to transition between one location and the next.
@@ -48,9 +47,9 @@ struct Region {
 
 AccessibilityFocusRingGroup::AccessibilityFocusRingGroup() {
   focus_animation_info_.fade_in_time =
-      base::TimeDelta::FromMilliseconds(kFocusFadeInTimeMilliseconds);
+      base::Milliseconds(kFocusFadeInTimeMilliseconds);
   focus_animation_info_.fade_out_time =
-      base::TimeDelta::FromMilliseconds(kFocusFadeOutTimeMilliseconds);
+      base::Milliseconds(kFocusFadeOutTimeMilliseconds);
 }
 
 AccessibilityFocusRingGroup::~AccessibilityFocusRingGroup() {}
@@ -114,7 +113,7 @@ bool AccessibilityFocusRingGroup::AnimateFocusRings(base::TimeTicks timestamp) {
   if (focus_ring_info_->behavior == FocusRingBehavior::PERSIST) {
     base::TimeDelta delta = timestamp - focus_animation_info_.change_time;
     base::TimeDelta transition_time =
-        base::TimeDelta::FromMilliseconds(kTransitionTimeMilliseconds);
+        base::Milliseconds(kTransitionTimeMilliseconds);
     if (delta >= transition_time) {
       focus_layers_[0]->Set(focus_rings_[0]);
       return true;

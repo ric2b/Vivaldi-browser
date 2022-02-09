@@ -109,9 +109,10 @@ class NameSourceRelatedObject final
   NameSourceRelatedObject(AXObject* object, String text)
       : object(object), text(text) {}
 
-  void Trace(Visitor* visitor) const { visitor->Trace(object); }
+  NameSourceRelatedObject(const NameSourceRelatedObject&) = delete;
+  NameSourceRelatedObject& operator=(const NameSourceRelatedObject&) = delete;
 
-  DISALLOW_COPY_AND_ASSIGN(NameSourceRelatedObject);
+  void Trace(Visitor* visitor) const { visitor->Trace(object); }
 };
 
 typedef HeapVector<Member<NameSourceRelatedObject>> AXRelatedObjectVector;
@@ -262,6 +263,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 #endif
 
  public:
+  AXObject(const AXObject&) = delete;
+  AXObject& operator=(const AXObject&) = delete;
+
   virtual ~AXObject();
   virtual void Trace(Visitor*) const;
 
@@ -468,6 +472,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
       IgnoredReasons* = nullptr) const;
   bool IsInert() const;
   bool IsAriaHidden() const;
+  bool CachedIsAriaHidden() { return cached_is_aria_hidden_; }
   const AXObject* AriaHiddenRoot() const;
   bool ComputeIsInert(IgnoredReasons* = nullptr) const;
   bool ComputeIsAriaHidden(IgnoredReasons* = nullptr) const;
@@ -795,6 +800,12 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual int SetSize() const { return 0; }
   bool SupportsARIASetSizeAndPosInSet() const;
 
+  // Returns true if the attribute is prohibited (e.g. by ARIA), and we plan
+  // to enforce that prohibition. An example of something prohibited that we
+  // do not enforce is aria-label/aria-labelledby on certain text containers.
+  bool IsProhibited(ax::mojom::blink::StringAttribute attribute) const;
+  bool IsProhibited(ax::mojom::blink::IntAttribute attribute) const;
+
   // ARIA live-region features.
   bool IsLiveRegionRoot() const;  // Any live region, including polite="off".
   bool IsActiveLiveRegionRoot() const;  // Live region that is not polite="off".
@@ -1086,6 +1097,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   AXObject* ContainerWidget() const;
   bool IsContainerWidget() const;
 
+  AXObject* ContainerListMarkerIncludingIgnored() const;
+
   // There are two types of traversal for obtaining children:
   // 1. LayoutTreeBuilderTraversal. Despite the name, this traverses a flattened
   // DOM tree that includes pseudo element children such as ::before, and where
@@ -1358,6 +1371,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   const AXObject* TableParent() const;
 
   // Helpers for serialization.
+  void SerializeActionAttributes(ui::AXNodeData* node_data);
   void SerializeColorAttributes(ui::AXNodeData* node_data);
   void SerializeStyleAttributes(ui::AXNodeData* node_data);
   void SerializeSparseAttributes(ui::AXNodeData* node_data);
@@ -1394,7 +1408,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   Member<AXObjectCacheImpl> ax_object_cache_;
 
-  void UpdateDistributionForFlatTreeTraversal() const;
   bool IsARIAControlledByTextboxWithActiveDescendant() const;
   bool AncestorExposesActiveDescendant() const;
   bool IsCheckable() const;
@@ -1428,8 +1441,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
       uint32_t max_len = kMaxStringAttributeLength) const;
 
   static unsigned number_of_live_ax_objects_;
-
-  DISALLOW_COPY_AND_ASSIGN(AXObject);
 };
 
 MODULES_EXPORT bool operator==(const AXObject& first, const AXObject& second);

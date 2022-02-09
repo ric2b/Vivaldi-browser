@@ -137,8 +137,7 @@ class ThemeProperties {
 
     // The throbber colors for tabs or anything on a toolbar (currently, only
     // the download shelf). If you're adding a throbber elsewhere, such as in
-    // a dialog or bubble, you likely want
-    // NativeTheme::kColorId_ThrobberSpinningColor.
+    // a dialog or bubble, you likely want ui::kColorThrobber.
     COLOR_TAB_THROBBER_SPINNING,
     COLOR_TAB_THROBBER_WAITING,
 
@@ -183,6 +182,15 @@ class ThemeProperties {
     COLOR_TAB_GROUP_CONTEXT_MENU_PINK,
     COLOR_TAB_GROUP_CONTEXT_MENU_PURPLE,
     COLOR_TAB_GROUP_CONTEXT_MENU_CYAN,
+    // The colors used for saved tab group chips on the bookmark bar.
+    COLOR_TAB_GROUP_BOOKMARK_BAR_GREY,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_BLUE,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_RED,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_YELLOW,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_GREEN,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_PINK,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_PURPLE,
+    COLOR_TAB_GROUP_BOOKMARK_BAR_CYAN,
 
     // Calculated representative colors for the background of window control
     // buttons.
@@ -238,6 +246,10 @@ class ThemeProperties {
   // than this).
   static constexpr int kFrameHeightAboveTabs = 16;
 
+  ThemeProperties() = delete;
+  ThemeProperties(const ThemeProperties&) = delete;
+  ThemeProperties& operator=(const ThemeProperties&) = delete;
+
   // Used by the browser theme pack to parse alignments from something like
   // "top left" into a bitmask of Alignment.
   static int StringToAlignment(const std::string& alignment);
@@ -265,9 +277,6 @@ class ThemeProperties {
   static SkColor GetDefaultColor(int id,
                                  bool incognito,
                                  bool dark_mode = false);
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(ThemeProperties);
 };
 
 #endif  // CHROME_BROWSER_THEMES_THEME_PROPERTIES_H_

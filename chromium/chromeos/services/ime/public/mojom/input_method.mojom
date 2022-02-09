@@ -6,7 +6,7 @@
 // the Chromium repo. This file should be updated first, before syncing in the
 // other repos.
 
-// Next MinVersion: 2
+// Next MinVersion: 6
 
 module chromeos.ime.mojom;
 
@@ -23,7 +23,7 @@ enum KeyEventType {
 // If a key is not listed here, then it means that the Chrome OS first-party
 // IMEs do not handle it and it is safe for the OS to handle the key itself.
 //
-// Next ordinal: 8
+// Next ordinal: 17
 [Stable, Extensible]
 enum NamedDomKey {
   [Default] kOther = 0,
@@ -34,9 +34,17 @@ enum NamedDomKey {
   kShift = 5,
   kEnter = 6,
   kBackspace = 7,
+  [MinVersion=2] kEscape = 10,
   // Korean keyboard specific keys
   [MinVersion=1] kHangeulMode = 8,
   [MinVersion=1] kHanjaMode = 9,
+  // Navigation keys
+  [MinVersion=2] kArrowDown = 11,
+  [MinVersion=2] kArrowLeft = 12,
+  [MinVersion=2] kArrowRight = 13,
+  [MinVersion=2] kArrowUp = 14,
+  [MinVersion=2] kPageDown = 15,
+  [MinVersion=2] kPageUp = 16,
 };
 
 // Represents a key pressed by the user, taking into account aspects like
@@ -237,16 +245,72 @@ struct InputFieldInfo {
   PersonalizationMode personalization@2;
 };
 
+// Next ordinal: 4
+// TODO(crbug/1201949): Note that the Extensible keyword is not supported for
+// union types. We may need to revisit this type in the future.
+[Stable, Extensible]
+union InputMethodSettings {
+  KoreanSettings korean_settings@0;
+  LatinSettings latin_settings@1;
+  PinyinSettings pinyin_settings@2;
+  ZhuyinSettings zhuyin_settings@3;
+};
+
+// Next ordinal: 9
+[Stable, Extensible]
+enum KoreanLayout {
+  [Default] kDubeolsik = 0,
+  kDubeolsikOldHangeul = 1,
+  kSebeolsik390 = 2,
+  kSebeolsikFinal = 3,
+  kSebeolsikNoShift = 4,
+  kSebeolsikOldHangeul = 5,
+  kSebeolsikDubeol = 6,
+  kRomaja = 7,
+  kAhnmatae = 8,
+};
+
+// Next ordinal: 2
+[Stable]
+struct KoreanSettings {
+  // Whether to allow users to type multiple syllables in one composition.
+  bool input_multiple_syllables@0;
+
+  // The keyboard layout used by the IME.
+  KoreanLayout layout@1;
+};
+
+// Next ordinal: 2
+[Stable]
+struct LatinSettings {
+  // Whether to enable autocorrect as the user is typing.
+  bool autocorrect@0;
+
+  // Whether to enable predictive writing as the user is typing.
+  [MinVersion=5] bool predictive_writing@1;
+};
+
+// Next ordinal: 0
+[Stable]
+struct PinyinSettings {
+};
+
+// Next ordinal: 0
+[Stable]
+struct ZhuyinSettings {
+};
+
 // An input method that is provided natively by the IME Service.
 // The browser process uses this interface to communicate with IMEs hosted in
 // a Chrome utility process, and this interface uses the InputMethodHost
 // interface to communicate back to the browser process.
 //
-// Next ordinal: 5
+// Next ordinal: 6
 [Stable]
 interface InputMethod {
   // Called when there's a new focused input field.
-  OnFocus@0(InputFieldInfo input_field_info);
+  OnFocus@0(InputFieldInfo input_field_info,
+            [MinVersion=4] InputMethodSettings? settings);
 
   // Called when the input field loses focus.
   OnBlur@1();
@@ -269,4 +333,9 @@ interface InputMethod {
   // Informs the IME that composition was canceled by the system. This can
   // for example happen if the user presses the Escape key.
   OnCompositionCanceledBySystem@4();
+
+  // Informs the IME that a candidate from the candidates window was selected by
+  // the user. This is usually from the user clicking the candidate.
+  // |selected_candidate_index| is the index of the selected candidate.
+  [MinVersion=3] OnCandidateSelected@5(uint32 selected_candidate_index);
 };

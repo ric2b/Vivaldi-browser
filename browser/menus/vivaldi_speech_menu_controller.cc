@@ -16,7 +16,7 @@ namespace vivaldi {
 
 SpeechMenuController::SpeechMenuController(
     VivaldiRenderViewContextMenu* rv_context_menu)
-  :rv_context_menu_(rv_context_menu) {}
+    : rv_context_menu_(rv_context_menu) {}
 
 SpeechMenuController::~SpeechMenuController() = default;
 

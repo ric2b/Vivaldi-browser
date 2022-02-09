@@ -19,6 +19,8 @@ class VivaldiLocationBar : public LocationBar {
  public:
   VivaldiLocationBar(const VivaldiBrowserWindow& window);
   ~VivaldiLocationBar() override;
+  VivaldiLocationBar(const VivaldiLocationBar&) = delete;
+  VivaldiLocationBar& operator=(const VivaldiLocationBar&) = delete;
 
   // The details necessary to open the user's desired omnibox match.
   GURL GetDestinationURL() const override;
@@ -43,11 +45,8 @@ class VivaldiLocationBar : public LocationBar {
   // Returns a pointer to the testing interface.
   LocationBarTesting* GetLocationBarForTesting() override;
 
- protected:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiLocationBar);
-
  private:
- // Owner
+  // Owner
   const VivaldiBrowserWindow& window_;
 };
 

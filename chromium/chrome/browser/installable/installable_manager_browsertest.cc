@@ -275,7 +275,7 @@ class InstallableManagerBrowserTest : public InProcessBrowserTest {
                                         const InstallableParams& params,
                                         const std::string& url) {
     GURL test_url = embedded_test_server()->GetURL(url);
-    ui_test_utils::NavigateToURL(browser, test_url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, test_url));
     RunInstallableManager(browser, tester, params);
   }
 
@@ -283,19 +283,8 @@ class InstallableManagerBrowserTest : public InProcessBrowserTest {
   NavigateAndGetAllInstallabilityErrors(Browser* browser,
                                         const std::string& url) {
     GURL test_url = embedded_test_server()->GetURL(url);
-    ui_test_utils::NavigateToURL(browser, test_url);
-    InstallableManager* manager = GetManager(browser);
-
-    base::RunLoop run_loop;
-    std::vector<content::InstallabilityError> result;
-
-    manager->GetAllErrors(base::BindLambdaForTesting(
-        [&](std::vector<content::InstallabilityError> installability_errors) {
-          result = std::move(installability_errors);
-          run_loop.Quit();
-        }));
-    run_loop.Run();
-    return result;
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser, test_url));
+    return GetAllInstallabilityErrors(browser);
   }
 
   void RunInstallableManager(Browser* browser,
@@ -316,6 +305,22 @@ class InstallableManagerBrowserTest : public InProcessBrowserTest {
     CHECK(manager);
 
     return manager;
+  }
+
+  std::vector<content::InstallabilityError> GetAllInstallabilityErrors(
+      Browser* browser) {
+    InstallableManager* manager = GetManager(browser);
+
+    base::RunLoop run_loop;
+    std::vector<content::InstallabilityError> result;
+
+    manager->GetAllErrors(base::BindLambdaForTesting(
+        [&](std::vector<content::InstallabilityError> installability_errors) {
+          result = std::move(installability_errors);
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+    return result;
   }
 };
 
@@ -450,9 +455,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, ManagerInIncognito) {
   std::unique_ptr<CallbackTester> tester(
       new CallbackTester(run_loop.QuitClosure()));
 
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       incognito_browser,
-      embedded_test_server()->GetURL("/banners/manifest_test_page.html"));
+      embedded_test_server()->GetURL("/banners/manifest_test_page.html")));
 
   RunInstallableManager(incognito_browser, tester.get(), GetManifestParams());
   run_loop.Run();
@@ -478,9 +483,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckNoManifest) {
       new CallbackTester(run_loop.QuitClosure()));
 
   // Navigating resets histogram state, so do it before recording a histogram.
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      embedded_test_server()->GetURL("/banners/no_manifest_test_page.html"));
+      embedded_test_server()->GetURL("/banners/no_manifest_test_page.html")));
   RunInstallableManager(browser(), tester.get(), GetManifestParams());
   run_loop.Run();
 
@@ -837,7 +842,6 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckManifestAndIcon) {
 
 IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
                        CheckWebapp) {
-  auto params = GetWebAppParams();
   // Request everything except splash icon.
   {
     base::HistogramTester histograms;
@@ -846,10 +850,9 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
         new CallbackTester(run_loop.QuitClosure()));
 
     // Navigating resets histogram state, so do it before recording a histogram.
-    ui_test_utils::NavigateToURL(
-        browser(),
-        embedded_test_server()->GetURL(
-            GetPath("/banners/manifest_test_page")));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL(
+                       GetPath("/banners/manifest_test_page"))));
     RunInstallableManager(browser(), tester.get(), GetWebAppParams());
     run_loop.Run();
 
@@ -921,7 +924,7 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
 
   {
     // Check that a subsequent navigation resets state.
-    ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
     InstallableManager* manager = GetManager(browser());
 
     EXPECT_TRUE(blink::IsEmptyManifest(manager->manifest()));
@@ -1064,9 +1067,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
     // Expect the call to ManifestAndIconTimeout to kick off an installable
     // check and fail it on a not installable page.
     base::HistogramTester histograms;
-    ui_test_utils::NavigateToURL(
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(),
-        embedded_test_server()->GetURL("/banners/no_manifest_test_page.html"));
+        embedded_test_server()->GetURL("/banners/no_manifest_test_page.html")));
 
     InstallableManager* manager = GetManager(browser());
 
@@ -1082,16 +1085,16 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
                        base::Unretained(tester.get())));
     run_loop.Run();
 
-    ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
   }
 
   {
     // Expect the call to ManifestAndIconTimeout to kick off an installable
     // check and pass it on an installable page.
     base::HistogramTester histograms;
-    ui_test_utils::NavigateToURL(
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(),
-        embedded_test_server()->GetURL("/banners/manifest_test_page.html"));
+        embedded_test_server()->GetURL("/banners/manifest_test_page.html")));
 
     InstallableManager* manager = GetManager(browser());
 
@@ -1107,7 +1110,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
                        base::Unretained(tester.get())));
     run_loop.Run();
 
-    ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
   }
 }
 
@@ -1198,7 +1201,7 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
     // Load a URL with no service worker.
     GURL test_url = embedded_test_server()->GetURL(
         "/banners/manifest_no_service_worker.html");
-    ui_test_utils::NavigateToURL(browser(), test_url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
 
     // Kick off fetching the data. This should block on waiting for a worker.
     manager->GetData(
@@ -1302,7 +1305,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
   // Load a URL with no service worker.
   GURL test_url = embedded_test_server()->GetURL(
       "/banners/manifest_no_service_worker.html");
-  ui_test_utils::NavigateToURL(browser(), test_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
 
   // Kick off fetching the data. This should block on waiting for a worker.
   manager->GetData(GetWebAppParams(),
@@ -1344,7 +1347,7 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
   // Load a URL with no service worker.
   GURL test_url = embedded_test_server()->GetURL(
       "/banners/manifest_no_service_worker.html");
-  ui_test_utils::NavigateToURL(browser(), test_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
 
   {
     base::RunLoop tester_run_loop;
@@ -1612,9 +1615,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
   auto manager = std::make_unique<ResetDataInstallableManager>(web_contents);
 
   // Start on a page with no manifest.
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      embedded_test_server()->GetURL("/banners/no_manifest_test_page.html"));
+      embedded_test_server()->GetURL("/banners/no_manifest_test_page.html")));
 
   {
     // Fetch the data. This should return an empty manifest.
@@ -1706,9 +1709,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, DebugModeWithNoManifest) {
 
   InstallableParams params = GetWebAppParams();
   params.is_debug_mode = true;
-  ui_test_utils::NavigateToURL(
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      embedded_test_server()->GetURL("/banners/no_manifest_test_page.html"));
+      embedded_test_server()->GetURL("/banners/no_manifest_test_page.html")));
   RunInstallableManager(browser(), tester.get(), params);
   run_loop.Run();
 
@@ -1777,23 +1780,34 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
             tester->errors());
 }
 
+// Flake tests: crbug.com/1256938
 IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
-                       GetAllInatallabilityErrorsNoErrors) {
+                       DISABLED_GetAllInstallabilityErrorsNoErrors) {
   EXPECT_EQ(std::vector<content::InstallabilityError>{},
             NavigateAndGetAllInstallabilityErrors(
                 browser(), "/banners/manifest_test_page.html"));
+
+  // Should pass a second time with no issues.
+  EXPECT_EQ(std::vector<content::InstallabilityError>{},
+            GetAllInstallabilityErrors(browser()));
 }
 
 IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
-                       GetAllInatallabilityErrorsWithNoManifest) {
+                       GetAllInstallabilityErrorsWithNoManifest) {
   EXPECT_EQ(std::vector<content::InstallabilityError>{GetInstallabilityError(
                 NO_MANIFEST)},
             NavigateAndGetAllInstallabilityErrors(
                 browser(), "/banners/no_manifest_test_page.html"));
+
+  // Should pass a second time with no issues.
+  EXPECT_EQ(std::vector<content::InstallabilityError>{GetInstallabilityError(
+                NO_MANIFEST)},
+            GetAllInstallabilityErrors(browser()));
 }
 
+// Flake tests: crbug.com/1256938
 IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
-                       GetAllInstallabilityErrorsWithPlayAppManifest) {
+                       DISABLED_GetAllInstallabilityErrorsWithPlayAppManifest) {
   if (IsCheckOfflineCapableFeatureEnabled()) {
     EXPECT_EQ(std::vector<content::InstallabilityError>(
                   {GetInstallabilityError(START_URL_NOT_VALID),
@@ -1821,13 +1835,14 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
 IN_PROC_BROWSER_TEST_F(InstallableManagerAllowlistOriginBrowserTest,
                        SecureOriginCheckRespectsUnsafeFlag) {
   // The allowlisted origin should be regarded as secure.
-  ui_test_utils::NavigateToURL(browser(), GURL(kInsecureOrigin));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kInsecureOrigin)));
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(InstallableManager::IsContentSecure(contents));
 
   // While a non-allowlisted origin should not.
-  ui_test_utils::NavigateToURL(browser(), GURL(kOtherInsecureOrigin));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(kOtherInsecureOrigin)));
   EXPECT_FALSE(InstallableManager::IsContentSecure(contents));
 }
 
@@ -1837,7 +1852,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, NarrowServiceWorker) {
   {
     web_app::ServiceWorkerRegistrationWaiter registration_waiter(
         browser()->profile(), url);
-    ui_test_utils::NavigateToURL(browser(), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     registration_waiter.AwaitRegistration();
   }
   base::RunLoop run_loop;
@@ -2046,7 +2061,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerInPrerenderingBrowserTest,
                        InstallableManagerInPrerendering) {
   auto manager = std::make_unique<ResetDataInstallableManager>(web_contents());
   GURL url = embedded_test_server()->GetURL("/empty.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   manager->ClearOnResetData();
 
@@ -2081,7 +2096,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerInPrerenderingBrowserTest,
     // reset.
     base::RunLoop run_loop;
     manager->SetQuitClosure(run_loop.QuitClosure());
-    ui_test_utils::NavigateToURL(browser(), prerender_url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), prerender_url));
     run_loop.Run();
   }
 
@@ -2136,7 +2151,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerInPrerenderingBrowserTest,
   GURL url = embedded_test_server()->GetURL("/empty.html");
   // OnResetData() is called when a navigation is finished.
   EXPECT_CALL(*manager.get(), OnResetData()).Times(1);
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   // Loads a page in the prerendering.
   auto prerender_url =
@@ -2207,7 +2222,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerInPrerenderingBrowserTest,
   GURL url = embedded_test_server()->GetURL("/empty.html");
   // OnResetData() is called when a navigation is finished.
   EXPECT_CALL(*manager.get(), OnResetData()).Times(1);
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   // Loads a page in the prerendering.
   auto prerender_url =

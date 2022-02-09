@@ -89,6 +89,10 @@ class QueuedHistoryDBTask {
       std::unique_ptr<HistoryDBTask> task,
       scoped_refptr<base::SingleThreadTaskRunner> origin_loop,
       const base::CancelableTaskTracker::IsCanceledCallback& is_canceled);
+
+  QueuedHistoryDBTask(const QueuedHistoryDBTask&) = delete;
+  QueuedHistoryDBTask& operator=(const QueuedHistoryDBTask&) = delete;
+
   ~QueuedHistoryDBTask();
 
   bool is_canceled();
@@ -99,8 +103,6 @@ class QueuedHistoryDBTask {
   std::unique_ptr<HistoryDBTask> task_;
   scoped_refptr<base::SingleThreadTaskRunner> origin_loop_;
   base::CancelableTaskTracker::IsCanceledCallback is_canceled_;
-
-  DISALLOW_COPY_AND_ASSIGN(QueuedHistoryDBTask);
 };
 
 // *See the .cc file for more information on the design.*
@@ -200,6 +202,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   HistoryBackend(std::unique_ptr<Delegate> delegate,
                  std::unique_ptr<HistoryBackendClient> backend_client,
                  scoped_refptr<base::SequencedTaskRunner> task_runner);
+
+  HistoryBackend(const HistoryBackend&) = delete;
+  HistoryBackend& operator=(const HistoryBackend&) = delete;
 
   // Must be called after creation but before any objects are created. If this
   // fails, all other functions will fail as well. (Since this runs on another
@@ -489,10 +494,13 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   virtual bool RemoveVisits(const VisitVector& visits);
 
-  // Returns the VisitSource associated with each one of the passed visits.
+  // Returns the `VisitSource` associated with each one of the passed visits.
   // If there is no entry in the map for a given visit, that means the visit
-  // was SOURCE_BROWSED. Returns false if there is no HistoryDatabase..
+  // was `SOURCE_BROWSED`. Returns false if there is no `HistoryDatabase`.
   bool GetVisitsSource(const VisitVector& visits, VisitSourceMap* sources);
+
+  // Like `GetVisitsSource`, but for a single visit.
+  bool GetVisitSource(const VisitID visit_id, VisitSource* source);
 
   virtual bool GetURL(const GURL& url, URLRow* url_row);
 
@@ -649,7 +657,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       bool hidden,
       VisitSource visit_source,
       bool should_increment_typed_count,
-      bool floc_allowed,
+      VisitID opener_visit,
       absl::optional<std::u16string> title = absl::nullopt);
 
   // Returns a redirect chain in `redirects` for the VisitID
@@ -868,8 +876,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // HistoryBackend::Init is called. Defined after observers_ because
   // it unregisters itself as observer during destruction.
   std::unique_ptr<TypedURLSyncBridge> typed_url_sync_bridge_;
-
-  DISALLOW_COPY_AND_ASSIGN(HistoryBackend);
 };
 
 }  // namespace history

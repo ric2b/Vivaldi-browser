@@ -10,7 +10,7 @@ import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
-import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
@@ -133,10 +133,10 @@ public interface SigninManager {
      *   - Complete sign-in with the native IdentityManager.
      *   - Call the callback if provided.
      *
-     * @param accountInfo The account to sign in to.
+     * @param account The account to sign in to.
      * @param callback Optional callback for when the sign-in process is finished.
      */
-    void signin(CoreAccountInfo accountInfo, @Nullable SignInCallback callback);
+    void signin(Account account, @Nullable SignInCallback callback);
 
     /**
      * Starts the sign-in flow, and executes the callback when finished.
@@ -199,4 +199,10 @@ public interface SigninManager {
      *                 otherwise.
      */
     void isAccountManaged(String email, Callback<Boolean> callback);
+
+    /**
+     * Reloads all the accounts from the system within the {@link IdentityManager}.
+     * @param primaryAccountId {@link CoreAccountId} of the primary account.
+     */
+    void reloadAllAccountsFromSystem(CoreAccountId primaryAccountId);
 }

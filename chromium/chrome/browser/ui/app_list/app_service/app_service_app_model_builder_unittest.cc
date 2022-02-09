@@ -41,11 +41,11 @@
 #include "chrome/browser/ui/app_list/md_icon_normalizer.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
-#include "chrome/browser/web_applications/test/test_web_app_provider.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -323,7 +323,7 @@ class WebAppBuilderTest : public AppServiceAppModelBuilderTest {
     web_app_info->title = base::UTF8ToUTF16(app_name);
     web_app_info->start_url = kAppUrl;
     web_app_info->scope = kAppUrl;
-    web_app_info->open_as_window = true;
+    web_app_info->user_display_mode = web_app::DisplayMode::kStandalone;
 
     return web_app::test::InstallWebApp(profile(), std::move(web_app_info));
   }
@@ -345,7 +345,7 @@ class WebAppBuilderTest : public AppServiceAppModelBuilderTest {
     }
 
     web_app::WebAppProvider* web_app_provider =
-        web_app::WebAppProvider::Get(profile());
+        web_app::WebAppProvider::GetForTest(profile());
     ASSERT_TRUE(web_app_provider);
 
     base::RunLoop run_loop;
@@ -863,6 +863,7 @@ TEST_F(CrostiniAppTest, CreatesFolder) {
   auto metadata = std::make_unique<ash::AppListItemMetadata>();
   metadata->id = ash::kCrostiniFolderId;
   metadata->is_folder = true;
+  metadata->position = syncer::StringOrdinal::CreateInitialOrdinal();
   GetModelUpdater()->OnItemAdded(std::move(metadata));
 
   EXPECT_THAT(GetAllApps(),
@@ -893,7 +894,7 @@ class PluginVmAppTest : public testing::Test {
  public:
   void SetUp() override {
     testing_profile_ = std::make_unique<TestingProfile>();
-    web_app::TestWebAppProvider::Get(testing_profile_.get())->Start();
+    web_app::FakeWebAppProvider::Get(testing_profile_.get())->Start();
     test_helper_ = std::make_unique<PluginVmTestHelper>(testing_profile_.get());
     // We need to call this before creating the builder, otherwise
     // |PluginVmApps| is disabled forever.
@@ -1003,7 +1004,7 @@ class BorealisAppTest : public AppServiceAppModelBuilderTest {
  public:
   void SetUp() override {
     testing_profile_ = std::make_unique<TestingProfile>();
-    web_app::TestWebAppProvider::Get(testing_profile_.get())->Start();
+    web_app::FakeWebAppProvider::Get(testing_profile_.get())->Start();
     CreateBuilder(/*guest_mode=*/false);
   }
 

@@ -17,8 +17,9 @@ class ChromeBookmarkFileReader {
                            const base::DictionaryValue& entries) = 0;
 
   ChromeBookmarkFileReader();
-
   virtual ~ChromeBookmarkFileReader();
+  ChromeBookmarkFileReader(const ChromeBookmarkFileReader&) = delete;
+  ChromeBookmarkFileReader& operator=(const ChromeBookmarkFileReader&) = delete;
 
  private:
   bool DecodeNode(const base::DictionaryValue& value);
@@ -30,8 +31,6 @@ class ChromeBookmarkFileReader {
   static const char* kTypeFolder;
   static const char* kChildrenKey;
   static const char* kTypeURL;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeBookmarkFileReader);
 };
 
 #endif  // IMPORTER_CHROME_BOOKMARK_READER_H_

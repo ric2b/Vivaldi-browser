@@ -85,13 +85,6 @@ AX_BASE_EXPORT bool IsSelectiveUIAEnablementEnabled();
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// Enables new magnifier panning improvements feature, which adds
-// additional keyboard and mouse panning functionality in Magnifier.
-AX_BASE_EXPORT extern const base::Feature kMagnifierPanningImprovements;
-
-// Returns true if the new magnifier panning improvements feature is enabled.
-AX_BASE_EXPORT bool IsMagnifierPanningImprovementsEnabled();
-
 // Enables ability to choose new continuous mouse following mode in Magnifier
 // settings.
 AX_BASE_EXPORT extern const base::Feature
@@ -101,21 +94,6 @@ AX_BASE_EXPORT extern const base::Feature
 // following mode in Magnifier settings is enabled.
 AX_BASE_EXPORT bool IsMagnifierContinuousMouseFollowingModeSettingEnabled();
 
-// Enables new caret following behavior from Javascript.
-AX_BASE_EXPORT extern const base::Feature
-    kMagnifierCaretFollowingFromJavascript;
-
-// Returns true if the feature to allow new caret following from Javascript is
-// enabled.
-AX_BASE_EXPORT bool IsMagnifierCaretFollowingFromJavascriptEnabled();
-
-// Enables ability to choose point scanning mode in switch access.
-AX_BASE_EXPORT extern const base::Feature kEnableSwitchAccessPointScanning;
-
-// Returns true if the feature to allow point scanning in switch access is
-// enabled.
-AX_BASE_EXPORT bool IsSwitchAccessPointScanningEnabled();
-
 // Enables dictation to use on-device speech recognition when available.
 AX_BASE_EXPORT extern const base::Feature
     kExperimentalAccessibilityDictationOffline;
@@ -124,6 +102,22 @@ AX_BASE_EXPORT extern const base::Feature
 AX_BASE_EXPORT bool IsExperimentalAccessibilityDictationOfflineEnabled();
 
 AX_BASE_EXPORT bool IsDictationOfflineAvailableAndEnabled();
+
+// Enables text-editing commands in the dictation.
+AX_BASE_EXPORT extern const base::Feature
+    kExperimentalAccessibilityDictationCommands;
+
+// Returns true if the expeirmental accessibility feature to enable dictation
+// text editing commands is enabled.
+AX_BASE_EXPORT bool IsExperimentalAccessibilityDictationCommandsEnabled();
+
+// Enable a setup guide to walk through the steps of initially configuring
+// Switch Access.
+AX_BASE_EXPORT extern const base::Feature
+    kExperimentalAccessibilitySwitchAccessSetupGuide;
+
+// Returns true if setup guide for Switch Access is enabled.
+AX_BASE_EXPORT bool IsExperimentalAccessibilitySwitchAccessSetupGuideEnabled();
 
 // Enables high-quality, network-based voices in Select-to-speak.
 AX_BASE_EXPORT extern const base::Feature kEnhancedNetworkVoices;

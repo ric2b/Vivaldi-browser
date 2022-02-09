@@ -5,7 +5,7 @@
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_gen_prefs.h"
 
-namespace vivaldi{
+namespace vivaldi {
 std::string GetSessionNameOverride(PrefService* prefs) {
   return prefs->GetString(vivaldiprefs::kSyncSessionName);
 }

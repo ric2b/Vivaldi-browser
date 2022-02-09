@@ -60,7 +60,7 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
         const std::string* type = top_node.FindStringPath("type");
         if (type && *type == "menu") {
           if (!RemoveFromProfile(top_node, "", bundled_root.get(),
-              profile_root.get())) {
+                                 profile_root.get())) {
             LOG(ERROR) << "Menu Upgrade: Aborted, failed to remove elements";
             return nullptr;
           }
@@ -76,7 +76,7 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
         const std::string* action = top_node.FindStringPath("action");
         if (type && *type == "menu" && action) {
           if (!FixupProfile(top_node, "", bundled_root.get(),
-              profile_root.get(), *action)) {
+                            profile_root.get(), *action)) {
             // Log error, but do not stop.
             LOG(ERROR) << "Menu Upgrade: Fixup failed for " << *action;
           }
@@ -134,8 +134,8 @@ base::Value* MenuUpgrade::FindNodeByAction(base::Value& value,
                                            const std::string& needle_action) {
   if (value.is_list()) {
     for (auto& item : value.GetList()) {
-      base::Value* matched_value = FindNodeByAction(item, include_children,
-          needle_action);
+      base::Value* matched_value =
+          FindNodeByAction(item, include_children, needle_action);
       if (matched_value) {
         return matched_value;
       }
@@ -150,8 +150,8 @@ base::Value* MenuUpgrade::FindNodeByAction(base::Value& value,
       if (include_children) {
         base::Value* children = value.FindPath("children");
         if (children && children->is_list()) {
-          base::Value* matched_value = FindNodeByAction(*children, true,
-              needle_action);
+          base::Value* matched_value =
+              FindNodeByAction(*children, true, needle_action);
           if (matched_value) {
             return matched_value;
           }
@@ -227,9 +227,8 @@ bool MenuUpgrade::RemoveFromProfile(const base::Value& profile_value,
       if (!FindNodeByGuid(*bundle_root, *guid)) {
         return Remove(profile_value, parent_guid, profile_root);
       }
-    }
-    else if (origin == Menu_Node::MODIFIED_BUNDLE &&
-        !IsDeletedOrModified(*guid)) {
+    } else if (origin == Menu_Node::MODIFIED_BUNDLE &&
+               !IsDeletedOrModified(*guid)) {
       // This means the item has gotten a new guid (which we did intentionally
       // at an early stage of development). We do not want that.
       needs_fixup_ = true;
@@ -254,7 +253,7 @@ bool MenuUpgrade::FixupProfile(base::Value& profile_value,
     for (int i = profile_value.GetList().size() - 1; i >= 0; i--) {
       auto& item = profile_value.GetList()[i];
       if (!FixupProfile(item, parent_guid, bundle_root, profile_root,
-          menu_action)) {
+                        menu_action)) {
         return false;
       }
     }
@@ -304,7 +303,7 @@ bool MenuUpgrade::FixupProfile(base::Value& profile_value,
     base::Value* children = profile_value.FindPath("children");
     if (children && children->is_list()) {
       if (!FixupProfile(*children, *guid, bundle_root, profile_root,
-          menu_action)) {
+                        menu_action)) {
         return false;
       }
     }
@@ -326,7 +325,6 @@ bool MenuUpgrade::Insert(const base::Value& bundle_value,
                          const std::string& parent_guid,
                          int index,
                          base::Value* profile_root) {
-
   if (parent_guid.empty()) {
     // Special case for top level. Index is not imporant.
     auto c = bundle_value.Clone();

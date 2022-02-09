@@ -405,6 +405,16 @@ const char kSearchSuggestEnabled[] = "search.suggest_enabled";
 const char kContextualSearchEnabled[] = "search.contextual_search_enabled";
 const char kContextualSearchDisabledValue[] = "false";
 const char kContextualSearchEnabledValue[] = "true";
+
+// A integer preference to store the number of times the Contextual Search promo
+// card shown.
+const char kContextualSearchPromoCardShownCount[] =
+    "search.contextual_search_promo_card_shown_count";
+
+// Boolean that indicates whether the user chose to fully opt in for Contextual
+// Search.
+const char kContextualSearchWasFullyPrivacyEnabled[] =
+    "search.contextual_search_fully_opted_in";
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_MAC)
@@ -476,11 +486,6 @@ const char kPrintingAPIExtensionsAllowlist[] =
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// An integer preference to store the number of times the Chrome OS Account
-// Manager migration flow ran successfully.
-const char kAccountManagerNumTimesMigrationRanSuccessfully[] =
-    "account_manager.num_times_migration_ran_successfully";
-
 // An integer preference to store the number of times the Chrome OS Account
 // Manager welcome screen has been shown.
 const char kAccountManagerNumTimesWelcomeScreenShown[] =
@@ -1129,6 +1134,12 @@ const char kForceYouTubeRestrict[] = "settings.force_youtube_restrict";
 // only using an account that belongs to one of the domains from this pref.
 const char kAllowedDomainsForApps[] = "settings.allowed_domains_for_apps";
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// A boolean pref that controls whether proxy settings from Ash-Chrome are
+// applied or ignored. Always true for the primary profile.
+const char kUseAshProxy[] = "lacros.proxy.use_ash_proxy";
+#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
+
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -1246,7 +1257,6 @@ const char kContentSettingsPluginWhitelist[] =
     "profile.content_settings.plugin_whitelist";
 #endif
 
-#if !defined(OS_ANDROID)
 // Double that indicates the default zoom level.
 const char kPartitionDefaultZoomLevel[] = "partition.default_zoom_level";
 
@@ -1254,6 +1264,7 @@ const char kPartitionDefaultZoomLevel[] = "partition.default_zoom_level";
 // be displayed at the default zoom level.
 const char kPartitionPerHostZoomLevels[] = "partition.per_host_zoom_levels";
 
+#if !defined(OS_ANDROID)
 const char kPinnedTabs[] = "pinned_tabs";
 #endif  // !defined(OS_ANDROID)
 
@@ -1372,9 +1383,16 @@ const char kPrintPdfAsImageAvailability[] =
 // An integer resolution to use for DPI when rasterizing PDFs with "Print to
 // image".
 const char kPrintRasterizePdfDpi[] = "printing.rasterize_pdf_dpi";
+
+// Boolean controlling whether the "Print as image" option should default to set
+// in Print Preview when printing a PDF.
+const char kPrintPdfAsImageDefault[] = "printing.print_pdf_as_image_default";
 #endif
 
 #if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINTING)
+// An integer pref that holds the PostScript mode to use when printing.
+const char kPrintPostScriptMode[] = "printing.postscript_mode";
+
 // An integer pref that holds the rasterization mode to use when printing.
 const char kPrintRasterizationMode[] = "printing.rasterization_mode";
 #endif
@@ -1587,10 +1605,6 @@ const char kQuietNotificationPermissionPromoWasShown[] =
     "profile.content_settings.quiet_permission_ui_promo.was_shown."
     "notifications";
 
-// List containing a history of past permission actions, for all permission
-// types.
-const char kPermissionActions[] = "profile.content_settings.permission_actions";
-
 // Boolean indicating if JS dialogs triggered from a different origin iframe
 // should be blocked. Has no effect if
 // "SuppressDifferentOriginSubframeJSDialogs" feature is disabled.
@@ -1719,6 +1733,11 @@ const char kDownloadLaterPromptStatus[] =
 // This is only applicable for Android.
 const char kShowMissingSdCardErrorAndroid[] =
     "download.show_missing_sd_card_error_android";
+
+// Boolean which specifies whether the user has turned on incognito
+// reauthentication setting for Android.
+const char kIncognitoReauthenticationForAndroid[] =
+    "incognito.incognito_reauthentication";
 #endif
 
 // String which specifies where to save html files to by default.
@@ -1847,12 +1866,6 @@ const char kNtpModulesOrder[] = "NewTabPage.ModulesOrder";
 const char kNtpModulesVisible[] = "NewTabPage.ModulesVisible";
 // List of promos that the user has dismissed while on the NTP.
 const char kNtpPromoBlocklist[] = "ntp.promo_blocklist";
-// Data associated with search suggestions that appear on the NTP.
-const char kNtpSearchSuggestionsBlocklist[] =
-    "ntp.search_suggestions_blocklist";
-const char kNtpSearchSuggestionsImpressions[] =
-    "ntp.search_suggestions_impressions";
-const char kNtpSearchSuggestionsOptOut[] = "ntp.search_suggestions_opt_out";
 #endif  // defined(OS_ANDROID)
 
 // Which page should be visible on the new tab page v4
@@ -1903,8 +1916,23 @@ const char kDevToolsDiscoverTCPTargetsEnabled[] =
 // A list of strings representing devtools target discovery servers.
 const char kDevToolsTCPDiscoveryConfig[] = "devtools.tcp_discovery_config";
 
-// A dictionary with generic DevTools settings.
+// A dictionary with all unsynced DevTools settings.
 const char kDevToolsPreferences[] = "devtools.preferences";
+
+// A boolean specyfing whether the "syncable" subset of DevTools preferences
+// should be synced or not.
+const char kDevToolsSyncPreferences[] = "devtools.sync_preferences";
+
+// Dictionaries with all synced DevTools settings. Depending on the state of the
+// kDevToolsSyncPreferences toggle, one or the other dictionary will be used.
+// The "Enabled" dictionary is synced via Chrome Sync with the rest of Chrome
+// settings, while the "Disabled" dictionary won't be synced. This allows
+// DevTools to opt-in of syncing DevTools settings independently from syncing
+// Chrome settings.
+const char kDevToolsSyncedPreferencesSyncEnabled[] =
+    "devtools.synced_preferences_sync_enabled";
+const char kDevToolsSyncedPreferencesSyncDisabled[] =
+    "devtools.synced_preferences_sync_disabled";
 
 #if !defined(OS_ANDROID)
 // Tracks the number of times the dice signin promo has been shown in the user
@@ -2035,6 +2063,11 @@ const char kMediaStorageIdSalt[] = "media.storage_id_salt";
 // Mapping of origin to their origin id (UnguessableToken). Origin IDs are only
 // stored for origins using MediaFoundation-based CDMs.
 const char kMediaCdmOriginData[] = "media.cdm.origin_data";
+
+// A boolean pref to determine whether or not the network service is running
+// sandboxed.
+const char kNetworkServiceSandboxEnabled[] = "net.network_service_sandbox";
+
 #endif  // defined(OS_WIN)
 
 // The last used printer and its settings.
@@ -2854,6 +2887,12 @@ const char kLatestVersionWhenClickedUpdateMenuItem[] =
     "omaha.latest_version_when_clicked_upate_menu_item";
 #endif
 
+#if defined(OS_ANDROID)
+// The serialized timestamps of latest shown merchant viewer messages.
+const char kCommerceMerchantViewerMessagesShownTime[] =
+    "commerce_merchant_viewer_messages_shown_time";
+#endif
+
 // Policy that indicates the state of updates for the binary components.
 const char kComponentUpdatesEnabled[] =
     "component_updates.component_updates_enabled";
@@ -2920,6 +2959,11 @@ const char kThirdPartyBlockingEnabled[] = "third_party_blocking_enabled";
 // A boolean value, controlling whether Chrome renderer processes have the CIG
 // mitigation enabled.
 const char kRendererCodeIntegrityEnabled[] = "renderer_code_integrity_enabled";
+
+// A boolean that controls whether the Browser process has
+// ProcessExtensionPointDisablePolicy enabled.
+const char kBlockBrowserLegacyExtensionPoints[] =
+    "block_browser_legacy_extension_points";
 #endif  // defined(OS_WIN)
 
 // An integer that keeps track of prompt waves for the settings reset
@@ -3059,6 +3103,11 @@ const char kAutoplayWhitelist[] = "media.autoplay_whitelist";
 const char kBlockAutoplayEnabled[] = "media.block_autoplay";
 #endif  // !defined(OS_ANDROID)
 
+// Boolean allowing Chrome to block external protocol navigation in sandboxed
+// iframes.
+const char kSandboxExternalProtocolBlocked[] =
+    "profile.sandbox_external_protocol_blocked";
+
 #if defined(OS_LINUX)
 // Boolean that indicates if native notifications are allowed to be used in
 // place of Chrome notifications. Will be replaced by kAllowSystemNotifications.
@@ -3162,6 +3211,12 @@ const char kCertificateProvisioningStateForUser[] =
 const char kCertificateProvisioningStateForDevice[] =
     "cert_provisioning_device_state";
 #endif
+// A boolean pref that enables certificate prompts when multiple certificates
+// match the auto-selection policy. This pref is controlled exclusively by
+// policies (PromptOnMultipleMatchingCertificates or, in the sign-in profile,
+// DeviceLoginScreenPromptOnMultipleMatchingCertificates).
+const char kPromptOnMultipleMatchingCertificates[] =
+    "prompt_on_multiple_matching_certificates";
 
 // This pref enables periodically fetching new Media Feed items for top feeds.
 const char kMediaFeedsBackgroundFetching[] =
@@ -3208,10 +3263,6 @@ const char kShowCaretBrowsingDialog[] =
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// Boolean pref indicating whether the Lacros browser is allowed. This is set by
-// a policy, and the default value for managed users is false. Admins willing to
-// give rights to use Lacros can set the policy to true.
-const char kLacrosAllowed[] = "lacros_allowed";
 // Enum pref indicating how to launch the Lacros browser. It is managed by
 // LacrosAvailability policy can have one of the following values:
 // 0: User choice (default value).
@@ -3261,6 +3312,9 @@ const char kCartDiscountAcknowledged[] = "cart_discount_acknowledged";
 const char kCartDiscountEnabled[] = "cart_discount_enabled";
 // Map pref recording the discounts used by users.
 const char kCartUsedDiscounts[] = "cart_used_discounts";
+// A time pref indicating the timestamp of when last cart discount fetch
+// happened.
+const char kCartDiscountLastFetchedTime[] = "cart_discount_last_fetched_time";
 #endif
 
 #if defined(OS_ANDROID)

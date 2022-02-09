@@ -13,6 +13,7 @@
 #include "net/cookies/canonical_cookie_test_helpers.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_util.h"
+#include "net/cookies/site_for_cookies.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
@@ -26,7 +27,7 @@ using testing::IsEmpty;
 using testing::UnorderedElementsAre;
 
 constexpr char kAllowedRequestsHistogram[] =
-    "API.StorageAccess.AllowedRequests";
+    "API.StorageAccess.AllowedRequests2";
 
 constexpr char kDomainURL[] = "http://example.com";
 constexpr char kURL[] = "http://foo.com";
@@ -196,6 +197,21 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAUnblocks) {
             CONTENT_SETTING_BLOCK);
   EXPECT_EQ(settings.GetCookieSetting(third_url, top_level_url, nullptr),
             CONTENT_SETTING_BLOCK);
+
+  // If cookies are globally blocked, SAA grants should be ignored.
+  {
+    settings.set_content_settings(
+        {CreateSetting("*", "*", CONTENT_SETTING_BLOCK)});
+    settings.set_block_third_party_cookies(true);
+    base::HistogramTester histogram_tester;
+    EXPECT_EQ(settings.GetCookieSetting(url, top_level_url, nullptr),
+              CONTENT_SETTING_BLOCK);
+    histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 1);
+    histogram_tester.ExpectBucketCount(
+        kAllowedRequestsHistogram,
+        static_cast<int>(net::cookie_util::StorageAccessResult::ACCESS_BLOCKED),
+        1);
+  }
 }
 
 // Subdomains of the granted embedding url should not gain access if a valid
@@ -268,8 +284,7 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAExpiredGrant) {
       {CreateSetting("*", "*", CONTENT_SETTING_ALLOW)});
   settings.set_block_third_party_cookies(true);
 
-  base::Time expiration_time =
-      base::Time::Now() + base::TimeDelta::FromSeconds(100);
+  base::Time expiration_time = base::Time::Now() + base::Seconds(100);
   settings.set_storage_access_grants(
       {CreateSetting(url.host(), top_level_url.host(), CONTENT_SETTING_ALLOW,
                      expiration_time)});
@@ -282,7 +297,7 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAExpiredGrant) {
 
   // If we fastforward past the expiration of our grant the result should be
   // CONTENT_SETTING_BLOCK now.
-  FastForwardTime(base::TimeDelta::FromSeconds(101));
+  FastForwardTime(base::Seconds(101));
   EXPECT_EQ(settings.GetCookieSetting(url, top_level_url, nullptr),
             CONTENT_SETTING_BLOCK);
 }
@@ -445,18 +460,19 @@ TEST_F(CookieSettingsTest, IsPrivacyModeEnabled) {
 
   // Enabled for third-party requests.
   EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kURL), GURL(), url::Origin::Create(GURL(kOtherURL)),
+      GURL(kURL), net::SiteForCookies(), url::Origin::Create(GURL(kOtherURL)),
       net::SamePartyContext::Type::kCrossParty));
 
   // Enabled for requests with a null site_for_cookies, even if the
   // top_frame_origin matches.
   EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kURL), GURL(), url::Origin::Create(GURL(kURL)),
+      GURL(kURL), net::SiteForCookies(), url::Origin::Create(GURL(kURL)),
       net::SamePartyContext::Type::kCrossParty));
 
   // Disabled for first-party requests, if no other rule applies.
   EXPECT_FALSE(settings.IsPrivacyModeEnabled(
-      GURL(kURL), GURL(kURL), url::Origin::Create(GURL(kURL)),
+      GURL(kURL), net::SiteForCookies::FromUrl(GURL(kURL)),
+      url::Origin::Create(GURL(kURL)),
       net::SamePartyContext::Type::kSameParty));
 
   // Enabled if there's a site-specific rule that blocks access, regardless of
@@ -465,15 +481,16 @@ TEST_F(CookieSettingsTest, IsPrivacyModeEnabled) {
       {CreateSetting(kURL, "*", CONTENT_SETTING_BLOCK)});
   // Third-party requests:
   EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kURL), GURL(), url::Origin::Create(GURL(kOtherURL)),
+      GURL(kURL), net::SiteForCookies(), url::Origin::Create(GURL(kOtherURL)),
       net::SamePartyContext::Type::kCrossParty));
   // Requests with a null site_for_cookies, but matching top_frame_origin.
   EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kURL), GURL(), url::Origin::Create(GURL(kURL)),
+      GURL(kURL), net::SiteForCookies(), url::Origin::Create(GURL(kURL)),
       net::SamePartyContext::Type::kCrossParty));
   // First-party requests.
   EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kURL), GURL(kURL), url::Origin::Create(GURL(kURL)),
+      GURL(kURL), net::SiteForCookies::FromUrl(GURL(kURL)),
+      url::Origin::Create(GURL(kURL)),
       net::SamePartyContext::Type::kSameParty));
 
   // No histogram samples should have been recorded.
@@ -491,21 +508,24 @@ TEST_F(CookieSettingsTest, IsPrivacyModeEnabled_SamePartyConsideredFirstParty) {
   settings.set_block_third_party_cookies(true);
 
   // Enabled for cross-party requests.
-  EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kFPSMemberURL), GURL(), url::Origin::Create(GURL(kFPSOwnerURL)),
-      net::SamePartyContext::Type::kCrossParty));
+  EXPECT_TRUE(
+      settings.IsPrivacyModeEnabled(GURL(kFPSMemberURL), net::SiteForCookies(),
+                                    url::Origin::Create(GURL(kFPSOwnerURL)),
+                                    net::SamePartyContext::Type::kCrossParty));
 
   // Disabled for cross-site, same-party requests.
-  EXPECT_FALSE(settings.IsPrivacyModeEnabled(
-      GURL(kFPSMemberURL), GURL(), url::Origin::Create(GURL(kFPSOwnerURL)),
-      net::SamePartyContext::Type::kSameParty));
+  EXPECT_FALSE(
+      settings.IsPrivacyModeEnabled(GURL(kFPSMemberURL), net::SiteForCookies(),
+                                    url::Origin::Create(GURL(kFPSOwnerURL)),
+                                    net::SamePartyContext::Type::kSameParty));
 
   // Enabled for same-party requests if blocked by a site-specific rule.
   settings.set_content_settings(
       {CreateSetting(kFPSMemberURL, "*", CONTENT_SETTING_BLOCK)});
-  EXPECT_TRUE(settings.IsPrivacyModeEnabled(
-      GURL(kFPSMemberURL), GURL(), url::Origin::Create(GURL(kFPSOwnerURL)),
-      net::SamePartyContext::Type::kSameParty));
+  EXPECT_TRUE(
+      settings.IsPrivacyModeEnabled(GURL(kFPSMemberURL), net::SiteForCookies(),
+                                    url::Origin::Create(GURL(kFPSOwnerURL)),
+                                    net::SamePartyContext::Type::kSameParty));
 
   // No histogram samples should have been recorded.
   EXPECT_THAT(histogram_tester.GetAllSamples(
@@ -523,7 +543,7 @@ TEST_F(CookieSettingsTest, IsCookieAccessible) {
       MakeCanonicalCookie("name", kFPSMemberURL, false /* sameparty */);
 
   EXPECT_FALSE(settings.IsCookieAccessible(
-      *non_sameparty_cookie, GURL(kFPSMemberURL), GURL(),
+      *non_sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kFPSOwnerURL))));
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "Cookie.SameParty.BlockedByThirdPartyCookieBlockingSetting"),
@@ -535,7 +555,7 @@ TEST_F(CookieSettingsTest, IsCookieAccessible) {
       MakeCanonicalCookie("name", kFPSMemberURL, true /* sameparty */);
 
   EXPECT_FALSE(settings.IsCookieAccessible(
-      *sameparty_cookie, GURL(kFPSMemberURL), GURL(),
+      *sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kFPSOwnerURL))));
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "Cookie.SameParty.BlockedByThirdPartyCookieBlockingSetting"),
@@ -546,7 +566,7 @@ TEST_F(CookieSettingsTest, IsCookieAccessible) {
   settings.set_content_settings(
       {CreateSetting(kFPSMemberURL, "*", CONTENT_SETTING_BLOCK)});
   EXPECT_FALSE(settings.IsCookieAccessible(
-      *sameparty_cookie, GURL(kFPSMemberURL), GURL(),
+      *sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kFPSOwnerURL))));
   // It wasn't the third-party cookie blocking setting this time, so we don't
   // record the metric.
@@ -568,7 +588,7 @@ TEST_F(CookieSettingsTest, IsCookieAccessible_SamePartyConsideredFirstParty) {
       MakeCanonicalCookie("name", kFPSMemberURL, false /* sameparty */);
 
   EXPECT_FALSE(settings.IsCookieAccessible(
-      *non_sameparty_cookie, GURL(kFPSMemberURL), GURL(),
+      *non_sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kFPSOwnerURL))));
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "Cookie.SameParty.BlockedByThirdPartyCookieBlockingSetting"),
@@ -580,7 +600,7 @@ TEST_F(CookieSettingsTest, IsCookieAccessible_SamePartyConsideredFirstParty) {
       MakeCanonicalCookie("name", kFPSMemberURL, true /* sameparty */);
 
   EXPECT_TRUE(settings.IsCookieAccessible(
-      *sameparty_cookie, GURL(kFPSMemberURL), GURL(),
+      *sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kFPSOwnerURL))));
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "Cookie.SameParty.BlockedByThirdPartyCookieBlockingSetting"),
@@ -591,7 +611,20 @@ TEST_F(CookieSettingsTest, IsCookieAccessible_SamePartyConsideredFirstParty) {
   settings.set_content_settings(
       {CreateSetting(kFPSMemberURL, "*", CONTENT_SETTING_BLOCK)});
   EXPECT_FALSE(settings.IsCookieAccessible(
-      *sameparty_cookie, GURL(kFPSMemberURL), GURL(),
+      *sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
+      url::Origin::Create(GURL(kFPSOwnerURL))));
+  // It wasn't blocked by third-party cookie blocking settings, so we shouldn't
+  // record the metric.
+  EXPECT_THAT(histogram_tester.GetAllSamples(
+                  "Cookie.SameParty.BlockedByThirdPartyCookieBlockingSetting"),
+              ElementsAre(base::Bucket(/*min=*/0, /*count=*/1)));
+
+  // If the SameParty cookie is blocked by the global default setting (i.e. if
+  // the user has blocked all cookies), it should not be accessible.
+  settings.set_content_settings(
+      {CreateSetting("*", "*", CONTENT_SETTING_BLOCK)});
+  EXPECT_FALSE(settings.IsCookieAccessible(
+      *sameparty_cookie, GURL(kFPSMemberURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kFPSOwnerURL))));
   // It wasn't blocked by third-party cookie blocking settings, so we shouldn't
   // record the metric.
@@ -618,7 +651,8 @@ TEST_F(CookieSettingsTest, AnnotateAndMoveUserBlockedCookies) {
   url::Origin origin = url::Origin::Create(GURL(kURL));
 
   EXPECT_FALSE(settings.AnnotateAndMoveUserBlockedCookies(
-      GURL(kURL), GURL(), &origin, maybe_included_cookies, excluded_cookies));
+      GURL(kURL), net::SiteForCookies(), &origin, maybe_included_cookies,
+      excluded_cookies));
 
   EXPECT_THAT(maybe_included_cookies, IsEmpty());
   EXPECT_THAT(
@@ -693,8 +727,8 @@ TEST_F(CookieSettingsTest,
 
   const url::Origin fps_owner_origin = url::Origin::Create(GURL(kFPSOwnerURL));
   EXPECT_TRUE(settings.AnnotateAndMoveUserBlockedCookies(
-      GURL(kFPSMemberURL), GURL(), &fps_owner_origin, maybe_included_cookies,
-      excluded_cookies));
+      GURL(kFPSMemberURL), net::SiteForCookies(), &fps_owner_origin,
+      maybe_included_cookies, excluded_cookies));
 
   EXPECT_THAT(maybe_included_cookies,
               ElementsAre(MatchesCookieWithAccessResult(

@@ -25,7 +25,7 @@
 namespace {
 
 // Constants for retrying certificate obtention and upload.
-constexpr base::TimeDelta kRetryDelay = base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta kRetryDelay = base::Seconds(5);
 const int kRetryLimit = 100;
 
 void DBusPrivacyCACallback(
@@ -90,13 +90,6 @@ void EnrollmentCertificateUploaderImpl::Start() {
     return;
   }
 
-  // We expect a registered CloudPolicyClient.
-  if (!policy_client_->is_registered()) {
-    LOG(ERROR) << "CloudPolicyClient not registered.";
-    RunCallbacks(Status::kFailedToFetch);
-    return;
-  }
-
   if (!attestation_flow_) {
     std::unique_ptr<ServerProxy> attestation_ca_client(
         new AttestationCAClient());
@@ -115,6 +108,13 @@ void EnrollmentCertificateUploaderImpl::RunCallbacks(Status status) {
 
 void EnrollmentCertificateUploaderImpl::GetCertificate(
     EnrollmentCertificateRequest certificate_request) {
+  // We expect a registered CloudPolicyClient.
+  if (!policy_client_->is_registered()) {
+    LOG(ERROR) << "CloudPolicyClient not registered.";
+    RunCallbacks(Status::kFailedToFetch);
+    return;
+  }
+
   bool force_new_key = false;
   switch (certificate_request) {
     case EnrollmentCertificateRequest::kExistingCertificate:

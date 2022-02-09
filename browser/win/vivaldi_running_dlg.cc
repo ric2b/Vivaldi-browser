@@ -1,10 +1,13 @@
 // Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
 
+// This must be included before other Windows headers.
 #include <Windows.h>
+
 #include <CommCtrl.h>
 
-#include "app/vivaldi_commands.h"
 #include "base/win/current_module.h"
+
+#include "app/vivaldi_commands.h"
 #include "browser/win/vivaldi_utils.h"
 
 #pragma comment(lib, "ComCtl32.lib")
@@ -14,10 +17,7 @@ namespace {
 static const int TIMER_ID = 123;
 static const int TIMEOUT_CHECK_DELAY = 500;
 
-INT_PTR CALLBACK DialogProc(HWND dlg,
-                            UINT msg,
-                            WPARAM wParam,
-                            LPARAM lParam) {
+INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
   switch (msg) {
     case WM_CLOSE:
       DestroyWindow(dlg);
@@ -32,24 +32,23 @@ INT_PTR CALLBACK DialogProc(HWND dlg,
           SendMessage(dlg, WM_CLOSE, 0, 0);
           PostQuitMessage(0);
           return TRUE;
-          break;
       }
-      case WM_TIMER: {
-        if (!vivaldi::IsVivaldiExiting()) {
-          KillTimer(dlg, TIMER_ID);
-          SendMessage(dlg, WM_CLOSE, 0, 0);
-          PostQuitMessage(0);
-          return TRUE;
-        }
-        break;
+      break;
+    }
+    case WM_TIMER: {
+      if (!vivaldi::IsVivaldiExiting()) {
+        KillTimer(dlg, TIMER_ID);
+        SendMessage(dlg, WM_CLOSE, 0, 0);
+        PostQuitMessage(0);
+        return TRUE;
       }
+      break;
     }
   }
   return FALSE;
 }
 
 }  // namespace
-
 
 bool OpenVivaldiRunningDialog() {
   HWND dlg;

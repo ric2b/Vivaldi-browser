@@ -87,6 +87,9 @@ class TreeNode : public TreeModelNode {
   explicit TreeNode(const std::u16string& title)
       : title_(title), parent_(nullptr) {}
 
+  TreeNode(const TreeNode&) = delete;
+  TreeNode& operator=(const TreeNode&) = delete;
+
   ~TreeNode() override {}
 
   // Adds |node| as a child of this node, at |index|. Returns a raw pointer to
@@ -175,8 +178,6 @@ class TreeNode : public TreeModelNode {
 
   // This node's children.
   TreeNodes children_;
-
-  DISALLOW_COPY_AND_ASSIGN(TreeNode);
 };
 
 // TreeNodeWithValue ----------------------------------------------------------
@@ -196,12 +197,13 @@ class TreeNodeWithValue : public TreeNode<TreeNodeWithValue<ValueType>> {
   TreeNodeWithValue(const std::u16string& title, const ValueType& value)
       : ParentType(title), value(value) {}
 
+  TreeNodeWithValue(const TreeNodeWithValue&) = delete;
+  TreeNodeWithValue& operator=(const TreeNodeWithValue&) = delete;
+
   ValueType value;
 
  private:
   using ParentType = TreeNode<TreeNodeWithValue<ValueType>>;
-
-  DISALLOW_COPY_AND_ASSIGN(TreeNodeWithValue);
 };
 
 // TreeNodeModel --------------------------------------------------------------
@@ -213,6 +215,10 @@ class TreeNodeModel : public TreeModel {
   // Creates a TreeNodeModel with the specified root node.
   explicit TreeNodeModel(std::unique_ptr<NodeType> root)
       : root_(std::move(root)) {}
+
+  TreeNodeModel(const TreeNodeModel&) = delete;
+  TreeNodeModel& operator=(const TreeNodeModel&) = delete;
+
   virtual ~TreeNodeModel() override {}
 
   static NodeType* AsNode(TreeModelNode* model_node) {
@@ -323,8 +329,6 @@ class TreeNodeModel : public TreeModel {
 
   // The root.
   std::unique_ptr<NodeType> root_;
-
-  DISALLOW_COPY_AND_ASSIGN(TreeNodeModel);
 };
 
 }  // namespace ui

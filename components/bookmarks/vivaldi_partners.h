@@ -11,39 +11,20 @@
 
 namespace base {
 class SequencedTaskRunner;
-}  // namspace base
+}  // namespace base
 
 namespace vivaldi_partners {
 
-bool HasPartnerThumbnailPrefix(base::StringPiece url);
-
-// Helper to read a JSON asset related to a bookmark partners.
-class AssetReader {
- public:
-  AssetReader();
-  ~AssetReader();
-
-  // Read bookmark-related json asset. Return nullopt on errors or when the file
-  // was not found. Use is_not_found() to distinguish these cases.
-  absl::optional<base::Value> ReadJson(base::StringPiece name);
-
-  // Get full path of the file that ReadJson() tried to read.
-  std::string GetPath() const;
-
- private:
-#if defined(OS_ANDROID)
-  std::string path_;
-#else
-  base::FilePath asset_dir_;
-  base::FilePath path_;
-#endif  // OS_ANDROID
-};
+extern const char kBookmarkResourceDir[];
 
 struct PartnerDetails {
   PartnerDetails();
   ~PartnerDetails();
   PartnerDetails(PartnerDetails&&);
   PartnerDetails& operator=(PartnerDetails&&);
+
+  PartnerDetails(const PartnerDetails&) = delete;
+  PartnerDetails& operator=(const PartnerDetails&) = delete;
 
   // guid2 is a GUID for a bookmark defined in the Bookmark folder as opposite
   // to SpeedDial. For some partners we define them twice both in SpeedDial and
@@ -56,8 +37,6 @@ struct PartnerDetails {
   std::string thumbnail;
   bool folder = false;
   bool speeddial = false;
-
-  DISALLOW_COPY_AND_ASSIGN(PartnerDetails);
 };
 
 const PartnerDetails* FindDetailsByName(base::StringPiece name);

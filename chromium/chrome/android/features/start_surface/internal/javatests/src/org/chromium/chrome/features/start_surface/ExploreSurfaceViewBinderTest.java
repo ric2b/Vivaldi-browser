@@ -35,9 +35,9 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.feed.FeedLaunchReliabilityLoggingState;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
+import org.chromium.chrome.browser.feed.ScrollableContainerDelegate;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ntp.NewTabPageLaunchOrigin;
-import org.chromium.chrome.browser.ntp.ScrollableContainerDelegate;
 import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger.SurfaceType;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -79,8 +79,8 @@ public class ExploreSurfaceViewBinderTest {
             mPropertyModel = new PropertyModel(StartSurfaceProperties.ALL_KEYS);
             mExploreSurfaceCoordinator = new ExploreSurfaceCoordinator(
                     mActivityTestRule.getActivity(),
-                    mActivityTestRule.getActivity().getCompositorViewHolder(), mPropertyModel, true,
-                    mBottomSheetController, new ObservableSupplierImpl<>(),
+                    mActivityTestRule.getActivity().getCompositorViewHolderForTesting(),
+                    mPropertyModel, true, mBottomSheetController, new ObservableSupplierImpl<>(),
                     mScrollableContainerDelegate,
                     mActivityTestRule.getActivity().getSnackbarManager(),
                     mActivityTestRule.getActivity().getShareDelegateSupplier(),

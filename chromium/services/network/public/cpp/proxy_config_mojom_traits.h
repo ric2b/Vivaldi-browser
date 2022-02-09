@@ -13,7 +13,6 @@
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
 #include "net/proxy_resolution/proxy_list.h"
 #include "services/network/public/mojom/proxy_config.mojom-shared.h"
-#include "url/mojom/url_gurl_mojom_traits.h"
 
 // This file handles the serialization of net::ProxyConfig.
 
@@ -96,6 +95,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     StructTraits<network::mojom::ProxyConfigDataView, net::ProxyConfig> {
  public:
   static bool auto_detect(const net::ProxyConfig& r) { return r.auto_detect(); }
+  static bool from_system(const net::ProxyConfig& r) { return r.from_system(); }
   static const std::string& pac_url(const net::ProxyConfig& r) {
     return r.pac_url().possibly_invalid_spec();
   }

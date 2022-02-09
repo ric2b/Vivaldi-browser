@@ -141,7 +141,7 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
     bool success,
     bool is_first_time_sync_configure) {
   SyncServiceImpl::OnEngineInitialized(debug_info_listener, success,
-                                          is_first_time_sync_configure);
+                                       is_first_time_sync_configure);
 
   if (!force_local_data_reset_)
     return;

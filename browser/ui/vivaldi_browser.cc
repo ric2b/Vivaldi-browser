@@ -6,7 +6,6 @@
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 
-
 Browser::CreateParams::~CreateParams() = default;
 
 // static

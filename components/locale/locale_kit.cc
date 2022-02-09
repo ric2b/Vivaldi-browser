@@ -34,7 +34,7 @@ std::string GetUserCountry() {
 }
 
 std::string FindBestMatchingLocale(base::span<const base::StringPiece> locales,
-                                   const std::string &application_locale) {
+                                   const std::string& application_locale) {
   // Locale may or may not contain the country part and it may be unrelated to
   // the user location, so always use the country from the system and strip the
   // country from the locale.

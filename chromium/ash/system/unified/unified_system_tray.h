@@ -26,8 +26,10 @@ class NetworkTrayView;
 class TimeTrayItemView;
 }  // namespace tray
 
+class AshMessagePopupCollection;
 class CurrentLocaleView;
 class ImeModeView;
+class HpsNotifyView;
 class ManagedDeviceTrayItemView;
 class NotificationIconsController;
 class PrivacyScreenToastController;
@@ -54,6 +56,10 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView,
                                      public ShelfConfig::Observer {
  public:
   explicit UnifiedSystemTray(Shelf* shelf);
+
+  UnifiedSystemTray(const UnifiedSystemTray&) = delete;
+  UnifiedSystemTray& operator=(const UnifiedSystemTray&) = delete;
+
   ~UnifiedSystemTray() override;
 
   // True if the bubble is shown. It does not include slider bubbles, and when
@@ -160,6 +166,8 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView,
 
   std::u16string GetAccessibleNameForQuickSettingsBubble();
 
+  AshMessagePopupCollection* GetMessagePopupCollection();
+
   UnifiedSystemTrayModel* model() { return model_.get(); }
   UnifiedSystemTrayBubble* bubble() { return bubble_.get(); }
 
@@ -170,6 +178,7 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView,
  private:
   static const base::TimeDelta kNotificationCountUpdateDelay;
 
+  friend class NotificationGroupingControllerTest;
   friend class SystemTrayTestApi;
   friend class UnifiedSystemTrayTest;
 
@@ -209,6 +218,7 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView,
   const std::unique_ptr<NotificationIconsController>
       notification_icons_controller_;
 
+  HpsNotifyView* const hps_notify_view_;
   CurrentLocaleView* const current_locale_view_;
   ImeModeView* const ime_mode_view_;
   ManagedDeviceTrayItemView* const managed_device_view_;
@@ -224,8 +234,6 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView,
   base::OneShotTimer timer_;
 
   bool first_interaction_recorded_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(UnifiedSystemTray);
 };
 
 }  // namespace ash

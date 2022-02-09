@@ -78,9 +78,10 @@ class AppListSyncUpdateWaiter
     service_->AddObserverAndStart(this);
   }
 
-  ~AppListSyncUpdateWaiter() override {
-    service_->RemoveObserver(this);
-  }
+  AppListSyncUpdateWaiter(const AppListSyncUpdateWaiter&) = delete;
+  AppListSyncUpdateWaiter& operator=(const AppListSyncUpdateWaiter&) = delete;
+
+  ~AppListSyncUpdateWaiter() override { service_->RemoveObserver(this); }
 
   // StatusChangeChecker:
   bool IsExitConditionSatisfied(std::ostream* os) override {
@@ -97,8 +98,6 @@ class AppListSyncUpdateWaiter
  private:
   app_list::AppListSyncableService* const service_;
   bool service_updated_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(AppListSyncUpdateWaiter);
 };
 
 }  // namespace
@@ -207,7 +206,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientAppListSyncTest, LocalStorage) {
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
 
   // Disable app sync by disabling all user-selectable types.
-  if (chromeos::features::IsSplitSettingsSyncEnabled()) {
+  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
     sync_service->GetUserSettings()->SetSelectedOsTypes(
         /*sync_all_os_types=*/false, syncer::UserSelectableOsTypeSet());
   } else {
@@ -228,7 +227,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientAppListSyncTest, LocalStorage) {
   EXPECT_FALSE(SyncItemsMatch(service, &compare_service));
 
   // Restore app sync and sync data should override local changes.
-  if (chromeos::features::IsSplitSettingsSyncEnabled()) {
+  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
     sync_service->GetUserSettings()->SetSelectedOsTypes(
         /*sync_all_os_types=*/true, syncer::UserSelectableOsTypeSet());
   } else {

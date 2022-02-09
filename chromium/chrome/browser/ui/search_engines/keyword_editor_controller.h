@@ -18,6 +18,10 @@ class TemplateURLTableModel;
 class KeywordEditorController {
  public:
   explicit KeywordEditorController(Profile* profile);
+
+  KeywordEditorController(const KeywordEditorController&) = delete;
+  KeywordEditorController& operator=(const KeywordEditorController&) = delete;
+
   ~KeywordEditorController();
 
   // Invoked when the user succesfully fills out the add keyword dialog.
@@ -43,6 +47,15 @@ class KeywordEditorController {
   // Return true if the given |url| can be removed.
   bool CanRemove(const TemplateURL* url) const;
 
+  // Return true if the given `url` can be activated. A `url` can be activated
+  // if it is currently inactive and is not a prepopulated engine.
+  bool CanActivate(const TemplateURL* url) const;
+
+  // Return true if the given `url` can be deactivated. A `url` can be
+  // deactivated if it is currently active and is not a prepopulated or default
+  // search engine.
+  bool CanDeactivate(const TemplateURL* url) const;
+
   // Remove the TemplateURL at the specified index in the TableModel.
   void RemoveTemplateURL(int index);
 
@@ -52,6 +65,10 @@ class KeywordEditorController {
   // Make the TemplateURL at the specified index (into the TableModel) the
   // default search provider.
   void MakeDefaultTemplateURL(int index);
+
+  // Activates the TemplateURL at the specified index in the TableModel if
+  // `is_active` is true or deactivates it if false.
+  void SetIsActiveTemplateURL(int index, bool is_active);
 
   // Return true if the |url_model_| data is loaded.
   bool loaded() const;
@@ -68,8 +85,6 @@ class KeywordEditorController {
 
   // Model for the TableView.
   std::unique_ptr<TemplateURLTableModel> table_model_;
-
-  DISALLOW_COPY_AND_ASSIGN(KeywordEditorController);
 };
 
 #endif  // CHROME_BROWSER_UI_SEARCH_ENGINES_KEYWORD_EDITOR_CONTROLLER_H_

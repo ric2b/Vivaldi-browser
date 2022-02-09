@@ -39,7 +39,8 @@ class RuleBasedEngine : public InputEngine, public mojom::InputMethod {
   // mojom::InputMethod overrides:
   // Most of these methods are deliberately empty because rule-based input
   // methods do not need to listen to these events.
-  void OnFocus(mojom::InputFieldInfoPtr input_field_info) override {}
+  void OnFocus(mojom::InputFieldInfoPtr input_field_info,
+               mojom::InputMethodSettingsPtr settings) override {}
   void OnBlur() override {}
   void OnSurroundingTextChanged(
       const std::string& text,
@@ -48,6 +49,7 @@ class RuleBasedEngine : public InputEngine, public mojom::InputMethod {
   void OnCompositionCanceledBySystem() override;
   void ProcessKeyEvent(mojom::PhysicalKeyEventPtr event,
                        ProcessKeyEventCallback callback) override;
+  void OnCandidateSelected(uint32_t selected_candidate_index) override;
 
   // TODO(https://crbug.com/837156): Implement a state for the interface.
 

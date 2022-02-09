@@ -16,6 +16,7 @@
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_functions.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/browser_process.h"
@@ -40,7 +41,7 @@
 #include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/command_storage_manager.h"
@@ -55,7 +56,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/crostini/crostini_util.h"
-#include "components/full_restore/features.h"
+#include "components/app_restore/features.h"
 #endif
 
 #if defined(OS_MAC)
@@ -145,9 +146,14 @@ SessionService::~SessionService() {
 }
 
 bool SessionService::ShouldNewWindowStartSession(Browser* browser) {
-  // ChromeOS and OSX have different ideas of application lifetime than
-  // the other platforms.
-  // On ChromeOS opening a new window should never start a new session.
+  // If saving is not enabled, then do not move the session file, otherwise
+  // we'll clobber the last session.
+  if (!is_saving_enabled())
+    return false;
+
+    // ChromeOS and OSX have different ideas of application lifetime than
+    // the other platforms.
+    // On ChromeOS opening a new window should never start a new session.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // If the full restore feature is enabled, Chrome browser is not launched
   // automatically during the system startup phase. When Chrome browser is
@@ -450,6 +456,7 @@ void SessionService::DidScheduleCommand() {
   if (is_first_session_service_)
     return;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(https://crbug.com/1245816): for debugging, remove once tracked down
   // source of problem.
   // A command has been scheduled for a SessionService other than the first.
@@ -459,6 +466,7 @@ void SessionService::DidScheduleCommand() {
   const bool shutdown_started = browser_shutdown::HasShutdownStarted();
   base::debug::Alias(&shutdown_started);
   base::debug::DumpWithoutCrashing();
+#endif
 }
 
 bool SessionService::ShouldRestoreWindowOfType(

@@ -63,6 +63,10 @@ class ScopedRemoteUpdateBookmarks {
     bookmark_model_->RemoveObserver(observer_);
   }
 
+  ScopedRemoteUpdateBookmarks(const ScopedRemoteUpdateBookmarks&) = delete;
+  ScopedRemoteUpdateBookmarks& operator=(const ScopedRemoteUpdateBookmarks&) =
+      delete;
+
   ~ScopedRemoteUpdateBookmarks() {
     // Notify UI intensive observers of BookmarkModel that all updates have been
     // applied, and that they may now be consumed. This prevents issues like the
@@ -79,8 +83,6 @@ class ScopedRemoteUpdateBookmarks {
   ScopedSuspendBookmarkUndo suspend_undo_;
 
   bookmarks::BookmarkModelObserver* const observer_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedRemoteUpdateBookmarks);
 };
 
 std::string ComputeServerDefinedUniqueTagForDebugging(

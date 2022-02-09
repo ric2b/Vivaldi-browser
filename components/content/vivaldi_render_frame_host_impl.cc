@@ -8,14 +8,6 @@
 
 namespace content {
 
-void RenderFrameHostImpl::DidChangeLoadProgressExtended(double load_progress,
-                                                        double loaded_bytes,
-                                                        int loaded_elements,
-                                                        int total_elements) {
-  frame_tree_node_->DidChangeLoadProgressExtended(
-      load_progress, loaded_bytes, loaded_elements, total_elements);
-}
-
 const mojo::AssociatedRemote<vivaldi::mojom::VivaldiFrameService>&
 RenderFrameHostImpl::GetVivaldiFrameService() {
   if (!vivaldi_frame_service_)

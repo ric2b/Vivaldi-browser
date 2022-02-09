@@ -194,6 +194,7 @@
             "name": "properties",
             "type": "object",
             "properties": {
+              "windowId": {"type": "integer"},
               "id": {"type": "integer", "description": "Id of the menu in the 'siblings' list to open."},
               "siblings": { "type": "array", "items": {"$ref": "Menu"}, "description": "List of menu entries."},
               "icons": {"$ref": "Icons", "description": "Default and folder icons."}

@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/assistant/assistant_interface_binder.h"
 #include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
@@ -18,7 +17,6 @@
 #include "chrome/browser/ui/ash/assistant/assistant_context_util.h"
 #include "chrome/browser/ui/ash/assistant/assistant_setup.h"
 #include "chrome/browser/ui/ash/assistant/assistant_web_view_factory_impl.h"
-#include "chrome/browser/ui/ash/assistant/conversation_starters_client_impl.h"
 #include "chrome/browser/ui/ash/assistant/device_actions_delegate_impl.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
@@ -87,11 +85,6 @@ void AssistantBrowserDelegateImpl::MaybeInit(Profile* profile) {
   if (!assistant_web_view_factory_) {
     assistant_web_view_factory_ =
         std::make_unique<AssistantWebViewFactoryImpl>(profile_);
-  }
-
-  if (chromeos::assistant::features::IsConversationStartersV2Enabled()) {
-    conversation_starters_client_ =
-        std::make_unique<ConversationStartersClientImpl>(profile_);
   }
 }
 
@@ -218,8 +211,7 @@ void AssistantBrowserDelegateImpl::OnAssistantFeatureAllowedChanged(
     // This is a short term workaround since Quick Answers also use the webview
     // factory.
     // TODO(b/198811694): Refactor AssistantWebViewFactoryImpl.
-    if (chromeos::features::IsQuickAnswersV2Enabled() &&
-        !assistant_web_view_factory_) {
+    if (!assistant_web_view_factory_) {
       assistant_web_view_factory_ =
           std::make_unique<AssistantWebViewFactoryImpl>(profile);
     }

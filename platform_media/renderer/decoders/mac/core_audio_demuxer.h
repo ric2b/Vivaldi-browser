@@ -35,8 +35,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
 
   // Demuxer implementation.
   std::string GetDisplayName() const override;
-  void Initialize(DemuxerHost* host,
-                  PipelineStatusCallback status_cb) override;
+  void Initialize(DemuxerHost* host, PipelineStatusCallback status_cb) override;
   void Seek(base::TimeDelta time, PipelineStatusCallback status_cb) override;
   void Stop() override;
   void AbortPendingReads() override;
@@ -87,8 +86,8 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   void ReadAudioFormatInfo(PipelineStatusCallback status_cb);
   int ReadDataSource();
 
-  DemuxerHost* host_;         // Weak, owned by WebMediaPlayerImpl
-  DataSource* data_source_;   // Weak, owned by WebMediaPlayerImpl
+  DemuxerHost* host_;        // Weak, owned by WebMediaPlayerImpl
+  DataSource* data_source_;  // Weak, owned by WebMediaPlayerImpl
 
   std::unique_ptr<CoreAudioDemuxerStream> audio_stream_;
 

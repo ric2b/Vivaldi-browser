@@ -20,6 +20,12 @@ enum class ExitCode {
 
 // Command line switches for the update notifier.
 
+// Automatic update check.
+extern const char kAutoCheck[];
+
+// Mark the update check running on the browser startup.
+extern const char kBrowserStartup[];
+
 // Manually check for update.
 extern const char kCheckForUpdates[];
 

@@ -23,8 +23,6 @@ import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ntp.ScrollListener;
-import org.chromium.chrome.browser.ntp.ScrollableContainerDelegate;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -103,7 +101,7 @@ public final class RefreshIphScrollListenerTest {
         when(mTracker.getTriggerState(FeatureConstants.FEED_SWIPE_REFRESH_FEATURE))
                 .thenReturn(triggerState);
 
-        FeedIPHDelegate iphDelegate = new FeedIPHDelegate() {
+        FeedBubbleDelegate delegate = new FeedBubbleDelegate() {
             @Override
             public Tracker getFeatureEngagementTracker() {
                 return mTracker;
@@ -133,6 +131,26 @@ public final class RefreshIphScrollListenerTest {
             public boolean canScrollUp() {
                 return canScrollUp;
             }
+            @Override
+            public boolean isShowingBackToTopBubble() {
+                return false;
+            }
+            @Override
+            public int getHeaderCount() {
+                return 0;
+            }
+            @Override
+            public int getItemCount() {
+                return 0;
+            }
+            @Override
+            public int getFirstVisiblePosition() {
+                return 0;
+            }
+            @Override
+            public int getLastVisiblePosition() {
+                return 0;
+            }
         };
 
         ScrollableContainerDelegate scrollableContainerDelegate =
@@ -157,7 +175,7 @@ public final class RefreshIphScrollListenerTest {
 
         // Trigger IPH through the scroll listener.
         RefreshIphScrollListener listener = new RefreshIphScrollListener(
-                iphDelegate, scrollableContainerDelegate, () -> { mHasShownIPH = true; });
+                delegate, scrollableContainerDelegate, () -> { mHasShownIPH = true; });
         listener.onScrolled(0, scrollY);
 
         if (expectEnabled) {

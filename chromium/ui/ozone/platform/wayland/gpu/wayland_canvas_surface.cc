@@ -15,7 +15,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkRegion.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
 
@@ -43,6 +43,10 @@ class WaylandCanvasSurface::SharedMemoryBuffer {
         buffer_manager_(buffer_manager) {
     DCHECK(buffer_manager_);
   }
+
+  SharedMemoryBuffer(const SharedMemoryBuffer&) = delete;
+  SharedMemoryBuffer& operator=(const SharedMemoryBuffer&) = delete;
+
   ~SharedMemoryBuffer() { buffer_manager_->DestroyBuffer(widget_, buffer_id_); }
 
   // Returns SkSurface, which the client can use to write to this buffer.
@@ -92,9 +96,9 @@ class WaylandCanvasSurface::SharedMemoryBuffer {
     return true;
   }
 
-  void CommitBuffer(const gfx::Rect& damage) {
+  void CommitBuffer(const gfx::Rect& damage, float buffer_scale) {
     buffer_manager_->CommitBuffer(widget_, buffer_id_, gfx::Rect(size_),
-                                  damage);
+                                  buffer_scale, damage);
   }
 
   void OnUse() {
@@ -162,8 +166,6 @@ class WaylandCanvasSurface::SharedMemoryBuffer {
 
   // Pending damage region if the buffer is pending to be submitted.
   gfx::Rect pending_damage_region_;
-
-  DISALLOW_COPY_AND_ASSIGN(SharedMemoryBuffer);
 };
 
 WaylandCanvasSurface::WaylandCanvasSurface(
@@ -221,6 +223,7 @@ void WaylandCanvasSurface::ResizeCanvas(const gfx::Size& viewport_size,
   pending_buffer_ = nullptr;
   unsubmitted_buffers_.clear();
   size_ = viewport_size;
+  viewport_scale_ = scale;
 }
 
 void WaylandCanvasSurface::PresentCanvas(const gfx::Rect& damage) {
@@ -272,7 +275,7 @@ void WaylandCanvasSurface::ProcessUnsubmittedBuffers() {
       buffer->UpdateDirtyRegion(damage, SkRegion::kUnion_Op);
   }
 
-  current_buffer_->CommitBuffer(damage);
+  current_buffer_->CommitBuffer(damage, viewport_scale_);
 }
 
 void WaylandCanvasSurface::OnSubmission(uint32_t buffer_id,

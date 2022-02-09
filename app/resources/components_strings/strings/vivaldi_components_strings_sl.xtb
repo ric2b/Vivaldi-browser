@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">O različici</translation>
 <translation id="139305205187523129">Spletno mesto <ph name="HOST_NAME" /> ni poslalo nobenih podatkov.</translation>
 <translation id="1559528461873125649">Taka datoteka ali imenik ne obstaja</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Poskusite <ph name="BEGIN_LINK" />obiskati domačo stran spletnega mesta<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodprt protokol</translation>
 <translation id="1710259589646384581">Operacijski sistem</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Poskusite zagnati Windows diagnostiko omrežja<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Na tem spletnem mestu so škodljivi programi</translation>
 <translation id="1916770123977586577">Če želite uporabiti posodobljene nastavitve za to spletno mesto, znova naložite to stran</translation>
-<translation id="1919345977826869612">Oglasi</translation>
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />preverite strežnik proxy in požarni zid<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Zvok</translation>
 <translation id="2119505898009119320">Izdano za: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Sinhronizacija v ozadju</translation>
 <translation id="2166378884831602661">To spletno mesto ne more zagotoviti varne povezave</translation>
 <translation id="2187317261103489799">Zaznava (privzeto)</translation>
 <translation id="2224337661447660594">Brez internetne povezave</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">Internetni dostop je blokiran</translation>
 <translation id="2317259163369394535">Domena <ph name="DOMAIN" /> zahteva uporabniško ime in geslo.</translation>
 <translation id="2337852623177822836">Nastavitev nadzira skrbnik</translation>
-<translation id="2344028582131185878">Samodejni prenosi</translation>
 <translation id="2355395290879513365">Napadalci morda vidijo slike, ki si jih ogledujete na tem spletnem mestu, in vas ukanijo, tako da jih spremenijo.</translation>
 <translation id="2356070529366658676">Vprašaj</translation>
 <translation id="2359808026110333948">Nadaljuj</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Izvajanje omrežne diagnostike<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Obvestila</translation>
 <translation id="2491414235131909199">To stran je blokirala razširitev</translation>
 <translation id="2501278716633472235">Pojdi nazaj</translation>
 <translation id="2539524384386349900">Zaznava</translation>
 <translation id="255002559098805027">Spletno mesto <ph name="HOST_NAME" /> je poslalo neveljaven odgovor.</translation>
-<translation id="2586657967955657006">Odložišče</translation>
 <translation id="2609632851001447353">Različice</translation>
 <translation id="2634124572758952069">Naslova IP strežnika <ph name="HOST_NAME" /> ni bilo mogoče najti.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
       ni treba uporabljati:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Pritisnite gumb za vnovično nalaganje, da znova pošljete podatke za nalaganje strani.</translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Vedno zaznaj pomembno vsebino na tem spletnem mestu</translation>
 <translation id="3308738399950580893">oglasi</translation>
 <translation id="3422472998109090673">Spletno mesto <ph name="HOST_NAME" /> trenutno ni dosegljivo.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Podrobnosti</translation>
 <translation id="4558551763791394412">Poskusite onemogočiti razširitve.</translation>
 <translation id="4592951414987517459">Povezava z domeno <ph name="DOMAIN" /> je šifrirana s sodobno šifrirno zbirko.</translation>
-<translation id="4690462567478992370">Nehajte uporabljati neveljavni certifikat</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Povezava je bila prekinjena</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Izvajanje Windows diagnostike omrežja<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">Pot do izvedljive datoteke</translation>
 <translation id="4750917950439032686">Vaši podatki (npr. gesla ali številke kreditnih kartic) so zasebni, kadar so poslani temu spletnemu mestu.</translation>
 <translation id="4764776831041365478">Spletna stran na naslovu <ph name="URL" /> morda začasno ne deluje ali pa je trajno premaknjena na novi spletni naslov.</translation>
+<translation id="483241715238664915">Vklopi opozorila</translation>
 <translation id="4943872375798546930">Ni rezultatov</translation>
-<translation id="4974590756084640048">Vnovično omogoči opozorila</translation>
 <translation id="5023310440958281426">Preverite skrbnikove pravilnike</translation>
 <translation id="5039804452771397117">Dovoli</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 v uporabi)}one{(# v uporabi)}two{(# v uporabi)}few{(# v uporabi)}other{(# v uporabi)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">preverite povezavo</translation>
 <translation id="5617949217645503996">Spletno mesto <ph name="HOST_NAME" /> vas je prevečkrat preusmerilo.</translation>
 <translation id="5675650730144413517">Ta stran ne deluje</translation>
-<translation id="5689516760719285838">Lokacija</translation>
-<translation id="5710435578057952990">Identiteta tega spletnega mesta ni bila potrjena.</translation>
-<translation id="5778550464785688721">Popolni nadzor naprav MIDI</translation>
 <translation id="5785756445106461925">Poleg tega so na tej strani druga sredstva, ki niso varna. Ta sredstva lahko med prenosom pregledujejo drugi, morebitni napadalec pa jih lahko spremeni, tako da se spremeni videz strani.</translation>
 <translation id="5799902971440853357">Spletnega mesta <ph name="SITE" /> trenutno ne morete obiskati, ker je poslalo šifrirane poverilnice, ki jih Vivaldi ne more obdelati. Napake v omrežju in napadi so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="5810442152076338065">Povezava z domeno <ph name="DOMAIN" /> je šifrirana z zastarelo šifrirno zbirko.</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">Povezava s tem spletnim mestom ni varna</translation>
 <translation id="6203231073485539293">Preverite internetno povezavo</translation>
 <translation id="6225522625585012689">Obiščite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; da si ogledate seznam blokiranih URL-jev in druge pravilnike, ki jih uveljavlja skrbnik sistema.</translation>
-<translation id="625755898061068298">Izbrali ste onemogočanje varnostnih opozoril za to spletno mesto.</translation>
 <translation id="6264485186158353794">Nazaj na varno</translation>
 <translation id="6305205051461490394">Naslov <ph name="URL" /> je nedosegljiv.</translation>
 <translation id="6321917430147971392">Preverite nastavitve za DNS</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">Uporabnikov posrednik</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7079718277001814089">To spletno mesto vsebuje zlonamerno programsko opremo</translation>
+<translation id="7096937462164235847">Identiteta tega spletnega mesta ni preverjena.</translation>
 <translation id="7108819624672055576">Dovoljeno z razširitvijo</translation>
 <translation id="7111012039238467737">(Veljavno)</translation>
 <translation id="7113310725918019676">Dovoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">Identitete strežnika, s katerim ste povezani, ni mogoče v celoti preveriti. S strežnikom ste povezani z uporabo imena, ki je veljavno samo v vašem omrežju, zato zunanji overitelj potrdil ne more preveriti njegovega lastništva. Ker nekateri overitelji potrdil kljub temu izdajajo potrdila za takšna imena, ni mogoče zagotoviti, da ste povezani z želenim spletnim mestom in ne z napadalcem.</translation>
 <translation id="7455133967321480974">Uporabi globalno privzeto (Blokiraj)</translation>
 <translation id="7518003948725431193">Za ta spletni naslov in bilo mogoče najti nobene spletne strani:<ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Za pravilen prikaz te strani so potrebni podatki, ki ste jih vnesli prej. Podatke lahko pošljete še enkrat, vendar se bodo s tem ponovila vsa prejšnja dejanja strani.</translation>
 <translation id="759889825892636187">Spletno mesto <ph name="HOST_NAME" /> trenutno ne more obdelati te zahteve.</translation>
 <translation id="7662298039739062396">Nastavitev nadzira razširitev</translation>
@@ -227,11 +214,11 @@
 <translation id="9039213469156557790">Poleg tega so na tej strani druga sredstva, ki niso varna. Ta sredstva lahko med prenosom pregledujejo drugi, morebitni napadalec pa jih lahko spremeni, tako da se spremeni način delovanja strani.</translation>
 <translation id="9062620674789239642">Morda je premaknjena, urejana ali izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano z razširitvijo</translation>
+<translation id="9073799351042754113">Izbrali ste izklop varnostnih opozoril za to spletno mesto.</translation>
 <translation id="910924428752220542">Vivaldi gesla</translation>
 <translation id="9169664750068251925">Vedno blokiraj na tem spletnem mestu</translation>
 <translation id="9180553614777056266">Blokator oglasov</translation>
 <translation id="9183425211371246419">Spletno mesto <ph name="HOST_NAME" /> uporablja nepodprt protokol.</translation>
-<translation id="9219103736887031265">Slike</translation>
 <translation id="936602727769022409">Izgubite lahko dostop do Google Računa. Chromium priporoča spremembo gesla. Pozvani boste k prijavi.</translation>
 <translation id="969892804517981540">Uradna različica</translation>
 <translation id="988159990683914416">Različica za razvijalce</translation>

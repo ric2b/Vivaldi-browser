@@ -13,7 +13,7 @@
 namespace menus {
 class Menu_Model;
 class Menu_Node;
-}
+}  // namespace menus
 
 namespace extensions {
 
@@ -74,8 +74,6 @@ class MenuContentGetFunction : public ExtensionFunction,
   ResponseAction Run() override;
 
   void SendResponse(menus::Menu_Model* model, const std::string& named_menu);
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentGetFunction);
 };
 
 class MenuContentMoveFunction : public ExtensionFunction {
@@ -88,8 +86,6 @@ class MenuContentMoveFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentMoveFunction);
 };
 
 class MenuContentCreateFunction : public ExtensionFunction {
@@ -102,8 +98,6 @@ class MenuContentCreateFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentCreateFunction);
 };
 
 class MenuContentRemoveFunction : public ExtensionFunction {
@@ -116,8 +110,6 @@ class MenuContentRemoveFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentRemoveFunction);
 };
 
 class MenuContentRemoveActionFunction : public ExtensionFunction,
@@ -136,8 +128,6 @@ class MenuContentRemoveActionFunction : public ExtensionFunction,
   // ExtensionFunction:
   ResponseAction Run() override;
   bool HandleRemoval();
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentRemoveActionFunction);
 };
 
 class MenuContentUpdateFunction : public ExtensionFunction {
@@ -150,8 +140,6 @@ class MenuContentUpdateFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentUpdateFunction);
 };
 
 class MenuContentResetFunction : public ExtensionFunction {
@@ -164,8 +152,6 @@ class MenuContentResetFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentResetFunction);
 };
 
 }  // namespace extensions

@@ -95,6 +95,7 @@ MEDIA_EXPORT extern const char kEnableClearHevcForTesting[];
 MEDIA_EXPORT extern const char kLacrosEnablePlatformEncryptedHevc[];
 MEDIA_EXPORT extern const char kLacrosEnablePlatformHevc[];
 MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedMedia[];
+MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedAv1[];
 #endif  // defined(OS_CHROMEOS)
 
 namespace autoplay {
@@ -129,11 +130,9 @@ MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoder;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderIgnoreWorkarounds;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderVP9Profile2;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAV1;
-MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderSkipMultithreaded;
-MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAlwaysCopy;
-MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAllowOverlay;
-MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderForceEnableHDR;
+MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderUseSharedHandle;
 MEDIA_EXPORT extern const base::Feature kEnableMediaInternals;
+MEDIA_EXPORT extern const base::Feature kEnableTabMuting;
 MEDIA_EXPORT extern const base::Feature kExposeSwDecodersToWebRTC;
 MEDIA_EXPORT extern const base::Feature kExternalClearKeyForTesting;
 MEDIA_EXPORT extern const base::Feature kFFmpegDecodeOpaqueVP8;
@@ -144,7 +143,6 @@ MEDIA_EXPORT extern const base::Feature kGlobalMediaControls;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsAutoDismiss;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsForCast;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsForChromeOS;
-MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsOverlayControls;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsPictureInPicture;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsSeamlessTransfer;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsModernUI;
@@ -182,6 +180,7 @@ MEDIA_EXPORT extern const base::Feature kPreloadMetadataSuspend;
 MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
 MEDIA_EXPORT extern const base::Feature kRecordWebAudioEngagement;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
+MEDIA_EXPORT extern const base::Feature kReuseMediaPlayer;
 MEDIA_EXPORT extern const base::Feature kRevokeMediaSourceObjectURLOnAttach;
 MEDIA_EXPORT extern const base::Feature kSpeakerChangeDetection;
 MEDIA_EXPORT extern const base::Feature kSpecCompliantCanPlayThrough;
@@ -205,6 +204,7 @@ MEDIA_EXPORT extern const base::Feature kVaapiVideoMinResolutionForPerformance;
 MEDIA_EXPORT extern const base::Feature kVaapiVP8Encoder;
 MEDIA_EXPORT extern const base::Feature kVaapiVP9Encoder;
 #if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH)
+MEDIA_EXPORT extern const base::Feature kVaapiH264TemporalLayerHWEncoding;
 MEDIA_EXPORT extern const base::Feature kVaapiVp9kSVCHWDecoding;
 MEDIA_EXPORT extern const base::Feature kVaapiVp9kSVCHWEncoding;
 #endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH)

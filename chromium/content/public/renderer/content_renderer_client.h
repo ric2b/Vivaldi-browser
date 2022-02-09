@@ -27,7 +27,7 @@
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
 #include "ui/base/page_transition_types.h"
-#include "v8/include/v8.h"
+#include "v8/include/v8-forward.h"
 
 #if !defined(OS_ANDROID)
 #include "media/base/speech_recognition_client.h"
@@ -352,14 +352,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // Whether this renderer should enforce preferences related to the WebRTC
   // routing logic, i.e. allowing multiple routes and non-proxied UDP.
   virtual bool ShouldEnforceWebRTCRoutingPreferences();
-
-  // Provides a default configuration of WebRTC audio processing, in JSON format
-  // with fields corresponding to webrtc::AudioProcessing::Config. Allows for a
-  // more functional tuning on platforms with known implementation and hardware
-  // limitations.
-  // This is currently not supported when running the Chrome audio service.
-  virtual absl::optional<std::string>
-  WebRTCPlatformSpecificAudioProcessingConfiguration();
 
   // Notifies that a worker context has been created. This function is called
   // from the worker thread.

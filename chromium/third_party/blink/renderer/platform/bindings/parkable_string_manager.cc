@@ -211,7 +211,7 @@ scoped_refptr<ParkableStringImpl> ParkableStringManager::Add(
         FROM_HERE,
         base::BindOnce(&ParkableStringManager::RecordStatisticsAfter5Minutes,
                        base::Unretained(this)),
-        base::TimeDelta::FromMinutes(5));
+        base::Minutes(5));
     has_posted_unparking_time_accounting_task_ = true;
   }
 
@@ -318,10 +318,8 @@ void ParkableStringManager::RecordStatisticsAfter5Minutes() const {
   }
 
   // May not be usable, e.g. Incognito, permission or write failure.
-  if (features::IsParkableStringsToDiskEnabled()) {
-    base::UmaHistogramBoolean("Memory.ParkableString.DiskIsUsable.5min",
-                              data_allocator().may_write());
-  }
+  base::UmaHistogramBoolean("Memory.ParkableString.DiskIsUsable.5min",
+                            data_allocator().may_write());
   // These metrics only make sense if the disk allocator is used.
   if (data_allocator().may_write()) {
     base::UmaHistogramTimes("Memory.ParkableString.DiskWriteTime.5min",
@@ -393,7 +391,7 @@ void ParkableStringManager::ScheduleAgingTaskIfNeeded() {
       FROM_HERE,
       base::BindOnce(&ParkableStringManager::AgeStringsAndPark,
                      base::Unretained(this)),
-      base::TimeDelta::FromSeconds(kAgingIntervalInSeconds));
+      base::Seconds(kAgingIntervalInSeconds));
   has_pending_aging_task_ = true;
 }
 

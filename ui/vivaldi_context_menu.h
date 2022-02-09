@@ -27,7 +27,7 @@ namespace ui {
 class Accelerator;
 class SimpleMenuModel;
 class MenuModel;
-}
+}  // namespace ui
 
 namespace views {
 class Widget;
@@ -39,7 +39,7 @@ class VivaldiBookmarkMenu;
 class VivaldiContextMenu;
 class VivaldiMenubarMenu;
 struct BookmarkMenuContainer;
-}
+}  // namespace vivaldi
 
 namespace vivaldi {
 
@@ -53,9 +53,11 @@ struct MenubarMenuEntry {
 struct MenubarMenuParams {
   class Delegate {
    public:
-    virtual void PopulateModel(int menu_id, bool dark_text_color,
+    virtual void PopulateModel(int menu_id,
+                               bool dark_text_color,
                                ui::MenuModel** menu_model) {}
-    virtual void PopulateSubmodel(int menu_id, bool dark_text_color,
+    virtual void PopulateSubmodel(int menu_id,
+                                  bool dark_text_color,
                                   ui::MenuModel* menu_model) {}
     virtual void OnMenuOpened(int menu_id) {}
     virtual void OnMenuClosed() {}
@@ -64,8 +66,7 @@ struct MenubarMenuParams {
     virtual int GetSelectedMenuId();
     virtual bool IsItemChecked(int id);
     virtual bool IsItemPersistent(int id);
-    virtual bool GetAccelerator(int id,
-        ui::Accelerator* accelerator);
+    virtual bool GetAccelerator(int id, ui::Accelerator* accelerator);
     virtual bool GetUrl(int id, std::string* url);
     virtual BookmarkMenuContainer* GetBookmarkMenuContainer();
   };
@@ -96,11 +97,7 @@ struct BookmarkMenuContainerEntry {
 // Used by main menu bar and bookmark bar context menu
 struct BookmarkMenuContainer {
   // Position of extra items wrt the bookmarks.
-  enum Edge {
-    Above = 0,
-    Below,
-    Off
-  };
+  enum Edge { Above = 0, Below, Off };
 
   class Delegate {
    public:
@@ -127,12 +124,10 @@ struct BookmarkMenuContainer {
   Delegate* delegate;
 };
 
-
-VivaldiContextMenu* CreateVivaldiContextMenu(
-    content::WebContents* web_contents,
-    ui::SimpleMenuModel* menu_model,
-    const gfx::Rect& rect,
-    bool force_views);
+VivaldiContextMenu* CreateVivaldiContextMenu(content::WebContents* web_contents,
+                                             ui::SimpleMenuModel* menu_model,
+                                             const gfx::Rect& rect,
+                                             bool force_views);
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
@@ -141,32 +136,29 @@ VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     int offset,
     const gfx::Rect& button_rect);
 
-VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
-    content::WebContents* web_contents,
-    MenubarMenuParams& params,
-    int id);
+VivaldiMenubarMenu* CreateVivaldiMenubarMenu(content::WebContents* web_contents,
+                                             MenubarMenuParams& params,
+                                             int id);
 
-void ConvertMenubarButtonRectToScreen(
-    content::WebContents* web_contents,
-    vivaldi::MenubarMenuParams& params);
+void ConvertMenubarButtonRectToScreen(content::WebContents* web_contents,
+                                      vivaldi::MenubarMenuParams& params);
 
-void ConvertContainerRectToScreen(
-    content::WebContents* web_contents,
-    vivaldi::BookmarkMenuContainer& container);
-
+void ConvertContainerRectToScreen(content::WebContents* web_contents,
+                                  vivaldi::BookmarkMenuContainer& container);
 
 class VivaldiBookmarkMenuObserver {
  public:
   virtual void BookmarkMenuClosed(VivaldiBookmarkMenu* menu) = 0;
+
  protected:
   virtual ~VivaldiBookmarkMenuObserver() {}
 };
 
 class VivaldiMenu {
-  public:
-    static gfx::NativeView GetActiveNativeViewFromWebContents(
+ public:
+  static gfx::NativeView GetActiveNativeViewFromWebContents(
       content::WebContents* web_contents);
-    static views::Widget* GetTopLevelWidgetFromWebContents(
+  static views::Widget* GetTopLevelWidgetFromWebContents(
       content::WebContents* web_contents);
 };
 
@@ -174,7 +166,8 @@ class VivaldiContextMenu : public VivaldiMenu {
  public:
   virtual ~VivaldiContextMenu() {}
 
-  virtual void Init(ui::SimpleMenuModel* menu_model, ContextMenuPostitionDelegate* delegate) = 0;
+  virtual void Init(ui::SimpleMenuModel* menu_model,
+                    ContextMenuPostitionDelegate* delegate) = 0;
   virtual bool Show() = 0;
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}

@@ -15,6 +15,10 @@ namespace media {
 class AudioBlockFifoTest : public testing::Test {
  public:
   AudioBlockFifoTest() = default;
+
+  AudioBlockFifoTest(const AudioBlockFifoTest&) = delete;
+  AudioBlockFifoTest& operator=(const AudioBlockFifoTest&) = delete;
+
   ~AudioBlockFifoTest() override = default;
 
   void PushAndVerify(AudioBlockFifo* fifo,
@@ -54,9 +58,6 @@ class AudioBlockFifoTest : public testing::Test {
       EXPECT_GT(bus->channel(i)[bus->frames() - 1], 0.0f);
     }
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AudioBlockFifoTest);
 };
 
 // Verify that construction works as intended.
@@ -114,7 +115,7 @@ TEST_F(AudioBlockFifoTest, PushAndConsume) {
 
   // Consume all blocks of data.
   for (int i = 1; i <= blocks; ++i) {
-    const AudioBus* bus = fifo.Consume();
+    bus = fifo.Consume();
     EXPECT_TRUE(channels == bus->channels());
     EXPECT_TRUE(frames == bus->frames());
     EXPECT_TRUE(fifo.GetUnfilledFrames() == frames * i);
@@ -132,7 +133,7 @@ TEST_F(AudioBlockFifoTest, PushAndConsume) {
 
   // Consume all the existing filled blocks of data.
   while (fifo.available_blocks()) {
-    const AudioBus* bus = fifo.Consume();
+    bus = fifo.Consume();
     EXPECT_TRUE(channels == bus->channels());
     EXPECT_TRUE(frames == bus->frames());
   }

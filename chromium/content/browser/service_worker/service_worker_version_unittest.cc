@@ -69,8 +69,7 @@ void ObserveStatusChanges(ServiceWorkerVersion* version,
 }
 
 base::Time GetYesterday() {
-  return base::Time::Now() - base::TimeDelta::FromDays(1) -
-         base::TimeDelta::FromSeconds(1);
+  return base::Time::Now() - base::Days(1) - base::Seconds(1);
 }
 
 class ServiceWorkerVersionTest : public testing::Test {
@@ -181,12 +180,15 @@ class ServiceWorkerVersionTest : public testing::Test {
     ServiceWorkerRemoteContainerEndpoint remote_endpoint;
     base::WeakPtr<ServiceWorkerContainerHost> container_host =
         CreateContainerHostForWindow(
-            controllee_process_id, true /* is_parent_frame_secure */,
-            helper_->context()->AsWeakPtr(), &remote_endpoint);
+            GlobalRenderFrameHostId(controllee_process_id,
+                                    /*mock frame_routing_id=*/1),
+            /*is_parent_frame_secure=*/true, helper_->context()->AsWeakPtr(),
+            &remote_endpoint);
     container_host->UpdateUrls(
         registration_->scope(),
         net::SiteForCookies::FromUrl(registration_->scope()),
-        url::Origin::Create(registration_->scope()));
+        url::Origin::Create(registration_->scope()),
+        blink::StorageKey(url::Origin::Create(registration_->scope())));
     container_host->SetControllerRegistration(
         registration_, false /* notify_controllerchange */);
     EXPECT_TRUE(version_->HasControllee());
@@ -256,15 +258,15 @@ TEST_F(ServiceWorkerVersionTest, ConcurrentStartAndStop) {
     // Call StopWorker() multiple times.
     bool has_stopped1 = false;
     bool has_stopped2 = false;
-    base::RunLoop run_loop_1;
-    base::RunLoop run_loop_2;
+    base::RunLoop run_loop_4;
+    base::RunLoop run_loop_5;
 
-    version_->StopWorker(VerifyCalled(&has_stopped1, run_loop_1.QuitClosure()));
-    version_->StopWorker(VerifyCalled(&has_stopped2, run_loop_2.QuitClosure()));
+    version_->StopWorker(VerifyCalled(&has_stopped1, run_loop_4.QuitClosure()));
+    version_->StopWorker(VerifyCalled(&has_stopped2, run_loop_5.QuitClosure()));
 
     EXPECT_EQ(EmbeddedWorkerStatus::STOPPING, version_->running_status());
-    run_loop_1.Run();
-    run_loop_2.Run();
+    run_loop_4.Run();
+    run_loop_5.Run();
     EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version_->running_status());
 
     // All StopWorker should just succeed.
@@ -276,15 +278,15 @@ TEST_F(ServiceWorkerVersionTest, ConcurrentStartAndStop) {
   status1.reset();
   status2.reset();
 
-  base::RunLoop run_loop_4;
-  base::RunLoop run_loop_5;
+  base::RunLoop run_loop_6;
+  base::RunLoop run_loop_7;
 
   version_->StartWorker(
       ServiceWorkerMetrics::EventType::UNKNOWN,
-      ReceiveServiceWorkerStatus(&status1, run_loop_4.QuitClosure()));
+      ReceiveServiceWorkerStatus(&status1, run_loop_6.QuitClosure()));
 
   EXPECT_EQ(EmbeddedWorkerStatus::STARTING, version_->running_status());
-  run_loop_4.Run();
+  run_loop_6.Run();
   EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
 
   {
@@ -295,10 +297,10 @@ TEST_F(ServiceWorkerVersionTest, ConcurrentStartAndStop) {
     // And try calling StartWorker while StopWorker is in queue.
     version_->StartWorker(
         ServiceWorkerMetrics::EventType::UNKNOWN,
-        ReceiveServiceWorkerStatus(&status2, run_loop_5.QuitClosure()));
+        ReceiveServiceWorkerStatus(&status2, run_loop_7.QuitClosure()));
 
     EXPECT_EQ(EmbeddedWorkerStatus::STOPPING, version_->running_status());
-    run_loop_5.Run();
+    run_loop_7.Run();
     EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
 
     // All should just succeed.
@@ -435,12 +437,15 @@ TEST_F(ServiceWorkerVersionTest, Doom) {
   ServiceWorkerRemoteContainerEndpoint remote_endpoint;
   base::WeakPtr<ServiceWorkerContainerHost> container_host =
       CreateContainerHostForWindow(
-          33 /* dummy render process id */, true /* is_parent_frame_secure */,
-          helper_->context()->AsWeakPtr(), &remote_endpoint);
+          GlobalRenderFrameHostId(/*mock process_id=*/33,
+                                  /*mock frame_routing_id=*/1),
+          /*is_parent_frame_secure=*/true, helper_->context()->AsWeakPtr(),
+          &remote_endpoint);
   container_host->UpdateUrls(
       registration_->scope(),
       net::SiteForCookies::FromUrl(registration_->scope()),
-      url::Origin::Create(registration_->scope()));
+      url::Origin::Create(registration_->scope()),
+      blink::StorageKey(url::Origin::Create(registration_->scope())));
   container_host->SetControllerRegistration(registration_, false);
   EXPECT_TRUE(version_->HasControllee());
   EXPECT_TRUE(container_host->controller());
@@ -572,7 +577,7 @@ TEST_F(ServiceWorkerVersionTest, StaleUpdate_RunningWorker) {
   // scheduled.
   version_->stale_time_ = base::TimeTicks::Now() -
                           ServiceWorkerVersion::kStartNewWorkerTimeout -
-                          base::TimeDelta::FromMinutes(1);
+                          base::Minutes(1);
   version_->OnTimeoutTimer();
   EXPECT_TRUE(version_->stale_time_.is_null());
   EXPECT_TRUE(version_->update_timer_.IsRunning());
@@ -586,7 +591,7 @@ TEST_F(ServiceWorkerVersionTest, StaleUpdate_DoNotDeferTimer) {
   registration_->set_last_update_check(GetYesterday());
   base::TimeTicks stale_time = base::TimeTicks::Now() -
                                ServiceWorkerVersion::kStartNewWorkerTimeout -
-                               base::TimeDelta::FromMinutes(1);
+                               base::Minutes(1);
   version_->stale_time_ = stale_time;
 
   // Stale time is not deferred.
@@ -625,7 +630,7 @@ TEST_F(ServiceWorkerVersionTest, StartRequestWithNullContext) {
 // Tests the delay mechanism for self-updating service workers, to prevent
 // them from running forever (see https://crbug.com/805496).
 TEST_F(ServiceWorkerVersionTest, ResetUpdateDelay) {
-  const base::TimeDelta kMinute = base::TimeDelta::FromMinutes(1);
+  const base::TimeDelta kMinute = base::Minutes(1);
   const base::TimeDelta kNoDelay = base::TimeDelta();
 
   // Initialize the delay.
@@ -718,6 +723,10 @@ class DelayMessageWorker : public FakeServiceWorker {
  public:
   explicit DelayMessageWorker(EmbeddedWorkerTestHelper* helper)
       : FakeServiceWorker(helper) {}
+
+  DelayMessageWorker(const DelayMessageWorker&) = delete;
+  DelayMessageWorker& operator=(const DelayMessageWorker&) = delete;
+
   ~DelayMessageWorker() override = default;
 
   void DispatchExtendableMessageEvent(
@@ -745,8 +754,6 @@ class DelayMessageWorker : public FakeServiceWorker {
   blink::mojom::ExtendableMessageEventPtr event_;
   DispatchExtendableMessageEventCallback callback_;
   base::OnceClosure quit_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(DelayMessageWorker);
 };
 
 TEST_F(ServiceWorkerVersionTest, RequestTimeout) {
@@ -870,13 +877,13 @@ TEST_F(ServiceWorkerVersionTest, RequestCustomizedTimeout) {
   int first_request_id = version_->StartRequestWithCustomTimeout(
       ServiceWorkerMetrics::EventType::SYNC,
       ReceiveServiceWorkerStatus(&first_status, first_run_loop.QuitClosure()),
-      base::TimeDelta::FromSeconds(2 * timeout_seconds),
+      base::Seconds(2 * timeout_seconds),
       ServiceWorkerVersion::KILL_ON_TIMEOUT);
 
   int second_request_id = version_->StartRequestWithCustomTimeout(
       ServiceWorkerMetrics::EventType::SYNC,
       ReceiveServiceWorkerStatus(&second_status, second_run_loop.QuitClosure()),
-      base::TimeDelta::FromSeconds(timeout_seconds),
+      base::Seconds(timeout_seconds),
       ServiceWorkerVersion::CONTINUE_ON_TIMEOUT);
 
   // The status should not have changed since neither task has timed out yet.
@@ -888,7 +895,7 @@ TEST_F(ServiceWorkerVersionTest, RequestCustomizedTimeout) {
   EXPECT_FALSE(second_status);
 
   // Now advance time until the second task timeout should expire.
-  tick_clock.Advance(base::TimeDelta::FromSeconds(timeout_seconds + 1));
+  tick_clock.Advance(base::Seconds(timeout_seconds + 1));
   version_->timeout_timer_.user_task().Run();
   second_run_loop.Run();
   EXPECT_FALSE(first_status);
@@ -899,7 +906,7 @@ TEST_F(ServiceWorkerVersionTest, RequestCustomizedTimeout) {
   EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
 
   // Now advance time until both tasks should be expired.
-  tick_clock.Advance(base::TimeDelta::FromSeconds(timeout_seconds + 1));
+  tick_clock.Advance(base::Seconds(timeout_seconds + 1));
   version_->timeout_timer_.user_task().Run();
   first_run_loop.Run();
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorTimeout,
@@ -1012,7 +1019,7 @@ TEST_F(ServiceWorkerVersionTest, FailToStart_Timeout) {
   EXPECT_TRUE(version_->timeout_timer_.IsRunning());
   version_->start_time_ = base::TimeTicks::Now() -
                           ServiceWorkerVersion::kStartNewWorkerTimeout -
-                          base::TimeDelta::FromMinutes(1);
+                          base::Minutes(1);
   version_->timeout_timer_.user_task().Run();
   run_loop.Run();
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorTimeout, status.value());
@@ -1045,7 +1052,7 @@ TEST_F(ServiceWorkerVersionTest, StallInStopping_DetachThenStart) {
   // Simulate timeout.
   version_->stop_time_ = base::TimeTicks::Now() -
                          ServiceWorkerVersion::kStopWorkerTimeout -
-                         base::TimeDelta::FromSeconds(1);
+                         base::Seconds(1);
   version_->timeout_timer_.user_task().Run();
   run_loop.Run();
   EXPECT_TRUE(has_stopped);
@@ -1087,7 +1094,7 @@ TEST_F(ServiceWorkerVersionTest, StallInStopping_DetachThenRestart) {
   EXPECT_TRUE(version_->timeout_timer_.IsRunning());
   version_->stop_time_ = base::TimeTicks::Now() -
                          ServiceWorkerVersion::kStopWorkerTimeout -
-                         base::TimeDelta::FromSeconds(1);
+                         base::Seconds(1);
   version_->timeout_timer_.user_task().Run();
   run_loop.Run();
   EXPECT_TRUE(has_stopped);
@@ -1234,7 +1241,8 @@ TEST_F(ServiceWorkerVersionTest,
   container_host->UpdateUrls(
       registration_->scope(),
       net::SiteForCookies::FromUrl(registration_->scope()),
-      url::Origin::Create(registration_->scope()));
+      url::Origin::Create(registration_->scope()),
+      blink::StorageKey(url::Origin::Create(registration_->scope())));
   container_host->SetControllerRegistration(
       registration_, false /* notify_controllerchange */);
   EXPECT_TRUE(version_->HasControllee());
@@ -1547,8 +1555,10 @@ class ServiceWorkerVersionTerminationOnNoControlleeTest
     remote_endpoints_.emplace_back();
     base::WeakPtr<ServiceWorkerContainerHost> container_host =
         CreateContainerHostForWindow(
-            33 /* dummy render process id */, true /* is_parent_frame_secure */,
-            helper_->context()->AsWeakPtr(), &remote_endpoints_.back());
+            GlobalRenderFrameHostId(/*mock process_id=*/33,
+                                    /*mock frame_routing_id=*/1),
+            /*is_parent_frame_secure=*/true, helper_->context()->AsWeakPtr(),
+            &remote_endpoints_.back());
     return container_host.get();
   }
 
@@ -1556,12 +1566,10 @@ class ServiceWorkerVersionTerminationOnNoControlleeTest
 
  protected:
   // The value should be the same with the number set in the constructor.
-  static constexpr base::TimeDelta kTerminationDelay =
-      base::TimeDelta::FromMilliseconds(5000);
+  static constexpr base::TimeDelta kTerminationDelay = base::Milliseconds(5000);
 
   static constexpr base::TimeDelta kDefaultIdleDelay =
-      base::TimeDelta::FromSeconds(
-          blink::mojom::kServiceWorkerDefaultIdleDelayInSeconds);
+      base::Seconds(blink::mojom::kServiceWorkerDefaultIdleDelayInSeconds);
 
  private:
   base::test::ScopedFeatureList feature_list_;

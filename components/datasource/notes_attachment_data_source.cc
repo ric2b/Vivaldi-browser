@@ -4,7 +4,6 @@
 
 #include "base/base64.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/datasource/vivaldi_data_source_api.h"
 #include "content/public/browser/browser_thread.h"
 #include "notes/note_attachment.h"
 #include "notes/note_node.h"

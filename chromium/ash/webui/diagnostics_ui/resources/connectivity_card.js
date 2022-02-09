@@ -4,17 +4,21 @@
 
 import './diagnostics_card.js';
 import './diagnostics_fonts_css.js';
+import './diagnostics_network_icon.js';
 import './diagnostics_shared_css.js';
 import './ip_config_info_drawer.js';
 import './network_info.js';
 import './routine_section.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Network, NetworkHealthProviderInterface, NetworkStateObserverInterface, NetworkStateObserverReceiver, NetworkType, RoutineType} from './diagnostics_types.js';
-import {getNetworkState, getNetworkType, getRoutinesByNetworkType} from './diagnostics_utils.js';
+import {filterNameServers, formatMacAddress, getNetworkCardTitle, getNetworkState, getNetworkType, getRoutineGroups} from './diagnostics_utils.js';
 import {getNetworkHealthProvider} from './mojo_interface_provider.js';
+import {RoutineGroup} from './routine_group.js';
+import {TestSuiteStatus} from './routine_list_executor.js';
 
 
 /**
@@ -40,29 +44,30 @@ Polymer({
   networkStateObserverReceiver_: null,
 
   properties: {
-    /** @type {boolean} */
-    isTestRunning: {
-      type: Boolean,
-      value: false,
+    /** @type {!TestSuiteStatus} */
+    testSuiteStatus: {
+      type: Number,
+      value: TestSuiteStatus.kNotRunning,
       notify: true,
     },
 
-    /** @private {!Array<!RoutineType>} */
-    routines_: {
+    /** @private {!Array<!RoutineGroup>} */
+    routineGroups_: {
       type: Array,
-      value: [],
-      computed: 'computeRoutines_(activeGuid, network.type)',
+      value: () => [],
     },
 
     /** @type {string} */
     activeGuid: {
       type: String,
       value: '',
+      observer: 'activeGuidChanged_',
     },
 
     /** @type {boolean} */
     isActive: {
       type: Boolean,
+      observer: 'isActiveChanged_',
     },
 
     /** @type {!Network} */
@@ -81,21 +86,27 @@ Polymer({
       type: String,
       value: '',
     },
-  },
 
-  observers: ['observeNetwork_(activeGuid)'],
+    /** @protected {string} */
+    macAddress_: {
+      type: String,
+      value: '',
+    },
+  },
 
   /** @override */
   created() {
     this.networkHealthProvider_ = getNetworkHealthProvider();
   },
 
-  computeRoutines_() {
-    if (!this.network) {
-      return [];
-    }
+  /** @private */
+  getRoutineSectionElem_() {
+    return /** @type {!RoutineSectionElement} */ (this.$$('routine-section'));
+  },
 
-    return getRoutinesByNetworkType(this.network.type);
+  /** @override */
+  detached() {
+    this.getRoutineSectionElem_().stopTests();
   },
 
   displayRoutines_() {
@@ -104,10 +115,6 @@ Polymer({
 
   /** @private */
   observeNetwork_() {
-    if (!this.activeGuid) {
-      return;
-    }
-
     if (this.networkStateObserverReceiver_) {
       this.networkStateObserverReceiver_.$.close();
       this.networkStateObserverReceiver_ = null;
@@ -131,6 +138,16 @@ Polymer({
   onNetworkStateChanged(network) {
     this.networkType_ = getNetworkType(network.type);
     this.networkState_ = getNetworkState(network.state);
+    this.macAddress_ = network.macAddress || '';
+
+    if (this.testSuiteStatus === TestSuiteStatus.kNotRunning) {
+      let isArcEnabled = loadTimeData.getBoolean('enableArcNetworkDiagnostics');
+      this.routineGroups_ = getRoutineGroups(network.type, isArcEnabled);
+      this.getRoutineSectionElem_().runTests();
+    }
+
+    // Remove '0.0.0.0' (if present) from list of name servers.
+    filterNameServers(network);
     this.set('network', network);
   },
 
@@ -142,11 +159,47 @@ Polymer({
 
   /** @protected */
   getNetworkCardTitle_() {
-    var title = this.networkType_;
-    if (this.networkState_) {
-      title = title + ' (' + this.networkState_ + ')';
+    return getNetworkCardTitle(this.networkType_, this.networkState_);
+  },
+
+  /**
+   * @protected
+   * @param {string} activeGuid
+   */
+  activeGuidChanged_(activeGuid) {
+    if (this.testSuiteStatus === TestSuiteStatus.kCompleted) {
+      this.testSuiteStatus = TestSuiteStatus.kNotRunning;
     }
 
-    return title;
+    if (!activeGuid) {
+      return;
+    }
+    this.getRoutineSectionElem_().stopTests();
+    this.observeNetwork_();
+  },
+
+  /**
+   * @protected
+   * @param {boolean} active
+   */
+  isActiveChanged_(active) {
+    if (!active) {
+      return;
+    }
+
+    if (this.routineGroups_.length > 0) {
+      this.getRoutineSectionElem_().runTests();
+    }
+  },
+
+  /**
+   * @protected
+   * @return {string}
+   */
+  getMacAddress_() {
+    if (!this.macAddress_) {
+      return '';
+    }
+    return formatMacAddress(this.macAddress_);
   },
 });

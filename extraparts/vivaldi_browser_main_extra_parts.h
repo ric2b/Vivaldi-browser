@@ -20,6 +20,9 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
  public:
   VivaldiBrowserMainExtraParts();
   ~VivaldiBrowserMainExtraParts() override;
+  VivaldiBrowserMainExtraParts(const VivaldiBrowserMainExtraParts&) = delete;
+  VivaldiBrowserMainExtraParts& operator=(const VivaldiBrowserMainExtraParts&) =
+      delete;
 
   // Overridden from ChromeBrowserMainExtraParts:
   void PostEarlyInitialization() override;
@@ -37,8 +40,6 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   std::unique_ptr<vivaldi::StatsReporter> stats_reporter_;
   std::unique_ptr<translate::VivaldiTranslateLanguageList>
       translate_language_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraParts);
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_

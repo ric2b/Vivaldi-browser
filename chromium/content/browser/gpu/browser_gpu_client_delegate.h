@@ -12,6 +12,10 @@ namespace content {
 class BrowserGpuClientDelegate : public viz::GpuClientDelegate {
  public:
   BrowserGpuClientDelegate();
+
+  BrowserGpuClientDelegate(const BrowserGpuClientDelegate&) = delete;
+  BrowserGpuClientDelegate& operator=(const BrowserGpuClientDelegate&) = delete;
+
   ~BrowserGpuClientDelegate() override;
 
   // GpuClientDelegate:
@@ -20,9 +24,6 @@ class BrowserGpuClientDelegate : public viz::GpuClientDelegate {
 
   // FEATURE_FORCE_ACCESS_TO_GPU
   void SetForceAllowAccessToGpu(bool enable) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BrowserGpuClientDelegate);
 };
 
 }  // namespace content

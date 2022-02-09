@@ -25,6 +25,7 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
+#include "base/time/time_override.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/fake_disk_mount_manager.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
@@ -65,6 +66,7 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/skia_util.h"
 
 namespace ash {
 
@@ -301,7 +303,9 @@ class MockDownloadManager : public content::MockDownloadManager {
 class HoldingSpaceKeyedServiceTest : public BrowserWithTestWindowTest {
  public:
   HoldingSpaceKeyedServiceTest()
-      : fake_user_manager_(new FakeChromeUserManager),
+      : BrowserWithTestWindowTest(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME),
+        fake_user_manager_(new FakeChromeUserManager),
         user_manager_enabler_(base::WrapUnique(fake_user_manager_)) {
     HoldingSpaceImage::SetUseZeroInvalidationDelayForTesting(true);
   }
@@ -316,11 +320,16 @@ class HoldingSpaceKeyedServiceTest : public BrowserWithTestWindowTest {
 
   // BrowserWithTestWindowTest:
   void SetUp() override {
+    // The test's task environment starts with a mock time close to the Unix
+    // epoch, but the files that back holding space items are created with
+    // accurate timestamps. Advance the clock so that the test's mock time and
+    // the time used for file operations are in sync for file age calculations.
+    task_environment()->AdvanceClock(base::subtle::TimeNowIgnoringOverride() -
+                                     base::Time::Now());
     // Needed by `file_manager::VolumeManager`.
     chromeos::disks::DiskMountManager::InitializeForTesting(
         new file_manager::FakeDiskMountManager);
     BrowserWithTestWindowTest::SetUp();
-    holding_space_util::SetNowForTesting(absl::nullopt);
   }
 
   void TearDown() override {
@@ -1583,8 +1592,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, RemoveItemsFromUnmountedVolumes) {
   EXPECT_EQ(file_path_2, holding_space_model->items()[0]->file_path());
 }
 
-// Verifies that screenshots restored from persistence are not older than
-// kMaxFileAge.
+// Verifies that files restored from persistence are not older than
+// `kMaxFileAge`.
 TEST_F(HoldingSpaceKeyedServiceTest, RemoveOlderFilesFromPersistence) {
   // Create file system mount point.
   std::unique_ptr<ScopedTestMountPoint> downloads_mount =
@@ -1597,6 +1606,7 @@ TEST_F(HoldingSpaceKeyedServiceTest, RemoveOlderFilesFromPersistence) {
   HoldingSpaceModel::ItemList restored_holding_space_items;
   base::Value persisted_holding_space_items_after_restoration(
       base::Value::Type::LIST);
+  base::Time last_creation_time = base::Time::Now();
 
   // Create a secondary profile w/ a pre-populated pref store.
   TestingProfile* const secondary_profile = CreateSecondaryProfile(
@@ -1621,7 +1631,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, RemoveOlderFilesFromPersistence) {
 
           // Only pinned files are exempt from age checks. In this test, we
           // expect all holding space items of other types to be removed from
-          // persistence during restoration due to being older than kMaxFileAge.
+          // persistence during restoration due to being older than
+          // `kMaxFileAge`.
           if (type == HoldingSpaceItem::Type::kPinnedFile) {
             persisted_holding_space_items_after_restoration.Append(
                 fresh_holding_space_item->Serialize());
@@ -1629,20 +1640,9 @@ TEST_F(HoldingSpaceKeyedServiceTest, RemoveOlderFilesFromPersistence) {
                 std::move(fresh_holding_space_item));
           }
 
-          const base::FilePath stale_item_file =
-              downloads_mount->GetRootPath().AppendASCII(
-                  base::UnguessableToken::Create().ToString());
-          auto stale_holding_space_item =
-              HoldingSpaceItem::CreateFileBackedItem(
-                  type, stale_item_file,
-                  GetFileSystemUrl(GetProfile(), stale_item_file),
-                  base::BindOnce(&CreateTestHoldingSpaceImage));
-
-          // NOTE: While the `stale_holding_space_item` is persisted here, we do
-          // *not* expect it to be restored or to be persisted after model
-          // restoration since its backing file does *not* exist.
-          persisted_holding_space_items_before_restoration.Append(
-              stale_holding_space_item->Serialize());
+          base::File::Info file_info;
+          ASSERT_TRUE(base::GetFileInfo(file, &file_info));
+          last_creation_time = file_info.creation_time;
         }
 
         pref_store->SetValueSilently(
@@ -1652,7 +1652,10 @@ TEST_F(HoldingSpaceKeyedServiceTest, RemoveOlderFilesFromPersistence) {
             PersistentPrefStore::DEFAULT_PREF_WRITE_FLAGS);
       }));
 
-  holding_space_util::SetNowForTesting(base::Time::Now() + kMaxFileAge);
+  // Fast-forward to a point where the created files are too old to be restored
+  // from persistence.
+  task_environment()->FastForwardBy(last_creation_time - base::Time::Now() +
+                                    kMaxFileAge);
 
   ActivateSecondaryProfile();
   HoldingSpaceModelAttachedWaiter(secondary_profile).Wait();
@@ -1684,6 +1687,42 @@ TEST_F(HoldingSpaceKeyedServiceTest, RemoveOlderFilesFromPersistence) {
   EXPECT_EQ(*secondary_profile->GetPrefs()->GetList(
                 HoldingSpacePersistenceDelegate::kPersistencePath),
             persisted_holding_space_items_after_restoration);
+}
+
+TEST_F(HoldingSpaceKeyedServiceTest, AddArcDownloadItem) {
+  // Wait for the holding space model to attach.
+  TestingProfile* profile = GetProfile();
+  HoldingSpaceModelAttachedWaiter(profile).Wait();
+
+  // Verify the holding space `model` is empty.
+  HoldingSpaceModel* const model = HoldingSpaceController::Get()->model();
+  ASSERT_EQ(0u, model->items().size());
+
+  // Create a test downloads mount point.
+  std::unique_ptr<ScopedTestMountPoint> downloads_mount =
+      ScopedTestMountPoint::CreateAndMountDownloads(profile);
+  ASSERT_TRUE(downloads_mount->IsValid());
+
+  // Create a fake download file on the local file system.
+  const base::FilePath file_path = downloads_mount->CreateFile(
+      /*relative_path=*/base::FilePath("Download.png"), /*content=*/"foo");
+
+  // Simulate an event from ARC to indicate that the Android application with
+  // package `com.bar.foo` added a download at `file_path`.
+  auto* arc_intent_helper_bridge =
+      arc::ArcIntentHelperBridge::GetForBrowserContext(profile);
+  ASSERT_TRUE(arc_intent_helper_bridge);
+  arc_intent_helper_bridge->OnDownloadAdded(
+      /*relative_path=*/"Download/Download.png",
+      /*owner_package_name=*/"com.bar.foo");
+
+  // Verify that an item of type `kArcDownload` was added to holding space.
+  ASSERT_EQ(1u, model->items().size());
+  const HoldingSpaceItem* arc_download_item = model->items()[0].get();
+  EXPECT_EQ(arc_download_item->type(), HoldingSpaceItem::Type::kArcDownload);
+  EXPECT_EQ(arc_download_item->file_path(),
+            file_manager::util::GetDownloadsFolderForProfile(profile).Append(
+                base::FilePath("Download.png")));
 }
 
 TEST_F(HoldingSpaceKeyedServiceTest, AddDownloadItem) {
@@ -2199,12 +2238,16 @@ class HoldingSpaceKeyedServiceAddItemTest
                const base::FilePath& file_path) {
     auto* const holding_space_service = GetService(profile);
     ASSERT_TRUE(holding_space_service);
+    const auto* holding_space_model =
+        holding_space_service->model_for_testing();
+    ASSERT_TRUE(holding_space_model);
 
     switch (type) {
       case HoldingSpaceItem::Type::kArcDownload:
       case HoldingSpaceItem::Type::kDownload:
       case HoldingSpaceItem::Type::kLacrosDownload:
-        holding_space_service->AddDownload(type, file_path);
+        EXPECT_EQ(holding_space_model->ContainsItem(type, file_path),
+                  holding_space_service->AddDownload(type, file_path).empty());
         break;
       case HoldingSpaceItem::Type::kDiagnosticsLog:
         holding_space_service->AddDiagnosticsLog(file_path);
@@ -2231,6 +2274,13 @@ class HoldingSpaceKeyedServiceAddItemTest
         break;
       case HoldingSpaceItem::Type::kScreenshot:
         holding_space_service->AddScreenshot(file_path);
+        break;
+      case HoldingSpaceItem::Type::kPhoneHubCameraRoll:
+        EXPECT_EQ(
+            holding_space_model->ContainsItem(type, file_path),
+            holding_space_service
+                ->AddPhoneHubCameraRollItem(file_path, HoldingSpaceProgress())
+                .empty());
         break;
     }
   }
@@ -2289,19 +2339,7 @@ TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItem) {
   EXPECT_EQ(model->items()[0].get(), item);
 }
 
-class HoldingSpaceKeyedServiceArcIntegrationTest
-    : public HoldingSpaceKeyedServiceTest {
- public:
-  HoldingSpaceKeyedServiceArcIntegrationTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kHoldingSpaceArcIntegration);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(HoldingSpaceKeyedServiceArcIntegrationTest, AddArcDownloadItem) {
+TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItemOfType) {
   // Wait for the holding space model to attach.
   TestingProfile* profile = GetProfile();
   HoldingSpaceModelAttachedWaiter(profile).Wait();
@@ -2310,31 +2348,46 @@ TEST_F(HoldingSpaceKeyedServiceArcIntegrationTest, AddArcDownloadItem) {
   HoldingSpaceModel* const model = HoldingSpaceController::Get()->model();
   ASSERT_EQ(0u, model->items().size());
 
-  // Create a test downloads mount point.
-  std::unique_ptr<ScopedTestMountPoint> downloads_mount =
+  // Create a test mount point.
+  std::unique_ptr<ScopedTestMountPoint> mount_point =
       ScopedTestMountPoint::CreateAndMountDownloads(profile);
-  ASSERT_TRUE(downloads_mount->IsValid());
+  ASSERT_TRUE(mount_point->IsValid());
 
-  // Create a fake download file on the local file system.
-  const base::FilePath file_path = downloads_mount->CreateFile(
-      /*relative_path=*/base::FilePath("Download.png"), /*content=*/"foo");
+  // Create a file on the file system.
+  const base::FilePath file_path = mount_point->CreateFile(
+      /*relative_path=*/base::FilePath("foo"), /*content=*/"foo");
 
-  // Simulate an event from ARC to indicate that the Android application with
-  // package `com.bar.foo` added a download at `file_path`.
-  auto* arc_intent_helper_bridge =
-      arc::ArcIntentHelperBridge::GetForBrowserContext(profile);
-  ASSERT_TRUE(arc_intent_helper_bridge);
-  arc_intent_helper_bridge->OnDownloadAdded(
-      /*relative_path=*/"Download/Download.png",
-      /*owner_package_name=*/"com.bar.foo");
+  // Add a holding space item of the type under test.
+  const auto& id = GetService(profile)->AddItemOfType(GetType(), file_path);
+  EXPECT_FALSE(id.empty());
 
-  // Verify that an item of type `kArcDownload` was added to holding space.
-  ASSERT_EQ(1u, model->items().size());
-  const HoldingSpaceItem* arc_download_item = model->items()[0].get();
-  EXPECT_EQ(arc_download_item->type(), HoldingSpaceItem::Type::kArcDownload);
-  EXPECT_EQ(arc_download_item->file_path(),
-            file_manager::util::GetDownloadsFolderForProfile(profile).Append(
-                base::FilePath("Download.png")));
+  // Verify a holding space item has been added to the model.
+  ASSERT_EQ(model->items().size(), 1u);
+
+  // Verify holding space `item` metadata.
+  HoldingSpaceItem* const item = model->items()[0].get();
+  EXPECT_EQ(item->id(), id);
+  EXPECT_EQ(item->type(), GetType());
+  EXPECT_EQ(item->GetText(), file_path.BaseName().LossyDisplayName());
+  EXPECT_EQ(item->file_path(), file_path);
+  EXPECT_EQ(item->file_system_url(),
+            holding_space_util::ResolveFileSystemUrl(profile, file_path));
+
+  // Verify holding space `item` image.
+  EXPECT_TRUE(gfx::BitmapsAreEqual(
+      *holding_space_util::ResolveImage(
+           GetService(profile)->thumbnail_loader_for_testing(), GetType(),
+           file_path)
+           ->GetImageSkia()
+           .bitmap(),
+      *item->image().GetImageSkia().bitmap()));
+
+  // Attempt to add a holding space item of the same type and `file_path`.
+  EXPECT_TRUE(GetService(profile)->AddItemOfType(GetType(), file_path).empty());
+
+  // Attempts to add already represented items should be ignored.
+  ASSERT_EQ(model->items().size(), 1u);
+  EXPECT_EQ(model->items()[0].get(), item);
 }
 
 class HoldingSpaceKeyedServiceNearbySharingTest
@@ -2536,16 +2589,35 @@ TEST_P(HoldingSpaceKeyedServicePrintToPdfIntegrationTest, AddPrintedPdfItem) {
 }
 
 // Base class for tests of incognito profile integration. Parameterized by
-// whether the holding space incognito profile feature is enabled.
+// whether the holding space incognito profile feature is enabled and whether
+// the holding space in-progress downloads integration feature is enabled.
 class HoldingSpaceKeyedServiceIncognitoDownloadsTest
     : public HoldingSpaceKeyedServiceTest,
       public testing::WithParamInterface<
-          bool /* incognito_downloads_enabled */> {
+          std::tuple<bool /* incognito_downloads_enabled */,
+                     bool /* in_progress_downloads_enabled */>> {
  public:
   HoldingSpaceKeyedServiceIncognitoDownloadsTest() {
-    scoped_feature_list_.InitWithFeatureState(
-        features::kHoldingSpaceIncognitoProfileIntegration,
-        IncognitoDownloadsEnabled());
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features;
+
+    if (IncognitoDownloadsEnabled()) {
+      enabled_features.push_back(
+          features::kHoldingSpaceIncognitoProfileIntegration);
+    } else {
+      disabled_features.push_back(
+          features::kHoldingSpaceIncognitoProfileIntegration);
+    }
+
+    if (InProgressDownloadsEnabled()) {
+      enabled_features.push_back(
+          features::kHoldingSpaceInProgressDownloadsIntegration);
+    } else {
+      disabled_features.push_back(
+          features::kHoldingSpaceInProgressDownloadsIntegration);
+    }
+
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   // HoldingSpaceKeyedServiceTest:
@@ -2567,7 +2639,11 @@ class HoldingSpaceKeyedServiceIncognitoDownloadsTest
 
   // Returns true if the test should run with the incognito profile feature
   // enabled, false otherwise.
-  bool IncognitoDownloadsEnabled() const { return GetParam(); }
+  bool IncognitoDownloadsEnabled() const { return std::get<0>(GetParam()); }
+
+  // Returns true if the test should run with the in-progress downloads feature
+  // enabled, false otherwise.
+  bool InProgressDownloadsEnabled() const { return std::get<1>(GetParam()); }
 
   // Returns the incognito profile spawned from the test's main profile.
   TestingProfile* incognito_profile() { return incognito_profile_; }
@@ -2577,9 +2653,12 @@ class HoldingSpaceKeyedServiceIncognitoDownloadsTest
   TestingProfile* incognito_profile_ = nullptr;
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         HoldingSpaceKeyedServiceIncognitoDownloadsTest,
-                         /*incognito_downloads_enabled=*/::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    HoldingSpaceKeyedServiceIncognitoDownloadsTest,
+    ::testing::Combine(
+        /*incognito_downloads_enabled=*/::testing::Bool(),
+        /*in_progress_downloads_enabled=*/testing::Bool()));
 
 TEST_P(HoldingSpaceKeyedServiceIncognitoDownloadsTest, AddDownloadItem) {
   TestingProfile* profile = GetProfile();
@@ -2618,8 +2697,17 @@ TEST_P(HoldingSpaceKeyedServiceIncognitoDownloadsTest, AddDownloadItem) {
   current_path = downloads_mount->CreateFile(base::FilePath("tmp/temp_path"));
   UpdateFakeDownloadItem();
 
-  // Verify holding space is empty.
-  ASSERT_EQ(0u, model->items().size());
+  // Holding space should be empty if and only if either the incognito profile
+  // feature is disabled or the in-progress downloads feature is disabled.
+  if (!IncognitoDownloadsEnabled() || !InProgressDownloadsEnabled()) {
+    ASSERT_EQ(0u, model->items().size());
+  } else {
+    ASSERT_EQ(1u, model->items().size());
+    HoldingSpaceItem* download_item = model->items()[0].get();
+    EXPECT_EQ(download_item->type(), HoldingSpaceItem::Type::kDownload);
+    EXPECT_EQ(download_item->file_path(), current_path);
+    EXPECT_EQ(download_item->progress().GetValue(), 0.f);
+  }
 
   // Complete the download.
   current_state = download::DownloadItem::COMPLETE;

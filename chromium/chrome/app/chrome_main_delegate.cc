@@ -123,9 +123,9 @@
 #include "ash/constants/ash_paths.h"
 #include "ash/constants/ash_switches.h"
 #include "base/system/sys_info.h"
+#include "chrome/browser/ash/boot_times_recorder.h"
 #include "chrome/browser/ash/dbus/ash_dbus_helper.h"
-#include "chrome/browser/chromeos/boot_times_recorder.h"
-#include "chrome/browser/chromeos/startup_settings_cache.h"
+#include "chrome/browser/ash/startup_settings_cache.h"
 #include "chromeos/hugepage_text/hugepage_text.h"
 #include "chromeos/memory/kstaled.h"
 #include "chromeos/memory/memory.h"
@@ -611,6 +611,10 @@ void ChromeMainDelegate::PostEarlyInitialization(bool is_running_tests) {
           case crosapi::mojom::BuildFlag::kUseChromeosProtectedMedia:
             base::CommandLine::ForCurrentProcess()->AppendSwitch(
                 switches::kLacrosUseChromeosProtectedMedia);
+            break;
+          case crosapi::mojom::BuildFlag::kUseChromeosProtectedAv1:
+            base::CommandLine::ForCurrentProcess()->AppendSwitch(
+                switches::kLacrosUseChromeosProtectedAv1);
             break;
         }
       }
@@ -1141,7 +1145,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
       pak_fd = global_descriptors->Get(extra_pak_key);
       pak_region = global_descriptors->GetRegion(extra_pak_key);
       ui::ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-          base::File(pak_fd), pak_region, ui::SCALE_FACTOR_100P);
+          base::File(pak_fd), pak_region, ui::k100Percent);
     }
 
     // For Android: Native resources for DFMs should only be used by the browser
@@ -1158,7 +1162,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
     base::FilePath resources_pack_path;
     base::PathService::Get(chrome::FILE_RESOURCES_PACK, &resources_pack_path);
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-        resources_pack_path, ui::SCALE_FACTOR_NONE);
+        resources_pack_path, ui::kScaleFactorNone);
 #endif
     CHECK(!loaded_locale.empty()) << "Locale could not be found for " <<
         locale;
@@ -1198,7 +1202,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
   crash_keys::SetCrashKeysFromCommandLine(command_line);
 
 #if BUILDFLAG(ENABLE_PDF)
-  MaybeInitializeGDI();
+  MaybePatchGdiGetFontData();
 #endif
 }
 

@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/lazy_instance.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/power_monitor/power_observer.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/shell_integration.h"
@@ -24,10 +25,12 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
-#include "extensions/schema/vivaldi_utilities.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/lights/razer_chroma_handler.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+
+#include "components/datasource/vivaldi_image_store.h"
+#include "extensions/schema/vivaldi_utilities.h"
+#include "ui/lights/razer_chroma_handler.h"
 
 class Browser;
 
@@ -90,9 +93,12 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   void OnPasswordIconStatusChanged(int window_id, bool show);
 
-  // Trigger the OS authentication dialog, if needed. web_contents can be null.
-  static bool AuthenticateUser(content::BrowserContext* browser_context,
-                               content::WebContents* web_contents);
+  // Trigger the OS authentication dialog, if needed. web_contents must not be
+  // null.
+  static bool AuthenticateUser(
+      content::WebContents* web_contents,
+      password_manager::PasswordAccessAuthenticator::AuthResultCallback
+          callback);
 
   // Is the Razer Chroma API available on this machine
   bool IsRazerChromaAvailable();
@@ -124,11 +130,13 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
     std::string flow_direction_;
   };
 
- protected:
-  bool OsReauthCall(password_manager::ReauthPurpose purpose);
-
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>;
+
+  void OsReauthCall(
+      password_manager::ReauthPurpose purpose,
+      password_manager::PasswordAccessAuthenticator::AuthResultCallback
+          callback);
 
   content::BrowserContext* browser_context_;
 
@@ -162,11 +170,8 @@ class UtilitiesPrintFunction : public ExtensionFunction {
 
   ResponseAction Run() override;
 
- protected:
-  ~UtilitiesPrintFunction() override = default;
-
  private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesPrintFunction);
+  ~UtilitiesPrintFunction() override = default;
 };
 
 class UtilitiesClearAllRecentlyClosedSessionsFunction
@@ -176,13 +181,10 @@ class UtilitiesClearAllRecentlyClosedSessionsFunction
                              UTILITIES_CLEARALLRECENTLYCLOSEDSESSIONS)
   UtilitiesClearAllRecentlyClosedSessionsFunction() = default;
 
- protected:
+ private:
   ~UtilitiesClearAllRecentlyClosedSessionsFunction() override = default;
 
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesClearAllRecentlyClosedSessionsFunction);
 };
 
 class UtilitiesIsTabInLastSessionFunction : public ExtensionFunction {
@@ -191,14 +193,11 @@ class UtilitiesIsTabInLastSessionFunction : public ExtensionFunction {
                              UTILITIES_ISTABINLASTSESSION)
   UtilitiesIsTabInLastSessionFunction() = default;
 
- protected:
+ private:
   ~UtilitiesIsTabInLastSessionFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsTabInLastSessionFunction);
 };
 
 // This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
@@ -213,8 +212,6 @@ class UtilitiesIsUrlValidFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsUrlValidFunction);
 };
 
 class UtilitiesCanOpenUrlExternallyFunction : public ExtensionFunction {
@@ -231,8 +228,20 @@ class UtilitiesCanOpenUrlExternallyFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
+};
 
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesCanOpenUrlExternallyFunction);
+// This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
+// various JS bindings constrains.
+class UtilitiesGenerateGUIDFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.generateGUID", UTILITIES_GENERATE_GUID)
+  UtilitiesGenerateGUIDFunction() = default;
+
+ private:
+  ~UtilitiesGenerateGUIDFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
 };
 
 // This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
@@ -243,14 +252,11 @@ class UtilitiesGetUrlFragmentsFunction : public ExtensionFunction {
                              UTILITIES_GET_URL_FRAGMENTS)
   UtilitiesGetUrlFragmentsFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetUrlFragmentsFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetUrlFragmentsFunction);
 };
 
 class UtilitiesGetSelectedTextFunction : public ExtensionFunction {
@@ -259,14 +265,11 @@ class UtilitiesGetSelectedTextFunction : public ExtensionFunction {
                              UTILITIES_GETSELECTEDTEXT)
   UtilitiesGetSelectedTextFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetSelectedTextFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSelectedTextFunction);
 };
 
 class UtilitiesSelectFileFunction : public ExtensionFunction {
@@ -280,9 +283,7 @@ class UtilitiesSelectFileFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnFileSelected(base::FilePath path);
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectFileFunction);
+  void OnFileSelected(base::FilePath path, bool cancelled);
 };
 
 class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
@@ -297,14 +298,30 @@ class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnFileSelected(int64_t bookmark_id,
-                      int preference_index,
-                      std::string preferences_path,
-                      base::FilePath path);
+  void OnFileSelected(VivaldiImageStore::ImagePlace place,
+                      bool store_as_profile_image,
+                      base::FilePath path,
+                      bool cancelled);
 
   void SendResult(bool success);
+};
 
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectLocalImageFunction);
+class UtilitiesStoreImageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.storeImage", UTILITIES_STOREIMAGE)
+  UtilitiesStoreImageFunction();
+
+ private:
+  ~UtilitiesStoreImageFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void StoreImage(scoped_refptr<base::RefCountedMemory> data);
+  void SendResult(bool success);
+
+  VivaldiImageStore::ImagePlace place_;
+  absl::optional<VivaldiImageStore::ImageFormat> image_format_;
 };
 
 // This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
@@ -314,13 +331,10 @@ class UtilitiesGetVersionFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.getVersion", UTILITIES_GETVERSION)
   UtilitiesGetVersionFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetVersionFunction() override = default;
 
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetVersionFunction);
 };
 
 class UtilitiesGetFFMPEGStateFunction : public ExtensionFunction {
@@ -329,13 +343,10 @@ class UtilitiesGetFFMPEGStateFunction : public ExtensionFunction {
                              UTILITIES_GET_FFMPEG_STATE)
   UtilitiesGetFFMPEGStateFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetFFMPEGStateFunction() override = default;
 
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetFFMPEGStateFunction);
 };
 
 class UtilitiesGetMediaAvailableStateFunction : public ExtensionFunction {
@@ -344,13 +355,10 @@ class UtilitiesGetMediaAvailableStateFunction : public ExtensionFunction {
                              UTILITIES_GET_MEDIA_AVAILABLE_STATE)
   UtilitiesGetMediaAvailableStateFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetMediaAvailableStateFunction() override = default;
 
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetMediaAvailableStateFunction);
 };
 
 class UtilitiesSetSharedDataFunction : public ExtensionFunction {
@@ -359,13 +367,10 @@ class UtilitiesSetSharedDataFunction : public ExtensionFunction {
 
   UtilitiesSetSharedDataFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSetSharedDataFunction() override = default;
 
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetSharedDataFunction);
 };
 
 class UtilitiesGetSharedDataFunction : public ExtensionFunction {
@@ -374,13 +379,10 @@ class UtilitiesGetSharedDataFunction : public ExtensionFunction {
 
   UtilitiesGetSharedDataFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetSharedDataFunction() override = default;
 
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSharedDataFunction);
 };
 
 class UtilitiesGetSystemDateFormatFunction : public ExtensionFunction {
@@ -389,16 +391,13 @@ class UtilitiesGetSystemDateFormatFunction : public ExtensionFunction {
  public:
   UtilitiesGetSystemDateFormatFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetSystemDateFormatFunction() override = default;
 
   bool ReadDateFormats(vivaldi::utilities::DateFormats* date_formats);
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemDateFormatFunction);
 };
 
 class UtilitiesGetSystemCountryFunction : public ExtensionFunction {
@@ -411,8 +410,6 @@ class UtilitiesGetSystemCountryFunction : public ExtensionFunction {
   ~UtilitiesGetSystemCountryFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemCountryFunction);
 };
 
 class UtilitiesSetLanguageFunction : public ExtensionFunction {
@@ -420,13 +417,10 @@ class UtilitiesSetLanguageFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.setLanguage", UTILITIES_SETLANGUAGE)
   UtilitiesSetLanguageFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSetLanguageFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetLanguageFunction);
 };
 
 class UtilitiesGetLanguageFunction : public ExtensionFunction {
@@ -434,13 +428,10 @@ class UtilitiesGetLanguageFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.getLanguage", UTILITIES_GETLANGUAGE)
   UtilitiesGetLanguageFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetLanguageFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetLanguageFunction);
 };
 
 class UtilitiesSetVivaldiAsDefaultBrowserFunction : public ExtensionFunction {
@@ -449,7 +440,7 @@ class UtilitiesSetVivaldiAsDefaultBrowserFunction : public ExtensionFunction {
                              UTILITIES_SETVIVALDIDEFAULT)
   UtilitiesSetVivaldiAsDefaultBrowserFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSetVivaldiAsDefaultBrowserFunction() override;
 
   void OnDefaultBrowserWorkerFinished(
@@ -457,9 +448,6 @@ class UtilitiesSetVivaldiAsDefaultBrowserFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetVivaldiAsDefaultBrowserFunction);
 };
 
 class UtilitiesIsVivaldiDefaultBrowserFunction : public ExtensionFunction {
@@ -468,7 +456,7 @@ class UtilitiesIsVivaldiDefaultBrowserFunction : public ExtensionFunction {
                              UTILITIES_ISVIVALDIDEFAULT)
   UtilitiesIsVivaldiDefaultBrowserFunction() = default;
 
- protected:
+ private:
   ~UtilitiesIsVivaldiDefaultBrowserFunction() override;
 
   void OnDefaultBrowserWorkerFinished(
@@ -476,9 +464,6 @@ class UtilitiesIsVivaldiDefaultBrowserFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsVivaldiDefaultBrowserFunction);
 };
 
 class UtilitiesLaunchNetworkSettingsFunction : public ExtensionFunction {
@@ -487,13 +472,10 @@ class UtilitiesLaunchNetworkSettingsFunction : public ExtensionFunction {
                              UTILITIES_LAUNCHNETWORKSETTINGS)
   UtilitiesLaunchNetworkSettingsFunction() = default;
 
- protected:
+ private:
   ~UtilitiesLaunchNetworkSettingsFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesLaunchNetworkSettingsFunction);
 };
 
 class UtilitiesSavePageFunction : public ExtensionFunction {
@@ -501,13 +483,10 @@ class UtilitiesSavePageFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.savePage", UTILITIES_SAVEPAGE)
   UtilitiesSavePageFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSavePageFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSavePageFunction);
 };
 
 class UtilitiesOpenPageFunction : public ExtensionFunction {
@@ -515,13 +494,10 @@ class UtilitiesOpenPageFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.openPage", UTILITIES_OPENPAGE)
   UtilitiesOpenPageFunction() = default;
 
- protected:
+ private:
   ~UtilitiesOpenPageFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenPageFunction);
 };
 
 class UtilitiesBroadcastMessageFunction : public ExtensionFunction {
@@ -530,13 +506,10 @@ class UtilitiesBroadcastMessageFunction : public ExtensionFunction {
                              UTILITIES_BROADCAST_MESSAGE)
   UtilitiesBroadcastMessageFunction() = default;
 
- protected:
+ private:
   ~UtilitiesBroadcastMessageFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesBroadcastMessageFunction);
 };
 
 class UtilitiesSetDefaultContentSettingsFunction : public ExtensionFunction {
@@ -545,13 +518,10 @@ class UtilitiesSetDefaultContentSettingsFunction : public ExtensionFunction {
                              UTILITIES_SETDEFAULTCONTENTSETTING)
   UtilitiesSetDefaultContentSettingsFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSetDefaultContentSettingsFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetDefaultContentSettingsFunction);
 };
 
 class UtilitiesGetDefaultContentSettingsFunction : public ExtensionFunction {
@@ -560,13 +530,10 @@ class UtilitiesGetDefaultContentSettingsFunction : public ExtensionFunction {
                              UTILITIES_GETDEFAULTCONTENTSETTING)
   UtilitiesGetDefaultContentSettingsFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetDefaultContentSettingsFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetDefaultContentSettingsFunction);
 };
 
 class UtilitiesSetBlockThirdPartyCookiesFunction : public ExtensionFunction {
@@ -575,13 +542,10 @@ class UtilitiesSetBlockThirdPartyCookiesFunction : public ExtensionFunction {
                              UTILITIES_SET_BLOCKTHIRDPARTYCOOKIES)
   UtilitiesSetBlockThirdPartyCookiesFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSetBlockThirdPartyCookiesFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetBlockThirdPartyCookiesFunction);
 };
 
 class UtilitiesGetBlockThirdPartyCookiesFunction : public ExtensionFunction {
@@ -590,13 +554,10 @@ class UtilitiesGetBlockThirdPartyCookiesFunction : public ExtensionFunction {
                              UTILITIES_GET_BLOCKTHIRDPARTYCOOKIES)
   UtilitiesGetBlockThirdPartyCookiesFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetBlockThirdPartyCookiesFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetBlockThirdPartyCookiesFunction);
 };
 
 class UtilitiesOpenTaskManagerFunction : public ExtensionFunction {
@@ -605,13 +566,10 @@ class UtilitiesOpenTaskManagerFunction : public ExtensionFunction {
                              UTILITIES_OPENTASKMANAGER)
   UtilitiesOpenTaskManagerFunction() = default;
 
- protected:
+ private:
   ~UtilitiesOpenTaskManagerFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenTaskManagerFunction);
 };
 
 class UtilitiesCreateQRCodeFunction : public ExtensionFunction {
@@ -619,13 +577,10 @@ class UtilitiesCreateQRCodeFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.createQRCode", UTILITIES_CREATE_QR_CODE)
   UtilitiesCreateQRCodeFunction() = default;
 
- protected:
+ private:
   ~UtilitiesCreateQRCodeFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesCreateQRCodeFunction);
 };
 
 class UtilitiesGetStartupActionFunction : public ExtensionFunction {
@@ -634,13 +589,10 @@ class UtilitiesGetStartupActionFunction : public ExtensionFunction {
                              UTILITIES_GET_STARTUPTYPE)
   UtilitiesGetStartupActionFunction() = default;
 
- protected:
+ private:
   ~UtilitiesGetStartupActionFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetStartupActionFunction);
 };
 
 class UtilitiesSetStartupActionFunction : public ExtensionFunction {
@@ -649,13 +601,10 @@ class UtilitiesSetStartupActionFunction : public ExtensionFunction {
                              UTILITIES_SET_STARTUPTYPE)
   UtilitiesSetStartupActionFunction() = default;
 
- protected:
+ private:
   ~UtilitiesSetStartupActionFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetStartupActionFunction);
 };
 
 class UtilitiesCanShowWhatsNewPageFunction : public ExtensionFunction {
@@ -666,11 +615,8 @@ class UtilitiesCanShowWhatsNewPageFunction : public ExtensionFunction {
 
   ResponseAction Run() override;
 
- protected:
-  ~UtilitiesCanShowWhatsNewPageFunction() override = default;
-
  private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesCanShowWhatsNewPageFunction);
+  ~UtilitiesCanShowWhatsNewPageFunction() override = default;
 };
 
 class UtilitiesShowPasswordDialogFunction : public ExtensionFunction {
@@ -682,8 +628,6 @@ class UtilitiesShowPasswordDialogFunction : public ExtensionFunction {
  private:
   ~UtilitiesShowPasswordDialogFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesShowPasswordDialogFunction);
 };
 
 class UtilitiesSetDialogPositionFunction : public ExtensionFunction {
@@ -695,8 +639,6 @@ class UtilitiesSetDialogPositionFunction : public ExtensionFunction {
  private:
   ~UtilitiesSetDialogPositionFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetDialogPositionFunction);
 };
 
 class UtilitiesIsRazerChromaAvailableFunction : public ExtensionFunction {
@@ -708,8 +650,6 @@ class UtilitiesIsRazerChromaAvailableFunction : public ExtensionFunction {
  private:
   ~UtilitiesIsRazerChromaAvailableFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsRazerChromaAvailableFunction);
 };
 
 class UtilitiesIsRazerChromaReadyFunction : public ExtensionFunction {
@@ -721,8 +661,6 @@ class UtilitiesIsRazerChromaReadyFunction : public ExtensionFunction {
  private:
   ~UtilitiesIsRazerChromaReadyFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsRazerChromaReadyFunction);
 };
 
 class UtilitiesSetRazerChromaColorFunction : public ExtensionFunction {
@@ -734,8 +672,6 @@ class UtilitiesSetRazerChromaColorFunction : public ExtensionFunction {
  private:
   ~UtilitiesSetRazerChromaColorFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetRazerChromaColorFunction);
 };
 
 class UtilitiesIsDownloadManagerReadyFunction : public ExtensionFunction {
@@ -747,8 +683,6 @@ class UtilitiesIsDownloadManagerReadyFunction : public ExtensionFunction {
  private:
   ~UtilitiesIsDownloadManagerReadyFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsDownloadManagerReadyFunction);
 };
 
 class UtilitiesSetContentSettingsFunction : public ExtensionFunction {
@@ -760,8 +694,6 @@ class UtilitiesSetContentSettingsFunction : public ExtensionFunction {
  private:
   ~UtilitiesSetContentSettingsFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetContentSettingsFunction);
 };
 
 class UtilitiesIsDialogOpenFunction : public ExtensionFunction {
@@ -772,8 +704,6 @@ class UtilitiesIsDialogOpenFunction : public ExtensionFunction {
  private:
   ~UtilitiesIsDialogOpenFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsDialogOpenFunction);
 };
 
 class UtilitiesFocusDialogFunction : public ExtensionFunction {
@@ -784,8 +714,6 @@ class UtilitiesFocusDialogFunction : public ExtensionFunction {
  private:
   ~UtilitiesFocusDialogFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesFocusDialogFunction);
 };
 
 class UtilitiesStartChromecastFunction : public ExtensionFunction {
@@ -797,8 +725,6 @@ class UtilitiesStartChromecastFunction : public ExtensionFunction {
  private:
   ~UtilitiesStartChromecastFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesStartChromecastFunction);
 };
 
 class UtilitiesIsFirstRunFunction : public ExtensionFunction {
@@ -809,8 +735,6 @@ class UtilitiesIsFirstRunFunction : public ExtensionFunction {
  private:
   ~UtilitiesIsFirstRunFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsFirstRunFunction);
 };
 
 class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
@@ -834,8 +758,6 @@ class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
 
   vivaldi::utilities::CaptureQRDestination dest_ =
       vivaldi::utilities::CAPTURE_QR_DESTINATION_DATAURL;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGenerateQRCodeFunction);
 };
 
 class UtilitiesGetGAPIKeyFunction : public ExtensionFunction {
@@ -847,8 +769,6 @@ class UtilitiesGetGAPIKeyFunction : public ExtensionFunction {
  private:
   ~UtilitiesGetGAPIKeyFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGAPIKeyFunction);
 };
 
 class UtilitiesGetGOAuthClientIdFunction : public ExtensionFunction {
@@ -860,8 +780,6 @@ class UtilitiesGetGOAuthClientIdFunction : public ExtensionFunction {
  private:
   ~UtilitiesGetGOAuthClientIdFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGOAuthClientIdFunction);
 };
 
 class UtilitiesGetGOAuthClientSecretFunction : public ExtensionFunction {
@@ -873,8 +791,17 @@ class UtilitiesGetGOAuthClientSecretFunction : public ExtensionFunction {
  private:
   ~UtilitiesGetGOAuthClientSecretFunction() override = default;
   ResponseAction Run() override;
+};
 
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGOAuthClientSecretFunction);
+class UtilitiesGetMOAuthClientIdFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getMOAuthClientId",
+                             UTILITIES_GET_MICROSOFT_API_CLIENT_ID)
+  UtilitiesGetMOAuthClientIdFunction() = default;
+
+ private:
+  ~UtilitiesGetMOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
 };
 
 class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
@@ -886,8 +813,6 @@ class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
  private:
   ~UtilitiesGetCommandLineValueFunction() override;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetCommandLineValueFunction);
 };
 
 class UtilitiesOsCryptFunction : public ExtensionFunction {
@@ -900,8 +825,6 @@ class UtilitiesOsCryptFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnEncryptDone(std::unique_ptr<std::string> encrypted, bool result);
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesOsCryptFunction);
 };
 
 class UtilitiesOsDecryptFunction : public ExtensionFunction {
@@ -914,8 +837,6 @@ class UtilitiesOsDecryptFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnDecryptDone(std::unique_ptr<std::string> decrypted, bool result);
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesOsDecryptFunction);
 };
 
 }  // namespace extensions

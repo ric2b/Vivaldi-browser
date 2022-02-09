@@ -349,6 +349,51 @@
       <message name="IDS_LOGIN_DEFAULT_USER_DESC_82" desc="Tooltip shown when the 'watermelon' avatar is hovered in the 'Choose device account image' section of the settings page. A watermelon is a large fruit of a plant of the gourd family, with smooth green skin, red pulp, and watery juice. Popular fruit in summer.">
         Watermelon
       </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_83" desc="Description of the default user icon with a picture of a person watering plants">
+        Person watering plants
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_84" desc="Description of the default user icon with a picture of a person daydreaming">
+        Person daydreaming
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_85" desc="Description of the default user icon with a picture of a person with flowers">
+        Person with flowers
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_86" desc="Description of the default user icon with a picture of a person with cats">
+        Person with cats
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_87" desc="Description of the default user icon with a picture of an artist">
+        Artist
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_88" desc="Description of the default user icon with a picture of a person doing tai chi">
+        Person doing tai chi
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_89" desc="Description of the default user icon with a picture of a person signing thank you">
+        Signing thank you
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_90" desc="Description of the default user icon with a picture of a person with coffee">
+        Person with coffee
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_91" desc="Description of the default user icon with a picture of a dog wagging tail">
+        Dog wagging tail
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_92" desc="Description of the default user icon with a picture of a nurse">
+        Nurse
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_93" desc="Description of the default user icon with a picture of a gamer">
+        Gamer
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_94" desc="Description of the default user icon with a picture of a bookworm">
+        Bookworm
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_95" desc="Description of the default user icon with a picture of a person biking">
+        Biking
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_96" desc="Description of the default user icon with a picture of a person in snow">
+        Person in snow
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_97" desc="Description of the default user icon with a picture of a person with megaphone">
+        Person with megaphone
+      </message>
 
 
       <!-- Attribution strings for stock user images, not translateable. -->
@@ -962,6 +1007,9 @@
       </message>
       <message name="IDS_IME_NAME_KEYBOARD_UK" desc="Input method name, shown in system tray menu, settings page, etc. following this template: “|language| (|variant|) |IME| with |layout| keyboard” which means “an input method that supports typing in the |variant| of |language|, using |IME| and a keyboard with |layout|. When a part in this template is unambiguous, it’s dropped for brevity. Translations should strive for similar consistency in structure among input method names. Note: On Chrome OS, an “input method” is a suite of all input functionalities. |IME| in the template refers to an optional aspect of an “input method” on Chrome OS, i.e. sophisticated transforms into text in |language| when using a keyboard layout not designed for |language|." meaning="Input method name">
         English (UK)
+      </message>
+      <message name="IDS_IME_NAME_KEYBOARD_ENGLISH_SOUTH_AFRICA" desc="Input method name, shown in system tray menu, settings page, etc. following this template: “|language| (|variant|) |IME| with |layout| keyboard” which means “an input method that supports typing in the |variant| of |language|, using |IME| and a keyboard with |layout|. When a part in this template is unambiguous, it’s dropped for brevity. Translations should strive for similar consistency in structure among input method names. Note: On Chrome OS, an “input method” is a suite of all input functionalities. |IME| in the template refers to an optional aspect of an “input method” on Chrome OS, i.e. sophisticated transforms into text in |language| when using a keyboard layout not designed for |language|." meaning="Input method name">
+        English (South Africa)
       </message>
       <message name="IDS_IME_NAME_KEYBOARD_UKRAINIAN" desc="Input method name, shown in system tray menu, settings page, etc. following this template: “|language| (|variant|) |IME| with |layout| keyboard” which means “an input method that supports typing in the |variant| of |language|, using |IME| and a keyboard with |layout|. When a part in this template is unambiguous, it’s dropped for brevity. Translations should strive for similar consistency in structure among input method names. Note: On Chrome OS, an “input method” is a suite of all input functionalities. |IME| in the template refers to an optional aspect of an “input method” on Chrome OS, i.e. sophisticated transforms into text in |language| when using a keyboard layout not designed for |language|." meaning="Input method name">
         Ukrainian

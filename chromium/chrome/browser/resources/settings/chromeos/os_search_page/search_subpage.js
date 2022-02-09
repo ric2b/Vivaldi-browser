@@ -17,7 +17,7 @@ import '../../prefs/prefs.js';
 import '../../prefs/pref_util.js';
 import '../../settings_shared_css.js';
 import '../../settings_vars_css.js';
-import '../localized_link/localized_link.js';
+import '//resources/cr_components/chromeos/localized_link/localized_link.js';
 import './search_engine.js';
 
 import {assert, assertNotReached} from '//resources/js/assert.m.js';
@@ -27,10 +27,10 @@ import {I18nBehavior} from '//resources/js/i18n_behavior.m.js';
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {PrefsBehavior} from '../../prefs/prefs_behavior.js';
 import {Route, RouteObserverBehavior, Router} from '../../router.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {routes} from '../os_route.m.js';
+import {PrefsBehavior} from '../prefs_behavior.js';
 
 Polymer({
   _template: html`{__html_template__}`,
@@ -121,11 +121,11 @@ Polymer({
    * @private
    */
   getAriaLabelledSubLabel_(subLabel) {
-    // Creating a <settings-localized-link> to get aria-labelled content with
+    // Creating a <localized-link> to get aria-labelled content with
     // the link. Since <settings-toggle-button> is a shared element which does
-    // not have access to <settings-localized-link> internally, we create dummy
+    // not have access to <localized-link> internally, we create dummy
     // element and take its innerHTML here.
-    const link = document.createElement('settings-localized-link');
+    const link = document.createElement('localized-link');
     link.setAttribute('localized-string', subLabel);
     link.setAttribute('hidden', true);
     document.body.appendChild(link);

@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.night_mode.settings;
 
-import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.UI_THEME_DARKEN_WEBSITES_ENABLED;
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.UI_THEME_SETTING;
 
 import android.os.Build;
@@ -14,9 +13,13 @@ import androidx.annotation.Nullable;
 import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.night_mode.NightModeMetrics;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.night_mode.R;
+import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
+import org.chromium.chrome.browser.night_mode.WebContentsDarkModeMessageController;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.UiUtils;
 
@@ -30,6 +33,13 @@ import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 public class ThemeSettingsFragment extends PreferenceFragmentCompat {
     static final String PREF_UI_THEME_PREF = "ui_theme_pref";
 
+    public static final String KEY_THEME_SETTINGS_ENTRY = "theme_settings_entry";
+
+    // Vivaldi
+    public static final String KEY_DARK_MODE_FOR_WEBPAGES = "dark_mode_for_webpages";
+
+    private boolean mWebContentsDarkModeEnabled;
+
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
         SettingsUtils.addPreferencesFromResource(this, R.xml.theme_preferences);
@@ -40,20 +50,42 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
         /*
         RadioButtonGroupThemePreference radioButtonGroupThemePreference =
                 (RadioButtonGroupThemePreference) findPreference(PREF_UI_THEME_PREF);
-        radioButtonGroupThemePreference.initialize(NightModeUtils.getThemeSetting(),
-                sharedPreferencesManager.readBoolean(UI_THEME_DARKEN_WEBSITES_ENABLED, false));
+        mWebContentsDarkModeEnabled = WebContentsDarkModeController.isGlobalUserSettingsEnabled();
+        radioButtonGroupThemePreference.initialize(
+                NightModeUtils.getThemeSetting(), mWebContentsDarkModeEnabled);
 
         radioButtonGroupThemePreference.setOnPreferenceChangeListener((preference, newValue) -> {
             if (ChromeFeatureList.isEnabled(
                         ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
-                sharedPreferencesManager.writeBoolean(UI_THEME_DARKEN_WEBSITES_ENABLED,
-                        radioButtonGroupThemePreference.isDarkenWebsitesEnabled());
+                if (radioButtonGroupThemePreference.isDarkenWebsitesEnabled()
+                        != mWebContentsDarkModeEnabled) {
+                    mWebContentsDarkModeEnabled =
+                            radioButtonGroupThemePreference.isDarkenWebsitesEnabled();
+                    WebContentsDarkModeController.setGlobalUserSettings(
+                            mWebContentsDarkModeEnabled);
+                }
             }
             int theme = (int) newValue;
             sharedPreferencesManager.writeInt(UI_THEME_SETTING, theme);
             return true;
         });
         */
+
+        // TODO(crbug.com/1252868): Notify feature engagement system that settings were opened.
+        // Record entry point metrics if this fragment is freshly created.
+        if (savedInstanceState == null) {
+            assert getArguments() != null
+                    && getArguments().containsKey(KEY_THEME_SETTINGS_ENTRY)
+                : "<theme_settings_entry> is missing in args.";
+            NightModeMetrics.recordThemeSettingsEntry(
+                    getArguments().getInt(KEY_THEME_SETTINGS_ENTRY));
+        }
+
+        if (ChromeFeatureList.isEnabled(
+                    ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
+            WebContentsDarkModeMessageController.notifyEventSettingsOpened(
+                    Profile.getLastUsedRegularProfile());
+        }
 
         // Note(david@vivaldi.com): Switch to handle dark mode for web pages.
         if (ChromeFeatureList.isEnabled(
@@ -66,11 +98,14 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
                     new ChromeSwitchPreference(getPreferenceManager().getContext(), null);
             darkWebPagesSwitch.setTitle(R.string.web_pages_dark_mode_switch);
             darkWebPagesSwitch.setSummary(R.string.web_pages_dark_mode_switch_desc);
+            // Note(Nagamani): This key will be used to enable/disable dark mode for individual
+            // webpages.
+            darkWebPagesSwitch.setKey(KEY_DARK_MODE_FOR_WEBPAGES);
             darkWebPagesSwitch.setChecked(
-                    sharedPreferencesManager.readBoolean(UI_THEME_DARKEN_WEBSITES_ENABLED, false));
+                    WebContentsDarkModeController.isGlobalUserSettingsEnabled());
             darkWebPagesSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-                sharedPreferencesManager.writeBoolean(
-                        UI_THEME_DARKEN_WEBSITES_ENABLED, (boolean) newValue);
+                SharedPreferencesManager.getInstance().writeBoolean(KEY_DARK_MODE_FOR_WEBPAGES, true);
+                WebContentsDarkModeController.setGlobalUserSettings((boolean) newValue);
                 return true;
             });
             getPreferenceScreen().addPreference(darkWebPagesSwitch);

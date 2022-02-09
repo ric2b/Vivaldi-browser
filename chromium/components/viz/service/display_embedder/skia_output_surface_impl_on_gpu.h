@@ -63,6 +63,8 @@ class PlatformWindowSurface;
 
 namespace viz {
 
+class AsyncReadResultHelper;
+class AsyncReadResultLock;
 class DawnContextProvider;
 class ImageContextImpl;
 class VulkanContextProvider;
@@ -108,6 +110,11 @@ class SkiaOutputSurfaceImplOnGpu
       BufferPresentedCallback buffer_presented_callback,
       ContextLostCallback context_lost_callback,
       GpuVSyncCallback gpu_vsync_callback);
+
+  SkiaOutputSurfaceImplOnGpu(const SkiaOutputSurfaceImplOnGpu&) = delete;
+  SkiaOutputSurfaceImplOnGpu& operator=(const SkiaOutputSurfaceImplOnGpu&) =
+      delete;
+
   ~SkiaOutputSurfaceImplOnGpu() override;
 
   gpu::CommandBufferId command_buffer_id() const {
@@ -139,6 +146,7 @@ class SkiaOutputSurfaceImplOnGpu
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane&
           output_surface_plane);
   void SwapBuffers(OutputSurfaceFrame frame, bool release_frame_buffer);
+  void ReleaseFrameBuffers(int n);
 
   void SetDependenciesResolvedTimings(base::TimeTicks task_ready);
   void SetDrawTimings(base::TimeTicks task_ready);
@@ -146,8 +154,8 @@ class SkiaOutputSurfaceImplOnGpu
   // Runs |deferred_framebuffer_draw_closure| when SwapBuffers() or CopyOutput()
   // will not.
   void SwapBuffersSkipped();
-  void EnsureBackbuffer() { output_device_->EnsureBackbuffer(); }
-  void DiscardBackbuffer() { output_device_->DiscardBackbuffer(); }
+  void EnsureBackbuffer();
+  void DiscardBackbuffer();
   void FinishPaintRenderPass(const gpu::Mailbox& mailbox,
                              sk_sp<SkDeferredDisplayList> ddl,
                              std::vector<ImageContextImpl*> image_contexts,
@@ -229,6 +237,11 @@ class SkiaOutputSurfaceImplOnGpu
       mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer>
           pending_receiver);
 
+  const scoped_refptr<AsyncReadResultLock> GetAsyncReadResultLock() const;
+
+  void AddAsyncReadResultHelper(AsyncReadResultHelper* helper);
+  void RemoveAsyncReadResultHelper(AsyncReadResultHelper* helper);
+
  private:
   class DisplayContext;
 
@@ -270,6 +283,15 @@ class SkiaOutputSurfaceImplOnGpu
     return !!dawn_context_provider_ &&
            gpu_preferences_.gr_context_type == gpu::GrContextType::kDawn;
   }
+
+  // Helper for `CopyOutput()` method, handles the RGBA format.
+  void CopyOutputRGBA(SkSurface* surface,
+                      copy_output::RenderPassGeometry geometry,
+                      const gfx::ColorSpace& color_space,
+                      const SkIRect& src_rect,
+                      SkSurface::RescaleMode rescale_mode,
+                      bool is_downscale_or_identity_in_both_dimensions,
+                      std::unique_ptr<CopyOutputRequest> request);
 
   // Schedules a task to check if any skia readback requests have completed
   // after a short delay. Will not schedule a task if there is already a
@@ -347,6 +369,11 @@ class SkiaOutputSurfaceImplOnGpu
   class PromiseImageAccessHelper {
    public:
     explicit PromiseImageAccessHelper(SkiaOutputSurfaceImplOnGpu* impl_on_gpu);
+
+    PromiseImageAccessHelper(const PromiseImageAccessHelper&) = delete;
+    PromiseImageAccessHelper& operator=(const PromiseImageAccessHelper&) =
+        delete;
+
     ~PromiseImageAccessHelper();
 
     void BeginAccess(std::vector<ImageContextImpl*> image_contexts,
@@ -357,8 +384,6 @@ class SkiaOutputSurfaceImplOnGpu
    private:
     SkiaOutputSurfaceImplOnGpu* const impl_on_gpu_;
     base::flat_set<ImageContextImpl*> image_contexts_;
-
-    DISALLOW_COPY_AND_ASSIGN(PromiseImageAccessHelper);
   };
   PromiseImageAccessHelper promise_image_access_helper_{this};
   base::flat_set<ImageContextImpl*> image_contexts_with_end_access_state_;
@@ -376,11 +401,6 @@ class SkiaOutputSurfaceImplOnGpu
 
   int num_readbacks_pending_ = 0;
   bool readback_poll_pending_ = false;
-
-  class AsyncReadResultLock;
-  class AsyncReadResultHelper;
-  class CopyOutputResultYUV;
-  class CopyOutputResultRGBA;
 
   // Lock for |async_read_result_helpers_|.
   scoped_refptr<AsyncReadResultLock> async_read_result_lock_;
@@ -420,8 +440,6 @@ class SkiaOutputSurfaceImplOnGpu
 
   base::WeakPtr<SkiaOutputSurfaceImplOnGpu> weak_ptr_;
   base::WeakPtrFactory<SkiaOutputSurfaceImplOnGpu> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SkiaOutputSurfaceImplOnGpu);
 };
 
 }  // namespace viz

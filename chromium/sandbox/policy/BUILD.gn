@@ -29,6 +29,7 @@ component("policy") {
     ":sanitizer_buildflags",
     "//base",
     "//build:chromeos_buildflags",
+    "//ppapi/buildflags",
     "//printing/buildflags",
     "//sandbox:common",
     "//sandbox/policy/mojom",
@@ -54,8 +55,6 @@ component("policy") {
       "linux/bpf_network_policy_linux.h",
       "linux/bpf_ppapi_policy_linux.cc",
       "linux/bpf_ppapi_policy_linux.h",
-      "linux/bpf_print_backend_policy_linux.cc",
-      "linux/bpf_print_backend_policy_linux.h",
       "linux/bpf_print_compositor_policy_linux.cc",
       "linux/bpf_print_compositor_policy_linux.h",
       "linux/bpf_renderer_policy_linux.cc",
@@ -73,6 +72,12 @@ component("policy") {
       "linux/sandbox_seccomp_bpf_linux.cc",
       "linux/sandbox_seccomp_bpf_linux.h",
     ]
+    if (enable_oop_printing) {
+      sources += [
+        "linux/bpf_print_backend_policy_linux.cc",
+        "linux/bpf_print_backend_policy_linux.h",
+      ]
+    }
     configs += [
       "//media:media_config",
       "//media/audio:platform_config",
@@ -118,6 +123,8 @@ component("policy") {
   }
   if (is_win) {
     sources += [
+      "win/lpac_capability.cc",
+      "win/lpac_capability.h",
       "win/sandbox_diagnostics.cc",
       "win/sandbox_diagnostics.h",
       "win/sandbox_win.cc",

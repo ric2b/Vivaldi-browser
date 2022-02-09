@@ -19,7 +19,11 @@
 class VivaldiNativeAppWindowViewsAura : public VivaldiNativeAppWindowViews {
  public:
   VivaldiNativeAppWindowViewsAura();
- ~VivaldiNativeAppWindowViewsAura() override;
+  ~VivaldiNativeAppWindowViewsAura() override;
+  VivaldiNativeAppWindowViewsAura(const VivaldiNativeAppWindowViewsAura&) =
+      delete;
+  VivaldiNativeAppWindowViewsAura& operator=(
+      const VivaldiNativeAppWindowViewsAura&) = delete;
 
  protected:
   ui::WindowShowState GetRestorableState(
@@ -33,9 +37,6 @@ class VivaldiNativeAppWindowViewsAura : public VivaldiNativeAppWindowViews {
   void OnBeforeWidgetInit(views::Widget::InitParams& init_params) override;
 
   ui::WindowShowState GetRestoredState() const override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowViewsAura);
 };
 
 #endif  // UI_VIVALDI_NATIVE_APP_WINDOW_VIEWS_AURA_H_

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/sharing_hub/screenshot/screenshot_captured_bubble.h"
 
+#include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -29,6 +30,11 @@
 #include "ui/views/view.h"
 
 namespace {
+
+// The Select->Copy/Save flow can be experimented with, but the edit piece will
+// be in development for some time. This flag can be used to enable the edit
+// button during development, and may later turn into a feature flag.
+constexpr bool kShowEditButton = false;
 
 // Rendered image size, pixels.
 constexpr int kImageWidthPx = 336;
@@ -60,7 +66,7 @@ ScreenshotCapturedBubble::ScreenshotCapturedBubble(
     base::OnceCallback<void(NavigateParams*)> edit_callback)
     : LocationBarBubbleDelegateView(anchor_view, nullptr),
       image_(image),
-      web_contents_(web_contents),
+      web_contents_(web_contents->GetWeakPtr()),
       profile_(profile),
       edit_callback_(std::move(edit_callback)) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
@@ -147,21 +153,23 @@ void ScreenshotCapturedBubble::Init() {
   // Padding
   AddSmallPaddingRow(layout);
 
-  // Controls row: edit, share, and download button.
+  // Controls row: optional edit button and download button.
   views::ColumnSet* control_columns =
       layout->AddColumnSet(kDownloadRowColumnSetId);
   // Column for edit button.
-  control_columns->AddColumn(
-      views::GridLayout::LEADING, views::GridLayout::CENTER, 1.0,
-      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
-  layout->StartRow(views::GridLayout::kFixedSize, kDownloadRowColumnSetId);
+  if (kShowEditButton) {
+    control_columns->AddColumn(
+        views::GridLayout::LEADING, views::GridLayout::CENTER, 1.0,
+        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
+    layout->StartRow(views::GridLayout::kFixedSize, kDownloadRowColumnSetId);
 
-  int kPaddingEditShareButtonPx =
-      kImageWidthPx - edit_button->CalculatePreferredSize().width() -
-      download_button->CalculatePreferredSize().width();
-  // Spacing between the edit and share buttons.
-  control_columns->AddPaddingColumn(views::GridLayout::kFixedSize,
-                                    kPaddingEditShareButtonPx);
+    int kPaddingEditDownloadButtonPx =
+        kImageWidthPx - edit_button->CalculatePreferredSize().width() -
+        download_button->CalculatePreferredSize().width();
+    // Spacing between the edit and download buttons.
+    control_columns->AddPaddingColumn(views::GridLayout::kFixedSize,
+                                      kPaddingEditDownloadButtonPx);
+  }
 
   // Column for download button
   control_columns->AddColumn(
@@ -169,7 +177,9 @@ void ScreenshotCapturedBubble::Init() {
       views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   layout->StartRow(views::GridLayout::kFixedSize, kDownloadRowColumnSetId);
 
-  edit_button_ = layout->AddView(std::move(edit_button));
+  if (kShowEditButton) {
+    edit_button_ = layout->AddView(std::move(edit_button));
+  }
   download_button_ = layout->AddView(std::move(download_button));
   // End controls row
 }
@@ -191,7 +201,10 @@ void ScreenshotCapturedBubble::DownloadButtonPressed() {
   const SkBitmap& bitmap = image_rep.GetBitmap();
   const GURL data_url = GURL(webui::GetBitmapDataUrl(bitmap));
 
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  if (!web_contents_)
+    return;
+
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_.get());
   content::DownloadManager* download_manager =
       browser->profile()->GetDownloadManager();
   // TODO(crbug.com/1186839): Update the annotation's |setting| and
@@ -219,12 +232,14 @@ void ScreenshotCapturedBubble::DownloadButtonPressed() {
       })");
   std::unique_ptr<download::DownloadUrlParameters> params =
       content::DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(
-          web_contents_, data_url, traffic_annotation);
+          web_contents_.get(), data_url, traffic_annotation);
   // Suggest a name incorporating the hostname. Protocol, TLD, etc are
   // not taken into consideration. Duplicate names get automatic suffixes.
   params->set_suggested_name(
       GetFilenameForURL(web_contents_->GetLastCommittedURL()));
   download_manager->DownloadUrl(std::move(params));
+  base::RecordAction(base::UserMetricsAction(
+      "SharingDesktopScreenshot.ScreenshotSavedViaBubble"));
 }
 
 void ScreenshotCapturedBubble::EditButtonPressed() {

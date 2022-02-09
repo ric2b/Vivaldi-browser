@@ -18,7 +18,7 @@ namespace {
 // Copied from chromium/chrome/browser/shell_integration_linux.cc
 const char kXdgSettings[] = "xdg-settings";
 const char kXdgSettingsDefaultBrowser[] = "default-web-browser";
-}
+}  // namespace
 
 bool IsOperaDefaultBrowser() {
   std::vector<std::string> argv;
@@ -33,8 +33,8 @@ bool IsOperaDefaultBrowser() {
 }
 
 bool IsChromeDefaultBrowser() {
-  //todo arnar
+  // todo arnar
   return false;
 }
 
-} //  namespace vivaldi
+}  //  namespace vivaldi

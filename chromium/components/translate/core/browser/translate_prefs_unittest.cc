@@ -36,6 +36,7 @@ namespace translate {
 
 namespace {
 
+using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::IsEmpty;
 using ::testing::UnorderedElementsAreArray;
@@ -63,7 +64,7 @@ class TranslatePrefsTest : public testing::Test {
     accept_languages_tester_ =
         std::make_unique<language::test::LanguagePrefTester>(&prefs_);
     now_ = base::Time::Now();
-    two_days_ago_ = now_ - base::TimeDelta::FromDays(2);
+    two_days_ago_ = now_ - base::Days(2);
   }
 
   void SetUp() override {
@@ -929,6 +930,33 @@ TEST_F(TranslatePrefsTest, MoveLanguageDown) {
   translate_prefs_->RearrangeLanguage("fr", TranslatePrefs::kDown, 6,
                                       {"en", "fr", "it", "es", "zh"});
   accept_languages_tester_->ExpectAcceptLanguagePrefs("en,it,es,zh,fr");
+}
+
+TEST_F(TranslatePrefsTest, MigrateNeverPromptSites) {
+  // Add two sites to the deprecated pref that need to be migrated.
+  translate_prefs_->AddValueToNeverPromptList(
+      TranslatePrefs::kPrefNeverPromptSitesDeprecated, "unmigrated.com");
+  translate_prefs_->AddValueToNeverPromptList(
+      TranslatePrefs::kPrefNeverPromptSitesDeprecated, "migratedWrong.com");
+  EXPECT_EQ(prefs_.Get(TranslatePrefs::kPrefNeverPromptSitesDeprecated)
+                ->GetList()
+                .size(),
+            2u);
+  // Also put one of those sites on the new pref but migrated incorrectly.
+  DictionaryPrefUpdate never_prompt_list_update(
+      &prefs_, TranslatePrefs::kPrefNeverPromptSitesWithTime);
+  base::Value* never_prompt_list = never_prompt_list_update.Get();
+  never_prompt_list->SetKey("migratedWrong.com", base::Value(0));
+
+  // Now migrate and fix the prefs.
+  translate_prefs_->MigrateNeverPromptSites();
+  EXPECT_THAT(translate_prefs_->GetNeverPromptSitesBetween(
+                  base::Time::Now() - base::Days(1), base::Time::Max()),
+              ElementsAre("migratedWrong.com", "unmigrated.com"));
+  EXPECT_EQ(prefs_.Get(TranslatePrefs::kPrefNeverPromptSitesDeprecated)
+                ->GetList()
+                .size(),
+            0u);
 }
 
 TEST_F(TranslatePrefsTest, SiteNeverPromptList) {

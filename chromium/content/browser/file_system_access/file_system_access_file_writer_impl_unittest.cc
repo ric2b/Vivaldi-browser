@@ -14,10 +14,10 @@
 #include "base/containers/contains.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
+#include "content/browser/file_system_access/file_system_access_write_lock_manager.h"
 #include "content/browser/file_system_access/fixed_file_system_access_permission_grant.h"
 #include "content/browser/file_system_access/mock_file_system_access_permission_context.h"
 #include "content/public/test/browser_task_environment.h"
@@ -72,7 +72,7 @@ class TestFileSystemBackend : public storage::TestFileSystemBackend {
                         const base::FilePath& base_path)
       : storage::TestFileSystemBackend(task_runner, base_path) {}
 
-  storage::FileSystemOperation* CreateFileSystemOperation(
+  std::unique_ptr<storage::FileSystemOperation> CreateFileSystemOperation(
       const storage::FileSystemURL& url,
       storage::FileSystemContext* context,
       base::File::Error* error_code) const override {
@@ -93,10 +93,6 @@ class TestFileSystemBackend : public storage::TestFileSystemBackend {
 };
 
 }  // namespace
-
-std::string GetHexEncodedString(const std::string& input) {
-  return base::HexEncode(base::as_bytes(base::make_span(input)));
-}
 
 class FileSystemAccessFileWriterImplTest : public testing::Test {
  public:
@@ -154,10 +150,15 @@ class FileSystemAccessFileWriterImplTest : public testing::Test {
           quarantine_receivers_.Add(&quarantine_, std::move(receiver));
         });
 
+    auto lock = manager_->TakeWriteLock(
+        test_file_url_,
+        FileSystemAccessWriteLockManager::WriteLockType::kShared);
+    ASSERT_TRUE(lock.has_value());
+
     handle_ = manager_->CreateFileWriter(
-        FileSystemAccessManagerImpl::BindingContext(kTestStorageKey.origin(),
-                                                    kTestURL, kFrameId),
-        test_file_url_, test_swap_url_,
+        FileSystemAccessManagerImpl::BindingContext(kTestStorageKey, kTestURL,
+                                                    kFrameId),
+        test_file_url_, test_swap_url_, std::move(lock.value()),
         FileSystemAccessManagerImpl::SharedHandleState(permission_grant_,
                                                        permission_grant_),
         remote_.InitWithNewPipeAndPassReceiver(),
@@ -192,8 +193,7 @@ class FileSystemAccessFileWriterImplTest : public testing::Test {
             contents, mojo::StringDataSource::AsyncWritingMode::
                           STRING_MAY_BE_INVALIDATED_BEFORE_COMPLETION),
         base::BindOnce(
-            base::DoNothing::Once<std::unique_ptr<mojo::DataPipeProducer>,
-                                  MojoResult>(),
+            [](std::unique_ptr<mojo::DataPipeProducer>, MojoResult) {},
             std::move(producer)));
     return consumer_handle;
   }
@@ -310,77 +310,6 @@ class FileSystemAccessFileWriterImplTest : public testing::Test {
   mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> remote_;
   base::WeakPtr<FileSystemAccessFileWriterImpl> handle_;
 };
-
-TEST_F(FileSystemAccessFileWriterImplTest, HashSimpleOK) {
-  uint64_t bytes_written;
-  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
-  EXPECT_EQ(bytes_written, 3u);
-
-  base::RunLoop loop;
-  handle_->ComputeHashForSwapFileForTesting(base::BindLambdaForTesting(
-      [&](base::File::Error result, const std::string& hash_value,
-          int64_t size) {
-        EXPECT_EQ(base::File::FILE_OK, result);
-        EXPECT_EQ(
-            "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
-            GetHexEncodedString(hash_value));
-        EXPECT_EQ(3, size);
-        loop.Quit();
-      }));
-  loop.Run();
-}
-
-TEST_F(FileSystemAccessFileWriterImplTest, HashEmptyOK) {
-  base::RunLoop loop;
-  handle_->ComputeHashForSwapFileForTesting(base::BindLambdaForTesting(
-      [&](base::File::Error result, const std::string& hash_value,
-          int64_t size) {
-        EXPECT_EQ(base::File::FILE_OK, result);
-        EXPECT_EQ(
-            "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
-            GetHexEncodedString(hash_value));
-        EXPECT_EQ(0, size);
-        loop.Quit();
-      }));
-  loop.Run();
-}
-
-TEST_F(FileSystemAccessFileWriterImplTest, HashNonExistingFileFails) {
-  ASSERT_EQ(base::File::FILE_OK, storage::AsyncFileTestHelper::Remove(
-                                     file_system_context_.get(),
-                                     handle_->swap_url(), /*recursive=*/false));
-  base::RunLoop loop;
-  handle_->ComputeHashForSwapFileForTesting(base::BindLambdaForTesting(
-      [&](base::File::Error result, const std::string& hash_value,
-          int64_t size) {
-        EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND, result);
-        loop.Quit();
-      }));
-  loop.Run();
-}
-
-TEST_F(FileSystemAccessFileWriterImplTest, HashLargerFileOK) {
-  size_t target_size = 9 * 1024u;
-  std::string file_data(target_size, '0');
-  uint64_t bytes_written;
-  FileSystemAccessStatus result = WriteSync(0, file_data, &bytes_written);
-  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
-  EXPECT_EQ(bytes_written, target_size);
-
-  base::RunLoop loop;
-  handle_->ComputeHashForSwapFileForTesting(base::BindLambdaForTesting(
-      [&](base::File::Error result, const std::string& hash_value,
-          int64_t size) {
-        EXPECT_EQ(base::File::FILE_OK, result);
-        EXPECT_EQ(
-            "34A82D28CB1E0BA92CADC4BE8497DC9EEA9AC4F63B9C445A9E52D298990AC491",
-            GetHexEncodedString(hash_value));
-        EXPECT_EQ(static_cast<int64_t>(target_size), size);
-        loop.Quit();
-      }));
-  loop.Run();
-}
 
 TEST_F(FileSystemAccessFileWriterImplTest, WriteValidEmptyString) {
   uint64_t bytes_written;
@@ -682,11 +611,15 @@ TEST_F(FileSystemAccessFileWriterAfterWriteChecksTest,
             storage::AsyncFileTestHelper::CreateFile(file_system_context_.get(),
                                                      test_swap_url_));
 
+  auto lock = manager_->TakeWriteLock(
+      test_file_url_, FileSystemAccessWriteLockManager::WriteLockType::kShared);
+  ASSERT_TRUE(lock.has_value());
+
   mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> remote;
   handle_ = manager_->CreateFileWriter(
-      FileSystemAccessManagerImpl::BindingContext(kTestStorageKey.origin(),
-                                                  kTestURL, kFrameId),
-      test_file_url_, test_swap_url_,
+      FileSystemAccessManagerImpl::BindingContext(kTestStorageKey, kTestURL,
+                                                  kFrameId),
+      test_file_url_, test_swap_url_, std::move(lock.value()),
       FileSystemAccessManagerImpl::SharedHandleState(permission_grant_,
                                                      permission_grant_),
       remote.InitWithNewPipeAndPassReceiver(),

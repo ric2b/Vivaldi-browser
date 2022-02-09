@@ -663,8 +663,11 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   const auto& sk_image_sync_token =
       transferable_resource.mailbox_holder.sync_token;
 
-  const SkImageInfo sk_image_info =
-      SkImageInfo::MakeN32Premul(size_.Width(), size_.Height());
+  auto sk_color_type = viz::ResourceFormatToClosestSkColorType(
+      /*gpu_compositing=*/true, transferable_resource.format);
+
+  const SkImageInfo sk_image_info = SkImageInfo::Make(
+      size_.Width(), size_.Height(), sk_color_type, kPremul_SkAlphaType);
 
   // TODO(xidachen): Create a small pool of recycled textures from
   // ImageBitmapRenderingContext's transferFromImageBitmap, and try to use them
@@ -1106,7 +1109,7 @@ cc::Layer* DrawingBuffer::CcLayer() {
     layer_->SetNearestNeighbor(filter_quality_ ==
                                cc::PaintFlags::FilterQuality::kNone);
 
-    if (opengl_flip_y_extension_)
+    if (opengl_flip_y_extension_ && IsUsingGpuCompositing())
       layer_->SetFlipped(false);
   }
 

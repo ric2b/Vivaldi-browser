@@ -19,7 +19,7 @@ namespace ui {
 class AcceleratorProvider;
 class MenuModel;
 class SimpleMenuModel;
-}
+}  // namespace ui
 
 // VivaldiSystemMenuModelBuilder is responsible for building and owning the
 // system menu model.
@@ -28,6 +28,9 @@ class VivaldiSystemMenuModelBuilder {
   VivaldiSystemMenuModelBuilder(ui::AcceleratorProvider* provider,
                                 Browser* browser);
   ~VivaldiSystemMenuModelBuilder();
+  VivaldiSystemMenuModelBuilder(const VivaldiSystemMenuModelBuilder&) = delete;
+  VivaldiSystemMenuModelBuilder& operator=(
+      const VivaldiSystemMenuModelBuilder&) = delete;
 
   // Populates the menu.
   void Init();
@@ -50,8 +53,6 @@ class VivaldiSystemMenuModelBuilder {
   SystemMenuModelDelegate menu_delegate_;
   std::unique_ptr<ui::MenuModel> menu_model_;
   std::unique_ptr<ZoomMenuModel> zoom_menu_contents_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSystemMenuModelBuilder);
 };
 
 #endif  // UI_VIEWS_VIVALDI_SYSTEM_MENU_MODEL_BUILDER_H_

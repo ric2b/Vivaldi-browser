@@ -247,14 +247,13 @@ class StartupBrowserCreator {
       Profile::CreateStatus status);
 
   // TODO(crbug/1213171): Move web-app functionality to its own file.
-  // The startup launch logic that is shared between ProcessCmdLineImpl()
-  // and web_app::MaybeLaunchProtocolHandlerWebApp().
-  bool StartupLaunchAfterProtocolHandler(const base::CommandLine& command_line,
-                                         const base::FilePath& cur_dir,
-                                         Profile* privacy_safe_profile,
-                                         bool process_startup,
-                                         Profile* last_used_profile,
-                                         const Profiles& last_opened_profiles);
+  bool ContinueProcessingCommandLineAfterEarlyWebAppCheck(
+      const base::CommandLine& command_line,
+      const base::FilePath& cur_dir,
+      Profile* privacy_safe_profile,
+      bool process_startup,
+      Profile* last_used_profile,
+      const Profiles& last_opened_profiles);
 
   // Returns true once a profile was activated. Used by the
   // StartupBrowserCreatorTest.LastUsedProfileActivated test.
@@ -275,11 +274,6 @@ class StartupBrowserCreator {
 
   static bool in_synchronous_profile_launch_;
 };
-
-// Returns the list of URLs to open from the command line.
-std::vector<GURL> GetURLsFromCommandLine(const base::CommandLine& command_line,
-                                         const base::FilePath& cur_dir,
-                                         Profile* profile);
 
 // Returns true if |profile| has exited uncleanly and has not been launched
 // after the unclean exit.

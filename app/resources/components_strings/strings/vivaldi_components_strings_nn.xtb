@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Om utgåva</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> sende ingen data.</translation>
 <translation id="1559528461873125649">Inga slik fil eller katalog</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Prøv å <ph name="BEGIN_LINK" />besøkja nettstaden si heimeside<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protokollen er ikkje støtta</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å køyra Windows-nettverksdiagnostikk<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Denne nettstaden inneheld skadelege program</translation>
 <translation id="1916770123977586577">Du må lasta om att sida for å få oppdatert nettstadinninnstillingane</translation>
-<translation id="1919345977826869612">Reklame</translation>
 <translation id="1974060860693918893">Avansert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />sjå over mellomtenaren og brannmuren<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Lyd</translation>
 <translation id="2119505898009119320">Utferda til: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Bakgrunnssynk</translation>
 <translation id="2166378884831602661">Denne nettstaden tilbyr ikkje eit trygt samband</translation>
 <translation id="2187317261103489799">Oppdag (standard)</translation>
 <translation id="2224337661447660594">Ingen Internett</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">Internettilgangen din er blokkert</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> krev eit brukarnamn og passord.</translation>
 <translation id="2337852623177822836">Innstillinga er kontrollert av administratoren din</translation>
-<translation id="2344028582131185878">Automatiske nedlastingar</translation>
 <translation id="2355395290879513365">Åtakarar kan vera i stand til å sjå bilda du ser på på denne nettstaden og lura deg ved å endra dei.</translation>
 <translation id="2356070529366658676">Spør</translation>
 <translation id="2359808026110333948">Hald fram</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />køyr nettverksdiagnostikk<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Varsel</translation>
 <translation id="2491414235131909199">Ei utviding blokkerte denne sida</translation>
 <translation id="2501278716633472235">Gå attende</translation>
 <translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sende eit ugyldig svar.</translation>
-<translation id="2586657967955657006">Utklippstavle</translation>
 <translation id="2609632851001447353">Variantar</translation>
 <translation id="2634124572758952069">Fann ikkje <ph name="HOST_NAME" /> si IP-adresse .</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
       å bruka ein mellomtenar:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på last om att-knappen for å senda dataa som trengst for å lasta sida.</translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Oppdag alltid viktig innhald på denne sida</translation>
 <translation id="3308738399950580893">annonsar</translation>
 <translation id="3422472998109090673">Klarer ikkje no å nå <ph name="HOST_NAME" />.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Detaljar</translation>
 <translation id="4558551763791394412">Prøv å slå av utvidingane dine.</translation>
 <translation id="4592951414987517459">Tilkoplinga di til <ph name="DOMAIN" /> er kryptert med ein moderne krypteringspakke.</translation>
-<translation id="4690462567478992370">Ikkje lenger godta ugyldige sertifikat</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Sambandet ditt vart avbrote</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />køyr Windows-nettverksdiagnostikk<ph name="END_LINK" /></translation>
@@ -117,7 +108,6 @@
 <translation id="4750917950439032686">Opplysningane dine (t.d. passord eller kredittkortnummer) er private når dei vert sende til denne nettstaden.</translation>
 <translation id="4764776831041365478">Nettsida hos <ph name="URL" /> er kanskje mellombels nede eller er kan hende flytta permanent til ei ny adresse.</translation>
 <translation id="4943872375798546930">Ingen resultat</translation>
-<translation id="4974590756084640048">Slå på att åtvaringar</translation>
 <translation id="5023310440958281426">Sjå over administratoren sine reglar</translation>
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =(1 {1 i bruk} other {# i bruk}}</translation>
@@ -136,9 +126,6 @@
 <translation id="5610142619324316209">Kontrollerer sambandet</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> vidaresende deg for mange gongar.</translation>
 <translation id="5675650730144413517">Denne sida fungerer ikkje</translation>
-<translation id="5689516760719285838">Stad</translation>
-<translation id="5710435578057952990">Identiteten til denne nettstaden er ikkje vorten stadfesta.</translation>
-<translation id="5778550464785688721">Full kontroll over MIDI-einingar</translation>
 <translation id="5785756445106461925">Vidare inneheld denne sida andre ressursar som ikkje er trygge. Desse kan verta lesne av andre under overføringa og kan verta endra av ein åtakar for å endra korleis sida ser ut.</translation>
 <translation id="5799902971440853357">Du kan ikkje besøkja <ph name="SITE" /> nett no fordi nettstaden sende påloggingsopplysningar som Vivaldi ikkje kan handtera. Nettverksfeil og -åtak er ofte mellombelse, so denne sida vil sannsynlegvis fungera seinare.</translation>
 <translation id="5810442152076338065">Tilkoplinga di til <ph name="DOMAIN" /> er kryptert med ein utgått krypteringspakke.</translation>
@@ -153,7 +140,6 @@
 <translation id="6177128806592000436">Tilkoplinga til denne nettstaden er ikkje trygt</translation>
 <translation id="6203231073485539293">Kontroller internettsambandet</translation>
 <translation id="6225522625585012689">Besøk &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for å sjå lista over blokkerte adresser og andre reglar systemadministratoren har sett i verk.</translation>
-<translation id="625755898061068298">Du har valt å slå av tryggleiksåtvaringane for denne nettstaden.</translation>
 <translation id="6264485186158353794">Attende til tryggleiken</translation>
 <translation id="6305205051461490394">Klarer ikkje å nå <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Sjå over DNS-innstillingane</translation>
@@ -183,7 +169,6 @@
 <translation id="7445762425076701745">Identiteten til tenaren du er tilkopla kan ikkje heilt stadfestast sidan tenaren bruker eit namn som berre er gyldig på lokalnettverket ditt. Ein ekstern sertifiseringsinstans kan derfor ikkje validera han. Somme sertifiseringsinstansar gjev ut sertifikat for slike namn likevel. Dette betyr at det ikkje er mogleg å vera sikker på at du er tilkopla rett nettstad og ikkje ein åtakar.</translation>
 <translation id="7455133967321480974">Bruk systemstandarden (blokker)</translation>
 <translation id="7518003948725431193">Fann inga nettside på nettadressa: <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Denne nettsida krev data som du skreiv inn tidlegare for å kunna visa ho skikkeleg. Du kan senda dataa på ny, men ved å gjera det vil du ogso repetera ei kvar handling denne sida utførte.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" />klarer ikkje å behandla denne førespurnaden no.</translation>
 <translation id="7662298039739062396">Innstillinga er kontrollert av ei utviding</translation>
@@ -229,7 +214,6 @@
 <translation id="9169664750068251925">Blokker alltid på denne sida</translation>
 <translation id="9180553614777056266">Annonseblokkering</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> bruker ein ikkje støtta protokoll.</translation>
-<translation id="9219103736887031265">Bilde</translation>
 <translation id="936602727769022409">Du kan koma til å missa tilgangen til Google-kontoen din. Vivaldi rår til at du endrar passordet ditt no. Du vil verta spurt om å logga deg på.</translation>
 <translation id="969892804517981540">Offisielt utgåvesteg</translation>
 <translation id="988159990683914416">utviklarutgåve</translation>

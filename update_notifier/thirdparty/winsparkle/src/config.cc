@@ -66,13 +66,13 @@ base::FilePath GetExeDir() {
   return g_install_dir.Append(installer::kInstallBinaryDir);
 }
 
-bool IsUsingTaskScheduler() {
-  return true;
-}
-
 bool DoesRunAsSystemService() {
-  return g_install_type == vivaldi::InstallType::kForAllUsers &&
-         g_mode == UpdateMode::kSilentUpdate;
+  // This is not yet ready.
+  if ((false)) {
+    return g_install_type == vivaldi::InstallType::kForAllUsers &&
+           g_mode == UpdateMode::kSilentUpdate;
+  }
+  return false;
 }
 
 }  // namespace vivaldi_update_notifier

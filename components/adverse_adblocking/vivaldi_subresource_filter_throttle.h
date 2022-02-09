@@ -17,12 +17,12 @@
 namespace content {
 class BrowserContext;
 class WebContents;
-}
+}  // namespace content
 
-using subresource_filter::SubresourceFilterSafeBrowsingClient;
-using subresource_filter::Configuration;
-using subresource_filter::ActivationList;
 using subresource_filter::ActivationDecision;
+using subresource_filter::ActivationList;
+using subresource_filter::Configuration;
+using subresource_filter::SubresourceFilterSafeBrowsingClient;
 
 enum class ActivationPosition {
   kOnly = 0,
@@ -38,10 +38,12 @@ class VivaldiSubresourceFilterAdblockingThrottle
     : public content::NavigationThrottle,
       public base::SupportsWeakPtr<VivaldiSubresourceFilterAdblockingThrottle> {
  public:
-  VivaldiSubresourceFilterAdblockingThrottle(
-      content::NavigationHandle* handle);
+  VivaldiSubresourceFilterAdblockingThrottle(content::NavigationHandle* handle);
   ~VivaldiSubresourceFilterAdblockingThrottle() override;
-
+  VivaldiSubresourceFilterAdblockingThrottle(
+      const VivaldiSubresourceFilterAdblockingThrottle&) = delete;
+  VivaldiSubresourceFilterAdblockingThrottle& operator=(
+      const VivaldiSubresourceFilterAdblockingThrottle&) = delete;
 
   // content::NavigationThrottle:
   content::NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
@@ -73,9 +75,10 @@ class VivaldiSubresourceFilterAdblockingThrottle
   void CheckCurrentUrl();
   void NotifyResult();
 
-  void LogMetricsOnChecksComplete(ActivationList matched_list,
-    ActivationDecision decision,
-    subresource_filter::mojom::ActivationLevel level) const;
+  void LogMetricsOnChecksComplete(
+      ActivationList matched_list,
+      ActivationDecision decision,
+      subresource_filter::mojom::ActivationLevel level) const;
 
   bool HasFinishedAllSafeBrowsingChecks() const;
   // Gets the configuration with the highest priority among those activated.
@@ -102,7 +105,6 @@ class VivaldiSubresourceFilterAdblockingThrottle
   bool deferring_ = false;
 
   content::BrowserContext* browser_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSubresourceFilterAdblockingThrottle);
 };
+
 #endif  // COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_SUBRESOURCE_FILTER_THROTTLE_H_

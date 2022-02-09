@@ -14,7 +14,7 @@
 // #import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.js';
 // #import {CrSettingsPrefs, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
-// #import {eventToPromise, waitAfterNextRender, waitBeforeNextRender} from '../../../test_util.m.js';
+// #import {eventToPromise, waitAfterNextRender, waitBeforeNextRender} from '../../../test_util.js';
 // clang-format on
 
 cr.define('settings_people_page_quick_unlock', function() {
@@ -383,15 +383,13 @@ cr.define('settings_people_page_quick_unlock', function() {
       });
 
       test('Deep link to enable lock screen', async () => {
-        loadTimeData.overrideValues({isDeepLinkingEnabled: true});
-
         const params = new URLSearchParams;
         params.append('settingId', '303');
         settings.Router.getInstance().navigateTo(
             settings.routes.LOCK_SCREEN, params);
 
-        const deepLinkElement =
-            getFromElement('#enableLockScreen').$$('cr-toggle');
+        const deepLinkElement = getFromElement('#enableLockScreen')
+                                    .shadowRoot.querySelector('cr-toggle');
         assert(!!deepLinkElement);
         await test_util.waitAfterNextRender(deepLinkElement);
         assertEquals(

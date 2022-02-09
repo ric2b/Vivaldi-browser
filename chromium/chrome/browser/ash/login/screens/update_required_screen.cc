@@ -41,8 +41,7 @@ constexpr char kUserActionConfirmDeleteUsersData[] = "confirm-delete-users";
 // Delay before showing error message if captive portal is detected.
 // We wait for this delay to let captive portal to perform redirect and show
 // its login page before error message appears.
-constexpr const base::TimeDelta kDelayErrorMessage =
-    base::TimeDelta::FromSeconds(10);
+constexpr const base::TimeDelta kDelayErrorMessage = base::Seconds(10);
 
 }  // namespace
 
@@ -430,7 +429,10 @@ void UpdateRequiredScreen::DeleteUsersData() {
   // change underneath.
   const user_manager::UserList user_list = user_manager->GetUsers();
   for (user_manager::User* user : user_list) {
-    user_manager->RemoveUser(user->GetAccountId(), this /* delegate */);
+    user_manager->RemoveUser(user->GetAccountId(),
+                             user_manager::UserRemovalReason::
+                                 LOCAL_USER_INITIATED_ON_REQUIRED_UPDATE,
+                             /*delegate=*/this);
   }
 }
 

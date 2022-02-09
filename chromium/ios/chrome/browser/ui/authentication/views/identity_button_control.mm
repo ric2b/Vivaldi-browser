@@ -9,7 +9,6 @@
 #import "ios/chrome/browser/ui/authentication/views/identity_view.h"
 #import "ios/chrome/browser/ui/authentication/views/views_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
@@ -53,7 +52,6 @@ const CGFloat kArrowDownMargin = 12.;
     _arrowImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _arrowDirection = IdentityButtonControlArrowDown;
     [self updateArrowDirection];
-    _arrowImageView.tintColor = UIColor.cr_labelColor;
     [self addSubview:_arrowImageView];
 
     // Main view with avatar, name and email.
@@ -82,9 +80,7 @@ const CGFloat kArrowDownMargin = 12.;
     AddSameCenterYConstraint(self, _arrowImageView);
     ApplyVisualConstraintsWithMetrics(constraints, views, metrics);
 
-    if (@available(iOS 13.4, *)) {
-      [self addInteraction:[[ViewPointerInteraction alloc] init]];
-    }
+    [self addInteraction:[[ViewPointerInteraction alloc] init]];
 
     // Accessibility.
     self.isAccessibilityElement = YES;
@@ -143,6 +139,7 @@ const CGFloat kArrowDownMargin = 12.;
       break;
     case IdentityButtonControlArrowDown:
       image = [UIImage imageNamed:@"identity_picker_view_arrow_down"];
+      tintColor = [UIColor colorNamed:kTextQuaternaryColor];
       break;
   }
   DCHECK(image);

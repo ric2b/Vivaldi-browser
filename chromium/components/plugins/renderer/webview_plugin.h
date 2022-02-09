@@ -13,7 +13,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
-#include "third_party/blink/public/mojom/page/widget.mojom.h"
+#include "third_party/blink/public/mojom/widget/platform_widget.mojom.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_response.h"
@@ -189,6 +189,7 @@ class WebViewPlugin : public blink::WebPlugin, public blink::WebViewObserver {
     void UpdateTooltipFromKeyboard(const std::u16string& tooltip_text,
                                    base::i18n::TextDirection hint,
                                    const gfx::Rect& bounds) override;
+    void ClearKeyboardTriggeredTooltip() override;
     void TextInputStateChanged(ui::mojom::TextInputStatePtr state) override {}
     void SelectionBoundsChanged(const gfx::Rect& anchor_rect,
                                 base::i18n::TextDirection anchor_dir,

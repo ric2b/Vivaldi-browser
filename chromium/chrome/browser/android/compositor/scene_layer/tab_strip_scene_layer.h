@@ -30,6 +30,10 @@ class TabHandleLayer;
 class TabStripSceneLayer : public SceneLayer {
  public:
   TabStripSceneLayer(JNIEnv* env, const base::android::JavaRef<jobject>& jobj);
+
+  TabStripSceneLayer(const TabStripSceneLayer&) = delete;
+  TabStripSceneLayer& operator=(const TabStripSceneLayer&) = delete;
+
   ~TabStripSceneLayer() override;
 
   void SetContentTree(
@@ -112,7 +116,10 @@ class TabStripSceneLayer : public SceneLayer {
       jboolean is_loading,
       jfloat spinner_rotation,
       const base::android::JavaParamRef<jobject>& jlayer_title_cache,
-      const base::android::JavaParamRef<jobject>& jresource_manager);
+      const base::android::JavaParamRef<jobject>& jresource_manager,
+      jfloat tab_alpha, // Vivaldi
+      jboolean is_shown_as_favicon, // Vivaldi
+      jfloat title_offset); // Vivaldi
 
   bool ShouldShowBackground() override;
   SkColor GetBackgroundColor() override;
@@ -123,6 +130,12 @@ class TabStripSceneLayer : public SceneLayer {
       const base::android::JavaParamRef<jobject>& jobj,
       jint java_color,
       jboolean use_light);
+
+  // Vivaldi
+  void SetIsStackStrip(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jboolean is_stack_strip);
 
  private:
   scoped_refptr<TabHandleLayer> GetNextLayer(
@@ -145,8 +158,7 @@ class TabStripSceneLayer : public SceneLayer {
 
   // Vivaldi
   bool use_light_foreground_on_background;
-
-  DISALLOW_COPY_AND_ASSIGN(TabStripSceneLayer);
+  bool is_stack_strip_;
 };
 
 }  // namespace android

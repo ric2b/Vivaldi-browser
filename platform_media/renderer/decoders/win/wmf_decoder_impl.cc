@@ -24,7 +24,7 @@
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
 #include "platform_media/common/platform_logging_util.h"
-#include "platform_media/common/win/mf_util.h"
+#include "platform_media/common/win/platform_media_init.h"
 
 namespace media {
 
@@ -61,7 +61,7 @@ int CalculateBufferAlignment(DWORD alignment) {
 
 GUID AudioCodecToAudioSubtypeGUID(AudioCodec codec) {
   switch (codec) {
-    case AudioCodec::kCodecAAC:
+    case AudioCodec::kAAC:
       return MFAudioFormat_AAC;
     default:
       NOTREACHED();
@@ -168,7 +168,7 @@ void WMFDecoderImpl<StreamType>::Reset(base::OnceClosure closure) {
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
-  if (config.codec() != AudioCodec::kCodecAAC) {
+  if (config.codec() != AudioCodec::kAAC) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Unsupported Audio codec : " << GetCodecName(config.codec());
     return false;
@@ -181,7 +181,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     return false;
   }
 
-  bool isAvailable = !!GetMFAudioDecoderLibrary();
+  bool isAvailable = !!platform_media_init::GetWMFLibraryForAAC();
 
   LOG_IF(WARNING, !isAvailable)
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -194,17 +194,17 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
 template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
-  if (!GetMFVideoDecoderLibrary()) {
+  if (!platform_media_init::GetWMFLibraryForH264()) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Video Platform Decoder : Unavailable";
     return false;
   }
 
-  LOG_IF(WARNING, config.codec() != VideoCodec::kCodecH264)
+  LOG_IF(WARNING, config.codec() != VideoCodec::kH264)
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " Unsupported Video codec : " << GetCodecName(config.codec());
 
-  if (config.codec() == VideoCodec::kCodecH264) {
+  if (config.codec() == VideoCodec::kH264) {
     LOG_IF(WARNING, !(config.profile() >= VideoCodecProfile::H264PROFILE_MIN))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Unsupported Video profile (too low) : " << config.profile();
@@ -221,7 +221,7 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     return false;
   }
 
-  return config.codec() == VideoCodec::kCodecH264 &&
+  return config.codec() == VideoCodec::kH264 &&
          config.profile() >= VideoCodecProfile::H264PROFILE_MIN &&
          config.profile() <= VideoCodecProfile::H264PROFILE_MAX;
 }
@@ -229,13 +229,13 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
 // static
 template <>
 HMODULE WMFDecoderImpl<DemuxerStream::AUDIO>::GetModuleLibrary() {
-  return GetMFAudioDecoderLibrary();
+  return platform_media_init::GetWMFLibraryForAAC();
 }
 
 // static
 template <>
 HMODULE WMFDecoderImpl<DemuxerStream::VIDEO>::GetModuleLibrary() {
-  return GetMFVideoDecoderLibrary();
+  return platform_media_init::GetWMFLibraryForH264();
 }
 
 // static
@@ -243,7 +243,7 @@ template <>
 GUID WMFDecoderImpl<DemuxerStream::AUDIO>::GetMediaObjectGUID(
     const DecoderConfig& config) {
   switch (config.codec()) {
-    case AudioCodec::kCodecAAC:
+    case AudioCodec::kAAC:
       return __uuidof(CMSAACDecMFT);
     default:
       NOTREACHED();
@@ -363,7 +363,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
     return false;
   }
 
-  if (config_.codec() == AudioCodec::kCodecAAC) {
+  if (config_.codec() == AudioCodec::kAAC) {
     // For details of media_type attributes see
     // http://msdn.microsoft.com/en-us/library/windows/desktop/dd742784%28v=vs.85%29.aspx
 
@@ -655,12 +655,12 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
 template <>
 void WMFDecoderImpl<DemuxerStream::AUDIO>::RecordInput(
     const scoped_refptr<DecoderBuffer>& input) {
-  // We use AudioDiscardHelper to calculate output audio timestamps and
-  // discard output buffers per the instructions in DecoderBuffer.
-  // AudioDiscardHelper needs both the output buffers and the corresponsing
-  // input buffers to do its work, so we need to queue the input buffers to
-  // cover the case when Decode() doesn't produce output immediately.
-  queued_input_.push_back(input);
+  // We use AudioDiscardHelper to calculate output audio timestamps and discard
+  // output buffers per the instructions in DecoderBuffer.  AudioDiscardHelper
+  // needs both the output buffers and the corresponsing timing for the input
+  // buffers to do its work, so we need to queue the input time info to cover
+  // the case when Decode() doesn't produce output immediately.
+  queued_input_timing_.push_back(input->time_info());
 }
 
 template <>
@@ -743,13 +743,13 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::ProcessBuffer(
     const scoped_refptr<AudioBuffer>& output) {
-  if (queued_input_.empty())
+  if (queued_input_timing_.empty())
     return false;
 
-  const scoped_refptr<DecoderBuffer> dequeued_input = queued_input_.front();
-  queued_input_.pop_front();
+  DecoderBuffer::TimeInfo dequeued_timing = queued_input_timing_.front();
+  queued_input_timing_.pop_front();
 
-  return discard_helper_->ProcessBuffers(*dequeued_input, output.get());
+  return discard_helper_->ProcessBuffers(dequeued_timing, output.get());
 }
 
 template <>
@@ -997,7 +997,7 @@ void WMFDecoderImpl<DemuxerStream::AUDIO>::ResetTimestampState() {
                                                config_.codec_delay(), false));
   discard_helper_->Reset(config_.codec_delay());
 
-  queued_input_.clear();
+  queued_input_timing_.clear();
 }
 
 template <>

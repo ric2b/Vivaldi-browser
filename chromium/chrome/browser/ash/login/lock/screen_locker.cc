@@ -64,7 +64,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -97,6 +96,9 @@ class ScreenLockObserver : public SessionManagerClient::StubDelegate,
     session_manager::SessionManager::Get()->AddObserver(this);
     SessionManagerClient::Get()->SetStubDelegate(this);
   }
+
+  ScreenLockObserver(const ScreenLockObserver&) = delete;
+  ScreenLockObserver& operator=(const ScreenLockObserver&) = delete;
 
   ~ScreenLockObserver() override {
     session_manager::SessionManager::Get()->RemoveObserver(this);
@@ -143,11 +145,11 @@ class ScreenLockObserver : public SessionManagerClient::StubDelegate,
 
  private:
   bool session_started_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScreenLockObserver);
 };
 
 ScreenLockObserver* g_screen_lock_observer = nullptr;
+const base::Clock* g_clock_for_testing_ = nullptr;
+const base::TickClock* g_tick_clock_for_testing_ = nullptr;
 
 CertificateProviderService* GetLoginScreenCertProviderService() {
   DCHECK(ProfileHelper::IsSigninProfileInitialized());
@@ -188,8 +190,15 @@ ScreenLocker::ScreenLocker(const user_manager::UserList& users)
       fingerprint_observer_receiver_.BindNewPipeAndPassRemote());
 
   GetLoginScreenCertProviderService()->pin_dialog_manager()->AddPinDialogHost(
-      &security_token_pin_dialog_host_ash_impl_);
+      &security_token_pin_dialog_host_impl_);
   user_manager::UserManager::Get()->AddSessionStateObserver(this);
+
+  if (g_clock_for_testing_ && g_tick_clock_for_testing_) {
+    update_fingerprint_state_timer_ = std::make_unique<base::WallClockTimer>(
+        g_clock_for_testing_, g_tick_clock_for_testing_);
+  } else {
+    update_fingerprint_state_timer_ = std::make_unique<base::WallClockTimer>();
+  }
 }
 
 void ScreenLocker::Init() {
@@ -215,10 +224,7 @@ void ScreenLocker::Init() {
   LoginScreen::Get()->ShowLockScreen();
   views_screen_locker_->Init();
 
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-      content::NotificationService::AllSources(),
-      content::NotificationService::NoDetails());
+  session_manager::SessionManager::Get()->NotifyLoginOrLockScreenVisible();
 
   // Start locking on ash side.
   SessionControllerClientImpl::Get()->StartLock(base::BindOnce(
@@ -688,6 +694,16 @@ void ScreenLocker::SetAuthenticatorsForTesting(
   extended_authenticator_ = std::move(extended_authenticator);
 }
 
+// static
+void ScreenLocker::SetClocksForTesting(const base::Clock* clock,
+                                       const base::TickClock* tick_clock) {
+  // Testing clocks should be already set at timer's initialization,
+  // which happens in ScreenLocker's constructor.
+  DCHECK(!screen_locker_);
+  g_clock_for_testing_ = clock;
+  g_tick_clock_for_testing_ = tick_clock;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ScreenLocker, private:
 
@@ -704,7 +720,7 @@ ScreenLocker::~ScreenLocker() {
 
   GetLoginScreenCertProviderService()
       ->pin_dialog_manager()
-      ->RemovePinDialogHost(&security_token_pin_dialog_host_ash_impl_);
+      ->RemovePinDialogHost(&security_token_pin_dialog_host_impl_);
 
   if (authenticator_)
     authenticator_->SetConsumer(nullptr);
@@ -714,6 +730,9 @@ ScreenLocker::~ScreenLocker() {
   ClearErrors();
 
   screen_locker_ = nullptr;
+
+  g_clock_for_testing_ = nullptr;
+  g_tick_clock_for_testing_ = nullptr;
 
   VLOG(1) << "Calling session manager's HandleLockScreenDismissed D-Bus method";
   SessionManagerClient::Get()->NotifyLockScreenDismissed();
@@ -867,7 +886,7 @@ void ScreenLocker::MaybeDisablePinAndFingerprintFromTimeout(
     const AccountId& account_id) {
   VLOG(1) << "MaybeDisablePinAndFingerprintFromTimeout source=" << source;
 
-  update_fingerprint_state_timer_.Stop();
+  update_fingerprint_state_timer_->Stop();
 
   // Update PIN state.
   quick_unlock::PinBackend::GetInstance()->CanAuthenticate(
@@ -881,11 +900,11 @@ void ScreenLocker::MaybeDisablePinAndFingerprintFromTimeout(
       // Call this function again when strong authentication expires. PIN may
       // also depend on strong authentication if it is prefs-based. Fingerprint
       // always requires strong authentication.
-      const base::TimeDelta next_strong_auth =
-          quick_unlock_storage->TimeUntilNextStrongAuth();
-      VLOG(1) << "Scheduling next pin and fingerprint timeout check in "
+      const base::Time next_strong_auth =
+          quick_unlock_storage->TimeOfNextStrongAuth();
+      VLOG(1) << "Scheduling next pin and fingerprint timeout check at "
               << next_strong_auth;
-      update_fingerprint_state_timer_.Start(
+      update_fingerprint_state_timer_->Start(
           FROM_HERE, next_strong_auth,
           base::BindOnce(
               &ScreenLocker::MaybeDisablePinAndFingerprintFromTimeout,

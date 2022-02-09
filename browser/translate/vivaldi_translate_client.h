@@ -55,6 +55,8 @@ class VivaldiTranslateClient
       public content::WebContentsUserData<VivaldiTranslateClient> {
  public:
   ~VivaldiTranslateClient() override;
+  VivaldiTranslateClient(const VivaldiTranslateClient&) = delete;
+  VivaldiTranslateClient& operator=(const VivaldiTranslateClient&) = delete;
 
   // Gets the LanguageState associated with the page.
   const translate::LanguageState& GetLanguageState();
@@ -143,8 +145,6 @@ class VivaldiTranslateClient
 #endif
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiTranslateClient);
 };
 
 #endif  // BROWSER_TRANSLATE_VIVALDI_TRANSLATE_CLIENT_H_

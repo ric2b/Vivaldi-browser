@@ -24,7 +24,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/background_tab_manager.h"
-#include "chrome/browser/android/feed/v2/feed_service_factory.h"
+#include "chrome/browser/feed/android/feed_service_factory.h"
 #include "components/feed/core/v2/public/feed_api.h"
 #include "components/feed/core/v2/public/feed_service.h"
 #else
@@ -71,12 +71,34 @@ bool ShouldConsiderForNtpMostVisited(
   return true;
 }
 
+// Returns the page associated with `opener_web_contents`.
+absl::optional<history::Opener> GetHistoryOpenerFromOpenerWebContents(
+    base::WeakPtr<content::WebContents> opener_web_contents) {
+  if (!opener_web_contents)
+    return absl::nullopt;
+
+  // The last committed entry could hypothetically change from when the opener
+  // was set on `HistoryTabHelper` to when this function gets called. It is
+  // unlikely that it will change since we should only be calling this on
+  // the first navigation this tab helper observes, but we are fine with that
+  // edge case.
+  auto* last_committed_entry =
+      opener_web_contents->GetController().GetLastCommittedEntry();
+  if (!last_committed_entry)
+    return absl::nullopt;
+
+  return history::Opener(
+      history::ContextIDForWebContents(opener_web_contents.get()),
+      last_committed_entry->GetUniqueID(),
+      opener_web_contents->GetLastCommittedURL());
+}
+
 }  // namespace
 
 HistoryTabHelper::HistoryTabHelper(WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {}
 
-HistoryTabHelper::~HistoryTabHelper() {}
+HistoryTabHelper::~HistoryTabHelper() = default;
 
 void HistoryTabHelper::UpdateHistoryForNavigation(
     const history::HistoryAddPageArgs& add_page_args) {
@@ -132,7 +154,19 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
       navigation_handle->IsSameDocument()
           ? absl::optional<std::u16string>(
                 navigation_handle->GetWebContents()->GetTitle())
-          : absl::nullopt);
+          : absl::nullopt,
+      // Only compute the opener page if it's the first committed page for this
+      // WebContents.
+      navigation_handle->GetPreviousMainFrameURL().is_empty()
+          ? GetHistoryOpenerFromOpenerWebContents(opener_web_contents_)
+          // Or use the opener for same-document navigations to connect these
+          // visits.
+          : (navigation_handle->IsSameDocument()
+                 ? absl::make_optional(history::Opener(
+                       history::ContextIDForWebContents(web_contents()),
+                       nav_entry_id,
+                       navigation_handle->GetPreviousMainFrameURL()))
+                 : absl::nullopt));
 
   if (ui::PageTransitionIsMainFrame(page_transition) &&
       virtual_url != navigation_handle->GetURL()) {
@@ -274,6 +308,25 @@ void HistoryTabHelper::DidFinishLoad(
   last_load_completion_ = base::TimeTicks::Now();
 }
 
+void HistoryTabHelper::DidOpenRequestedURL(
+    content::WebContents* new_contents,
+    content::RenderFrameHost* source_render_frame_host,
+    const GURL& url,
+    const content::Referrer& referrer,
+    WindowOpenDisposition disposition,
+    ui::PageTransition transition,
+    bool started_from_context_menu,
+    bool renderer_initiated) {
+  HistoryTabHelper* new_history_tab_helper =
+      HistoryTabHelper::FromWebContents(new_contents);
+  if (!new_history_tab_helper)
+    return;
+
+  // This should only be set once on a new tab helper.
+  DCHECK(!new_history_tab_helper->opener_web_contents_);
+  new_history_tab_helper->opener_web_contents_ = web_contents()->GetWeakPtr();
+}
+
 void HistoryTabHelper::TitleWasSet(NavigationEntry* entry) {
   if (!entry)
     return;
@@ -328,7 +381,7 @@ void HistoryTabHelper::WebContentsDestroyed() {
 
 bool HistoryTabHelper::IsEligibleTab(
     const history::HistoryAddPageArgs& add_page_args) const {
-  if (force_eligibile_tab_for_testing_)
+  if (force_eligible_tab_for_testing_)
     return true;
 
 #if defined(OS_ANDROID)
@@ -346,4 +399,4 @@ bool HistoryTabHelper::IsEligibleTab(
 #endif
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(HistoryTabHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(HistoryTabHelper);

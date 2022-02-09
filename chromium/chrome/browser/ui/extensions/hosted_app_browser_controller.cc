@@ -17,11 +17,10 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
-#include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "components/security_state/core/security_state.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/browser_context.h"
@@ -113,24 +112,6 @@ ui::ImageModel HostedAppBrowserController::GetWindowIcon() const {
     return GetWindowAppIcon();
 
   return ui::ImageModel::FromImage(browser()->GetCurrentPageIcon());
-}
-
-absl::optional<SkColor> HostedAppBrowserController::GetThemeColor() const {
-  absl::optional<SkColor> web_theme_color =
-      AppBrowserController::GetThemeColor();
-  if (web_theme_color)
-    return web_theme_color;
-
-  const Extension* extension = GetExtension();
-  if (!extension)
-    return absl::nullopt;
-
-  absl::optional<SkColor> extension_theme_color =
-      AppThemeColorInfo::GetThemeColor(extension);
-  if (extension_theme_color)
-    return SkColorSetA(*extension_theme_color, SK_AlphaOPAQUE);
-
-  return absl::nullopt;
 }
 
 std::u16string HostedAppBrowserController::GetTitle() const {

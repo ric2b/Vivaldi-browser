@@ -45,6 +45,7 @@ enum ResourceType : ushort (bit_flags) {
   WEBSOCKET,
   WEBRTC,
   PING,
+  WEBTRANSPORT,
   OTHER,
 }
 
@@ -53,7 +54,7 @@ table RequestFilterRule {
   options : ubyte;
 
   // A bitmask of ResourceType. Rules most commonly have all types set.
-  resource_types : ushort = 8191;
+  resource_types : ushort = 16383;
 
   // A bitmask of ActivationType. Most rules have none set.
   activation_types : ubyte = 0;

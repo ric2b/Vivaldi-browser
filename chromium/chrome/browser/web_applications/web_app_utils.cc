@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/site_engagement/content/site_engagement_service.h"
@@ -25,6 +26,12 @@
 #include "chrome/common/chrome_features.h"
 #include "components/user_manager/user_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+namespace {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+bool g_enable_system_web_apps_in_lacros_for_testing = false;
+#endif
+}  // namespace
 
 namespace web_app {
 
@@ -64,6 +71,14 @@ bool AreWebAppsUserInstallable(Profile* profile) {
 #endif
   return AreWebAppsEnabled(profile) && !profile->IsGuestSession() &&
          !profile->IsOffTheRecord();
+}
+
+bool AreSystemWebAppsSupported() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (!g_enable_system_web_apps_in_lacros_for_testing)
+    return false;
+#endif
+  return true;
 }
 
 content::BrowserContext* GetBrowserContextForWebApps(
@@ -135,7 +150,7 @@ std::string GetProfileCategoryForLogging(Profile* profile) {
 }
 
 bool IsChromeOsDataMandatory() {
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
   return true;
 #else
   return false;
@@ -186,7 +201,7 @@ bool AreFileHandlersAlreadyRegistered(Profile* profile,
 
 apps::FileHandlers GetFileHandlersForAllWebAppsWithOrigin(Profile* profile,
                                                           const GURL& url) {
-  auto* provider = WebAppProvider::Get(profile);
+  auto* provider = WebAppProvider::GetForLocalAppsUnchecked(profile);
   if (!provider)
     return {};
 
@@ -237,6 +252,49 @@ std::u16string GetFileTypeAssociationsHandledByWebAppsForDisplay(
   return base::UTF8ToUTF16(base::JoinString(
       associations,
       l10n_util::GetStringUTF8(IDS_WEB_APP_FILE_HANDLING_LIST_SEPARATOR)));
+}
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+void EnableSystemWebAppsInLacrosForTesting() {
+  g_enable_system_web_apps_in_lacros_for_testing = true;
+}
+#endif
+
+void PersistProtocolHandlersUserChoice(
+    Profile* profile,
+    const AppId& app_id,
+    const GURL& protocol_url,
+    bool allowed,
+    base::OnceClosure update_finished_callback) {
+  web_app::WebAppProvider* const provider =
+      web_app::WebAppProvider::GetForWebApps(profile);
+  DCHECK(provider);
+
+  web_app::OsIntegrationManager& os_integration_manager =
+      provider->os_integration_manager();
+  const std::vector<ProtocolHandler> original_protocol_handlers =
+      os_integration_manager.GetAppProtocolHandlers(app_id);
+
+  if (allowed) {
+    provider->sync_bridge().AddAllowedLaunchProtocol(app_id,
+                                                     protocol_url.scheme());
+  } else {
+    provider->sync_bridge().AddDisallowedLaunchProtocol(app_id,
+                                                        protocol_url.scheme());
+  }
+
+  // OS protocol registration does not need to be updated.
+  if (original_protocol_handlers ==
+      os_integration_manager.GetAppProtocolHandlers(app_id)) {
+    std::move(update_finished_callback).Run();
+    return;
+  }
+
+  // TODO(https://crbug.com/1251062): Can we avoid the delay of startup, if the
+  // action as allowed?
+  provider->os_integration_manager().UpdateProtocolHandlers(
+      app_id, /*force_shortcut_updates_if_needed=*/true,
+      std::move(update_finished_callback));
 }
 
 }  // namespace web_app

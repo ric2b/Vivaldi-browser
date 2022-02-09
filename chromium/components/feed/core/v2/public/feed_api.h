@@ -77,7 +77,11 @@ class FeedApi {
   virtual void SetContentOrder(const StreamType& stream_type,
                                ContentOrder content_order) = 0;
 
-  // Gets the "raw" content order value stored in prefs.
+  // Returns the current `ContentOrder` for `stream_type`.
+  virtual ContentOrder GetContentOrder(const StreamType& stream_type) = 0;
+
+  // Gets the "raw" content order value stored in prefs. Returns `kUnspecified`
+  // if the user has not selected one yet.
   virtual ContentOrder GetContentOrderFromPrefs(
       const StreamType& stream_type) = 0;
 
@@ -153,7 +157,8 @@ class FeedApi {
                                  const std::string& slice_id) = 0;
   // Some feed content has been loaded and is now available to the user on the
   // feed surface. Reported only once after a surface is attached.
-  virtual void ReportFeedViewed(SurfaceId surface_id) = 0;
+  virtual void ReportFeedViewed(const StreamType& stream_type,
+                                SurfaceId surface_id) = 0;
   // A web page was loaded in response to opening a link from the Feed.
   virtual void ReportPageLoaded() = 0;
   // The user triggered the default open action, usually by tapping the card.
@@ -185,7 +190,7 @@ class FeedApi {
 
   virtual DebugStreamData GetDebugStreamData() = 0;
   // Forces a Feed refresh from the server.
-  virtual void ForceRefreshForDebugging() = 0;
+  virtual void ForceRefreshForDebugging(const StreamType& stream_type) = 0;
   // Dumps some state information for debugging.
   virtual std::string DumpStateForDebugging() = 0;
   // Forces to render a StreamUpdate on all subsequent surface attaches.

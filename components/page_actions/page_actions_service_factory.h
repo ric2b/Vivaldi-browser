@@ -13,7 +13,8 @@ class Service;
 class ServiceFactory : public BrowserContextKeyedServiceFactory {
  public:
   static Service* GetForBrowserContext(content::BrowserContext* context);
-  static Service* GetForBrowserContextIfExists(content::BrowserContext* context);
+  static Service* GetForBrowserContextIfExists(
+      content::BrowserContext* context);
   static ServiceFactory* GetInstance();
 
  private:

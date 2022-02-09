@@ -64,33 +64,33 @@ typedef std::vector<AccountRow> AccountRows;
 class CreateAccountResult {
  public:
   CreateAccountResult() = default;
+  CreateAccountResult(const CreateAccountResult&) = delete;
+  CreateAccountResult& operator=(const CreateAccountResult&) = delete;
+
   bool success;
   std::string message;
   AccountRow createdRow;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CreateAccountResult);
 };
 
 class UpdateAccountResult {
  public:
   UpdateAccountResult() = default;
+  UpdateAccountResult(const UpdateAccountResult&) = delete;
+  UpdateAccountResult& operator=(const UpdateAccountResult&) = delete;
+
   bool success;
   std::string message;
   AccountRow updatedRow;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UpdateAccountResult);
 };
 
 class DeleteAccountResult {
  public:
   DeleteAccountResult() = default;
+  DeleteAccountResult(const DeleteAccountResult&) = delete;
+  DeleteAccountResult& operator=(const DeleteAccountResult&) = delete;
+
   bool success;
   std::string message;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteAccountResult);
 };
 
 }  // namespace calendar

@@ -47,8 +47,6 @@ class VivaldiAccountEventRouter
 
  private:
   Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountEventRouter);
 };
 
 class VivaldiAccountAPI : public BrowserContextKeyedAPI,
@@ -90,8 +88,6 @@ class VivaldiAccountLoginFunction : public ExtensionFunction {
   ~VivaldiAccountLoginFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountLoginFunction);
 };
 
 class VivaldiAccountLogoutFunction : public ExtensionFunction {
@@ -103,8 +99,6 @@ class VivaldiAccountLogoutFunction : public ExtensionFunction {
   ~VivaldiAccountLogoutFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountLogoutFunction);
 };
 
 class VivaldiAccountGetStateFunction : public ExtensionFunction {
@@ -117,8 +111,6 @@ class VivaldiAccountGetStateFunction : public ExtensionFunction {
   ~VivaldiAccountGetStateFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountGetStateFunction);
 };
 
 class VivaldiAccountSetPendingRegistrationFunction : public ExtensionFunction {
@@ -136,8 +128,6 @@ class VivaldiAccountSetPendingRegistrationFunction : public ExtensionFunction {
       bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountSetPendingRegistrationFunction);
 };
 
 class VivaldiAccountGetPendingRegistrationFunction : public ExtensionFunction {
@@ -154,8 +144,6 @@ class VivaldiAccountGetPendingRegistrationFunction : public ExtensionFunction {
       bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountGetPendingRegistrationFunction);
 };
 
 }  // namespace extensions

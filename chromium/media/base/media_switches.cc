@@ -218,6 +218,8 @@ MEDIA_EXPORT extern const char kLacrosEnablePlatformHevc[] =
     "lacros-enable-platform-hevc";
 MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedMedia[] =
     "lacros-use-chromeos-protected-media";
+MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedAv1[] =
+    "lacros-use-chromeos-protected-av1";
 #endif  // defined(OS_CHROMEOS)
 
 namespace autoplay {
@@ -257,6 +259,10 @@ const base::Feature kOverlayFullscreenVideo{"overlay-fullscreen-video",
 const base::Feature kEnableMediaInternals{"enable-media-internals",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables user control over muting tab audio from the tab strip.
+const base::Feature kEnableTabMuting{"enable-tab-muting",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable Picture-in-Picture.
 const base::Feature kPictureInPicture {
   "PictureInPicture",
@@ -282,6 +288,12 @@ const base::Feature kResumeBackgroundVideo {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Experimental: Try to avoid destroying the media player when transferring a
+// media element to a new document.  This is a work in progress, and may cause
+// security and/or stability issues.
+const base::Feature kReuseMediaPlayer{"ReuseMediaPlayer",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, MediaCapabilities will check with GPU Video Accelerator
 // Factories to determine isPowerEfficient = true/false.
@@ -387,23 +399,8 @@ const base::Feature kD3D11VideoDecoderVP9Profile2{
 const base::Feature kD3D11VideoDecoderAV1{"D3D11VideoDecoderEnableAV1",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Tell D3D11VideoDecoder not to switch the D3D11 device to multi-threaded mode.
-// This is to help us track down IGD crashes.
-const base::Feature kD3D11VideoDecoderSkipMultithreaded{
-    "D3D11VideoDecoderSkipMultithreaded", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, D3D11VideoDecoder will always copy instead of bind textures.
-const base::Feature kD3D11VideoDecoderAlwaysCopy{
-    "D3D11VideoDecoderAlwaysCopy", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, D3D11VideoDecoder may (but is not required to) choose to mark
-// VideoFrames as overlayable.
-const base::Feature kD3D11VideoDecoderAllowOverlay{
-    "D3D11VideoDecoderAllowOverlay", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// If enabled, D3D11VideoDecoder will enable HDR support even if the OS doesn't.
-const base::Feature kD3D11VideoDecoderForceEnableHDR{
-    "D3D11VideoDecoderForceEnableHDR", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kD3D11VideoDecoderUseSharedHandle{
+    "D3D11VideoDecoderUseSharedHandle", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Falls back to other decoders after audio/video decode error happens. The
 // implementation may choose different strategies on when to fallback. See
@@ -453,11 +450,6 @@ constexpr base::FeatureParam<kCrosGlobalMediaControlsPinOptions>
         "CrosGlobalMediaControlsPinParam",
         kCrosGlobalMediaControlsPinOptions::kHeuristic,
         &kCrosGlobalMediaControlsParamOptions);
-
-// Allow global media controls notifications to be dragged out into overlay
-// notifications. It is no-op if kGlobalMediaControls is not enabled.
-const base::Feature kGlobalMediaControlsOverlayControls{
-    "GlobalMediaControlsOverlayControls", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Show picture-in-picture button in Global Media Controls.
 const base::Feature kGlobalMediaControlsPictureInPicture {
@@ -543,6 +535,9 @@ const base::Feature kVaapiVP9Encoder{"VaapiVP9Encoder",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH)
+// Enable H264 temporal layer encoding with HW encoder on ChromeOS.
+const base::Feature kVaapiH264TemporalLayerHWEncoding{
+    "VaapiH264TemporalLayerEncoding", base::FEATURE_ENABLED_BY_DEFAULT};
 // Enable VP9 k-SVC decoding with HW decoder for webrtc use case on ChromeOS.
 const base::Feature kVaapiVp9kSVCHWDecoding{"VaapiVp9kSVCHWDecoding",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
@@ -924,8 +919,9 @@ bool IsVideoCaptureAcceleratedJpegDecodingEnabled() {
   }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
-#endif
+#else
   return false;
+#endif
 }
 
 bool IsLiveCaptionFeatureEnabled() {

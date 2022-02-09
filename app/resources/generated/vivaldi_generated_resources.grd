@@ -138,6 +138,11 @@
           New &amp;private window
         </message>
       </if>
+      <if expr="is_win">
+        <message name="IDS_IMPORT_FROM_EDGE" desc="browser combo box: Microsoft Edge Legacy">
+          Microsoft Edge Legacy
+        </message>
+      </if>
     </messages>
   </release>
 </grit>

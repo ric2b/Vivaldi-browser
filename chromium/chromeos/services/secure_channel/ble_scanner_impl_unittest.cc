@@ -83,6 +83,12 @@ class SecureChannelBleScannerImplTest : public testing::Test {
 
   SecureChannelBleScannerImplTest()
       : test_devices_(multidevice::CreateRemoteDeviceRefListForTest(3)) {}
+
+  SecureChannelBleScannerImplTest(const SecureChannelBleScannerImplTest&) =
+      delete;
+  SecureChannelBleScannerImplTest& operator=(
+      const SecureChannelBleScannerImplTest&) = delete;
+
   ~SecureChannelBleScannerImplTest() override = default;
 
   // testing::Test:
@@ -141,6 +147,7 @@ class SecureChannelBleScannerImplTest : public testing::Test {
   // creating a DiscoverySession.
   void StartDiscoverySession() {
     mock_adapter_->StartDiscoverySession(
+        /*client_name=*/std::string(),
         base::BindLambdaForTesting(
             [&](std::unique_ptr<device::BluetoothDiscoverySession>
                     discovery_session) {
@@ -276,9 +283,6 @@ class SecureChannelBleScannerImplTest : public testing::Test {
   base::WeakPtr<device::BluetoothDiscoverySession> discovery_session_weak_ptr_;
 
   std::unique_ptr<BleScanner> ble_scanner_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SecureChannelBleScannerImplTest);
 };
 
 TEST_F(SecureChannelBleScannerImplTest, UnrelatedScanResults) {

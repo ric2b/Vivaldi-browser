@@ -149,6 +149,8 @@ class DataRequestHandlerTest : public testing::Test {
   struct Request {
     Request() = default;
     ~Request() { CHECK(!loading_request); }
+    Request(const Request&) = delete;
+    Request& operator=(const Request&) = delete;
 
     bool finished() const { return success || read_error || aborted; }
 
@@ -157,8 +159,6 @@ class DataRequestHandlerTest : public testing::Test {
     bool success = false;
     bool read_error = false;
     bool aborted = false;
-
-    DISALLOW_COPY_AND_ASSIGN(Request);
   };
 
   DataRequestHandlerTest()

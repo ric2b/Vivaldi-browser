@@ -65,6 +65,8 @@ const char* GetUITaskQueueName(BrowserTaskQueues::QueueType queue_type) {
       return "ui_user_visible_tq";
     case BrowserTaskQueues::QueueType::kUserInput:
       return "ui_user_input_tq";
+    case BrowserTaskQueues::QueueType::kNavigationNetworkResponse:
+      return "ui_navigation_network_response_tq";
   }
 }
 
@@ -84,6 +86,8 @@ const char* GetIOTaskQueueName(BrowserTaskQueues::QueueType queue_type) {
       return "io_user_visible_tq";
     case BrowserTaskQueues::QueueType::kUserInput:
       return "io_user_input_tq";
+    case BrowserTaskQueues::QueueType::kNavigationNetworkResponse:
+      return "io_navigation_network_response_tq";
   }
 }
 
@@ -186,6 +190,9 @@ BrowserTaskQueues::BrowserTaskQueues(
   GetBrowserTaskQueue(QueueType::kUserInput)
       ->SetQueuePriority(QueuePriority::kHighestPriority);
 
+  GetBrowserTaskQueue(QueueType::kNavigationNetworkResponse)
+      ->SetQueuePriority(QueuePriority::kHighPriority);
+
   // Control queue
   control_queue_ =
       sequence_manager->CreateTaskQueue(base::sequence_manager::TaskQueue::Spec(
@@ -225,15 +232,17 @@ BrowserTaskQueues::CreateBrowserTaskRunners() const {
 }
 
 void BrowserTaskQueues::PostFeatureListInitializationSetup() {
-  if (base::FeatureList::IsEnabled(features::kPrioritizeBootstrapTasks)) {
-    GetBrowserTaskQueue(QueueType::kBootstrap)
-        ->SetQueuePriority(QueuePriority::kHighestPriority);
+  // NOTE: This queue will not be used if the |kTreatBootstrapAsDefault|
+  // feature is enabled (see browser_task_executor.cc).
+  GetBrowserTaskQueue(QueueType::kBootstrap)
+      ->SetQueuePriority(QueuePriority::kHighestPriority);
 
-    // Navigation and preconnection tasks are also important during startup so
-    // prioritize them too.
-    GetBrowserTaskQueue(QueueType::kPreconnection)
-        ->SetQueuePriority(QueuePriority::kHighPriority);
-  }
+  // Preconnection tasks are also important during startup so prioritize this
+  // queue too. NOTE: This queue will not be used if the
+  // |kTreatPreconnectAsDefault| feature is enabled (see
+  // browser_task_executor.cc).
+  GetBrowserTaskQueue(QueueType::kPreconnection)
+      ->SetQueuePriority(QueuePriority::kHighPriority);
 }
 
 void BrowserTaskQueues::EnableAllQueues() {

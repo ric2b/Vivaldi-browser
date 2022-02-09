@@ -25,6 +25,8 @@
 #include "third_party/blink/renderer/platform/graphics/paint/raster_invalidation_tracking.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scrollbar_display_item.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace blink {
 
@@ -35,7 +37,7 @@ class ConversionContext {
 
  public:
   ConversionContext(const PropertyTreeState& layer_state,
-                    const FloatPoint& layer_offset,
+                    const gfx::Vector2dF& layer_offset,
                     cc::DisplayItemList& cc_list)
       : layer_state_(layer_state),
         layer_offset_(layer_offset),
@@ -147,10 +149,8 @@ class ConversionContext {
         GetTranslation2DOrMatrix(target_transform);
     if (translation_2d_or_matrix.IsIdentityOr2DTranslation()) {
       const auto& translation = translation_2d_or_matrix.Translation2D();
-      if (!translation.IsZero()) {
-        cc_list_.push<cc::TranslateOp>(translation.Width(),
-                                       translation.Height());
-      }
+      if (!translation.IsZero())
+        cc_list_.push<cc::TranslateOp>(translation.x(), translation.y());
     } else {
       cc_list_.push<cc::ConcatOp>(translation_2d_or_matrix.ToSkM44());
     }
@@ -175,7 +175,7 @@ class ConversionContext {
   // Ends the effect on the top of the state stack if the stack is not empty,
   // and update the bounds of the SaveLayer[Alpha]Op of the effect.
   void EndEffect();
-  void UpdateEffectBounds(const FloatRect&, const TransformPaintPropertyNode&);
+  void UpdateEffectBounds(const gfx::RectF&, const TransformPaintPropertyNode&);
 
   // Starts a clip state by adjusting the transform state, applying
   // |combined_clip_rect| which is combined from one or more consecutive clips,
@@ -214,7 +214,7 @@ class ConversionContext {
   Vector<StateEntry> state_stack_;
 
   const PropertyTreeState& layer_state_;
-  FloatPoint layer_offset_;
+  gfx::Vector2dF layer_offset_;
   bool translated_for_layer_offset_ = false;
 
   // These fields are neve nullptr.
@@ -245,7 +245,7 @@ class ConversionContext {
     // Records the bounds of the effect which initiated the entry. Note that
     // the effect is not |effect| (which is the previous effect), but the
     // |current_effect_| when this entry is the top of the stack.
-    FloatRect bounds;
+    gfx::RectF bounds;
   };
   Vector<EffectBoundsInfo> effect_bounds_stack_;
 
@@ -268,12 +268,12 @@ ConversionContext::~ConversionContext() {
 }
 
 void ConversionContext::TranslateForLayerOffsetOnce() {
-  if (translated_for_layer_offset_ || layer_offset_ == FloatPoint())
+  if (translated_for_layer_offset_ || layer_offset_ == gfx::Vector2dF())
     return;
 
   cc_list_.StartPaint();
   cc_list_.push<cc::SaveOp>();
-  cc_list_.push<cc::TranslateOp>(-layer_offset_.X(), -layer_offset_.Y());
+  cc_list_.push<cc::TranslateOp>(-layer_offset_.x(), -layer_offset_.y());
   cc_list_.EndPaintOfPairedBegin();
   translated_for_layer_offset_ = true;
 }
@@ -307,7 +307,7 @@ static bool CombineClip(const ClipPaintPropertyNode& clip,
     return false;
 
   // Don't combine two rounded clip rects.
-  bool clip_is_rounded = clip.PixelSnappedClipRect().IsRounded();
+  bool clip_is_rounded = clip.PaintClipRect().IsRounded();
   bool combined_is_rounded = combined_clip_rect.IsRounded();
   if (clip_is_rounded && combined_is_rounded)
     return false;
@@ -315,13 +315,11 @@ static bool CombineClip(const ClipPaintPropertyNode& clip,
   // If one is rounded and the other contains the rounded bounds, use the
   // rounded as the combined.
   if (combined_is_rounded) {
-    return clip.PixelSnappedClipRect().Rect().Contains(
-        combined_clip_rect.Rect());
+    return clip.PaintClipRect().Rect().Contains(combined_clip_rect.Rect());
   }
   if (clip_is_rounded) {
-    if (combined_clip_rect.Rect().Contains(
-            clip.PixelSnappedClipRect().Rect())) {
-      combined_clip_rect = clip.PixelSnappedClipRect();
+    if (combined_clip_rect.Rect().Contains(clip.PaintClipRect().Rect())) {
+      combined_clip_rect = clip.PaintClipRect();
       return true;
     }
     return false;
@@ -329,8 +327,8 @@ static bool CombineClip(const ClipPaintPropertyNode& clip,
 
   // The combined is the intersection if both are rectangular.
   DCHECK(!combined_is_rounded && !clip_is_rounded);
-  combined_clip_rect = FloatRoundedRect(Intersection(
-      combined_clip_rect.Rect(), clip.PixelSnappedClipRect().Rect()));
+  combined_clip_rect = FloatRoundedRect(
+      Intersection(combined_clip_rect.Rect(), clip.PaintClipRect().Rect()));
   return true;
 }
 
@@ -343,17 +341,16 @@ void ConversionContext::SwitchToClip(const ClipPaintPropertyNode& target_clip) {
       &target_clip.LowestCommonAncestor(*current_clip_).Unalias();
   while (current_clip_ != lca_clip) {
     if (!state_stack_.size() || state_stack_.back().type != StateEntry::kClip) {
-      // This bug is known to happen in pre-CompositeAfterPaint due to some
-      // clip-escaping corner cases that are very difficult to fix in legacy
-      // architecture. In CompositeAfterPaint this should never happen.
+      // TODO(crbug.com/803649): We still have clip hierarchy issues with
+      // fragment clips. See crbug.com/1240080 for the test case. Will change
+      // the above condition to DCHECK after both CompositeAfterPaint and
+      // LayoutNGBlockFragmentation are fully launched.
 #if DCHECK_IS_ON()
       DLOG(ERROR) << "Error: Chunk has a clip that escaped its layer's or "
                   << "effect's clip.\ntarget_clip:\n"
                   << target_clip.ToTreeString().Utf8() << "current_clip_:\n"
                   << current_clip_->ToTreeString().Utf8();
 #endif
-      if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-        NOTREACHED();
       break;
     }
     DCHECK(current_clip_->Parent());
@@ -384,14 +381,11 @@ void ConversionContext::SwitchToClip(const ClipPaintPropertyNode& target_clip) {
 
   // Step 3: Now apply the list of clips in top-down order.
   DCHECK(pending_clips.size());
-
-  const ClipPaintPropertyNode* top_clip = pending_clips.back();
-	auto pending_combined_clip_rect =
-      top_clip->PixelSnappedClipRect();
+  auto pending_combined_clip_rect = pending_clips.back()->PaintClipRect();
 
   // NOTE(igor@vivaldi): remove clipping to the visible scroll view
   // of the top frame when we snapshot the whole page.
-  if (top_clip == PaintChunksToCcLayer::TopClipToIgnore()) {
+  if (pending_clips.back() == PaintChunksToCcLayer::TopClipToIgnore()) {
     pending_combined_clip_rect =
       FloatRoundedRect(LayoutRect::InfiniteIntRect());
   }
@@ -415,7 +409,7 @@ void ConversionContext::SwitchToClip(const ClipPaintPropertyNode& target_clip) {
       // |sub_clip| can't be combined to previous clips. Output the current
       // combined clip, and start new combination.
       StartClip(pending_combined_clip_rect, *lowest_combined_clip_node);
-      pending_combined_clip_rect = sub_clip->PixelSnappedClipRect();
+      pending_combined_clip_rect = sub_clip->PaintClipRect();
       lowest_combined_clip_node = sub_clip;
     }
   }
@@ -474,25 +468,24 @@ void ConversionContext::SwitchToEffect(
       target_effect.LowestCommonAncestor(*current_effect_).Unalias();
 
 #if DCHECK_IS_ON()
-  bool has_pre_cap_effect_hierarchy_issue = false;
+  bool has_effect_hierarchy_issue = false;
 #endif
 
   while (current_effect_ != &lca_effect) {
     // This EndClips() and the later EndEffect() pop to the parent effect.
     EndClips();
-    // This bug is known to happen in pre-CompositeAfterPaint due to some
-    // effect-escaping corner cases that are very difficult to fix in legacy
-    // architecture. In CompositeAfterPaint this should never happen.
     if (!state_stack_.size()) {
+      // TODO(crbug.com/803649): We still have clip hierarchy issues with
+      // fragment clips. See crbug.com/1240080 for the test case. Will change
+      // the above condition to DCHECK after both CompositeAfterPaint and
+      // LayoutNGBlockFragmentation are fully launched.
 #if DCHECK_IS_ON()
       DLOG(ERROR) << "Error: Chunk has an effect that escapes layer's effect.\n"
                   << "target_effect:\n"
                   << target_effect.ToTreeString().Utf8() << "current_effect_:\n"
                   << current_effect_->ToTreeString().Utf8();
-      has_pre_cap_effect_hierarchy_issue = true;
+      has_effect_hierarchy_issue = true;
 #endif
-      if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-        NOTREACHED();
       // In pre-CompositeAfterPaint, we may squash one layer into another, but
       // the squashing layer may create more effect nodes not for real effects,
       // causing squashed layer's effect to escape the squashing layer's effect.
@@ -519,15 +512,15 @@ void ConversionContext::SwitchToEffect(
   for (auto i = pending_effects.size(); i--;) {
     const EffectPaintPropertyNode* sub_effect = pending_effects[i];
 #if DCHECK_IS_ON()
-    if (!has_pre_cap_effect_hierarchy_issue)
+    if (!has_effect_hierarchy_issue)
       DCHECK_EQ(current_effect_, sub_effect->UnaliasedParent());
 #endif
     StartEffect(*sub_effect);
 #if DCHECK_IS_ON()
     state_stack_.back().has_pre_cap_effect_hierarchy_issue =
-        has_pre_cap_effect_hierarchy_issue;
+        has_effect_hierarchy_issue;
     // This applies only to the first new effect.
-    has_pre_cap_effect_hierarchy_issue = false;
+    has_effect_hierarchy_issue = false;
 #endif
   }
 }
@@ -602,28 +595,28 @@ void ConversionContext::StartEffect(const EffectPaintPropertyNode& effect) {
     // the bounds of the effect on an empty source. For empty chunks, or chunks
     // with empty bounds, with a filter applied that produces output even when
     // there's no input this will expand the bounds to match.
-    FloatRect filtered_bounds = current_effect_->MapRect(
-        FloatRect(effect.Filter().ReferenceBox().Center(), FloatSize()));
+    gfx::RectF filtered_bounds = current_effect_->MapRect(
+        gfx::RectF(effect.Filter().ReferenceBox().Center(), gfx::SizeF()));
     effect_bounds_stack_.back().bounds = filtered_bounds;
     // Emit an empty paint operation to add the filtered bounds (mapped to layer
     // space) to the visual rect of the filter's SaveLayerOp.
     cc_list_.StartPaint();
     cc_list_.EndPaintOfUnpaired(chunk_to_layer_mapper_.MapVisualRect(
-        EnclosingIntRect(filtered_bounds)));
+        gfx::ToEnclosingRect(filtered_bounds)));
   }
 }
 
 void ConversionContext::UpdateEffectBounds(
-    const FloatRect& bounds,
+    const gfx::RectF& bounds,
     const TransformPaintPropertyNode& transform) {
   if (effect_bounds_stack_.IsEmpty() || bounds.IsEmpty())
     return;
 
   auto& effect_bounds_info = effect_bounds_stack_.back();
-  FloatRect mapped_bounds = bounds;
+  gfx::RectF mapped_bounds = bounds;
   GeometryMapper::SourceToDestinationRect(
       transform, *effect_bounds_info.transform, mapped_bounds);
-  effect_bounds_info.bounds.Unite(mapped_bounds);
+  effect_bounds_info.bounds.Union(mapped_bounds);
 }
 
 void ConversionContext::EndEffect() {
@@ -637,14 +630,17 @@ void ConversionContext::EndEffect() {
 
   DCHECK(effect_bounds_stack_.size());
   const auto& bounds_info = effect_bounds_stack_.back();
-  FloatRect bounds = bounds_info.bounds;
+  gfx::RectF bounds = bounds_info.bounds;
   if (current_effect_->Filter().IsEmpty()) {
-    if (!bounds.IsEmpty())
-      cc_list_.UpdateSaveLayerBounds(bounds_info.save_layer_id, bounds);
+    if (!bounds.IsEmpty()) {
+      cc_list_.UpdateSaveLayerBounds(bounds_info.save_layer_id,
+                                     gfx::RectFToSkRect(bounds));
+    }
   } else {
     // We need an empty bounds for empty filter to avoid performance issue of
     // PDF renderer. See crbug.com/740824.
-    cc_list_.UpdateSaveLayerBounds(bounds_info.save_layer_id, bounds);
+    cc_list_.UpdateSaveLayerBounds(bounds_info.save_layer_id,
+                                   gfx::RectFToSkRect(bounds));
     // We need to propagate the filtered bounds to the parent.
     bounds = current_effect_->MapRect(bounds);
   }
@@ -704,7 +700,7 @@ void ConversionContext::SwitchToTransform(
   cc_list_.push<cc::SaveOp>();
   if (translation_2d_or_matrix.IsIdentityOr2DTranslation()) {
     const auto& translation = translation_2d_or_matrix.Translation2D();
-    cc_list_.push<cc::TranslateOp>(translation.Width(), translation.Height());
+    cc_list_.push<cc::TranslateOp>(translation.x(), translation.y());
   } else {
     cc_list_.push<cc::ConcatOp>(translation_2d_or_matrix.ToSkM44());
   }
@@ -772,7 +768,7 @@ void ConversionContext::Convert(const PaintChunkSubset& chunks) {
     // Most effects apply to drawable contents only. Reference filters are
     // exceptions, for which we have already added the chunk bounds mapped
     // through the filter to the bounds of the effect in StartEffect().
-    UpdateEffectBounds(FloatRect(chunk.drawable_bounds),
+    UpdateEffectBounds(gfx::RectF(chunk.drawable_bounds),
                        chunk_state.Transform().Unalias());
   }
 }
@@ -781,7 +777,7 @@ void ConversionContext::Convert(const PaintChunkSubset& chunks) {
 
 void PaintChunksToCcLayer::ConvertInto(const PaintChunkSubset& chunks,
                                        const PropertyTreeState& layer_state,
-                                       const FloatPoint& layer_offset,
+                                       const gfx::Vector2dF& layer_offset,
                                        cc::DisplayItemList& cc_list) {
   ConversionContext(layer_state, layer_offset, cc_list).Convert(chunks);
 }
@@ -789,7 +785,7 @@ void PaintChunksToCcLayer::ConvertInto(const PaintChunkSubset& chunks,
 scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
     const PaintChunkSubset& paint_chunks,
     const PropertyTreeState& layer_state,
-    const FloatPoint& layer_offset,
+    const gfx::Vector2dF& layer_offset,
     cc::DisplayItemList::UsageHint hint,
     RasterUnderInvalidationCheckingParams* under_invalidation_checking_params) {
   auto cc_list = base::MakeRefCounted<cc::DisplayItemList>(hint);
@@ -798,7 +794,7 @@ scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
   if (under_invalidation_checking_params) {
     auto& params = *under_invalidation_checking_params;
     PaintRecorder recorder;
-    recorder.beginRecording(params.interest_rect);
+    recorder.beginRecording(gfx::RectToSkRect(params.interest_rect));
     // Create a complete cloned list for under-invalidation checking. We can't
     // use cc_list because it is not finalized yet.
     auto list_clone = base::MakeRefCounted<cc::DisplayItemList>(
@@ -871,7 +867,7 @@ static void UpdateTouchActionRegion(
     const HitTestData& hit_test_data,
     const PropertyTreeState& layer_state,
     const PropertyTreeState& chunk_state,
-    const FloatPoint& layer_offset,
+    const gfx::Vector2dF& layer_offset,
     cc::TouchActionRegion& touch_action_region) {
   // If the element has an horizontal scrollable ancestor (including itself), we
   // need to disable cursor control by setting the bit kInternalPanXScrolls.
@@ -881,8 +877,8 @@ static void UpdateTouchActionRegion(
   for (const auto* scroll_node = chunk_state.Transform().ScrollNode();
        scroll_node; scroll_node = scroll_node->Parent()) {
     if (scroll_node->UserScrollableHorizontal() &&
-        scroll_node->ContainerRect().Width() <
-            scroll_node->ContentsSize().Width()) {
+        scroll_node->ContainerRect().width() <
+            scroll_node->ContentsSize().width()) {
       disable_cursor_control = TouchAction::kInternalPanXScrolls;
       break;
     }
@@ -893,33 +889,32 @@ static void UpdateTouchActionRegion(
   }
 
   for (const auto& touch_action_rect : hit_test_data.touch_action_rects) {
-    auto rect = FloatClipRect(FloatRect(touch_action_rect.rect));
+    auto rect = FloatClipRect(gfx::RectF(touch_action_rect.rect));
     if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
                                                    rect)) {
       continue;
     }
-    rect.MoveBy(-layer_offset);
+    rect.MoveBy(FloatPoint(-layer_offset));
     TouchAction touch_action = touch_action_rect.allowed_touch_action;
     if ((touch_action & TouchAction::kPanX) != TouchAction::kNone)
       touch_action |= disable_cursor_control;
-    touch_action_region.Union(touch_action,
-                              gfx::Rect(EnclosingIntRect(rect.Rect())));
+    touch_action_region.Union(touch_action, gfx::ToEnclosingRect(rect.Rect()));
   }
 }
 
 static void UpdateWheelEventRegion(const HitTestData& hit_test_data,
                                    const PropertyTreeState& layer_state,
                                    const PropertyTreeState& chunk_state,
-                                   const FloatPoint& layer_offset,
+                                   const gfx::Vector2dF& layer_offset,
                                    cc::Region& wheel_event_region) {
   for (const auto& wheel_event_rect : hit_test_data.wheel_event_rects) {
-    auto rect = FloatClipRect(FloatRect(wheel_event_rect));
+    auto rect = FloatClipRect(gfx::RectF(wheel_event_rect));
     if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
                                                    rect)) {
       continue;
     }
-    rect.MoveBy(-layer_offset);
-    wheel_event_region.Union(gfx::Rect(EnclosingIntRect(rect.Rect())));
+    rect.MoveBy(FloatPoint(-layer_offset));
+    wheel_event_region.Union(gfx::ToEnclosingRect(rect.Rect()));
   }
 }
 
@@ -928,7 +923,7 @@ static void UpdateNonFastScrollableRegion(
     const HitTestData& hit_test_data,
     const PropertyTreeState& layer_state,
     const PropertyTreeState& chunk_state,
-    const FloatPoint& layer_offset,
+    const gfx::Vector2dF& layer_offset,
     cc::Region& non_fast_scrollable_region) {
   if (hit_test_data.scroll_hit_test_rect.IsEmpty())
     return;
@@ -950,12 +945,12 @@ static void UpdateNonFastScrollableRegion(
     }
   }
 
-  FloatClipRect rect(FloatRect(hit_test_data.scroll_hit_test_rect));
+  FloatClipRect rect(gfx::RectF(hit_test_data.scroll_hit_test_rect));
   if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
                                                  rect))
     return;
 
-  rect.MoveBy(-layer_offset);
+  rect.MoveBy(FloatPoint(-layer_offset));
   non_fast_scrollable_region.Union(EnclosingIntRect(rect.Rect()));
 }
 
@@ -963,8 +958,7 @@ static void UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
     cc::Layer& layer,
     const PropertyTreeState& layer_state,
     const PaintChunkSubset& chunks) {
-  gfx::Vector2dF cc_layer_offset = layer.offset_to_transform_parent();
-  FloatPoint layer_offset(cc_layer_offset.x(), cc_layer_offset.y());
+  gfx::Vector2dF layer_offset = layer.offset_to_transform_parent();
   cc::TouchActionRegion touch_action_region;
   cc::Region wheel_event_region;
   cc::Region non_fast_scrollable_region;
@@ -997,18 +991,17 @@ static void UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
   layer.SetNonFastScrollableRegion(std::move(non_fast_scrollable_region));
 }
 
-static gfx::Point MapSelectionBoundPoint(const IntPoint& point,
+static gfx::Point MapSelectionBoundPoint(const gfx::Point& point,
                                          const PropertyTreeState& layer_state,
                                          const PropertyTreeState& chunk_state,
-                                         const FloatPoint& layer_offset) {
-  FloatPoint mapped_point =
+                                         const gfx::Vector2dF& layer_offset) {
+  gfx::PointF mapped_point =
       GeometryMapper::SourceToDestinationProjection(chunk_state.Transform(),
                                                     layer_state.Transform())
-          .MapPoint(FloatPoint(point));
+          .MapPoint(gfx::PointF(point));
 
-  mapped_point.MoveBy(-layer_offset);
-  gfx::Point out_point(RoundedIntPoint(mapped_point));
-  return out_point;
+  mapped_point -= layer_offset;
+  return gfx::ToRoundedPoint(mapped_point);
 }
 
 static cc::LayerSelectionBound
@@ -1016,7 +1009,7 @@ ConvertPaintedSelectionBoundToLayerSelectionBound(
     const PaintedSelectionBound& bound,
     const PropertyTreeState& layer_state,
     const PropertyTreeState& chunk_state,
-    const FloatPoint& layer_offset) {
+    const gfx::Vector2dF& layer_offset) {
   cc::LayerSelectionBound layer_bound;
   layer_bound.type = bound.type;
   layer_bound.hidden = bound.hidden;
@@ -1032,8 +1025,7 @@ void PaintChunksToCcLayer::UpdateLayerSelection(
     const PropertyTreeState& layer_state,
     const PaintChunkSubset& chunks,
     cc::LayerSelection& layer_selection) {
-  gfx::Vector2dF cc_layer_offset = layer.offset_to_transform_parent();
-  FloatPoint layer_offset(cc_layer_offset.x(), cc_layer_offset.y());
+  gfx::Vector2dF layer_offset = layer.offset_to_transform_parent();
   for (const auto& chunk : chunks) {
     if (!chunk.layer_selection_data)
       continue;

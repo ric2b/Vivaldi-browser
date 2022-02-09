@@ -57,12 +57,12 @@
 #include "chrome/browser/ash/policy/scheduled_task_handler/device_scheduled_reboot_handler.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/device_scheduled_update_checker.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/scheduled_task_executor_impl.h"
-#include "chrome/browser/ash/policy/server_backed_state/device_cloud_state_keys_uploader.h"
+#include "chrome/browser/ash/policy/server_backed_state/active_directory_device_state_uploader.h"
 #include "chrome/browser/ash/policy/server_backed_state/server_backed_state_keys_broker.h"
+#include "chrome/browser/ash/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ash/system/timezone_util.h"
-#include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/policy/device_management_service_configuration.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -220,12 +220,12 @@ void BrowserPolicyConnectorAsh::Init(
     // mode.
     state_keys_broker_ = std::make_unique<ServerBackedStateKeysBroker>(
         chromeos::SessionManagerClient::Get());
-    state_keys_uploader_for_active_directory_ =
-        std::make_unique<DeviceCloudStateKeysUploader>(
+    active_directory_device_state_uploader_ =
+        std::make_unique<ActiveDirectoryDeviceStateUploader>(
             /*client_id=*/GetInstallAttributes()->GetDeviceId(),
             device_management_service(), state_keys_broker_.get(),
             url_loader_factory, std::make_unique<DMTokenStorage>(local_state));
-    state_keys_uploader_for_active_directory_->Init();
+    active_directory_device_state_uploader_->Init();
   }
 
   if (device_cloud_policy_manager_) {
@@ -290,8 +290,8 @@ void BrowserPolicyConnectorAsh::Init(
           std::make_unique<ScheduledTaskExecutorImpl>(
               update_checker_internal::kUpdateCheckTimerTag));
 
-  chromeos::BulkPrintersCalculatorFactory* calculator_factory =
-      chromeos::BulkPrintersCalculatorFactory::Get();
+  ash::BulkPrintersCalculatorFactory* calculator_factory =
+      ash::BulkPrintersCalculatorFactory::Get();
   DCHECK(calculator_factory)
       << "Policy connector initialized before the bulk printers factory";
   device_cloud_external_data_policy_handlers_.push_back(
@@ -349,8 +349,8 @@ void BrowserPolicyConnectorAsh::Shutdown() {
   if (device_local_account_policy_service_)
     device_local_account_policy_service_->Shutdown();
 
-  if (state_keys_uploader_for_active_directory_)
-    state_keys_uploader_for_active_directory_->Shutdown();
+  if (active_directory_device_state_uploader_)
+    active_directory_device_state_uploader_->Shutdown();
 
   if (device_cloud_policy_initializer_)
     device_cloud_policy_initializer_->Shutdown();
@@ -452,6 +452,13 @@ std::string BrowserPolicyConnectorAsh::GetDirectoryApiID() const {
   return std::string();
 }
 
+std::string BrowserPolicyConnectorAsh::GetObfuscatedCustomerID() const {
+  const em::PolicyData* policy = GetDevicePolicy();
+  if (policy && policy->has_obfuscated_customer_id())
+    return policy->obfuscated_customer_id();
+  return std::string();
+}
+
 std::string BrowserPolicyConnectorAsh::GetCustomerLogoURL() const {
   const em::PolicyData* policy = GetDevicePolicy();
   if (policy && policy->has_customer_logo())
@@ -491,10 +498,6 @@ BrowserPolicyConnectorAsh::GetGlobalUserCloudPolicyProvider() {
 void BrowserPolicyConnectorAsh::SetAttestationFlowForTesting(
     std::unique_ptr<chromeos::attestation::AttestationFlow> attestation_flow) {
   attestation_flow_ = std::move(attestation_flow);
-  if (device_cloud_policy_initializer_) {
-    device_cloud_policy_initializer_->SetAttestationFlowForTesting(
-        attestation_flow_.get());
-  }
 }
 
 // static
@@ -512,9 +515,6 @@ void BrowserPolicyConnectorAsh::OnDeviceCloudPolicyManagerConnected() {
   device_cloud_policy_initializer_->Shutdown();
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
       FROM_HERE, std::move(device_cloud_policy_initializer_));
-
-  // TODO(crbug.com/705758): Remove once the crash is resolved.
-  LOG(WARNING) << "DeviceCloudPolicyInitializer is not available anymore.";
 
   if (!device_cert_provisioning_scheduler_) {
     // CertProvisioningScheduler depends on the device-wide CloudPolicyClient to
@@ -572,10 +572,9 @@ void BrowserPolicyConnectorAsh::RestartDeviceCloudPolicyInitializer() {
   device_cloud_policy_initializer_ =
       std::make_unique<DeviceCloudPolicyInitializer>(
           local_state_, device_management_service(),
-          CreateBackgroundTaskRunner(), chromeos::InstallAttributes::Get(),
-          state_keys_broker_.get(),
+          chromeos::InstallAttributes::Get(), state_keys_broker_.get(),
           device_cloud_policy_manager_->device_store(),
-          device_cloud_policy_manager_, attestation_flow_.get(),
+          device_cloud_policy_manager_,
           chromeos::system::StatisticsProvider::GetInstance());
   device_cloud_policy_initializer_->Init();
 }

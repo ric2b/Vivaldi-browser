@@ -21,6 +21,7 @@ class SingleThreadTaskRunner;
 namespace policy {
 class AsyncPolicyLoader;
 class ConfigurationPolicyProvider;
+class ManagementService;
 class Schema;
 class SchemaRegistry;
 }  // namespace policy
@@ -36,6 +37,9 @@ class PolicyWatcher : public policy::PolicyService::Observer {
 
   // Called after detecting malformed policies.
   typedef base::RepeatingCallback<void()> PolicyErrorCallback;
+
+  PolicyWatcher(const PolicyWatcher&) = delete;
+  PolicyWatcher& operator=(const PolicyWatcher&) = delete;
 
   ~PolicyWatcher() override;
 
@@ -87,7 +91,8 @@ class PolicyWatcher : public policy::PolicyService::Observer {
   // preferences (which are blocking operations). |file_task_runner| should be
   // of TYPE_IO type.
   static std::unique_ptr<PolicyWatcher> CreateWithTaskRunner(
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner,
+      policy::ManagementService* management_service);
 
   // Creates a PolicyWatcher from the given loader instead of loading the policy
   // from the default location.
@@ -170,8 +175,6 @@ class PolicyWatcher : public policy::PolicyService::Observer {
   std::unique_ptr<policy::PolicyService> owned_policy_service_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(PolicyWatcher);
 };
 
 }  // namespace remoting

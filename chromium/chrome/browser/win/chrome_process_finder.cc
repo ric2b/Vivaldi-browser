@@ -1,7 +1,6 @@
 // Copyright 2013 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
 #include "chrome/browser/win/chrome_process_finder.h"
 
@@ -88,8 +87,7 @@ NotifyChromeResult AttemptToNotifyRunningChrome(HWND remote_window) {
 }
 
 base::TimeDelta SetNotificationTimeoutForTesting(base::TimeDelta new_timeout) {
-  base::TimeDelta old_timeout =
-      base::TimeDelta::FromMilliseconds(g_timeout_in_milliseconds);
+  base::TimeDelta old_timeout = base::Milliseconds(g_timeout_in_milliseconds);
   g_timeout_in_milliseconds =
       base::checked_cast<uint32_t>(new_timeout.InMilliseconds());
   return old_timeout;

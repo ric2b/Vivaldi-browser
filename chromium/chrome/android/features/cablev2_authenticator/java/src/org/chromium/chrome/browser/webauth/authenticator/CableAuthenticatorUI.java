@@ -11,25 +11,23 @@ import android.app.Activity;
 import android.app.KeyguardManager;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.hardware.usb.UsbAccessory;
 import android.hardware.usb.UsbManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.appcompat.app.AlertDialog;
-import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.vectordrawable.graphics.drawable.Animatable2Compat;
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
@@ -46,10 +44,9 @@ import org.chromium.ui.widget.Toast;
 import java.lang.ref.WeakReference;
 
 /**
- * A fragment that provides a UI for scanning caBLE v2 QR codes.
+ * A fragment that provides a UI for various caBLE v2 actions.
  */
-public class CableAuthenticatorUI
-        extends Fragment implements OnClickListener, QRScanDialog.Callback {
+public class CableAuthenticatorUI extends Fragment implements OnClickListener {
     private static final String TAG = "CableAuthenticatorUI";
 
     // ENABLE_BLUETOOTH_REQUEST_CODE is a random int used to identify responses
@@ -76,6 +73,7 @@ public class CableAuthenticatorUI
             "org.chromium.chrome.modules.cablev2_authenticator.Secret";
     private static final String SERVER_LINK_EXTRA =
             "org.chromium.chrome.browser.webauth.authenticator.ServerLink";
+    private static final String QR_EXTRA = "org.chromium.chrome.browser.webauth.authenticator.QR";
 
     // These entries duplicate some of the enum values from
     // device::cablev2::authenticator::Platform::Error. They must be kept in
@@ -87,7 +85,7 @@ public class CableAuthenticatorUI
     private static final int ERROR_NO_BLUETOOTH_PERMISSION = 111;
 
     private enum Mode {
-        QR, // Triggered from Settings; can scan QR code to start handshake.
+        QR, // QR code scanned by external app.
         FCM, // Triggered by user selecting notification; handshake already running.
         USB, // Triggered by connecting via USB.
         SERVER_LINK, // Triggered by GMSCore forwarding from GAIA.
@@ -96,11 +94,9 @@ public class CableAuthenticatorUI
 
     // Save for ERROR, states always move from one to the next. There are no
     // cycles. Different modes start in different states, e.g. only QR mode
-    // starts with SETTINGS_UI.
+    // starts with QR_CONFIRM.
     private enum State {
-        SETTINGS_UI,
-        CAMERA_PERMISSION,
-        QR_SCANNING,
+        QR_CONFIRM,
         ENABLE_BLUETOOTH,
         ENABLE_BLUETOOTH_REQUESTED,
         BLUETOOTH_PERMISSION,
@@ -112,30 +108,17 @@ public class CableAuthenticatorUI
 
     private AndroidPermissionDelegate mPermissionDelegate;
     private CableAuthenticator mAuthenticator;
-    private LinearLayout mQRButton;
-    private LinearLayout mUnlinkButton;
-    private ImageView mHeader;
     private TextView mStatusText;
     private View mErrorView;
     private View mErrorCloseButton;
+    private View mErrorSettingsButton;
     private View mSpinnerView;
+    private View mBLEEnableView;
+    private View mQRButton;
 
     // mErrorCode contains a value of the authenticator::Platform::Error
     // enumeration when |mState| is |ERROR|.
     private int mErrorCode;
-
-    // The following two members store a pending QR-scan result while Bluetooth
-    // is enabled.
-    private String mPendingQRCode;
-    private boolean mPendingShouldLink;
-
-    // This is true if we enabled Bluetooth and thus need to disable it once
-    // complete. This is only set while a Bluetooth permission prompt is
-    // outstanding, otherwise the value is passed around as a parameter.
-    // (A permission prompt is only shown on Android >=12, and on Android >=12
-    // it's not possible to disable Bluetooth. But we continue to accurately
-    // track this boolean in case that changes.)
-    private boolean mNeedToDisableBluetooth;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -150,6 +133,8 @@ public class CableAuthenticatorUI
                 (UsbAccessory) arguments.getParcelable(UsbManager.EXTRA_ACCESSORY);
         final byte[] serverLink = arguments.getByteArray(SERVER_LINK_EXTRA);
         final byte[] fcmEvent = arguments.getByteArray(EVENT_EXTRA);
+        final Uri qrFromArguments = (Uri) arguments.getParcelable(QR_EXTRA);
+        final String qrURI = qrFromArguments == null ? null : qrFromArguments.toString();
         if (accessory != null) {
             mMode = Mode.USB;
         } else if (arguments.getBoolean(FCM_EXTRA)) {
@@ -162,8 +147,17 @@ public class CableAuthenticatorUI
             }
 
             mMode = Mode.SERVER_LINK;
-        } else {
+        } else if (qrURI != null) {
+            mErrorCode = CableAuthenticator.validateQRURI(qrURI);
+            if (mErrorCode != ERROR_NONE) {
+                mState = State.ERROR;
+                return;
+            }
+
             mMode = Mode.QR;
+        } else {
+            assert false;
+            getActivity().finish();
         }
 
         // GMSCore will immediately fail all requests if a screenlock isn't
@@ -190,7 +184,7 @@ public class CableAuthenticatorUI
         mPermissionDelegate = new ActivityAndroidPermissionDelegate(
                 new WeakReference<Activity>((Activity) context));
         mAuthenticator = new CableAuthenticator(getContext(), this, networkContext, registration,
-                secret, mMode == Mode.FCM, accessory, serverLink, fcmEvent);
+                secret, mMode == Mode.FCM, accessory, serverLink, fcmEvent, qrURI);
 
         switch (mMode) {
             case USB:
@@ -198,6 +192,7 @@ public class CableAuthenticatorUI
                 mState = State.RUNNING;
                 break;
 
+            case SERVER_LINK:
             case FCM:
                 BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
                 if (!adapter.isEnabled()) {
@@ -209,14 +204,9 @@ public class CableAuthenticatorUI
                 mState = State.BLUETOOTH_PERMISSION;
                 break;
 
-            case SERVER_LINK:
-                // GMS Core should have taken care of enabling Bluetooth.
-                mState = State.BLUETOOTH_PERMISSION;
-                break;
-
             case QR:
-                // QR mode displays a UI first.
-                mState = State.SETTINGS_UI;
+                // QR mode displays a confirmation UI first.
+                mState = State.QR_CONFIRM;
                 break;
         }
     }
@@ -229,7 +219,7 @@ public class CableAuthenticatorUI
     }
 
     private View createSpinnerScreen(LayoutInflater inflater, ViewGroup container) {
-        View v = inflater.inflate(R.layout.cablev2_serverlink, container, false);
+        View v = inflater.inflate(R.layout.cablev2_spinner, container, false);
         mStatusText = v.findViewById(R.id.status_text);
 
         final AnimatedVectorDrawableCompat anim = AnimatedVectorDrawableCompat.create(
@@ -256,19 +246,13 @@ public class CableAuthenticatorUI
         getActivity().setTitle(R.string.cablev2_activity_title);
         ViewGroup top = new LinearLayout(getContext());
 
-        // Inflate the error view in case it's needed later.
         mErrorView = inflater.inflate(R.layout.cablev2_error, container, false);
+        mSpinnerView = createSpinnerScreen(inflater, container);
+        mBLEEnableView = inflater.inflate(R.layout.cablev2_ble_enable, container, false);
 
         View v = null;
-
         if (mState == State.ENABLE_BLUETOOTH) {
-            v = inflater.inflate(R.layout.cablev2_ble_enable, container, false);
-            if (BuildInfo.isAtLeastS()) {
-                // Don't claim that Bluetooth will be switched off afterwards on Android 12 and
-                // later because disabling Bluetooth requires an extra permission prompt.
-                ((TextView) v.findViewById(R.id.cablev2_ble_enable_body)).setText("");
-            }
-            mSpinnerView = createSpinnerScreen(inflater, container);
+            v = mBLEEnableView;
         } else if (mState == State.ERROR) {
             fillOutErrorUI(mErrorCode);
             v = mErrorView;
@@ -280,24 +264,17 @@ public class CableAuthenticatorUI
 
                 case FCM:
                 case SERVER_LINK:
-                    v = createSpinnerScreen(inflater, container);
+                    v = mSpinnerView;
                     break;
 
                 case QR:
-                    // TODO: should check FEATURE_BLUETOOTH with
-                    // https://developer.android.com/reference/android/content/pm/PackageManager.html#hasSystemFeature(java.lang.String)
                     // TODO: strings should be translated but this will be replaced during
                     // the UI process.
+                    v = inflater.inflate(R.layout.cablev2_qr, container, false);
 
-                    v = inflater.inflate(R.layout.cablev2_qr_scan, container, false);
-                    mQRButton = v.findViewById(R.id.qr_scan);
+                    mQRButton = v.findViewById(R.id.qr_connect);
                     mQRButton.setOnClickListener(this);
 
-                    mHeader = v.findViewById(R.id.qr_image);
-                    setHeader(R.style.idle);
-
-                    mUnlinkButton = v.findViewById(R.id.unlink);
-                    mUnlinkButton.setOnClickListener(this);
                     break;
             }
         }
@@ -311,37 +288,64 @@ public class CableAuthenticatorUI
         super.onResume();
 
         if (mState == State.ENABLE_BLUETOOTH) {
-            mState = State.ENABLE_BLUETOOTH_REQUESTED;
-            PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT, () -> {
-                if (mAuthenticator != null) {
-                    startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),
-                            ENABLE_BLUETOOTH_REQUEST_CODE);
-                }
-            }, BLE_SCREEN_DELAY_SECS * 1000);
+            enableBluetooth();
         } else if (mState == State.BLUETOOTH_PERMISSION) {
-            onBluetoothEnabled(/*needToDisableBluetooth=*/false);
+            onBluetoothEnabled();
+        } else if (mState == State.ERROR && mErrorCode == ERROR_NO_BLUETOOTH_PERMISSION
+                && BuildInfo.isAtLeastS()) {
+            // This needs to be in a different function call to use functions above API level 21.
+            maybeResolveBLEPermissionError();
         }
     }
 
-    // Called when the Bluetooth adapter has been enabled, or was already enabled.
-    private void onBluetoothEnabled(boolean needToDisableBluetooth) {
-        // In Android 12 and above there is a new BLUETOOTH_ADVERTISE runtime permission.
-        if (BuildInfo.isAtLeastS()) {
-            maybeGetBluetoothPermission(needToDisableBluetooth);
+    // Called when the activity is resumed in a BLE permission error state.
+    @TargetApi(31)
+    private void maybeResolveBLEPermissionError() {
+        if (getContext().checkSelfPermission(permission.BLUETOOTH_ADVERTISE)
+                != PackageManager.PERMISSION_GRANTED) {
             return;
         }
 
-        onHaveBluetoothPermission(needToDisableBluetooth);
+        // The user navigated away and came back, but now we have the needed permission.
+        ViewGroup top = (ViewGroup) getView();
+        top.removeAllViews();
+        top.addView(mSpinnerView);
+
+        mErrorCode = 0;
+        onHaveBluetoothPermission();
+    }
+
+    private void enableBluetooth() {
+        assert mState == State.ENABLE_BLUETOOTH;
+
+        mState = State.ENABLE_BLUETOOTH_REQUESTED;
+        PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT, () -> {
+            if (mAuthenticator != null) {
+                startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),
+                        ENABLE_BLUETOOTH_REQUEST_CODE);
+            }
+        }, BLE_SCREEN_DELAY_SECS * 1000);
+    }
+
+    // Called when the Bluetooth adapter has been enabled, or was already enabled.
+    private void onBluetoothEnabled() {
+        // In Android 12 and above there is a new BLUETOOTH_ADVERTISE runtime permission.
+        if (BuildInfo.isAtLeastS()) {
+            maybeGetBluetoothPermission();
+            return;
+        }
+
+        onHaveBluetoothPermission();
     }
 
     // Called on Android 12 or later after the Bluetooth adaptor is enabled.
     @TargetApi(31)
-    private void maybeGetBluetoothPermission(boolean needToDisableBluetooth) {
+    private void maybeGetBluetoothPermission() {
         mState = State.BLUETOOTH_PERMISSION;
         final String advertise = permission.BLUETOOTH_ADVERTISE;
 
         if (getContext().checkSelfPermission(advertise) == PackageManager.PERMISSION_GRANTED) {
-            onHaveBluetoothPermission(needToDisableBluetooth);
+            onHaveBluetoothPermission();
             return;
         }
 
@@ -358,34 +362,14 @@ public class CableAuthenticatorUI
         // |onRequestPermissionsResult| callback to the Activity, and not
         // this fragment.
         mState = State.BLUETOOTH_PERMISSION_REQUESTED;
-        mNeedToDisableBluetooth = needToDisableBluetooth;
         requestPermissions(new String[] {advertise}, 1);
     }
 
     // Called once the BLUETOOTH_ADVERTISE permission has been granted, or if
     // its not needed on this version of Android.
-    private void onHaveBluetoothPermission(boolean needToDisableBluetooth) {
+    private void onHaveBluetoothPermission() {
         mState = State.RUNNING;
-
-        if (mMode == Mode.QR) {
-            final String qrCode = mPendingQRCode;
-            mPendingQRCode = null;
-            mAuthenticator.onQRCode(qrCode, mPendingShouldLink);
-        } else {
-            mAuthenticator.onBluetoothReady(needToDisableBluetooth);
-        }
-    }
-
-    /**
-     * Updates the header image to be shown in a new "style". The Android
-     * style system is used to make certain elements appear as a QR handshake
-     * progresses.
-     */
-    private void setHeader(int style) {
-        ContextThemeWrapper theme = new ContextThemeWrapper(getContext(), style);
-        Drawable drawable =
-                ResourcesCompat.getDrawable(getResources(), R.drawable.header, theme.getTheme());
-        mHeader.setImageDrawable(drawable);
+        mAuthenticator.onBluetoothReady();
     }
 
     /**
@@ -394,91 +378,39 @@ public class CableAuthenticatorUI
     @Override
     @SuppressLint("SetTextI18n")
     public void onClick(View v) {
-        if (v == mUnlinkButton) {
-            // TODO: localise strings.
-            new AlertDialog.Builder(getContext())
-                    .setTitle("Unlink all devices")
-                    .setMessage("Do you want to unlink all previously connected devices?"
-                            + " You will need to scan a QR code from a given device in"
-                            + " order to use it again."
-                            + " No credentials will be deleted.")
-                    .setIcon(android.R.drawable.ic_dialog_alert)
-                    .setPositiveButton(android.R.string.ok,
-                            new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int whichButton) {
-                                    mAuthenticator.unlinkAllDevices();
-                                }
-                            })
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
-            return;
-        } else if (v == mErrorCloseButton) {
+        if (v == mErrorCloseButton) {
             getActivity().finish();
-            return;
-        }
+        } else if (v == mErrorSettingsButton) {
+            // Open the Settings screen for Chromium.
+            Intent intent =
+                    new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(android.net.Uri.fromParts(
+                    "package", BuildInfo.getInstance().packageName, null));
+            startActivity(intent);
+        } else if (v == mQRButton) {
+            // User approved a QR transaction.
 
-        assert (v == mQRButton);
-        // If camera permission is already available, show the scanning
-        // dialog.
-        final Context context = getContext();
-        if (mPermissionDelegate.hasPermission(permission.CAMERA)) {
-            mState = State.QR_SCANNING;
-            (new QRScanDialog(this)).show(getFragmentManager(), "dialog");
-            return;
-        }
+            ViewGroup top = (ViewGroup) getView();
+            mAuthenticator.setQRLinking(
+                    !((CheckBox) top.findViewById(R.id.qr_no_link)).isChecked());
 
-        // Otherwise prompt for permission first.
-        if (mPermissionDelegate.canRequestPermission(permission.CAMERA)) {
-            // The |Fragment| method |requestPermissions| is called rather than
-            // the method on |mPermissionDelegate| because the latter routes the
-            // |onRequestPermissionsResult| callback to the Activity, and not
-            // this fragment.
-            mState = State.CAMERA_PERMISSION;
-            requestPermissions(new String[] {permission.CAMERA}, 1);
-        } else {
-            // TODO: permission cannot be requested on older versions of
-            // Android. Does Chrome always get camera permission at install
-            // time on those versions? If so, then this case should be
-            // impossible.
-        }
-    }
-
-    /**
-     * Called when the camera has scanned a FIDO QR code.
-     */
-    @Override
-    @SuppressLint("SetTextI18n")
-    public void onQRCode(String value, boolean link) {
-        assert mState == State.QR_SCANNING;
-        setHeader(R.style.step1);
-
-        mPendingQRCode = value;
-        mPendingShouldLink = link;
-
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter.isEnabled()) {
-            onBluetoothEnabled(/*needToDisableBluetooth=*/false);
-        } else {
-            mState = State.ENABLE_BLUETOOTH_REQUESTED;
-            startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),
-                    ENABLE_BLUETOOTH_REQUEST_CODE);
+            top.removeAllViews();
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            if (!adapter.isEnabled()) {
+                mState = State.ENABLE_BLUETOOTH;
+                top.addView(mBLEEnableView);
+                enableBluetooth();
+            } else {
+                mState = State.BLUETOOTH_PERMISSION;
+                top.addView(mSpinnerView);
+                onBluetoothEnabled();
+            }
         }
     }
 
     void onStatus(int code) {
         switch (mMode) {
             case QR:
-                // These values must match up with the Status enum in v2_authenticator.h
-                if (code == 1) {
-                    setHeader(R.style.step2);
-                } else if (code == 2) {
-                    setHeader(R.style.step3);
-                } else if (code == 3) {
-                    setHeader(R.style.step4);
-                }
-                break;
-
             case SERVER_LINK:
             case FCM:
                 // These values must match up with the Status enum in v2_authenticator.h
@@ -517,31 +449,13 @@ public class CableAuthenticatorUI
                 grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
 
         switch (mState) {
-            case CAMERA_PERMISSION:
-                if (granted) {
-                    assert permissions[0].equals(permission.CAMERA);
-                    mState = State.QR_SCANNING;
-                    (new QRScanDialog(this)).show(getFragmentManager(), "dialog");
-                } else {
-                    mState = State.SETTINGS_UI;
-                }
-                break;
-
             case BLUETOOTH_PERMISSION_REQUESTED:
-                final boolean needToDisable = mNeedToDisableBluetooth;
-                mNeedToDisableBluetooth = false;
-
                 if (granted) {
                     assert permissions[0].equals(permission.BLUETOOTH_ADVERTISE);
-                    onHaveBluetoothPermission(needToDisable);
+                    onHaveBluetoothPermission();
                 } else {
                     mState = State.ERROR;
 
-                    // If would be nice to disable Bluetooth here if we switched
-                    // it on previously, but Android 12 requires more
-                    // permissions to do that.
-
-                    // TODO(agl): do a better UI once we're out of strings freeze.
                     mErrorCode = ERROR_NO_BLUETOOTH_PERMISSION;
                     fillOutErrorUI(mErrorCode);
                     ViewGroup top = (ViewGroup) getView();
@@ -597,15 +511,13 @@ public class CableAuthenticatorUI
 
         switch (mMode) {
             case QR:
-                onBluetoothEnabled(/*needToDisableBluetooth=*/true);
-                break;
-
+            case SERVER_LINK:
             case FCM:
                 ViewGroup top = (ViewGroup) getView();
                 top.removeAllViews();
                 top.addView(mSpinnerView);
 
-                onBluetoothEnabled(/*needToDisableBluetooth=*/true);
+                onBluetoothEnabled();
                 break;
 
             default:
@@ -674,17 +586,34 @@ public class CableAuthenticatorUI
     void fillOutErrorUI(int errorCode) {
         mErrorCloseButton = mErrorView.findViewById(R.id.error_close);
         mErrorCloseButton.setOnClickListener(this);
+        mErrorSettingsButton = mErrorView.findViewById(R.id.error_settings_button);
+        mErrorSettingsButton.setOnClickListener(this);
 
         String desc;
-        if (errorCode == ERROR_UNEXPECTED_EOF) {
-            desc = getResources().getString(R.string.cablev2_error_timeout);
-        } else {
-            TextView errorCodeTextView = (TextView) mErrorView.findViewById(R.id.error_code);
-            errorCodeTextView.setText(
-                    getResources().getString(R.string.cablev2_error_code, errorCode));
+        boolean settingsButtonVisible = false;
+        switch (errorCode) {
+            case ERROR_UNEXPECTED_EOF:
+                desc = getResources().getString(R.string.cablev2_error_timeout);
+                break;
 
-            desc = getResources().getString(R.string.cablev2_error_generic);
+            case ERROR_NO_BLUETOOTH_PERMISSION:
+                final String packageLabel = BuildInfo.getInstance().hostPackageLabel;
+                desc = getResources().getString(
+                        R.string.cablev2_error_ble_permission, packageLabel);
+                settingsButtonVisible = true;
+                break;
+
+            default:
+                TextView errorCodeTextView = (TextView) mErrorView.findViewById(R.id.error_code);
+                errorCodeTextView.setText(
+                        getResources().getString(R.string.cablev2_error_code, errorCode));
+
+                desc = getResources().getString(R.string.cablev2_error_generic);
+                break;
         }
+
+        ((View) mErrorView.findViewById(R.id.error_settings_button))
+                .setVisibility(settingsButtonVisible ? View.VISIBLE : View.INVISIBLE);
 
         TextView descriptionTextView = (TextView) mErrorView.findViewById(R.id.error_description);
         descriptionTextView.setText(desc);

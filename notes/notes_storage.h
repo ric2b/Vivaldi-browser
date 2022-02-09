@@ -37,6 +37,8 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   // task in a backend task runner.
   NotesStorage(NotesModel* model, const base::FilePath& profile_path);
   ~NotesStorage() override;
+  NotesStorage(const NotesStorage&) = delete;
+  NotesStorage& operator=(const NotesStorage&) = delete;
 
   // Schedules saving the notes model to disk.
   void ScheduleSave();
@@ -61,8 +63,6 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   // The state of the backup file creation which is created lazily just before
   // the first scheduled save.
   bool backup_triggered_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesStorage);
 };
 
 }  // namespace vivaldi

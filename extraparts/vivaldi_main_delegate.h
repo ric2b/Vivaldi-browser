@@ -13,9 +13,9 @@
 
 class VivaldiMainDelegate
 #if defined(OS_ANDROID)
-  : public ChromeMainDelegateAndroid
+    : public ChromeMainDelegateAndroid
 #else
-  : public ChromeMainDelegate
+    : public ChromeMainDelegate
 #endif
 {
  public:

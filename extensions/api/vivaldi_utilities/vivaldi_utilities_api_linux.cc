@@ -18,12 +18,13 @@ namespace extensions {
 void reduce_spaces(std::string& s) {
   // strip leading spaces.
   unsigned i;
-  for (i = 0; s[i] == ' ' && i < s.length(); i++);
+  for (i = 0; s[i] == ' ' && i < s.length(); i++)
+    ;
   s.erase(0, i);
 
   // reduce double spaces
   for (i = 0; i < s.length(); i++) {
-    if(s[i] == ' ' && s[i+1] == ' ') {
+    if (s[i] == ' ' && s[i + 1] == ' ') {
       s.erase(i, 1);
       i--;
     }
@@ -50,15 +51,15 @@ std::map<char, std::string> dateFormatMods = {
 // Tongan, Farsi and Vietnamese, out of 92 tested so far.
 std::string getMomentJsFormatString(const char* fmt, bool short_date) {
   std::string s = "";
-  std::map<char,std::string>::iterator it;
+  std::map<char, std::string>::iterator it;
   char c;
 
   for (int i = 0; fmt[i] != '\0'; i++) {
     if (fmt[i] == '%') {
-      c = fmt[i+1];
+      c = fmt[i + 1];
       if (c == '-') {
         i++;
-        c = fmt[i+1];
+        c = fmt[i + 1];
       }
 
       // Long form sometimes uses %b (month number) for the month where we
@@ -82,12 +83,12 @@ std::string getMomentJsFormatString(const char* fmt, bool short_date) {
       }
       i++;
 
-    // Norway adds 'kl.' in front of its time format. This code might seem
-    // like too much special-casing, but Norway really is the only country
-    // in the world that does this and 'kl' interferes with moment.js
-    // formatting.
-    } else if (fmt[i] == 'k' && fmt[i+1] == 'l' && fmt[i+2] == '.') {
-      i+=2;
+      // Norway adds 'kl.' in front of its time format. This code might seem
+      // like too much special-casing, but Norway really is the only country
+      // in the world that does this and 'kl' interferes with moment.js
+      // formatting.
+    } else if (fmt[i] == 'k' && fmt[i + 1] == 'l' && fmt[i + 2] == '.') {
+      i += 2;
     } else {
       s += fmt[i];
     }
@@ -97,10 +98,10 @@ std::string getMomentJsFormatString(const char* fmt, bool short_date) {
 }
 
 static int first_weekday(void) {
-  const char *const s = nl_langinfo(_NL_TIME_FIRST_WEEKDAY);
+  const char* const s = nl_langinfo(_NL_TIME_FIRST_WEEKDAY);
 
   if (s && *s >= 1 && *s <= 7)
-      return (int)*s;
+    return (int)*s;
 
   /* Default to Sunday, 1. */
   return 1;
@@ -108,7 +109,6 @@ static int first_weekday(void) {
 
 bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
     vivaldi::utilities::DateFormats* date_formats) {
-
   // This initializes the system locale for LC_TIME. Not all locale categories
   // are necessarily equal, but LC_TIME is what is relevant to us.
   setlocale(LC_TIME, "");
@@ -119,7 +119,8 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
       getMomentJsFormatString(nl_langinfo(D_FMT), true);
   date_formats->long_date_format =
       getMomentJsFormatString(nl_langinfo(D_T_FMT), false);
-  date_formats->time_format = getMomentJsFormatString(nl_langinfo(T_FMT), false);
+  date_formats->time_format =
+      getMomentJsFormatString(nl_langinfo(T_FMT), false);
 
   return true;
 }

@@ -23,6 +23,10 @@ BASE_EXPORT base::CallbackListSubscription AddExtDataUpdatedCallback(
     base::RepeatingCallback<void(content::WebContents*)>);
 BASE_EXPORT base::RepeatingCallbackList<void(content::WebContents*)>&
 GetExtDataUpdatedCallbackList();
+BASE_EXPORT base::RepeatingCallbackList<void()>& GetSystemColorsUpdatedCallbackList();
+BASE_EXPORT base::CallbackListSubscription SystemColorsUpdatedCallback(
+    base::RepeatingCallback<void()> system_colors_callback);
+
 
 bool BASE_EXPORT IsVivaldiApp(base::StringPiece extension_id);
 

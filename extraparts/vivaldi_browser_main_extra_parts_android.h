@@ -5,16 +5,18 @@
 
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
-class VivaldiBrowserMainExtraPartsAndroid :
-    public VivaldiBrowserMainExtraParts {
-public:
+class VivaldiBrowserMainExtraPartsAndroid
+    : public VivaldiBrowserMainExtraParts {
+ public:
   VivaldiBrowserMainExtraPartsAndroid();
   ~VivaldiBrowserMainExtraPartsAndroid() override;
+  VivaldiBrowserMainExtraPartsAndroid(
+      const VivaldiBrowserMainExtraPartsAndroid&) = delete;
+  VivaldiBrowserMainExtraPartsAndroid& operator=(
+      const VivaldiBrowserMainExtraPartsAndroid&) = delete;
 
   // VivaldiBrowserMainExtraParts override.
   void PostProfileInit() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraPartsAndroid);
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_ANDROID_H_

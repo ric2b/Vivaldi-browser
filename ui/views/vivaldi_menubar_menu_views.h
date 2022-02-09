@@ -9,7 +9,7 @@
 namespace views {
 class MenuItemView;
 class Widget;
-}
+}  // namespace views
 
 namespace vivaldi {
 class Menubar;
@@ -20,16 +20,17 @@ class VivaldiMenubarMenuViews : public VivaldiMenubarMenu {
   VivaldiMenubarMenuViews(content::WebContents* web_contents,
                           MenubarMenuParams& params,
                           int id);
+  VivaldiMenubarMenuViews(const VivaldiMenubarMenuViews&) = delete;
+  VivaldiMenubarMenuViews& operator=(const VivaldiMenubarMenuViews&) = delete;
+
   bool CanShow() override;
   void Show() override;
 
  private:
   content::WebContents* web_contents_;
   std::unique_ptr<Menubar> menubar_;
-  DISALLOW_COPY_AND_ASSIGN(VivaldiMenubarMenuViews);
 };
 
-}  // namespace vivialdi
-
+}  // namespace vivaldi
 
 #endif  // UI_VIEWS_VIVALDI_MENUBAR_MENU_VIEWS_H_

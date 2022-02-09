@@ -9,10 +9,12 @@ class VivaldiBrowserMainExtraPartsWin : public VivaldiBrowserMainExtraParts {
  public:
   VivaldiBrowserMainExtraPartsWin();
   ~VivaldiBrowserMainExtraPartsWin() override;
+  VivaldiBrowserMainExtraPartsWin(const VivaldiBrowserMainExtraPartsWin&) =
+      delete;
+  VivaldiBrowserMainExtraPartsWin& operator=(
+      const VivaldiBrowserMainExtraPartsWin&) = delete;
 
   void PostEarlyInitialization() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraPartsWin);
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_WIN_H_

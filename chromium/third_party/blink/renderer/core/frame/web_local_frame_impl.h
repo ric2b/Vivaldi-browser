@@ -46,6 +46,7 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
@@ -174,19 +175,15 @@ class CORE_EXPORT WebLocalFrameImpl final
   v8::Local<v8::Context> GetScriptContextFromWorldId(
       v8::Isolate* isolate,
       int world_id) const override;
-  void RequestExecuteScriptAndReturnValue(const WebScriptSource&,
-                                          bool user_gesture,
-                                          WebScriptExecutionCallback*) override;
   void RequestExecuteV8Function(v8::Local<v8::Context>,
                                 v8::Local<v8::Function>,
                                 v8::Local<v8::Value> receiver,
                                 int argc,
                                 v8::Local<v8::Value> argv[],
                                 WebScriptExecutionCallback*) override;
-  void RequestExecuteScriptInIsolatedWorld(
+  void RequestExecuteScript(
       int32_t world_id,
-      const WebScriptSource* source_in,
-      unsigned num_sources,
+      base::span<const WebScriptSource> sources,
       bool user_gesture,
       ScriptExecutionType,
       WebScriptExecutionCallback*,
@@ -286,8 +283,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   std::unique_ptr<WebAssociatedURLLoader> CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) override;
   void DeprecatedStopLoading() override;
-  gfx::ScrollOffset GetScrollOffset() const override;
-  void SetScrollOffset(const gfx::ScrollOffset&) override;
+  gfx::Vector2dF GetScrollOffset() const override;
+  void SetScrollOffset(const gfx::Vector2dF&) override;
   gfx::Size DocumentSize() const override;
   bool HasVisibleContent() const override;
   gfx::Rect VisibleContentRect() const override;
@@ -327,6 +324,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool HasStickyUserActivation() override;
   bool HasTransientUserActivation() override;
   bool ConsumeTransientUserActivation(UserActivationUpdateSource) override;
+  bool LastActivationWasRestricted() const override;
   void SetTargetToCurrentHistoryItem(const WebString& target) override;
   void UpdateCurrentHistoryItem() override;
   PageState CurrentHistoryItemToPageState() override;
@@ -417,7 +415,9 @@ class CORE_EXPORT WebLocalFrameImpl final
       mojo::PendingAssociatedRemote<mojom::blink::PortalClient>);
   RemoteFrame* AdoptPortal(HTMLPortalElement*);
 
-  RemoteFrame* CreateFencedFrame(HTMLFencedFrameElement*);
+  RemoteFrame* CreateFencedFrame(
+      HTMLFencedFrameElement*,
+      mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>);
 
   void DidChangeContentsSize(const IntSize&);
 
@@ -610,8 +610,6 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebTextCheckClient* text_check_client_;
 
   WebSpellCheckPanelHostClient* spell_check_panel_host_client_;
-
-  WebCosmeticFilterClient* web_cosmetic_filter_client_;
 
   // Oilpan: WebLocalFrameImpl must remain alive until close() is called.
   // Accomplish that by keeping a self-referential Persistent<>. It is

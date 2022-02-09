@@ -7,6 +7,7 @@
 #include <fuchsia/legacymetrics/cpp/fidl_test_base.h>
 #include <fuchsia/media/cpp/fidl.h>
 #include <fuchsia/modular/cpp/fidl.h>
+#include <fuchsia/web/cpp/fidl.h>
 #include <lib/fdio/directory.h>
 #include <lib/fidl/cpp/binding.h>
 #include <lib/sys/cpp/component_context.h>
@@ -20,6 +21,7 @@
 #include "base/fuchsia/file_utils.h"
 #include "base/fuchsia/filtered_service_directory.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/mem_buffer_util.h"
 #include "base/fuchsia/process_context.h"
 #include "base/fuchsia/scoped_service_binding.h"
 #include "base/fuchsia/test_component_controller.h"
@@ -30,19 +32,19 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_future.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "fuchsia/base/agent_impl.h"
-#include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/base/string_util.h"
 #include "fuchsia/base/test/context_provider_test_connector.h"
 #include "fuchsia/base/test/fake_component_context.h"
 #include "fuchsia/base/test/fit_adapter.h"
 #include "fuchsia/base/test/frame_test_util.h"
-#include "fuchsia/base/test/result_receiver.h"
 #include "fuchsia/base/test/test_devtools_list_fetcher.h"
 #include "fuchsia/base/test/url_request_rewrite_test_util.h"
+#include "fuchsia/fidl/chromium/cast/cpp/fidl.h"
 #include "fuchsia/runners/cast/cast_runner.h"
 #include "fuchsia/runners/cast/cast_runner_switches.h"
 #include "fuchsia/runners/cast/fake_api_bindings.h"
@@ -336,25 +338,23 @@ class TestCastComponent {
   // promise is returned.
   std::string ExecuteJavaScript(const std::string& code) {
     fuchsia::web::WebMessage message;
-    message.set_data(cr_fuchsia::MemBufferFromString(code, "test-msg"));
+    message.set_data(base::MemBufferFromString(code, "test-msg"));
     test_port_->PostMessage(
         std::move(message),
         [](fuchsia::web::MessagePort_PostMessage_Result result) {
           EXPECT_TRUE(result.is_response());
         });
 
-    base::RunLoop response_loop;
-    cr_fuchsia::ResultReceiver<fuchsia::web::WebMessage> response(
-        response_loop.QuitClosure());
+    base::test::TestFuture<fuchsia::web::WebMessage> response;
     test_port_->ReceiveMessage(
-        cr_fuchsia::CallbackToFitFunction(response.GetReceiveCallback()));
-    response_loop.Run();
+        cr_fuchsia::CallbackToFitFunction(response.GetCallback()));
+    EXPECT_TRUE(response.Wait());
 
-    std::string response_string;
-    EXPECT_TRUE(
-        cr_fuchsia::StringFromMemBuffer(response->data(), &response_string));
+    absl::optional<std::string> response_string =
+        base::StringFromMemBuffer(response.Get().data());
+    EXPECT_TRUE(response_string.has_value());
 
-    return response_string;
+    return response_string.value_or(std::string());
   }
 
   void CheckAppUrl(const GURL& app_url) {
@@ -427,7 +427,7 @@ class TestCastComponent {
     // return the results over a MessagePort.
     std::vector<chromium::cast::ApiBinding> binding_list;
     chromium::cast::ApiBinding eval_js_binding;
-    eval_js_binding.set_before_load_script(cr_fuchsia::MemBufferFromString(
+    eval_js_binding.set_before_load_script(base::MemBufferFromString(
         "function valueOrUndefinedString(value) {"
         "    return (typeof(value) == 'undefined') ? 'undefined' : value;"
         "}"
@@ -778,7 +778,7 @@ TEST_F(CastRunnerIntegrationTest, ApplicationConfigAgentUrl) {
   // bindings returned for the single-agent scenario are not initialized.
   std::vector<chromium::cast::ApiBinding> binding_list;
   chromium::cast::ApiBinding echo_binding;
-  echo_binding.set_before_load_script(cr_fuchsia::MemBufferFromString(
+  echo_binding.set_before_load_script(base::MemBufferFromString(
       "window.echo = cast.__platform__.PortConnector.bind('dummyService');",
       "test"));
   binding_list.emplace_back(std::move(echo_binding));
@@ -837,7 +837,7 @@ TEST_F(CastRunnerIntegrationTest, ApplicationConfigAgentUrlRewriteOptional) {
   // bindings returned for the single-agent scenario are not initialized.
   std::vector<chromium::cast::ApiBinding> binding_list;
   chromium::cast::ApiBinding echo_binding;
-  echo_binding.set_before_load_script(cr_fuchsia::MemBufferFromString(
+  echo_binding.set_before_load_script(base::MemBufferFromString(
       "window.echo = cast.__platform__.PortConnector.bind('dummyService');",
       "test"));
   binding_list.emplace_back(std::move(echo_binding));

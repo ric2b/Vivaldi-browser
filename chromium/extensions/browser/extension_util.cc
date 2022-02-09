@@ -256,7 +256,7 @@ void ResetCorsOriginAccessListForExtension(
     content::BrowserContext* browser_context,
     const Extension& extension) {
   SetCorsOriginAccessListForExtensionHelper({browser_context}, extension, {},
-                                            {}, base::DoNothing::Once());
+                                            {}, base::DoNothing());
 }
 
 // Returns whether the |extension| should be loaded in the given

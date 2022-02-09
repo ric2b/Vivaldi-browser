@@ -12,6 +12,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -57,6 +58,10 @@ class PreMenuEventDispatchHandler : public ui::EventHandler,
     window_->AddObserver(this);
   }
 
+  PreMenuEventDispatchHandler(const PreMenuEventDispatchHandler&) = delete;
+  PreMenuEventDispatchHandler& operator=(const PreMenuEventDispatchHandler&) =
+      delete;
+
   ~PreMenuEventDispatchHandler() override { StopObserving(); }
 
   // ui::EventHandler overrides.
@@ -82,8 +87,6 @@ class PreMenuEventDispatchHandler : public ui::EventHandler,
   MenuController* menu_controller_;
   SubmenuView* submenu_;
   aura::Window* window_;
-
-  DISALLOW_COPY_AND_ASSIGN(PreMenuEventDispatchHandler);
 };
 #endif  // USE_AURA
 
@@ -127,8 +130,10 @@ void MenuHost::InitMenuHost(const InitParams& init_params) {
   bool rounded_border = menu_config.CornerRadiusForMenu(menu_controller) != 0;
   bool bubble_border = submenu_->GetScrollViewContainer() &&
                        submenu_->GetScrollViewContainer()->HasBubbleBorder();
-  params.shadow_type = bubble_border ? Widget::InitParams::ShadowType::kNone
-                                     : Widget::InitParams::ShadowType::kDrop;
+  params.shadow_type =
+      (bubble_border || (menu_config.win11_style_menus && rounded_border))
+          ? Widget::InitParams::ShadowType::kNone
+          : Widget::InitParams::ShadowType::kDrop;
   params.opacity = (bubble_border || rounded_border)
                        ? Widget::InitParams::WindowOpacity::kTranslucent
                        : Widget::InitParams::WindowOpacity::kOpaque;
@@ -139,8 +144,12 @@ void MenuHost::InitMenuHost(const InitParams& init_params) {
   params.bounds = init_params.bounds;
 
 #if defined(USE_AURA)
+  // TODO(msisov): remove kMenutype once positioning of anchored windows
+  // finally migrates to a new path.
   params.init_properties_container.SetProperty(aura::client::kMenuType,
                                                init_params.menu_type);
+  params.init_properties_container.SetProperty(aura::client::kOwnedWindowAnchor,
+                                               init_params.owned_window_anchor);
 #endif
   // If MenuHost has no parent widget, it needs to be marked
   // Activatable, so that calling Show in ShowMenuHost will
@@ -234,6 +243,14 @@ void MenuHost::DestroyMenuHost() {
 
 void MenuHost::SetMenuHostBounds(const gfx::Rect& bounds) {
   SetBounds(bounds);
+}
+
+void MenuHost::SetMenuHostOwnedWindowAnchor(
+    const ui::OwnedWindowAnchor& anchor) {
+#if defined(USE_AURA)
+  native_widget_private()->GetNativeWindow()->SetProperty(
+      aura::client::kOwnedWindowAnchor, anchor);
+#endif
 }
 
 void MenuHost::ReleaseMenuHostCapture() {

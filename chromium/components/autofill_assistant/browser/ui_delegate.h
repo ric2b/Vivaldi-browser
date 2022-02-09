@@ -15,6 +15,7 @@
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/rectf.h"
 #include "components/autofill_assistant/browser/state.h"
+#include "components/autofill_assistant/browser/tts_button_state.h"
 #include "components/autofill_assistant/browser/user_action.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/viewport_mode.h"
@@ -43,10 +44,6 @@ class UiDelegate {
   // Returns the current state of the controller.
   virtual AutofillAssistantState GetState() const = 0;
 
-  // Called when user interaction within the allowed touchable area was
-  // detected. This should cause rerun of preconditions check.
-  virtual void OnUserInteractionInsideTouchableArea() = 0;
-
   // Returns a string describing the current execution context. This is useful
   // when analyzing feedback forms and for debugging in general.
   virtual std::string GetDebugContext() = 0;
@@ -71,6 +68,12 @@ class UiDelegate {
 
   // Returns whether the progress bar is visible.
   virtual bool GetProgressVisible() const = 0;
+
+  // Returns whether the TTS button is visible.
+  virtual bool GetTtsButtonVisible() const = 0;
+
+  // Returns the current TTS button state.
+  virtual TtsButtonState GetTtsButtonState() const = 0;
 
   // Returns the current configuration of the step progress bar.
   virtual absl::optional<ShowProgressBarProto::StepProgressBarConfiguration>
@@ -140,6 +143,9 @@ class UiDelegate {
 
   // Called when the user clicks a link in the form action.
   virtual void OnFormActionLinkClicked(int link) = 0;
+
+  // Called when the user clicks the TTS button.
+  virtual void OnTtsButtonClicked() = 0;
 
   // Sets the start date of the date/time range.
   virtual void SetDateTimeRangeStartDate(
@@ -262,6 +268,13 @@ class UiDelegate {
   // Whether the overlay should be determined based on AA state or always
   // hidden.
   virtual bool ShouldShowOverlay() const = 0;
+
+  // Whether the keyboard should currently be suppressed.
+  virtual bool ShouldSuppressKeyboard() const = 0;
+
+  // Set the keyboard suppression for all frames for the current WebContent's
+  // main page.
+  virtual void SuppressKeyboard(bool suppress) = 0;
 
   // Notifies the UI delegate that it should shut down.
   virtual void ShutdownIfNecessary() = 0;

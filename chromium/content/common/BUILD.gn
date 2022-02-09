@@ -54,6 +54,7 @@ source_set("common") {
     "background_fetch/background_fetch_types.h",
     "child_process_host_impl.cc",
     "child_process_host_impl.h",
+    "color_parser.cc",
     "common_param_traits.cc",
     "common_param_traits.h",
     "common_param_traits_macros.h",
@@ -84,6 +85,7 @@ source_set("common") {
     "font_list.cc",
     "font_list.h",
     "font_list_fontconfig.cc",
+    "frame_owner_element_type_mojom_traits.cc",
     "gin_java_bridge_messages.h",
     "in_process_child_thread_params.cc",
     "in_process_child_thread_params.h",
@@ -131,6 +133,8 @@ source_set("common") {
     "process_type.cc",
     "process_visibility_tracker.cc",
     "process_visibility_tracker.h",
+    "pseudonymization_salt.cc",
+    "pseudonymization_salt.h",
     "service_worker/service_worker_utils.cc",
     "service_worker/service_worker_utils.h",
     "set_process_title.cc",
@@ -145,6 +149,8 @@ source_set("common") {
     "trace_utils.h",
     "url_schemes.cc",
     "url_schemes.h",
+    "url_utils.cc",
+    "url_utils.h",
     "user_agent.cc",
     "web_package/signed_exchange_utils.cc",
     "web_package/signed_exchange_utils.h",
@@ -224,6 +230,7 @@ source_set("common") {
     "//third_party/angle:angle_gpu_info_util",
     "//third_party/boringssl",
     "//third_party/icu",
+    "//third_party/re2",
     "//ui/base",
     "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/ime",
@@ -468,6 +475,10 @@ mojom("mojo_bindings") {
     {
       types = [
         {
+          mojom = "content.mojom.ChildFrameOwnerElementType"
+          cpp = "::blink::FrameOwnerElementType"
+        },
+        {
           mojom = "content.mojom.ContentSecurityPolicy"
           cpp = "::content::ContentSecurityPolicy"
         },
@@ -523,6 +534,7 @@ mojom("mojo_bindings") {
 
       traits_headers = [
         "//cc/input/touch_action.h",
+        "//content/common/frame_owner_element_type_mojom_traits.h",
         "//content/common/input/input_injector_mojom_traits.h",
         "//content/common/input/synthetic_pinch_gesture_params.h",
         "//content/common/input/synthetic_pointer_action_list_params.h",
@@ -530,14 +542,14 @@ mojom("mojo_bindings") {
         "//content/common/input/synthetic_smooth_scroll_gesture_params.h",
         "//content/common/input/synthetic_tap_gesture_params.h",
         "//content/common/navigation_gesture.h",
-        "//third_party/blink/public/common/widget/visual_properties.h",
-        "//third_party/blink/public/common/web_preferences/web_preferences.h",
         "//net/base/network_change_notifier.h",
         "//third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h",
         "//third_party/blink/public/common/input/web_input_event.h",
         "//third_party/blink/public/common/input/web_mouse_wheel_event.h",
         "//third_party/blink/public/common/input/web_pointer_properties.h",
         "//third_party/blink/public/common/input/web_touch_point.h",
+        "//third_party/blink/public/common/web_preferences/web_preferences.h",
+        "//third_party/blink/public/common/widget/visual_properties.h",
         "//ui/events/blink/did_overscroll_params.h",
         "//ui/events/blink/web_input_event_traits.h",
         "//ui/latency/ipc/latency_info_param_traits.h",

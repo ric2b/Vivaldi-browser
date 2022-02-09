@@ -211,7 +211,9 @@ void SetupSandboxParameters(sandbox::policy::SandboxType sandbox_type,
     case sandbox::policy::SandboxType::kCdm:
     case sandbox::policy::SandboxType::kMirroring:
     case sandbox::policy::SandboxType::kNaClLoader:
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
     case sandbox::policy::SandboxType::kPrintBackend:
+#endif
     case sandbox::policy::SandboxType::kPrintCompositor:
     case sandbox::policy::SandboxType::kRenderer:
     case sandbox::policy::SandboxType::kUtility:
@@ -230,7 +232,6 @@ void SetupSandboxParameters(sandbox::policy::SandboxType sandbox_type,
 #endif
       break;
     case sandbox::policy::SandboxType::kNoSandbox:
-    case sandbox::policy::SandboxType::kVideoCapture:
       CHECK(false) << "Unhandled parameters for sandbox_type "
                    << static_cast<int>(sandbox_type);
       break;

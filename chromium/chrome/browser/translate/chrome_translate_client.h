@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/feature_list.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
@@ -47,6 +48,9 @@ class ChromeTranslateClient
       public content::WebContentsUserData<ChromeTranslateClient>,
       public autofill_assistant::RuntimeObserver {
  public:
+  ChromeTranslateClient(const ChromeTranslateClient&) = delete;
+  ChromeTranslateClient& operator=(const ChromeTranslateClient&) = delete;
+
   ~ChromeTranslateClient() override;
 
   // Gets the LanguageState associated with the page.
@@ -151,8 +155,6 @@ class ChromeTranslateClient
 #endif
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeTranslateClient);
 };
 
 #endif  // CHROME_BROWSER_TRANSLATE_CHROME_TRANSLATE_CLIENT_H_

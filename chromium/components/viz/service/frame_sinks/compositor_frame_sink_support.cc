@@ -120,6 +120,12 @@ CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
 
   if (begin_frame_source_ && added_frame_observer_)
     begin_frame_source_->RemoveObserver(this);
+
+  if (bundle_id_.has_value()) {
+    if (auto* bundle = frame_sink_manager_->GetFrameSinkBundle(*bundle_id_)) {
+      bundle->RemoveFrameSink(this);
+    }
+  }
 }
 
 FrameTimingDetailsMap CompositorFrameSinkSupport::TakeFrameTimingDetailsMap() {
@@ -147,27 +153,34 @@ void CompositorFrameSinkSupport::SetBeginFrameSource(
     begin_frame_source_->RemoveObserver(this);
     added_frame_observer_ = false;
   }
-  if (bundle_id_ && begin_frame_source_ != nullptr &&
-      begin_frame_source_ != begin_frame_source) {
-    // If we are in a bundle, our previous BeginFrameSource must have been
-    // identical to the bundle's. If that's changing, we're no longer able to
-    // participate in the bundle. Force the client to re-establish a
-    // CompositorFrameSink in this case.
-    ScheduleSelfDestruction();
-    return;
-  }
+
+  auto* old_source = begin_frame_source_;
   begin_frame_source_ = begin_frame_source;
+
+  FrameSinkBundleImpl* bundle = nullptr;
+  if (bundle_id_) {
+    bundle = frame_sink_manager_->GetFrameSinkBundle(*bundle_id_);
+    if (!bundle) {
+      // Our bundle has been destroyed.
+      ScheduleSelfDestruction();
+      return;
+    }
+    bundle->UpdateFrameSink(this, old_source);
+  }
+
   UpdateNeedsBeginFramesInternal();
 }
 
 void CompositorFrameSinkSupport::SetBundle(const FrameSinkBundleId& bundle_id) {
   auto* bundle = frame_sink_manager_->GetFrameSinkBundle(bundle_id);
-  if (!bundle || (begin_frame_source_ &&
-                  begin_frame_source_ != bundle->begin_frame_source())) {
+  if (!bundle) {
+    // The bundle is gone already, so force the client to re-establish their
+    // CompositorFrameSink.
     ScheduleSelfDestruction();
     return;
   }
 
+  bundle->AddFrameSink(this);
   bundle_id_ = bundle_id;
   UpdateNeedsBeginFramesInternal();
 }
@@ -1023,7 +1036,7 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   // the last one was sent, either because clients are unresponsive or have
   // submitted too many undrawn frames.
   const bool can_throttle_if_unresponsive_or_excessive =
-      frame_time - last_frame_time_ < base::TimeDelta::FromSeconds(1);
+      frame_time - last_frame_time_ < base::Seconds(1);
 
   // If there are pending timing details from the previous frame(s),
   // then the client needs to receive the begin-frame.
@@ -1087,10 +1100,12 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   DCHECK_GE(active_frame_index, last_drawn_frame_index_);
   }
 
-  // Throttle clients that have submitted too many undrawn frames.
+  // Throttle clients that have submitted too many undrawn frames, unless the
+  // active frame requests that it doesn't.
   uint64_t num_undrawn_frames = active_frame_index - last_drawn_frame_index_;
   if (can_throttle_if_unresponsive_or_excessive &&
-      num_undrawn_frames > kUndrawnFrameLimit) {
+      num_undrawn_frames > kUndrawnFrameLimit &&
+      surface->GetActiveFrameMetadata().may_throttle_if_undrawn_frames) {
     RecordShouldSendBeginFrame("ThrottleUndrawnFrames");
     return false;
   }

@@ -854,6 +854,10 @@ void RenderFrameDevToolsAgentHost::UpdateRendererChannel(bool force) {
   auto_attacher_->SetRenderFrameHost(frame_host_);
 }
 
+protocol::TargetAutoAttacher* RenderFrameDevToolsAgentHost::auto_attacher() {
+  return auto_attacher_.get();
+}
+
 bool RenderFrameDevToolsAgentHost::IsChildFrame() {
   return frame_tree_node_ && frame_tree_node_->parent();
 }

@@ -34,6 +34,10 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   NotesModelObserverImpl(const base::RepeatingClosure& nudge_for_commit_closure,
                          base::OnceClosure on_notes_model_being_deleted_closure,
                          SyncedNoteTracker* note_tracker);
+
+  NotesModelObserverImpl(const NotesModelObserverImpl&) = delete;
+  NotesModelObserverImpl& operator=(const NotesModelObserverImpl&) = delete;
+
   ~NotesModelObserverImpl() override;
 
   //  vivaldi::NotesModelObserver:
@@ -88,8 +92,6 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   // The callback used to inform the processor that the note is getting
   // deleted.
   base::OnceClosure on_notes_model_being_deleted_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesModelObserverImpl);
 };
 
 }  // namespace sync_notes

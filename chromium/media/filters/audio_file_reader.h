@@ -36,6 +36,10 @@ class MEDIA_EXPORT AudioFileReader {
   // The AudioFileReader does not take ownership of |protocol| and
   // simply maintains a weak reference to it.
   explicit AudioFileReader(FFmpegURLProtocol* protocol);
+
+  AudioFileReader(const AudioFileReader&) = delete;
+  AudioFileReader& operator=(const AudioFileReader&) = delete;
+
   virtual ~AudioFileReader();
 
   // Open() reads the audio data format so that the sample_rate(),
@@ -117,8 +121,6 @@ class MEDIA_EXPORT AudioFileReader {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   std::unique_ptr<IPCAudioDecoder> ipc_audio_decoder_;
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
-
-  DISALLOW_COPY_AND_ASSIGN(AudioFileReader);
 };
 
 }  // namespace media

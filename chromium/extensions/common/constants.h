@@ -76,31 +76,44 @@ extern const int kDefaultUpdateFrequencySeconds;
 
 // The name of the directory inside the profile where per-app local settings
 // are stored.
-extern const char kLocalAppSettingsDirectoryName[];
+extern const base::FilePath::CharType kLocalAppSettingsDirectoryName[];
 
 // The name of the directory inside the profile where per-extension local
 // settings are stored.
-extern const char kLocalExtensionSettingsDirectoryName[];
+extern const base::FilePath::CharType kLocalExtensionSettingsDirectoryName[];
 
 // The name of the directory inside the profile where per-app synced settings
 // are stored.
-extern const char kSyncAppSettingsDirectoryName[];
+extern const base::FilePath::CharType kSyncAppSettingsDirectoryName[];
 
 // The name of the directory inside the profile where per-extension synced
 // settings are stored.
-extern const char kSyncExtensionSettingsDirectoryName[];
+extern const base::FilePath::CharType kSyncExtensionSettingsDirectoryName[];
 
 // The name of the directory inside the profile where per-extension persistent
 // managed settings are stored.
-extern const char kManagedSettingsDirectoryName[];
+extern const base::FilePath::CharType kManagedSettingsDirectoryName[];
 
 // The name of the database inside the profile where chrome-internal
 // extension state resides.
-extern const char kStateStoreName[];
+extern const base::FilePath::CharType kStateStoreName[];
 
 // The name of the database inside the profile where declarative extension
 // rules are stored.
-extern const char kRulesStoreName[];
+extern const base::FilePath::CharType kRulesStoreName[];
+
+// The name of the database inside the profile where persistent dynamic user
+// script metadata is stored.
+extern const base::FilePath::CharType kScriptsStoreName[];
+
+// Statistics are logged to UMA with these strings as part of histogram name.
+// They can all be found under Extensions.Database.Open.<client>. Changing this
+// needs to synchronize with histograms.xml, AND will also become incompatible
+// with older browsers still reporting the previous values.
+extern const char kSettingsDatabaseUMAClientName[];
+extern const char kRulesDatabaseUMAClientName[];
+extern const char kStateDatabaseUMAClientName[];
+extern const char kScriptsDatabaseUMAClientName[];
 
 // The URL query parameter key corresponding to multi-login user index.
 extern const char kAuthUserQueryKey[];
@@ -115,6 +128,9 @@ extern const char kWebStoreAppId[];
 // The key used for signing some pieces of data from the webstore.
 extern const uint8_t kWebstoreSignaturesPublicKey[];
 extern const size_t kWebstoreSignaturesPublicKeySize;
+
+// A preference for storing the extension's update URL data.
+extern const char kUpdateURLData[];
 
 // Thread identifier for the main renderer thread (as opposed to a service
 // worker thread).
@@ -287,6 +303,14 @@ extern const char kGuestModeTestExtensionId[];
 bool IsSystemUIApp(base::StringPiece extension_id);
 #endif
 
+// Returns if the app is managed by extension default apps. This is a hardcoded
+// list of default apps for Windows/Linux/MacOS platforms that should be
+// migrated from extension to web app.
+// TODO(https://crbug.com/1257275): remove after deault app migration is done.
+// This function is copied from
+// chrome/browser/web_applications/extension_status_utils.h.
+bool IsPreinstalledAppId(const std::string& app_id);
+
 // The extension id for the production version of Hangouts.
 extern const char kProdHangoutsExtensionId[];
 
@@ -298,6 +322,16 @@ extern const char kPolicyBlockedScripting[];
 
 // The default block size for hashing used in content verification.
 extern const int kContentVerificationDefaultBlockSize;
+
+// The origin of the CryptoToken component extension, which implements the
+// deprecated U2F Security Key API.
+// TODO(1224886): Delete together with CryptoToken code.
+extern const char kCryptotokenExtensionId[];
+
+// The name of the CryptoToken component extension deprecation trial, which
+// allows making requests to the extension after it has been default disabled.
+// TODO(1224886): Delete together with CryptoToken code.
+extern const char kCryptotokenDeprecationTrialName[];
 
 }  // namespace extension_misc
 

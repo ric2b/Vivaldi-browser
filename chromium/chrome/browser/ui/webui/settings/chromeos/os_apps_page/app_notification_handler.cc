@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/os_apps_page/app_notification_handler.h"
 
+#include <utility>
+
 #include "ash/public/cpp/message_center_ash.h"
 #include "base/logging.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -19,12 +21,8 @@ namespace {
 app_notification::mojom::AppPtr CreateAppPtr(const apps::AppUpdate& update) {
   apps::mojom::PermissionPtr permission_copy;
   for (const auto& permission : update.Permissions()) {
-    if ((static_cast<app_management::mojom::PwaPermissionType>(
-             permission->permission_id) ==
-         app_management::mojom::PwaPermissionType::NOTIFICATIONS) ||
-        (static_cast<app_management::mojom::ArcPermissionType>(
-             permission->permission_id) ==
-         app_management::mojom::ArcPermissionType::NOTIFICATIONS)) {
+    if (permission->permission_type ==
+        apps::mojom::PermissionType::kNotifications) {
       permission_copy = permission->Clone();
       break;
     }
@@ -34,9 +32,40 @@ app_notification::mojom::AppPtr CreateAppPtr(const apps::AppUpdate& update) {
   app->id = update.AppId();
   app->title = update.Name();
   app->notification_permission = std::move(permission_copy);
+  app->readiness = update.Readiness();
 
   return app;
 }
+
+std::vector<app_notification::mojom::AppPtr> Clone(
+    const std::vector<app_notification::mojom::AppPtr>& apps) {
+  std::vector<app_notification::mojom::AppPtr> cloned_apps;
+  for (const auto& app : apps) {
+    cloned_apps.push_back(app.Clone());
+  }
+  return cloned_apps;
+}
+
+bool ShouldIncludeApp(const apps::AppUpdate& update) {
+  // Only apps that can be shown in management are supported.
+  if (update.ShowInManagement() != apps::mojom::OptionalBool::kTrue) {
+    return false;
+  }
+
+  // Only kArc and kWeb apps are supported.
+  if (update.AppType() == apps::mojom::AppType::kArc ||
+      update.AppType() == apps::mojom::AppType::kWeb) {
+    for (const auto& permission : update.Permissions()) {
+      if (permission->permission_type ==
+          apps::mojom::PermissionType::kNotifications) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 }  // namespace
 
 using app_notification::mojom::AppNotificationsHandler;
@@ -48,7 +77,6 @@ AppNotificationHandler::AppNotificationHandler(
   if (ash::MessageCenterAsh::Get()) {
     ash::MessageCenterAsh::Get()->AddObserver(this);
   }
-  // app_service_proxy_ = apps::AppServiceProxyFactory::GetForProfile(profile_);
   Observe(&app_service_proxy_->AppRegistryCache());
 }
 
@@ -73,7 +101,6 @@ void AppNotificationHandler::BindInterface(
 }
 
 void AppNotificationHandler::OnQuietModeChanged(bool in_quiet_mode) {
-  in_quiet_mode_ = in_quiet_mode;
   for (const auto& observer : observer_list_) {
     observer->OnQuietModeChanged(in_quiet_mode);
   }
@@ -83,46 +110,41 @@ void AppNotificationHandler::SetQuietMode(bool in_quiet_mode) {
   ash::MessageCenterAsh::Get()->SetQuietMode(in_quiet_mode);
 }
 
-void AppNotificationHandler::GetApps() {
-  std::vector<app_notification::mojom::AppPtr> apps;
-  app_service_proxy_->AppRegistryCache().ForEachApp(
-      [&apps](const apps::AppUpdate& update) {
-        if (update.ShowInManagement() != apps::mojom::OptionalBool::kTrue ||
-            !apps_util::IsInstalled(update.Readiness())) {
-          return;
-        }
+void AppNotificationHandler::SetNotificationPermission(
+    const std::string& app_id,
+    apps::mojom::PermissionPtr permission) {
+  app_service_proxy_->SetPermission(app_id, std::move(permission));
+}
 
-        // This statement only adds apps to the list if they are
-        // of app_type kArc or kWeb.
-        if (update.AppType() == apps::mojom::AppType::kArc) {
-          for (const auto& permission : update.Permissions()) {
-            if (static_cast<app_management::mojom::ArcPermissionType>(
-                    permission->permission_id) ==
-                app_management::mojom::ArcPermissionType::NOTIFICATIONS) {
-              apps.push_back(CreateAppPtr(update));
-              break;
-            }
-          }
-        } else if (update.AppType() == apps::mojom::AppType::kWeb) {
-          for (const auto& permission : update.Permissions()) {
-            if (static_cast<app_management::mojom::PwaPermissionType>(
-                    permission->permission_id) ==
-                app_management::mojom::PwaPermissionType::NOTIFICATIONS) {
-              apps.push_back(CreateAppPtr(update));
-              break;
-            }
-          }
-        }
-      });
-  apps_ = std::move(apps);
+void AppNotificationHandler::GetApps(GetAppsCallback callback) {
+  std::move(callback).Run(GetAppList());
 }
 
 void AppNotificationHandler::OnAppUpdate(const apps::AppUpdate& update) {
-  // Each time an update is observed the entire list of apps is refetched.
-  // 'update' is a required parameter from the AppRegistryCache::Observer,
-  // but is not used in this implementation.
-  apps_.clear();
-  GetApps();
+  if (ShouldIncludeApp(update)) {
+    // Uninstalled apps are allowed to be sent as an update.
+    NotifyAppChanged(CreateAppPtr(update));
+  }
+}
+
+std::vector<app_notification::mojom::AppPtr>
+AppNotificationHandler::GetAppList() {
+  std::vector<app_notification::mojom::AppPtr> apps;
+  app_service_proxy_->AppRegistryCache().ForEachApp(
+      [&apps](const apps::AppUpdate& update) {
+        if (ShouldIncludeApp(update) &&
+            apps_util::IsInstalled(update.Readiness())) {
+          apps.push_back(CreateAppPtr(update));
+        }
+      });
+  return apps;
+}
+
+void AppNotificationHandler::NotifyAppChanged(
+    app_notification::mojom::AppPtr app) {
+  for (const auto& observer : observer_list_) {
+    observer->OnNotificationAppChanged(app.Clone());
+  }
 }
 
 void AppNotificationHandler::OnAppRegistryCacheWillBeDestroyed(

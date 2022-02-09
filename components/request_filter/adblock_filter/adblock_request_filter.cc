@@ -38,6 +38,8 @@ int RuleGroupToPriority(RuleGroup group) {
 
 flat::ResourceType ResourceTypeFromRequest(
     const vivaldi::FilteredRequestInfo& request) {
+  if (request.is_webtransport)
+    return flat::ResourceType_WEBTRANSPORT;
   if (request.request.url.SchemeIsWSOrWSS())
     return flat::ResourceType_WEBSOCKET;
   if (request.loader_factory_type ==

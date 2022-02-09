@@ -181,8 +181,6 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
     ::features::kPeriodicBackgroundSync,
     // TODO(crbug.com/1174856): Support Portals.
     blink::features::kPortals,
-    // TODO(crbug.com/1174566): Enable by default after experiment.
-    content_capture::features::kContentCapture,
     // TODO(crbug.com/1144912): Support BackForwardCache on WebLayer.
     ::features::kBackForwardCache,
 
@@ -193,14 +191,10 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
     ::features::kDisableDeJelly,
     ::features::kDynamicColorGamut,
 #else
-    // TODO(crbug.com/1131021): Support WebOTP Service on WebLayer.
+    // WebOTP is supported only on Android in WebLayer.
     ::features::kWebOTP,
 #endif
   };
-
-  // TODO(crbug.com/1057770): make Background Fetch work with WebLayer.
-  if (!BackgroundFetchDelegateFactory::IsEnabled())
-    disabled_features.push_back(::features::kBackgroundFetch);
 
 #if defined(OS_ANDROID)
   if (base::android::BuildInfo::GetInstance()->sdk_int() >=
@@ -393,8 +387,8 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
                                                   pak_region);
 
     std::vector<std::pair<int, ui::ResourceScaleFactor>> extra_paks = {
-        {kWebLayerMainPakDescriptor, ui::SCALE_FACTOR_NONE},
-        {kWebLayer100PercentPakDescriptor, ui::SCALE_FACTOR_100P}};
+        {kWebLayerMainPakDescriptor, ui::kScaleFactorNone},
+        {kWebLayer100PercentPakDescriptor, ui::k100Percent}};
 
     for (const auto& pak_info : extra_paks) {
       pak_fd = global_descriptors->Get(pak_info.first);

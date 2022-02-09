@@ -97,10 +97,6 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #endif
 
-#define STATIC_ASSERT_ENUM(a, b)                            \
-  static_assert(static_cast<int>(a) == static_cast<int>(b), \
-                "mismatching enums: " #a)
-
 namespace blink {
 namespace {
 
@@ -160,8 +156,7 @@ void RecordEncryptedEvent(bool encrypted_event_fired) {
 
 // How much time must have elapsed since loading last progressed before we
 // assume that the decoder will have had time to complete preroll.
-constexpr base::TimeDelta kPrerollAttemptTimeout =
-    base::TimeDelta::FromSeconds(3);
+constexpr base::TimeDelta kPrerollAttemptTimeout = base::Seconds(3);
 
 // Maximum number, per-WMPI, of media logs of playback rate changes.
 constexpr int kMaxNumPlaybackRateLogs = 10;
@@ -331,7 +326,7 @@ bool MediaPositionNeedsUpdate(
   // perceptible difference.
   const auto drift =
       (old_position.GetPosition() - new_position.GetPosition()).magnitude();
-  return drift > base::TimeDelta::FromMilliseconds(100);
+  return drift > base::Milliseconds(100);
 }
 
 // Returns whether the player uses AudioService. This is needed to enable
@@ -765,6 +760,8 @@ void WebMediaPlayerImpl::OnDisplayTypeChanged(DisplayType display_type) {
       }
       break;
   }
+
+  SetPersistentState(display_type == DisplayType::kPictureInPicture);
 }
 
 void WebMediaPlayerImpl::DoLoad(LoadType load_type,
@@ -987,7 +984,7 @@ void WebMediaPlayerImpl::Seek(double seconds) {
   DVLOG(1) << __func__ << "(" << seconds << "s)";
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   media_log_->AddEvent<MediaLogEvent::kSeek>(seconds);
-  DoSeek(base::TimeDelta::FromSecondsD(seconds), true);
+  DoSeek(base::Seconds(seconds), true);
 }
 
 void WebMediaPlayerImpl::DoSeek(base::TimeDelta time, bool time_updated) {
@@ -1008,8 +1005,7 @@ void WebMediaPlayerImpl::DoSeek(base::TimeDelta time, bool time_updated) {
   //      Because the buffers may have changed between seeks, MSE seeks are
   //      never elided.
   if (paused_ && pipeline_controller_->IsStable() &&
-      (paused_time_ == time ||
-       (ended_ && time == base::TimeDelta::FromSecondsD(Duration()))) &&
+      (paused_time_ == time || (ended_ && time == base::Seconds(Duration()))) &&
       !chunk_demuxer_) {
     // If the ready state was high enough before, we can indicate that the seek
     // completed just by restoring it. Otherwise we will just wait for the real
@@ -1098,7 +1094,7 @@ void WebMediaPlayerImpl::SetLatencyHint(double seconds) {
   absl::optional<base::TimeDelta> latency_hint;
   if (std::isfinite(seconds)) {
     DCHECK_GE(seconds, 0);
-    latency_hint = base::TimeDelta::FromSecondsD(seconds);
+    latency_hint = base::Seconds(seconds);
   }
   pipeline_controller_->SetLatencyHint(latency_hint);
 }
@@ -1449,7 +1445,7 @@ bool WebMediaPlayerImpl::WouldTaintOrigin() const {
 }
 
 double WebMediaPlayerImpl::MediaTimeForTimeValue(double timeValue) const {
-  return base::TimeDelta::FromSecondsD(timeValue).InSecondsF();
+  return base::Seconds(timeValue).InSecondsF();
 }
 
 unsigned WebMediaPlayerImpl::DecodedFrameCount() const {
@@ -1718,7 +1714,7 @@ void WebMediaPlayerImpl::OnPipelineSuspended() {
                          base::Unretained(mb_data_source_), true));
       main_task_runner_->PostDelayedTask(
           FROM_HERE, have_enough_after_lazy_load_cb_.callback(),
-          base::TimeDelta::FromMilliseconds(250));
+          base::Milliseconds(250));
     } else {
       have_enough_after_lazy_load_cb_.Cancel();
       mb_data_source_->OnBufferingHaveEnough(true);
@@ -1804,7 +1800,7 @@ void WebMediaPlayerImpl::OnMemoryPressure(
   media_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&media::ChunkDemuxer::OnMemoryPressure,
                                 base::Unretained(chunk_demuxer_),
-                                base::TimeDelta::FromSecondsD(CurrentTime()),
+                                base::Seconds(CurrentTime()),
                                 memory_pressure_level, force_instant_gc));
 }
 
@@ -1953,11 +1949,6 @@ void WebMediaPlayerImpl::OnMetadata(const media::PipelineMetadata& metadata) {
   pipeline_metadata_ = metadata;
   if (power_status_helper_)
     power_status_helper_->SetMetadata(metadata);
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "Media.VideoRotation",
-      metadata.video_decoder_config.video_transformation().rotation,
-      media::VIDEO_ROTATION_MAX + 1);
 
   if (HasAudio()) {
     media_metrics_provider_->SetHasAudio(metadata.audio_decoder_config.codec());
@@ -2163,8 +2154,7 @@ bool WebMediaPlayerImpl::CanPlayThrough() {
   if (network_state_ == WebMediaPlayer::kNetworkStateIdle)
     return true;
   return buffered_data_source_host_->CanPlayThrough(
-      base::TimeDelta::FromSecondsD(CurrentTime()),
-      base::TimeDelta::FromSecondsD(Duration()),
+      base::Seconds(CurrentTime()), base::Seconds(Duration()),
       playback_rate_ == 0.0 ? 1.0 : playback_rate_);
 }
 
@@ -2278,8 +2268,7 @@ void WebMediaPlayerImpl::OnDurationChange() {
 
   if (frame_->IsAdSubframe()) {
     UMA_HISTOGRAM_CUSTOM_TIMES("Ads.Media.Duration", GetPipelineMediaDuration(),
-                               base::TimeDelta::FromMilliseconds(1),
-                               base::TimeDelta::FromDays(1),
+                               base::Milliseconds(1), base::Days(1),
                                50 /* bucket_count */);
   }
 
@@ -3098,8 +3087,7 @@ void WebMediaPlayerImpl::SetMemoryReportingState(
   }
 
   if (is_memory_reporting_enabled) {
-    memory_usage_reporting_timer_.Start(FROM_HERE,
-                                        base::TimeDelta::FromSeconds(2), this,
+    memory_usage_reporting_timer_.Start(FROM_HERE, base::Seconds(2), this,
                                         &WebMediaPlayerImpl::ReportMemoryUsage);
   } else {
     memory_usage_reporting_timer_.Stop();
@@ -3391,8 +3379,8 @@ void WebMediaPlayerImpl::ScheduleIdlePauseTimer() {
 #endif
 
   // Idle timeout chosen arbitrarily.
-  background_pause_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(5),
-                                client_, &WebMediaPlayerClient::PausePlayback);
+  background_pause_timer_.Start(FROM_HERE, base::Seconds(5), client_,
+                                &WebMediaPlayerClient::PausePlayback);
 }
 
 void WebMediaPlayerImpl::CreateWatchTimeReporter() {
@@ -3565,6 +3553,11 @@ bool WebMediaPlayerImpl::ShouldPausePlaybackWhenHidden() const {
     return false;
   }
 
+#if defined(OS_ANDROID)
+  if (IsInPictureInPicture())
+    return false;
+#endif
+
   if (!is_background_video_playback_enabled_)
     return true;
 
@@ -3633,8 +3626,7 @@ bool WebMediaPlayerImpl::IsBackgroundOptimizationCandidate() const {
   base::TimeDelta duration = GetPipelineMediaDuration();
 
   constexpr base::TimeDelta kMaxKeyframeDistanceToDisableBackgroundVideo =
-      base::TimeDelta::FromMilliseconds(
-          kMaxKeyframeDistanceToDisableBackgroundVideoMs);
+      base::Milliseconds(kMaxKeyframeDistanceToDisableBackgroundVideoMs);
   if (duration < kMaxKeyframeDistanceToDisableBackgroundVideo)
     return true;
 
@@ -3661,7 +3653,7 @@ void WebMediaPlayerImpl::UpdateBackgroundVideoOptimizationState() {
       // may also cause AV sync issues if disable/enable happens too fast.
       main_task_runner_->PostDelayedTask(
           FROM_HERE, update_background_status_cb_.callback(),
-          base::TimeDelta::FromSeconds(10));
+          base::Seconds(10));
     }
   } else {
     update_background_status_cb_.Cancel();
@@ -3938,8 +3930,8 @@ void WebMediaPlayerImpl::UpdateSmoothnessHelper() {
   // NOTE: this is a very bad way to do this, since it memorizes the order of
   // features in the task.  However, it'll do for now.
   learning::FeatureVector features;
-  features.push_back(
-      learning::FeatureValue(pipeline_metadata_.video_decoder_config.codec()));
+  features.push_back(learning::FeatureValue(
+      static_cast<int>(pipeline_metadata_.video_decoder_config.codec())));
   features.push_back(learning::FeatureValue(
       pipeline_metadata_.video_decoder_config.profile()));
   features.push_back(
@@ -3982,8 +3974,7 @@ bool WebMediaPlayerImpl::HasUnmutedAudio() const {
 
 bool WebMediaPlayerImpl::IsVideoBeingCaptured() const {
   // 5 seconds chosen arbitrarily since most videos are never captured.
-  return tick_clock_->NowTicks() - last_frame_request_time_ <
-         base::TimeDelta::FromSeconds(5);
+  return tick_clock_->NowTicks() - last_frame_request_time_ < base::Seconds(5);
 }
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)

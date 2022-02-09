@@ -145,19 +145,18 @@ class RenderWidgetHostVisibilityTracker final
   // content::RenderWidgetHostObserver:
   void RenderWidgetHostVisibilityChanged(content::RenderWidgetHost* host,
                                          bool became_visible) override {
-    // TODO(crbug.com/1198798): DCHECKs are disabled during automated testing on
-    // CrOS and this check failed when tested on an experimental builder. Revert
-    // https://crrev.com/c/2835079 to enable it. See go/chrome-dcheck-on-cros
-    // or http://crbug.com/1113456 for more details.
-#if !defined(OS_CHROMEOS)
-    DCHECK(became_visible);
-#endif
-    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-        "Browser.Tabs.SelectionToVisibilityRequestTime", timer_.Elapsed(),
-        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(3),
-        50);
-    TRACE_EVENT_NESTABLE_ASYNC_END0("ui,latency", "TabSwitchVisibilityRequest",
-                                    this);
+    // This used to be a DCHECK but there are cases where the tab preview
+    // capture system is just finishing up a capture where we could get a
+    // signal with `became_visible` being false. Therefore simple make sure
+    // the render widget host actually became visible.
+    if (became_visible) {
+      UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+          "Browser.Tabs.SelectionToVisibilityRequestTime", timer_.Elapsed(),
+          base::Microseconds(1), base::Seconds(3), 50);
+      TRACE_EVENT_NESTABLE_ASYNC_END0("ui,latency",
+                                      "TabSwitchVisibilityRequest", this);
+      observation_.Reset();
+    }
   }
 
   void RenderWidgetHostDestroyed(content::RenderWidgetHost* host) override {
@@ -333,7 +332,7 @@ TabStripModel::TabStripModel(TabStripModelDelegate* delegate, Profile* profile)
   group_model_ = std::make_unique<TabGroupModel>(this);
 
   constexpr base::TimeDelta kTabScrubbingHistogramIntervalTime =
-      base::TimeDelta::FromSeconds(30);
+      base::Seconds(30);
 
   last_tab_switch_timestamp_ = base::TimeTicks::Now();
   tab_scrubbing_interval_timer_.Start(
@@ -601,7 +600,7 @@ void TabStripModel::ActivateTabAt(int index, UserGestureDetails user_gesture) {
   if (user_gesture.type == GestureType::kMouse ||
       user_gesture.type == GestureType::kKeyboard) {
     constexpr base::TimeDelta kMaxTimeConsideredScrubbing =
-        base::TimeDelta::FromMilliseconds(1500);
+        base::Milliseconds(1500);
     base::TimeDelta elapsed_time_since_tab_switch =
         base::TimeTicks::Now() - last_tab_switch_timestamp_;
     if (elapsed_time_since_tab_switch <= kMaxTimeConsideredScrubbing) {
@@ -1122,7 +1121,8 @@ tab_groups::TabGroupId TabStripModel::AddToNewGroup(
     const std::vector<int>& indices) {
   ReentrancyCheck reentrancy_check(&reentrancy_guard_);
 
-  // Ensure that the indices are sorted and unique.
+  // Ensure that the indices are nonempty, sorted, and unique.
+  DCHECK_GT(indices.size(), 0u);
   DCHECK(base::ranges::is_sorted(indices));
   DCHECK(std::adjacent_find(indices.begin(), indices.end()) == indices.end());
 
@@ -1225,6 +1225,9 @@ void TabStripModel::RemoveFromGroup(const std::vector<int>& indices) {
 
 bool TabStripModel::IsReadLaterSupportedForAny(
     const std::vector<int>& indices) {
+  if (profile_->IsGuestSession())
+    return false;
+
   ReadingListModel* model =
       ReadingListModelFactory::GetForBrowserContext(profile_);
   if (!model || !model->loaded())
@@ -1903,8 +1906,10 @@ bool TabStripModel::CloseWebContentses(
     detached_web_contents.push_back(std::move(dwc));
   }
 
-  // ClosedTabCache will only take ownership of the last recently closed tab.
-  delegate_->CacheWebContents(detached_web_contents);
+  if (!detached_web_contents.empty()) {
+    // ClosedTabCache will only take ownership of the last recently closed tab.
+    delegate_->CacheWebContents(detached_web_contents);
+  }
 
   // If the delegate takes ownership, it must reset the reason.
 #if DCHECK_IS_ON()

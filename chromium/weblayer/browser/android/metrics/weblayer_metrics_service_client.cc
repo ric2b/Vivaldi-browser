@@ -11,7 +11,6 @@
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/no_destructor.h"
-#include "base/path_service.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_service.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
@@ -23,10 +22,10 @@
 #include "google_apis/google_api_keys.h"
 #include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_list.h"
+#include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/java/jni/MetricsServiceClient_jni.h"
 #include "weblayer/browser/system_network_context_manager.h"
 #include "weblayer/browser/tab_impl.h"
-#include "weblayer/common/weblayer_paths.h"
 
 namespace weblayer {
 namespace {
@@ -54,6 +53,10 @@ const int kPackageNameLimitRatePerMille = 100;
 class PageLoadMetricsProvider : public metrics::MetricsProvider {
  public:
   PageLoadMetricsProvider() = default;
+
+  PageLoadMetricsProvider(const PageLoadMetricsProvider&) = delete;
+  PageLoadMetricsProvider& operator=(const PageLoadMetricsProvider&) = delete;
+
   ~PageLoadMetricsProvider() override = default;
 
   // metrics:MetricsProvider implementation:
@@ -67,9 +70,6 @@ class PageLoadMetricsProvider : public metrics::MetricsProvider {
         observer->FlushMetricsOnAppEnterBackground();
     }
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PageLoadMetricsProvider);
 };
 
 }  // namespace
@@ -108,9 +108,12 @@ void WebLayerMetricsServiceClient::RegisterExternalExperiments(
 }
 
 void WebLayerMetricsServiceClient::Initialize(PrefService* pref_service) {
-  base::FilePath user_data_dir;
-  base::PathService::Get(DIR_USER_DATA, &user_data_dir);
-  AndroidMetricsServiceClient::Initialize(user_data_dir, pref_service);
+  // Pass an empty file path since the path is for the Extended Variations Safe
+  // Mode experiment and Android WebLayer is temporarily excluded from this
+  // experiment.
+  // TODO(crbug/1245347): Enable the experiment on Android WebLayer.
+  AndroidMetricsServiceClient::Initialize(/*user_data_dir=*/base::FilePath(),
+                                          pref_service);
 }
 
 int32_t WebLayerMetricsServiceClient::GetProduct() {
@@ -136,6 +139,11 @@ std::string WebLayerMetricsServiceClient::GetUploadSigningKey() {
   std::string decoded_key;
   base::Base64Decode(google_apis::GetMetricsKey(), &decoded_key);
   return decoded_key;
+}
+
+const network_time::NetworkTimeTracker*
+WebLayerMetricsServiceClient::GetNetworkTimeTracker() {
+  return BrowserProcess::GetInstance()->GetNetworkTimeTracker();
 }
 
 int WebLayerMetricsServiceClient::GetSampleRatePerMille() const {

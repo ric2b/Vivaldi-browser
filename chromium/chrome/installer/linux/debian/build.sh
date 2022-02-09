@@ -251,7 +251,6 @@ fi
 eval $(sed -e "s/^\([^=]\+\)=\(.*\)$/export \1='\2'/" \
   "${OUTPUTDIR}/installer/theme/BRANDING")
 
-REPOCONFIG="deb http://repo.vivaldi.com/$CHANNEL/deb/ stable main"
 verify_channel
 
 # Some Debian packaging tools want these set.
@@ -262,15 +261,16 @@ export ARCHITECTURE="${ARCHITECTURE}"
 DEB_COMMON_DEPS="${OUTPUTDIR}/deb_common.deps"
 COMMON_DEPS=$(sed ':a;N;$!ba;s/\n/, /g' "${DEB_COMMON_DEPS}")
 COMMON_PREDEPS="dpkg (>= 1.14.0)"
-COMMON_RECOMMENDS="libu2f-udev, adobe-flashplugin"
-
+MANUAL_RECOMMENDS="${SCRIPTDIR}/manual_recommends"
+COMMON_RECOMMENDS=$(grep -v ^$ "${MANUAL_RECOMMENDS}" | grep -v ^# |
+                        sed ':a;N;$!ba;s/\n/, /g')
 
 # Make everything happen in the OUTPUTDIR.
 cd "${OUTPUTDIR}"
-BASEREPOCONFIG="repo.vivaldi.com/archive/deb/ stable main"
+BASEREPOCONFIG="repo.vivaldi.com/$CHANNEL/deb/ stable main"
 # Only use the default REPOCONFIG if it's unset (e.g. verify_channel might have
 # set it to an empty string)
-REPOCONFIG="${REPOCONFIG-deb [arch=${ARCHITECTURE}] http://${BASEREPOCONFIG}}"
+REPOCONFIG="${REPOCONFIG-deb [arch=${ARCHITECTURE}] https://${BASEREPOCONFIG}}"
 # Allowed configs include optional HTTPS support and explicit multiarch
 # platforms.
 REPOCONFIGREGEX="deb (\\\\[arch=[^]]*\\\\b${ARCHITECTURE}\\\\b[^]]*\\\\]"

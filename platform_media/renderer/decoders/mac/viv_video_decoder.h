@@ -31,6 +31,9 @@ class VivVideoDecoder : public VideoDecoder {
       MediaLog* media_log);
 
   ~VivVideoDecoder() override;
+  VivVideoDecoder(const VivVideoDecoder&) = delete;
+  VivVideoDecoder& operator=(const VivVideoDecoder&) = delete;
+
   static void DestroyAsync(std::unique_ptr<VivVideoDecoder>);
 
   // media::VideoDecoder implementation.
@@ -210,8 +213,6 @@ class VivVideoDecoder : public VideoDecoder {
   // Declared last to ensure that all weak pointers are invalidated before
   // other destructors run.
   base::WeakPtrFactory<VivVideoDecoder> weak_this_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivVideoDecoder);
 };
 
 }  // namespace media

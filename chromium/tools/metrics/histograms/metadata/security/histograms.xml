@@ -54,6 +54,113 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Security.DataDecoder.Image.DecodingTime" units="ms"
+    expires_after="2022-04-10">
+  <owner>lukasza@chromium.org</owner>
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Logged once for every invocation of `data_decoder::DecodeImage` and/or
+    `data_decoder::DecodeImageIsolated`. Logs the time that has elapsed while
+    decoding the image (typically this happens in the Utility process). The time
+    is recorded in all the cases (including empty input which don't require
+    actual image decoding).
+  </summary>
+</histogram>
+
+<histogram name="Security.DataDecoder.Image.Isolated.EndToEndTime" units="ms"
+    expires_after="2022-04-10">
+  <owner>lukasza@chromium.org</owner>
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Logged once for every invocation of `data_decoder::DecodeImageIsolated`.
+    Logs the time that has elapsed between 1) invocation of DecodeImageIsolated
+    and 2) calling the completion callback (both of these events happen in the
+    Browser process). The elapsed time covers A) spawning the utility process,
+    B) decoding the image, C) IPC overhead.
+
+    Note that there are 2 sets of similar metrics:
+    Security.DataDecoder.Image.Isolated. and
+    Security.DataDecoder.Image.Reusable. In the Isolated case a Utility process
+    is spawned for each image decoding operation and the ...End2End and
+    ...ProcessOverhead metrics always include process spawning overhead. In the
+    Reusable case a Utility process may get reused when decoding a batch of
+    images, and the ...End2End and ...ProcessOverhead metrics may or may not
+    include process spawning overhead (the process will only need to be spawned
+    for the first image in a batch + after the process has been shut down due to
+    inactivity).
+  </summary>
+</histogram>
+
+<histogram name="Security.DataDecoder.Image.Isolated.ProcessOverhead"
+    units="ms" expires_after="2022-04-10">
+  <owner>lukasza@chromium.org</owner>
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Logged once for every invocation of `data_decoder::DecodeImageIsolated`.
+    Logs the overhead of using a separate process for decoding the images by
+    calculating the difference between ...Image.Isolated.EndToEndTime and the
+    ...Image.DecodingTime metrics.
+
+    Note that there are 2 sets of similar metrics:
+    Security.DataDecoder.Image.Isolated. and
+    Security.DataDecoder.Image.Reusable. In the Isolated case a Utility process
+    is spawned for each image decoding operation and the ...End2End and
+    ...ProcessOverhead metrics always include process spawning overhead. In the
+    Reusable case a Utility process may get reused when decoding a batch of
+    images, and the ...End2End and ...ProcessOverhead metrics may or may not
+    include process spawning overhead (the process will only need to be spawned
+    for the first image in a batch + after the process has been shut down due to
+    inactivity).
+  </summary>
+</histogram>
+
+<histogram name="Security.DataDecoder.Image.Reusable.EndToEndTime" units="ms"
+    expires_after="2022-04-10">
+  <owner>lukasza@chromium.org</owner>
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Logged once for every invocation of `data_decoder::DecodeImage`. Logs the
+    time that has elapsed between 1) invocation of DecodeImage and 2) calling
+    the completion callback (both of these events happen in the Browser
+    process). The elapsed time covers A) spawning the utility process (if
+    needed), B) decoding the image, C) IPC overhead.
+
+    Note that there are 2 sets of similar metrics:
+    Security.DataDecoder.Image.Isolated. and
+    Security.DataDecoder.Image.Reusable. In the Isolated case a Utility process
+    is spawned for each image decoding operation and the ...End2End and
+    ...ProcessOverhead metrics always include process spawning overhead. In the
+    Reusable case a Utility process may get reused when decoding a batch of
+    images, and the ...End2End and ...ProcessOverhead metrics may or may not
+    include process spawning overhead (the process will only need to be spawned
+    for the first image in a batch + after the process has been shut down due to
+    inactivity).
+  </summary>
+</histogram>
+
+<histogram name="Security.DataDecoder.Image.Reusable.ProcessOverhead"
+    units="ms" expires_after="2022-04-10">
+  <owner>lukasza@chromium.org</owner>
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Logged once for every invocation of `data_decoder::DecodeImage`. Logs the
+    overhead of using a separate process for decoding the images by calculating
+    the difference between ...Image.Reusable.EndToEndTime and the
+    ...Image.DecodingTime metrics.
+
+    Note that there are 2 sets of similar metrics:
+    Security.DataDecoder.Image.Isolated. and
+    Security.DataDecoder.Image.Reusable. In the Isolated case a Utility process
+    is spawned for each image decoding operation and the ...End2End and
+    ...ProcessOverhead metrics always include process spawning overhead. In the
+    Reusable case a Utility process may get reused when decoding a batch of
+    images, and the ...End2End and ...ProcessOverhead metrics may or may not
+    include process spawning overhead (the process will only need to be spawned
+    for the first image in a batch + after the process has been shut down due to
+    inactivity).
+  </summary>
+</histogram>
+
 <histogram name="Security.HttpsFirstMode.NavigationEvent"
     enum="HttpsFirstModeNavigationEvent" expires_after="2022-01-31">
   <owner>cthomp@chromium.org</owner>
@@ -66,7 +173,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.SettingChanged" enum="BooleanEnabled"
-    expires_after="2022-01-31">
+    expires_after="2022-04-24">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -77,7 +184,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.SettingEnabledAtStartup"
-    enum="BooleanEnabled" expires_after="2022-01-31">
+    enum="BooleanEnabled" expires_after="2022-04-10">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -89,6 +196,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.LegacyTLS.DownloadStarted" enum="Boolean"
     expires_after="2021-08-09">
+  <obsolete>
+    Expired after 2021-08. No longer in use.
+  </obsolete>
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -103,6 +213,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.LegacyTLS.FormSubmission" enum="Boolean"
     expires_after="2021-08-09">
+  <obsolete>
+    Expired after 2021-08. No longer in use.
+  </obsolete>
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -115,6 +228,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.LegacyTLS.OnCommit" enum="Boolean"
     expires_after="2021-08-09">
+  <obsolete>
+    Expired after 2021-08. No longer in use.
+  </obsolete>
   <owner>cthomp@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
@@ -126,6 +242,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.LegacyTLS.PageInfo.Action"
     enum="WebsiteSettingsAction" expires_after="M92">
+  <obsolete>
+    Expired after M92. No longer in use.
+  </obsolete>
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -135,7 +254,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.MixedForm.InterstitialTriggerState"
-    enum="MixedFormInterstitialTriggeredState" expires_after="2021-12-26">
+    enum="MixedFormInterstitialTriggeredState" expires_after="2022-04-24">
   <owner>carlosil@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -146,7 +265,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Security.PageEndReason" enum="PageEndReason"
-    expires_after="2021-10-10">
+    expires_after="2022-04-10">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -242,7 +361,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.PageInfo.TimeOpen" units="units"
-    expires_after="2022-02-01">
+    expires_after="2022-04-10">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -252,7 +371,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.PageInfo.TimeOpen.Action" units="units"
-    expires_after="2021-12-12">
+    expires_after="2022-04-10">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -262,7 +381,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.PageInfo.TimeOpen.NoAction" units="units"
-    expires_after="2021-10-10">
+    expires_after="2022-04-10">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -273,6 +392,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.PasswordEntry.SiteEngagementLevel"
     enum="SiteEngagementLevel" expires_after="2021-10-31">
+  <obsolete>
+    Expired after 2021-10. No longer in use.
+  </obsolete>
   <owner>meacer@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -284,6 +406,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.PasswordFocus.SiteEngagementLevel"
     enum="SiteEngagementLevel" expires_after="2021-01-31">
+  <obsolete>
+    Expired after 2021-01. No longer in use.
+  </obsolete>
   <owner>meacer@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -293,8 +418,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Security.PrivateNetworkAccess.CheckResult"
+    enum="PrivateNetworkAccessCheckResult" expires_after="M107">
+  <owner>titouan@chromium.org</owner>
+  <owner>clamy@chromium.org</owner>
+  <owner>mkwst@chromium.org</owner>
+  <summary>
+    Result of the Private Network Access Check on a new connection. Recorded
+    once per call to network::URLLoader::OnConnected(), which may be more than
+    once per URL request.
+  </summary>
+</histogram>
+
 <histogram name="Security.SafetyTips.DownloadStarted" enum="SafetyTipStatus"
-    expires_after="2021-12-26">
+    expires_after="2022-04-24">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -307,7 +444,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.FormSubmission" enum="SafetyTipStatus"
-    expires_after="2021-12-26">
+    expires_after="2022-04-24">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -320,7 +457,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.Interaction" enum="SafetyTipInteraction"
-    expires_after="2021-12-25">
+    expires_after="2022-04-03">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -332,7 +469,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.OpenTime.CloseTab" units="ms"
-    expires_after="2022-01-02">
+    expires_after="2022-04-17">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -342,7 +479,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.OpenTime.Dismiss" units="ms"
-    expires_after="2021-12-25">
+    expires_after="2022-04-17">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -389,7 +526,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.OpenTime.LeaveSite" units="ms"
-    expires_after="2021-12-26">
+    expires_after="2022-04-17">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -409,7 +546,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.OpenTime.StartNewNavigation" units="ms"
-    expires_after="2021-12-26">
+    expires_after="2022-04-24">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -419,7 +556,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.OpenTime.SwitchTab" units="ms"
-    expires_after="2021-12-26">
+    expires_after="2022-04-24">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -439,7 +576,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Security.SafetyTips.ReputationCheckComplete"
-    enum="SafetyTipStatus" expires_after="2021-12-26">
+    enum="SafetyTipStatus" expires_after="2022-05-01">
   <owner>jdeblasio@chromium.org</owner>
   <owner>src/chrome/browser/reputation/OWNERS</owner>
   <summary>
@@ -460,7 +597,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SafetyTips.SafetyTipShown" enum="SafetyTipStatus"
-    expires_after="2021-12-25">
+    expires_after="2022-04-10">
   <owner>jdeblasio@chromium.org</owner>
   <owner>livvielin@chromium.org</owner>
   <summary>
@@ -536,7 +673,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptIn.ReportDeduplicated" enum="Boolean"
-    expires_after="2021-12-12">
+    expires_after="2022-04-17">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -590,6 +727,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.SecurityLevel.CryptographicScheme"
     enum="SecurityLevel" expires_after="2021-09-01">
+  <obsolete>
+    Expired after 2021-09. No longer in use.
+  </obsolete>
   <owner>estark@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -635,7 +775,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SecurityLevel.InsecureMainFrameFormSubmission"
-    enum="SecurityLevel" expires_after="2021-10-31">
+    enum="SecurityLevel" expires_after="2022-04-10">
   <owner>estark@chromium.org</owner>
   <owner>livvielin@chromium.org</owner>
   <summary>
@@ -649,6 +789,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.SecurityLevel.InsecureMainFrameNonFormNavigation"
     enum="SecurityLevel" expires_after="2021-09-01">
+  <obsolete>
+    Expired after 2021-09. No longer in use.
+  </obsolete>
   <owner>estark@chromium.org</owner>
   <owner>livvielin@chromium.org</owner>
   <summary>
@@ -660,6 +803,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Security.SecurityLevel.NoncryptographicScheme"
     enum="SecurityLevel" expires_after="2021-09-01">
+  <obsolete>
+    Expired after 2021-09. No longer in use.
+  </obsolete>
   <owner>estark@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -679,7 +825,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Security.SecurityLevel.OnCommit" enum="SecurityLevel"
-    expires_after="2022-02-01">
+    expires_after="2022-04-24">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -729,7 +875,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Security.TimeOnPage2" units="units"
-    expires_after="2021-12-12">
+    expires_after="2022-04-10">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>

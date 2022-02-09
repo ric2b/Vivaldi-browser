@@ -66,13 +66,17 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   class ObserverWithAccessor : public content::WebContentsObserver {
    public:
     explicit ObserverWithAccessor(content::WebContents* web_contents);
-    ~ObserverWithAccessor() override;
 
-   private:
-    DISALLOW_COPY_AND_ASSIGN(ObserverWithAccessor);
+    ObserverWithAccessor(const ObserverWithAccessor&) = delete;
+    ObserverWithAccessor& operator=(const ObserverWithAccessor&) = delete;
+
+    ~ObserverWithAccessor() override;
   };
 
   static const char kDevToolsApp[];
+
+  DevToolsWindow(const DevToolsWindow&) = delete;
+  DevToolsWindow& operator=(const DevToolsWindow&) = delete;
 
   ~DevToolsWindow() override;
 
@@ -343,13 +347,15 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                                 bool can_dock,
                                 const std::string& settings,
                                 const std::string& panel,
-                                bool has_other_clients);
+                                bool has_other_clients,
+                                bool browser_connnection);
   static GURL GetDevToolsURL(Profile* profile,
                              FrontendType frontend_type,
                              const std::string& frontend_url,
                              bool can_dock,
                              const std::string& panel,
-                             bool has_other_clients);
+                             bool has_other_clients,
+                             bool browser_connection);
 
   static void ToggleDevToolsWindow(
       content::WebContents* web_contents,
@@ -388,6 +394,9 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
       const content::NativeWebKeyboardEvent& event) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
+  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
+      content::RenderFrameHost* render_frame_host,
+      content::EyeDropperListener* listener) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
@@ -498,7 +507,6 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
 
   friend class DevToolsEventForwarder;
-  DISALLOW_COPY_AND_ASSIGN(DevToolsWindow);
 };
 
 #endif  // CHROME_BROWSER_DEVTOOLS_DEVTOOLS_WINDOW_H_

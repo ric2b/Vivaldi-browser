@@ -22,6 +22,9 @@ namespace ui {
 // Theme support for non-Windows toolkits.
 class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
  public:
+  NativeThemeBase(const NativeThemeBase&) = delete;
+  NativeThemeBase& operator=(const NativeThemeBase&) = delete;
+
   // NativeTheme implementation:
   gfx::Size GetPartSize(Part part,
                         State state,
@@ -88,7 +91,8 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
 
   using NativeTheme::NativeTheme;
   NativeThemeBase();
-  explicit NativeThemeBase(bool should_only_use_dark_colors);
+  explicit NativeThemeBase(bool should_only_use_dark_colors,
+                           bool is_custom_system_theme = false);
   ~NativeThemeBase() override;
 
   // Draw the arrow. Used by scrollbar and inner spin button.
@@ -302,8 +306,6 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
 
   // The length of the arrow buttons, 0 means no buttons are drawn.
   int scrollbar_button_length_ = 14;
-
-  DISALLOW_COPY_AND_ASSIGN(NativeThemeBase);
 };
 
 }  // namespace ui

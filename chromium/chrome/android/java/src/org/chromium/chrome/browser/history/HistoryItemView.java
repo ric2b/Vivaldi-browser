@@ -112,8 +112,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
             requestIcon();
 
             if (!ChromeApplicationImpl.isVivaldi())
-            mTitleView.setTextColor(
-                    ApiCompatibilityUtils.getColor(getResources(),R.color.default_text_color));
+            mTitleView.setTextColor(AppCompatResources.getColorStateList(
+                    getContext(), R.color.default_text_color_list));
         }
     }
 

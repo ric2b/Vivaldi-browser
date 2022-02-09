@@ -335,6 +335,10 @@ bool ConfigChangeDetector::is_vp9_resilient_mode() const {
 class H264ConfigChangeDetector : public ConfigChangeDetector {
  public:
   H264ConfigChangeDetector() {}
+
+  H264ConfigChangeDetector(const H264ConfigChangeDetector&) = delete;
+  H264ConfigChangeDetector& operator=(const H264ConfigChangeDetector&) = delete;
+
   ~H264ConfigChangeDetector() override {}
 
   // Detects stream configuration changes.
@@ -360,8 +364,6 @@ class H264ConfigChangeDetector : public ConfigChangeDetector {
   bool pending_config_changed_ = false;
 
   std::unique_ptr<H264Parser> parser_;
-
-  DISALLOW_COPY_AND_ASSIGN(H264ConfigChangeDetector);
 };
 
 bool H264ConfigChangeDetector::DetectConfig(const uint8_t* stream,
@@ -652,7 +654,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       make_context_current_cb_(make_context_current_cb),
       bind_image_cb_(bind_image_cb),
       media_log_(media_log),
-      codec_(kUnknownVideoCodec),
+      codec_(VideoCodec::kUnknown),
       decoder_thread_("DXVAVideoDecoderThread"),
       pending_flush_(false),
       enable_low_latency_(gpu_preferences.enable_low_latency_dxva),
@@ -824,11 +826,11 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
       SendMFTMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0),
       "Send MFT_MESSAGE_NOTIFY_START_OF_STREAM notification failed", false);
 
-  if (codec_ == kCodecH264)
+  if (codec_ == VideoCodec::kH264)
     config_change_detector_ = std::make_unique<H264ConfigChangeDetector>();
-  if (codec_ == kCodecVP8)
+  if (codec_ == VideoCodec::kVP8)
     config_change_detector_ = std::make_unique<VP8ConfigChangeDetector>();
-  if (codec_ == kCodecVP9)
+  if (codec_ == VideoCodec::kVP9)
     config_change_detector_ = std::make_unique<VP9ConfigChangeDetector>();
 
   processing_config_changed_ = false;
@@ -1046,7 +1048,9 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
                              &feature_level_out, &d3d11_device_context_);
       RETURN_ON_HR_FAILURE(hr, "Failed to create DX11 device", false);
     }
-
+    RETURN_ON_HR_FAILURE(
+        hr, media::SetDebugName(d3d11_device_.Get(), "DXVA_DecodeAccelerator"),
+        false);
     hr = d3d11_device_.As(&video_device_);
     RETURN_ON_HR_FAILURE(hr, "Failed to get video device", false);
   }
@@ -1279,7 +1283,7 @@ void DXVAVideoDecodeAccelerator::WaitForOutputBuffer(int32_t picture_buffer_id,
         FROM_HERE,
         base::BindOnce(&DXVAVideoDecodeAccelerator::WaitForOutputBuffer,
                        weak_ptr_, picture_buffer_id, count + 1),
-        base::TimeDelta::FromMilliseconds(kFlushDecoderSurfaceTimeoutMs));
+        base::Milliseconds(kFlushDecoderSurfaceTimeoutMs));
     return;
   }
   RETURN_AND_NOTIFY_ON_FAILURE(picture_buffer->ReusePictureBuffer(),
@@ -1500,14 +1504,14 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
     std::u16string file_version = version_info->file_version();
     RETURN_ON_FAILURE(file_version.find(u"6.1.7140") == std::u16string::npos,
                       "blocked version of msmpeg2vdec.dll 6.1.7140", false);
-    codec_ = kCodecH264;
+    codec_ = VideoCodec::kH264;
     clsid = __uuidof(CMSH264DecoderMFT);
   } else if ((profile >= VP9PROFILE_PROFILE0 &&
               profile <= VP9PROFILE_PROFILE3) ||
              profile == VP8PROFILE_ANY) {
-    codec_ = profile == VP8PROFILE_ANY ? kCodecVP8 : kCodecVP9;
-    if ((codec_ == kCodecVP8 && enable_accelerated_vp8_decode_) ||
-        (codec_ == kCodecVP9 && enable_accelerated_vp9_decode_)) {
+    codec_ = profile == VP8PROFILE_ANY ? VideoCodec::kVP8 : VideoCodec::kVP9;
+    if ((codec_ == VideoCodec::kVP8 && enable_accelerated_vp8_decode_) ||
+        (codec_ == VideoCodec::kVP9 && enable_accelerated_vp9_decode_)) {
       clsid = CLSID_MSVPxDecoder;
       decoder_dll = ::LoadLibrary(kMSVPxDecoderDLLName);
       if (decoder_dll)
@@ -1518,7 +1522,7 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
   if (enable_accelerated_av1_decode_ &&
       base::FeatureList::IsEnabled(kMediaFoundationAV1Decoding) &&
       (profile >= AV1PROFILE_MIN && profile <= AV1PROFILE_MAX)) {
-    codec_ = kCodecAV1;
+    codec_ = VideoCodec::kAV1;
     clsid = CLSID_CAV1DecoderMFT;
 
     // Since the AV1 decoder is a Windows Store package, it can't be created
@@ -1632,7 +1636,7 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
   hr = attributes->GetUINT32(MF_SA_D3D_AWARE, &dxva);
   RETURN_ON_HR_FAILURE(hr, "Failed to check if decoder supports DXVA", false);
 
-  if (codec_ == kCodecH264) {
+  if (codec_ == VideoCodec::kH264) {
     hr = attributes->SetUINT32(CODECAPI_AVDecVideoAcceleration_H264, TRUE);
     RETURN_ON_HR_FAILURE(hr, "Failed to enable DXVA H/W decoding", false);
   }
@@ -1701,13 +1705,13 @@ bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
   hr = media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
   RETURN_ON_HR_FAILURE(hr, "Failed to set major input type", false);
 
-  if (codec_ == kCodecH264) {
+  if (codec_ == VideoCodec::kH264) {
     hr = media_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-  } else if (codec_ == kCodecVP9) {
+  } else if (codec_ == VideoCodec::kVP9) {
     hr = media_type->SetGUID(MF_MT_SUBTYPE, MEDIASUBTYPE_VP90);
-  } else if (codec_ == kCodecVP8) {
+  } else if (codec_ == VideoCodec::kVP8) {
     hr = media_type->SetGUID(MF_MT_SUBTYPE, MEDIASUBTYPE_VP80);
-  } else if (codec_ == kCodecAV1) {
+  } else if (codec_ == VideoCodec::kAV1) {
     hr = media_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_AV1);
   } else {
     NOTREACHED();
@@ -1788,7 +1792,7 @@ bool DXVAVideoDecodeAccelerator::GetStreamsInfoAndBufferReqs() {
   // There should be three flags, one for requiring a whole frame be in a
   // single sample, one for requiring there be one buffer only in a single
   // sample, and one that specifies a fixed sample size. (as in cbSize)
-  if (codec_ == kCodecH264 && input_stream_info_.dwFlags != 0x7u)
+  if (codec_ == VideoCodec::kH264 && input_stream_info_.dwFlags != 0x7u)
     return false;
 
   DVLOG(1) << "Min buffer size: " << input_stream_info_.cbSize;
@@ -1804,7 +1808,7 @@ bool DXVAVideoDecodeAccelerator::GetStreamsInfoAndBufferReqs() {
   // The flags here should be the same and mean the same thing, except when
   // DXVA is enabled, there is an extra 0x100 flag meaning decoder will
   // allocate its own sample.
-  if (codec_ == kCodecH264 && output_stream_info_.dwFlags != 0x107u)
+  if (codec_ == VideoCodec::kH264 && output_stream_info_.dwFlags != 0x107u)
     return false;
 
   // We should fail above during MFT_MESSAGE_SET_D3D_MANAGER if the decoder
@@ -2355,7 +2359,7 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
 
   // https://crbug.com/1160623 -- non 4:2:0 content hangs the decoder.
   RETURN_AND_NOTIFY_ON_FAILURE(
-      codec_ != kCodecH264 || config_change_detector_->IsYUV420(),
+      codec_ != VideoCodec::kH264 || config_change_detector_->IsYUV420(),
       "Only 4:2:0 H.264 content is supported", PLATFORM_FAILURE, );
 
   processing_config_changed_ = config_changed;
@@ -2637,7 +2641,7 @@ void DXVAVideoDecodeAccelerator::CopySurface(
                      base::Unretained(this), 0, base::Unretained(src_surface),
                      base::Unretained(dest_surface), picture_buffer_id,
                      input_buffer_id),
-      base::TimeDelta::FromMilliseconds(kFlushDecoderSurfaceTimeoutMs));
+      base::Milliseconds(kFlushDecoderSurfaceTimeoutMs));
 }
 
 void DXVAVideoDecodeAccelerator::CopySurfaceComplete(
@@ -2742,8 +2746,8 @@ void DXVAVideoDecodeAccelerator::BindPictureBufferToSample(
     // Get the viz resource format per texture.
     std::array<viz::ResourceFormat, VideoFrame::kMaxPlanes> viz_formats;
     {
-      const bool result = VideoPixelFormatToVizFormat(
-          picture_buffer->pixel_format(), textures_per_picture, viz_formats);
+      result = VideoPixelFormatToVizFormat(picture_buffer->pixel_format(),
+                                           textures_per_picture, viz_formats);
       RETURN_AND_NOTIFY_ON_FAILURE(
           result, "Could not convert pixel format to viz format",
           PLATFORM_FAILURE, );
@@ -2899,8 +2903,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
   DCHECK(d3d11_processor_.Get());
 
   if (dest_keyed_mutex) {
-    HRESULT hr =
-        dest_keyed_mutex->AcquireSync(keyed_mutex_value, kAcquireSyncWaitMs);
+    hr = dest_keyed_mutex->AcquireSync(keyed_mutex_value, kAcquireSyncWaitMs);
     RETURN_AND_NOTIFY_ON_FAILURE(
         hr == S_OK, "D3D11 failed to acquire keyed mutex for texture.",
         PLATFORM_FAILURE, );
@@ -2956,7 +2959,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
                                   PLATFORM_FAILURE, );
 
   if (dest_keyed_mutex) {
-    HRESULT hr = dest_keyed_mutex->ReleaseSync(keyed_mutex_value + 1);
+    hr = dest_keyed_mutex->ReleaseSync(keyed_mutex_value + 1);
     RETURN_AND_NOTIFY_ON_FAILURE(hr == S_OK, "Failed to release keyed mutex.",
                                  PLATFORM_FAILURE, );
 
@@ -2974,7 +2977,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
         base::BindOnce(&DXVAVideoDecodeAccelerator::FlushDecoder,
                        base::Unretained(this), 0, nullptr, nullptr,
                        picture_buffer_id, input_buffer_id),
-        base::TimeDelta::FromMilliseconds(kFlushDecoderSurfaceTimeoutMs));
+        base::Milliseconds(kFlushDecoderSurfaceTimeoutMs));
   }
 }
 
@@ -3018,7 +3021,7 @@ void DXVAVideoDecodeAccelerator::FlushDecoder(int iterations,
             &DXVAVideoDecodeAccelerator::FlushDecoder, base::Unretained(this),
             iterations, base::Unretained(src_surface),
             base::Unretained(dest_surface), picture_buffer_id, input_buffer_id),
-        base::TimeDelta::FromMilliseconds(kFlushDecoderSurfaceTimeoutMs));
+        base::Milliseconds(kFlushDecoderSurfaceTimeoutMs));
     return;
   }
 

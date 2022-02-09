@@ -140,8 +140,7 @@ unsigned WebGLRenderingContextBase::max_active_webgl_contexts_on_worker_ = 0;
 
 namespace {
 
-constexpr base::TimeDelta kDurationBetweenRestoreAttempts =
-    base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kDurationBetweenRestoreAttempts = base::Seconds(1);
 const int kMaxGLErrorsAllowedToConsole = 256;
 
 Mutex& WebGLContextLimitMutex() {
@@ -794,7 +793,7 @@ void WebGLRenderingContextBase::CompleteXrCompatiblePromiseIfPending(
                 WebFeature::kWebGLRenderingContextMakeXRCompatible))) {
       const auto& ukm_params = GetUkmParameters();
       IdentifiabilityMetricBuilder(ukm_params.source_id)
-          .SetWebfeature(WebFeature::kWebGLRenderingContextMakeXRCompatible,
+          .AddWebFeature(WebFeature::kWebGLRenderingContextMakeXRCompatible,
                          exception_code == DOMExceptionCode::kNoError)
           .Record(ukm_params.ukm_recorder);
     }
@@ -1731,10 +1730,9 @@ bool WebGLRenderingContextBase::CopyRenderingResultsFromDrawingBuffer(
   // We use this draw helper as we need to take into account the
   // ImageOrientation of the UnacceleratedStaticBitmapImage.
   ImageDrawOptions draw_options;
-  draw_options.sampling_options = SkSamplingOptions();
+  draw_options.clamping_mode = Image::kDoNotClampImageToSourceRect;
   image->Draw(resource_provider->Canvas(), flags, FloatRect(dest_rect),
-              FloatRect(src_rect), draw_options,
-              Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
+              FloatRect(src_rect), draw_options);
   return true;
 }
 
@@ -3326,7 +3324,7 @@ void WebGLRenderingContextBase::RecordIdentifiableGLParameterDigest(
       blink::IdentifiableSurface::Type::kWebGLParameter));
   const auto ukm_params = GetUkmParameters();
   blink::IdentifiabilityMetricBuilder(ukm_params.source_id)
-      .Set(blink::IdentifiableSurface::FromTypeAndToken(
+      .Add(blink::IdentifiableSurface::FromTypeAndToken(
                blink::IdentifiableSurface::Type::kWebGLParameter, pname),
            value)
       .Record(ukm_params.ukm_recorder);
@@ -3349,7 +3347,7 @@ void WebGLRenderingContextBase::RecordShaderPrecisionFormatForStudy(
                           .GetToken();
 
   blink::IdentifiabilityMetricBuilder(ukm_params.source_id)
-      .Set(blink::IdentifiableSurface::FromTypeAndToken(
+      .Add(blink::IdentifiableSurface::FromTypeAndToken(
                blink::IdentifiableSurface::Type::kWebGLShaderPrecisionFormat,
                surface_token),
            sample_token)
@@ -5140,10 +5138,9 @@ scoped_refptr<Image> WebGLRenderingContextBase::DrawImageIntoBuffer(
   // TODO(ccameron): WebGL should produce sRGB images.
   // https://crbug.com/672299
   ImageDrawOptions draw_options;
-  draw_options.sampling_options = SkSamplingOptions();
+  draw_options.clamping_mode = Image::kDoNotClampImageToSourceRect;
   image->Draw(resource_provider->Canvas(), flags, FloatRect(dest_rect),
-              FloatRect(src_rect), draw_options,
-              Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
+              FloatRect(src_rect), draw_options);
   return resource_provider->Snapshot();
 }
 

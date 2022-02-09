@@ -36,15 +36,13 @@ enum class InstallationStatus {
 };
 
 #ifdef NDEBUG
-constexpr base::TimeDelta kLockDelay =
-    base::TimeDelta::FromMinutes(2);  // minutes
-constexpr int kMatomoId = 36;         // Browser Usage - New implementation.
-constexpr int kScheduleJitter = 15;   // minutes
+constexpr base::TimeDelta kLockDelay = base::Minutes(2);  // minutes
+constexpr int kMatomoId = 36;        // Browser Usage - New implementation.
+constexpr int kScheduleJitter = 15;  // minutes
 #else
-constexpr base::TimeDelta kLockDelay =
-    base::TimeDelta::FromMinutes(0);  // minutes
-constexpr int kMatomoId = 13;         // Blackhole
-constexpr int kScheduleJitter = 1;    // minutes
+constexpr base::TimeDelta kLockDelay = base::Minutes(0);  // minutes
+constexpr int kMatomoId = 13;                             // Blackhole
+constexpr int kScheduleJitter = 1;                        // minutes
 #endif
 
 constexpr int kExtraPingCount = 2;
@@ -94,18 +92,16 @@ constexpr char kActionUrl[] = "http://localhost/";
 // These intervals are used to determine if a delay should be reset for being
 // higher than should be possible. Allow an extra day of wiggle room, to make
 // sure we only reset for good reasons.
-constexpr base::TimeDelta kMaxDailyPingDelay = base::TimeDelta::FromDays(2);
-constexpr base::TimeDelta kMaxWeeklyPingDelay = base::TimeDelta::FromDays(8);
-constexpr base::TimeDelta kMaxMonthlyPingDelay = base::TimeDelta::FromDays(32);
+constexpr base::TimeDelta kMaxDailyPingDelay = base::Days(2);
+constexpr base::TimeDelta kMaxWeeklyPingDelay = base::Days(8);
+constexpr base::TimeDelta kMaxMonthlyPingDelay = base::Days(32);
 // Any period of three months will have at most two months with 31 days and
 // one months with 30, which makes 92 days.
-constexpr base::TimeDelta kMaxTrimestrialPingDelay =
-    base::TimeDelta::FromDays(93);
+constexpr base::TimeDelta kMaxTrimestrialPingDelay = base::Days(93);
 // Any period of 6 months will have at most four months with 31 days and two
 // months with 30, which makes 184 days.
-constexpr base::TimeDelta kMaxSemestrialPingDelay =
-    base::TimeDelta::FromDays(185);
-constexpr base::TimeDelta kMaxYearlyPingDelay = base::TimeDelta::FromDays(367);
+constexpr base::TimeDelta kMaxSemestrialPingDelay = base::Days(185);
+constexpr base::TimeDelta kMaxYearlyPingDelay = base::Days(367);
 
 constexpr char kReportRequest[] =
     "rec=1&"
@@ -543,13 +539,13 @@ bool StatsReporterImpl::GeneratePingRequest(
   NextPingTimes new_next_pings = next_pings;
   int new_pings_since_last_month = pings_since_last_month;
   if (!do_extra_ping) {
-    new_next_pings.daily = now + base::TimeDelta::FromDays(1);
+    new_next_pings.daily = now + base::Days(1);
     new_pings_since_last_month++;
   }
 
   if (next_pings.weekly <= now) {
     request_url += kWeekly;
-    new_next_pings.weekly = now + base::TimeDelta::FromDays(7);
+    new_next_pings.weekly = now + base::Days(7);
   }
   if (next_pings.monthly <= now) {
     new_pings_since_last_month = 0;
@@ -684,7 +680,7 @@ bool StatsReporterImpl::GeneratePingRequest(
 
   if (next_extra_ping) {
     next_reporting_time_interval =
-        base::TimeDelta::FromMinutes(kExtraPingDelays[next_extra_ping - 1]);
+        base::Minutes(kExtraPingDelays[next_extra_ping - 1]);
   } else {
     next_reporting_time_interval = new_next_pings.daily - now;
   }
@@ -864,7 +860,7 @@ void StatsReporterImpl::ScheduleNextReporting(base::TimeDelta delay,
   DCHECK(!delay.is_zero());
 
   if (add_jitter) {
-    delay += base::TimeDelta::FromMicroseconds(
+    delay += base::Microseconds(
         base::RandDouble() *
         (kScheduleJitter * base::Time::kMicrosecondsPerMinute));
   }

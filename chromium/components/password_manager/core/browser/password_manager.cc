@@ -363,8 +363,6 @@ void PasswordManager::DidNavigateMainFrame(bool form_may_be_submitted) {
       break;
     }
   }
-  UMA_HISTOGRAM_COUNTS_1000("PasswordManager.NumFormManagersCleared",
-                            form_managers_.size());
   form_managers_.clear();
 
   TryToFindPredictionsToPossibleUsernameData();
@@ -626,8 +624,7 @@ PasswordFormManager* PasswordManager::CreateFormManager(
   form_managers_.push_back(std::make_unique<PasswordFormManager>(
       client_,
       driver ? driver->AsWeakPtr() : base::WeakPtr<PasswordManagerDriver>(),
-      form, nullptr,
-      PasswordSaveManagerImpl::CreatePasswordSaveManagerImpl(client_),
+      form, nullptr, std::make_unique<PasswordSaveManagerImpl>(client_),
       nullptr));
   form_managers_.back()->ProcessServerPredictions(predictions_);
   return form_managers_.back().get();
@@ -956,6 +953,10 @@ void PasswordManager::OnLoginSuccessful() {
   DCHECK(submitted_manager);
   const PasswordForm* submitted_form = submitted_manager->GetSubmittedForm();
   DCHECK(submitted_form);
+  client_->MaybeReportEnterpriseLoginEvent(
+      submitted_form->url, submitted_form->IsFederatedCredential(),
+      submitted_form->federation_origin,
+      submitted_manager->GetPendingCredentials().username_value);
   if (!client_->IsSavingAndFillingEnabled(submitted_form->url))
     return;
 
@@ -963,8 +964,7 @@ void PasswordManager::OnLoginSuccessful() {
   // Check for leaks only if there are no muted credentials.
   if (!HasMutedCredentials(
           submitted_manager->GetInsecureCredentials(),
-          submitted_manager->GetSubmittedForm()->username_value) ||
-      !base::FeatureList::IsEnabled(features::kMutingCompromisedCredentials)) {
+          submitted_manager->GetSubmittedForm()->username_value)) {
     leak_delegate_.StartLeakCheck(submitted_manager->GetPendingCredentials());
   }
 
@@ -975,7 +975,7 @@ void PasswordManager::OnLoginSuccessful() {
     logger->LogSuccessfulSubmissionIndicatorEvent(submission_event);
 
   bool able_to_save_passwords =
-      client_->GetProfilePasswordStoreInterface()->IsAbleToSavePasswords();
+      client_->GetProfilePasswordStore()->IsAbleToSavePasswords();
   UMA_HISTOGRAM_BOOLEAN("PasswordManager.AbleToSavePasswordsOnSuccessfulLogin",
                         able_to_save_passwords);
   if (!able_to_save_passwords)
@@ -1285,7 +1285,7 @@ void PasswordManager::ShowManualFallbackForSaving(
   if (!form_manager->is_submitted())
     return;
 
-  if (!client_->GetProfilePasswordStoreInterface()->IsAbleToSavePasswords() ||
+  if (!client_->GetProfilePasswordStore()->IsAbleToSavePasswords() ||
       !client_->IsSavingAndFillingEnabled(form_data.url) ||
       ShouldBlockPasswordForSameOriginButDifferentScheme(form_data.url)) {
     return;

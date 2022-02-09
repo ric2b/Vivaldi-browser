@@ -11,6 +11,22 @@ GEN('#include "ash/constants/ash_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
 // clang-format off
+[
+  ['BasePage', 'bluetooth/bluetooth_base_page_test.js'],
+  ['BluetoothIcon', 'bluetooth/bluetooth_icon_test.js'],
+  ['DeviceBatteryInfo', 'bluetooth/bluetooth_device_battery_info_tests.js'],
+  [
+    'DeviceSelectionPage',
+    'bluetooth/bluetooth_pairing_device_selection_page_test.js'
+  ],
+  ['PairingDeviceItem', 'bluetooth/bluetooth_pairing_device_item_test.js'],
+  [
+    'PairingRequestCodePage',
+    'bluetooth/bluetooth_pairing_request_code_page_test.js'
+  ],
+  ['PairingUi', 'bluetooth/bluetooth_pairing_ui_test.js'],
+ ].forEach(test => registerTest('Bluetooth', 'bluetooth-pairing', ...test));
+
 [['CrPolicyNetworkBehaviorMojo', 'network/cr_policy_network_behavior_mojo_tests.m.js'],
  ['CrPolicyNetworkIndicatorMojo', 'network/cr_policy_network_indicator_mojo_tests.m.js'],
  ['NetworkApnlist', 'network/network_apnlist_test.m.js'],
@@ -35,7 +51,8 @@ GEN('#include "content/public/test/browser_test.h"');
  ['SimLockDialogs', 'network/sim_lock_dialogs_test.m.js'],
 ].forEach(test => registerTest('NetworkComponents', 'os-settings', ...test));
 
-[['RoutineGroup', 'network_health/routine_group_test.m.js'],
+[['NetworkDiagnostics', 'network_health/network_diagnostics_test.js'],
+ ['RoutineGroup', 'network_health/routine_group_test.js'],
 ].forEach(test => registerTest('NetworkHealth', 'connectivity-diagnostics', ...test));
 
 [
@@ -75,6 +92,7 @@ function registerTest(componentName, webuiHost, testName, module, caseName) {
       return {
         enabled: [
           'chromeos::features::kCellularUseAttachApn',
+          'ash::features::kBluetoothRevamp',
         ],
       };
     }

@@ -4,6 +4,7 @@
 
 #include "content/browser/interest_group/auction_runner.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,7 @@
 #include "net/base/escape.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
@@ -37,6 +39,26 @@ namespace {
 // to call ReportBadMessage() on invalid URLs.
 bool IsUrlValid(const GURL& url) {
   return url.is_valid() && url.SchemeIs(url::kHttpsScheme);
+}
+
+// Finds InterestGroup::Ad in `ads` that matches `render_url`, if any. Returns
+// nullptr if `render_url` is invalid.
+const blink::InterestGroup::Ad* FindMatchingAd(
+    const std::vector<blink::InterestGroup::Ad>& ads,
+    const GURL& render_url) {
+  // TODO(mmenke): Validate render URLs on load and make this a DCHECK just
+  // before the return instead, since then `ads` will necessarily only contain
+  // valid URLs at that point.
+  if (!IsUrlValid(render_url))
+    return nullptr;
+
+  for (const auto& ad : ads) {
+    if (ad.render_url == render_url) {
+      return &ad;
+    }
+  }
+
+  return nullptr;
 }
 
 // Validates that `bid` is valid and, if it is, returns the InterestGroupAd
@@ -56,21 +78,39 @@ const blink::InterestGroup::Ad* ValidateBidAndGetAd(
     return nullptr;
   }
 
-  // This should be a subset of the next case, but best to be careful.
-  if (!IsUrlValid(bid.render_url)) {
-    mojo::ReportBadMessage("Invalid bid render URL");
+  const blink::InterestGroup::Ad* matching_ad =
+      FindMatchingAd(*interest_group.ads, bid.render_url);
+  if (!matching_ad) {
+    mojo::ReportBadMessage("Bid render URL must be a valid ad URL");
     return nullptr;
   }
 
-  // Reject URLs not listed in the interest group.
-  for (const auto& ad : interest_group.ads.value()) {
-    if (ad.render_url == bid.render_url) {
-      return &ad;
+  // Validate `ad_component` URLs, if present.
+  if (bid.ad_components) {
+    // Only InterestGroups with ad components should return bids with ad
+    // components.
+    if (!interest_group.ad_components) {
+      mojo::ReportBadMessage("Unexpected non-null ad component list");
+      return nullptr;
+    }
+
+    if (bid.ad_components->size() > blink::kMaxAdAuctionAdComponents) {
+      mojo::ReportBadMessage("Too many ad component URLs");
+      return nullptr;
+    }
+
+    // Validate each ad component URL is valid and appears in the interest
+    // group's `ad_components` field.
+    for (const GURL& ad_component_url : *bid.ad_components) {
+      if (!FindMatchingAd(*interest_group.ad_components, ad_component_url)) {
+        mojo::ReportBadMessage(
+            "Bid ad components URL must match a valid ad component URL");
+        return nullptr;
+      }
     }
   }
 
-  mojo::ReportBadMessage("Bid render URL must be an ad URL");
-  return nullptr;
+  return matching_ad;
 }
 
 }  // namespace
@@ -128,7 +168,7 @@ void AuctionRunner::FailAuction(AuctionResult result,
   ClosePipes();
 
   std::move(callback_).Run(this, absl::nullopt, absl::nullopt, absl::nullopt,
-                           errors_);
+                           absl::nullopt, errors_);
 }
 
 void AuctionRunner::ReadInterestGroups(
@@ -206,14 +246,15 @@ void AuctionRunner::OnSellerWorkletProcessReceived() {
       base::BindRepeating(&Delegate::GetFrameURLLoaderFactory,
                           base::Unretained(delegate_)),
       frame_origin_, true /* use_cors */, seller_url);
-  bool should_pause_on_start = false;  // TODO(morlovich): Use this.
+  bool should_pause_on_start = false;
   mojo::PendingReceiver<auction_worklet::mojom::SellerWorklet>
       worklet_receiver = seller_worklet_.BindNewPipeAndPassReceiver();
   seller_worklet_debug_ = base::WrapUnique(new DebuggableAuctionWorklet(
       delegate_->GetFrame(), seller_url, seller_worklet_.get(),
       should_pause_on_start));
   seller_worklet_process_handle_->GetService()->LoadSellerWorklet(
-      std::move(worklet_receiver), std::move(url_loader_factory), seller_url,
+      std::move(worklet_receiver), should_pause_on_start,
+      std::move(url_loader_factory), seller_url,
       base::BindOnce(&AuctionRunner::OnSellerWorkletLoaded,
                      weak_ptr_factory_.GetWeakPtr()));
   // Fail auction if the seller worklet pipe is disconnected.
@@ -292,17 +333,18 @@ void AuctionRunner::OnBidderWorkletProcessReceived(BidState* bid_state) {
 
   mojo::PendingReceiver<auction_worklet::mojom::BidderWorklet>
       worklet_receiver = bid_state->bidder_worklet.BindNewPipeAndPassReceiver();
-  bool should_pause_on_start = false;  // TODO(morlovich): Use this.
+  bool should_pause_on_start = false;
   bid_state->bidder_worklet_debug =
       base::WrapUnique(new DebuggableAuctionWorklet(
           delegate_->GetFrame(), bidding_url, bid_state->bidder_worklet.get(),
           should_pause_on_start));
 
   bid_state->process_handle->GetService()->LoadBidderWorkletAndGenerateBid(
-      std::move(worklet_receiver), std::move(url_loader_factory),
-      bidder->Clone(), auction_config_->auction_signals,
-      PerBuyerSignals(bid_state), browser_signals_->top_frame_origin,
-      browser_signals_->seller, auction_start_time_,
+      std::move(worklet_receiver), should_pause_on_start,
+      std::move(url_loader_factory), bidder->Clone(),
+      auction_config_->auction_signals, PerBuyerSignals(bid_state),
+      browser_signals_->top_frame_origin, browser_signals_->seller,
+      auction_start_time_,
       base::BindOnce(&AuctionRunner::OnGenerateBidComplete,
                      weak_ptr_factory_.GetWeakPtr(), bid_state));
   bid_state->bidder_worklet.set_disconnect_handler(
@@ -587,6 +629,7 @@ void AuctionRunner::ReportSuccess() {
       top_bidder_->bidder.group->group.name, ad_metadata);
 
   std::move(callback_).Run(this, top_bidder_->bid_result->render_url,
+                           top_bidder_->bid_result->ad_components,
                            std::move(bidder_report_url_),
                            std::move(seller_report_url_), std::move(errors_));
 }

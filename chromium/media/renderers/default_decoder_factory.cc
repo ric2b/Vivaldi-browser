@@ -46,17 +46,7 @@
 #include "media/filters/gav1_video_decoder.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MAC)
-#include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
-#include "platform_media/renderer/decoders/mac/viv_video_decoder.h"
-#endif
-#if defined(OS_WIN)
-#include "media/base/win/mf_helpers.h"
-#include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
-#include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
-#endif
-#endif
+#include "platform_media/renderer/decoders/vivaldi_decoder_config.h"
 
 namespace media {
 
@@ -73,14 +63,6 @@ void DefaultDecoderFactory::CreateAudioDecoders(
   base::AutoLock auto_lock(shutdown_lock_);
   if (is_shutdown_)
     return;
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MAC)
-  audio_decoders->push_back(std::make_unique<ATAudioDecoder>(task_runner));
-#elif defined(OS_WIN)
-  audio_decoders->push_back(std::make_unique<WMFAudioDecoder>(task_runner));
-#endif
-#endif
 
 #if !defined(OS_ANDROID)
   // DecryptingAudioDecoder is only needed in External Clear Key testing to
@@ -100,6 +82,11 @@ void DefaultDecoderFactory::CreateAudioDecoders(
     external_decoder_factory_->CreateAudioDecoders(task_runner, media_log,
                                                    audio_decoders);
   }
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  VivaldiDecoderConfig::AddAudioDecoders(task_runner, media_log,
+                                         *audio_decoders);
+#endif
 }
 
 SupportedVideoDecoderConfigs
@@ -223,13 +210,9 @@ void DefaultDecoderFactory::CreateVideoDecoders(
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MAC)
-  video_decoders->push_back(VivVideoDecoder::Create(task_runner, media_log));
-#endif // OS_MAC
-#if defined(OS_WIN)
-  video_decoders->push_back(std::make_unique<WMFVideoDecoder>(task_runner));
-#endif // OS_WIN
-#endif // USE_SYSTEM_PROPRIETARY_CODECS
+  VivaldiDecoderConfig::AddVideoDecoders(task_runner, media_log,
+                                         *video_decoders);
+#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 }
 
 void DefaultDecoderFactory::Shutdown() {

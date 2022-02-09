@@ -19,7 +19,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/common/guest_view_constants.h"
@@ -103,6 +102,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -186,7 +186,7 @@ static std::string TerminationStatusToString(base::TerminationStatus status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_STILL_RUNNING:
       return "abnormal";
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       return "oom killed";
 #endif
@@ -1044,6 +1044,7 @@ void WebViewGuest::NewGuestWebViewCallback(const content::OpenURLParams& params,
   // this new window should be the same type.
   if (IsVivaldiRunning() &&
       params.disposition == WindowOpenDisposition::NEW_WINDOW &&
+      params.source_site_instance &&
       params.source_site_instance->GetBrowserContext()->IsOffTheRecord()) {
     DCHECK(guest_web_contents->GetBrowserContext()->IsOffTheRecord());
     RequestNewWindowPermission(WindowOpenDisposition::OFF_THE_RECORD,
@@ -1438,6 +1439,18 @@ bool WebViewGuest::CheckMediaAccessPermission(
 void WebViewGuest::CanDownload(const GURL& url,
                                const std::string& request_method,
                                base::OnceCallback<void(bool)> callback) {
+
+  // NOTE(andre@vivaldi.com) : Mimick Chrome download flow and deny download of
+  // mixed-content. (It will be cancelled later on anyways so do not present a
+  // save dialog to the user.)
+  GURL tab_url = web_contents()->GetURL();
+  bool is_download_secure = (network::IsUrlPotentiallyTrustworthy(url) ||
+                             url.SchemeIsBlob() || url.SchemeIsFile());
+  // Block secure tab and not secure download.
+  if (tab_url.SchemeIsCryptographic() && !is_download_secure) {
+    std::move(callback).Run(false);
+    return;
+  }
   web_view_permission_helper_->SetDownloadInformation(download_info_);
   web_view_permission_helper_->CanDownload(url, request_method,
                                            std::move(callback));
@@ -1574,17 +1587,18 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
   params.GetString(webview::kParameterUserAgentOverride, &user_agent_override);
   SetUserAgentOverride(user_agent_override);
 
-  bool allow_transparency = false;
-  if (params.GetBoolean(webview::kAttributeAllowTransparency,
-      &allow_transparency)) {
+  absl::optional<bool> allow_transparency =
+      params.FindBoolKey(webview::kAttributeAllowTransparency);
+  if (allow_transparency) {
     // We need to set the background opaque flag after navigation to ensure that
     // there is a RenderWidgetHostView available.
-    SetAllowTransparency(allow_transparency);
+    SetAllowTransparency(*allow_transparency);
   }
 
-  bool allow_scaling = false;
-  if (params.GetBoolean(webview::kAttributeAllowScaling, &allow_scaling))
-    SetAllowScaling(allow_scaling);
+  absl::optional<bool> allow_scaling =
+      params.FindBoolKey(webview::kAttributeAllowScaling);
+  if (allow_scaling)
+    SetAllowScaling(*allow_scaling);
 
   // Check for a pending zoom from before the first navigation.
   params.GetDouble(webview::kInitialZoomFactor, &pending_zoom_factor_);
@@ -1854,6 +1868,20 @@ WebContents* WebViewGuest::OpenURLFromTab(
     return web_contents();
   }
 
+
+  // This comes from a context menu where the owner might be the ui which always
+  // run in non-incognito profile. Patch through to the correct browser.
+  // NOTE(andre@vivaldi.com) : This could take over handling for navigations
+  // into new contents for all cases. Was VB-83603.
+  if (params.source_site_instance &&
+      params.source_site_instance->GetBrowserContext()->IsOffTheRecord()) {
+    Profile *profile =
+        Profile::FromBrowserContext(
+          params.source_site_instance->GetBrowserContext());
+    Browser *browser = chrome::FindTabbedBrowser(profile, false);
+    browser->OpenURL(params);
+    return nullptr;
+  }
   // This code path is taken if Ctrl+Click, middle click or any of the
   // keyboard/mouse combinations are used to open a link in a new tab/window.
   // This code path is also taken on client-side redirects from about:blank.
@@ -2166,6 +2194,10 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
       ->GetRenderViewHost()
       ->GetWidget()
       ->SynchronizeVisualProperties();
+}
+
+bool WebViewGuest::IsBackForwardCacheSupported() {
+  return true;
 }
 
 }  // namespace extensions

@@ -25,15 +25,19 @@ cbor::Value CreateHeaderMap(const WebBundleBuilder::Headers& headers) {
 }  // namespace
 
 WebBundleBuilder::WebBundleBuilder(const std::string& fallback_url,
-                                   const std::string& manifest_url)
-    : fallback_url_(fallback_url) {
+                                   const std::string& manifest_url,
+                                   BundleVersion version)
+    : fallback_url_(fallback_url), version_(version) {
   writer_config_.allow_invalid_utf8_for_testing = true;
   if (!manifest_url.empty()) {
     AddSection("manifest",
                cbor::Value::InvalidUTF8StringValueForTesting(manifest_url));
   }
+  if (version == BundleVersion::kB2 && !fallback_url_.empty()) {
+    AddSection("primary",
+               cbor::Value::InvalidUTF8StringValueForTesting(fallback_url_));
+  }
 }
-
 WebBundleBuilder::~WebBundleBuilder() = default;
 
 void WebBundleBuilder::AddExchange(base::StringPiece url,
@@ -66,7 +70,12 @@ void WebBundleBuilder::AddIndexEntry(
     base::StringPiece variants_value,
     std::vector<ResponseLocation> response_locations) {
   cbor::Value::ArrayValue index_value_array;
-  index_value_array.emplace_back(CreateByteString(variants_value));
+  // 'b2' version does not include |variants_value| in the response array.
+  if (version_ == BundleVersion::kB1) {
+    index_value_array.emplace_back(CreateByteString(variants_value));
+  } else {
+    DCHECK_EQ(response_locations.size(), 1u);
+  }
   for (const auto& location : response_locations) {
     index_value_array.emplace_back(location.offset);
     index_value_array.emplace_back(location.length);
@@ -130,9 +139,15 @@ cbor::Value WebBundleBuilder::CreateTopLevel() {
   cbor::Value::ArrayValue toplevel_array;
   toplevel_array.emplace_back(
       CreateByteString(u8"\U0001F310\U0001F4E6"));  // "🌐📦"
-  toplevel_array.emplace_back(CreateByteString(base::StringPiece("b1\0\0", 4)));
-  toplevel_array.emplace_back(
-      cbor::Value::InvalidUTF8StringValueForTesting(fallback_url_));
+  if (version_ == BundleVersion::kB1) {
+    toplevel_array.emplace_back(
+        CreateByteString(base::StringPiece("b1\0\0", 4)));
+    toplevel_array.emplace_back(
+        cbor::Value::InvalidUTF8StringValueForTesting(fallback_url_));
+  } else {
+    toplevel_array.emplace_back(
+        CreateByteString(base::StringPiece("b2\0\0", 4)));
+  }
   toplevel_array.emplace_back(Encode(cbor::Value(section_lengths_)));
   toplevel_array.emplace_back(sections_);
   toplevel_array.emplace_back(CreateByteString(""));  // length (ignored)

@@ -37,8 +37,7 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
     base::Time next_retry_time;
   };
 
-  VivaldiSyncUIHelper(Profile* profile,
-                      VivaldiSyncServiceImpl* sync_manager);
+  VivaldiSyncUIHelper(Profile* profile, VivaldiSyncServiceImpl* sync_manager);
   ~VivaldiSyncUIHelper() override;
 
   void RegisterObserver();

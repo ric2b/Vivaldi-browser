@@ -138,6 +138,10 @@ class TestController : public TopControlsSlideController {
       : real_controller_(std::move(real_controller)) {
     DCHECK(real_controller_);
   }
+
+  TestController(const TestController&) = delete;
+  TestController& operator=(const TestController&) = delete;
+
   ~TestController() override = default;
 
   void AddObserver(TestControllerObserver* observer) {
@@ -188,8 +192,6 @@ class TestController : public TopControlsSlideController {
   std::unique_ptr<TopControlsSlideController> real_controller_;
 
   base::ObserverList<TestControllerObserver>::Unchecked observers_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestController);
 };
 
 // Waits for a given terminal value (1.f or 0.f) of the browser top controls
@@ -200,6 +202,10 @@ class TopControlsShownRatioWaiter : public TestControllerObserver {
       : controller_(controller) {
     controller_->AddObserver(this);
   }
+
+  TopControlsShownRatioWaiter(const TopControlsShownRatioWaiter&) = delete;
+  TopControlsShownRatioWaiter& operator=(const TopControlsShownRatioWaiter&) =
+      delete;
 
   ~TopControlsShownRatioWaiter() override { controller_->RemoveObserver(this); }
 
@@ -248,8 +254,6 @@ class TopControlsShownRatioWaiter : public TestControllerObserver {
   std::unique_ptr<base::RunLoop> run_loop_;
 
   float waiting_for_shown_ratio_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(TopControlsShownRatioWaiter);
 };
 
 // Waits for a given |is_gesture_scrolling_in_progress_| value.
@@ -303,6 +307,12 @@ class GestureScrollInProgressChangeWaiter : public TestControllerObserver {
 class TopControlsSlideControllerTest : public InProcessBrowserTest {
  public:
   TopControlsSlideControllerTest() = default;
+
+  TopControlsSlideControllerTest(const TopControlsSlideControllerTest&) =
+      delete;
+  TopControlsSlideControllerTest& operator=(
+      const TopControlsSlideControllerTest&) = delete;
+
   ~TopControlsSlideControllerTest() override = default;
 
   BrowserView* browser_view() const {
@@ -353,7 +363,7 @@ class TopControlsSlideControllerTest : public InProcessBrowserTest {
   }
 
   void NavigateActiveTabToUrl(const GURL& url) {
-    ui_test_utils::NavigateToURL(browser(), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     auto* active_contents = browser_view()->GetActiveWebContents();
     EXPECT_TRUE(content::WaitForLoadStop(active_contents));
     SynchronizeBrowserWithRenderer(active_contents);
@@ -545,8 +555,6 @@ class TopControlsSlideControllerTest : public InProcessBrowserTest {
   }
 
   TestController* test_controller_ = nullptr;  // Not owned.
-
-  DISALLOW_COPY_AND_ASSIGN(TopControlsSlideControllerTest);
 };
 
 namespace {
@@ -690,7 +698,8 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
 
   // Add a tab containing a local NTP page. NTP pages are not permitted to hide
   // top-chrome with scrolling.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           GURL(chrome::kChromeUINewTabURL)));
   ASSERT_EQ(browser()->tab_strip_model()->count(), 1);
 
   // Navigate to our test page that has a long vertical content which we can use
@@ -872,6 +881,10 @@ class BrowserViewLayoutWaiter : public views::ViewObserver {
       : browser_view_(browser_view) {
     browser_view->AddObserver(this);
   }
+
+  BrowserViewLayoutWaiter(const BrowserViewLayoutWaiter&) = delete;
+  BrowserViewLayoutWaiter& operator=(const BrowserViewLayoutWaiter&) = delete;
+
   ~BrowserViewLayoutWaiter() override { browser_view_->RemoveObserver(this); }
 
   void Wait() {
@@ -897,8 +910,6 @@ class BrowserViewLayoutWaiter : public views::ViewObserver {
   bool view_bounds_changed_ = false;
 
   std::unique_ptr<base::RunLoop> run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserViewLayoutWaiter);
 };
 
 IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, DisplayRotation) {
@@ -1000,6 +1011,10 @@ class PageStateUpdateWaiter : content::WebContentsObserver {
  public:
   explicit PageStateUpdateWaiter(content::WebContents* contents)
       : WebContentsObserver(contents) {}
+
+  PageStateUpdateWaiter(const PageStateUpdateWaiter&) = delete;
+  PageStateUpdateWaiter& operator=(const PageStateUpdateWaiter&) = delete;
+
   ~PageStateUpdateWaiter() override = default;
 
   void Wait() {
@@ -1019,8 +1034,6 @@ class PageStateUpdateWaiter : content::WebContentsObserver {
 
  private:
   base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(PageStateUpdateWaiter);
 };
 
 // Verifies that we ignore the shown ratios sent from widgets other than that of
@@ -1131,6 +1144,10 @@ class IntermediateShownRatioWaiter : public TestControllerObserver {
     controller_->AddObserver(this);
   }
 
+  IntermediateShownRatioWaiter(const IntermediateShownRatioWaiter&) = delete;
+  IntermediateShownRatioWaiter& operator=(const IntermediateShownRatioWaiter&) =
+      delete;
+
   ~IntermediateShownRatioWaiter() override {
     controller_->RemoveObserver(this);
   }
@@ -1169,8 +1186,6 @@ class IntermediateShownRatioWaiter : public TestControllerObserver {
   base::OnceClosure on_intermediate_ratio_callback_;
 
   bool seen_intermediate_ratios_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(IntermediateShownRatioWaiter);
 };
 
 // TODO(crbug.com/1055958): Test is flaky.

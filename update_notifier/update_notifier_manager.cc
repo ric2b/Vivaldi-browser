@@ -55,15 +55,6 @@ namespace vivaldi_update_notifier {
 
 namespace {
 
-constexpr base::TimeDelta kPeriodicAutomaticCheckInterval =
-    base::TimeDelta::FromDays(1);
-
-// Maximum delay to wait to delete downloads from the previous run. The delay
-// should be sufficient for the installer that restarted the notifier to exit
-// allowing to delete its files. See also comments in
-constexpr base::TimeDelta kOldDownloadsCleanupDelay =
-    base::TimeDelta::FromSeconds(30);
-
 constexpr base::win::i18n::LanguageSelector::LangToOffset
     kLanguageOffsetPairs[] = {
 #define HANDLE_LANGUAGE(l_, o_) {L## #l_, o_},
@@ -486,25 +477,17 @@ ExitCode UpdateNotifierManager::RunNotifier() {
                                      : &ReadLocaleStateLanguage);
   UI::Init(*this);
 
-  if (IsUsingTaskScheduler()) {
-    // When we run the first time after been enabled from the installer, this
-    // may fail as the installer may still be running preventing to remove its
-    // setup.exe file. But then we will remove the leftovers the next time we
-    // run in 24 hours. This is not an issue on subsequent updates when the
-    // notifier was already enabled as then the notifier will check for updates
-    // either 24 hours or on the browser startup. In both cases the installer
-    // will exit at that point.
-    //
-    // TODO(igor@vivaldi.com): Consider waiting for the installer process to
-    // finish and delete the leftovers then.
-    CleanDownloadLeftovers();
-  } else {
-    main_thread_runner_->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&UpdateNotifierManager::EnsureOldDownloadsDeleted,
-                       base::Unretained(this)),
-        kOldDownloadsCleanupDelay);
-  }
+  // When we run the first time after been enabled from the installer, this
+  // may fail as the installer may still be running preventing to remove its
+  // setup.exe file. But then we will remove the leftovers the next time we
+  // run in 24 hours. This is not an issue on subsequent updates when the
+  // notifier was already enabled as then the notifier will check for updates
+  // either 24 hours or on the browser startup. In both cases the installer
+  // will exit at that point.
+  //
+  // TODO(igor@vivaldi.com): Consider waiting for the installer process to
+  // finish and delete the leftovers then.
+  CleanDownloadLeftovers();
 
   StartUpdateCheck();
 
@@ -591,6 +574,8 @@ void UpdateNotifierManager::OnUpdateCheckResult(
   if (appcast && !WithVersionCheckUI(g_mode)) {
     base::Version toSkip(ReadRegistryIem(RegistryItem::kSkipThisVersion));
     if (toSkip.IsValid() && toSkip == appcast->Version) {
+      LOG(INFO) << "No update to the version " << appcast->Version
+                << ": explicit skipped by the user";
       appcast.reset();
     }
   }
@@ -598,7 +583,8 @@ void UpdateNotifierManager::OnUpdateCheckResult(
   if (appcast && g_app_version.IsValid()) {
     // Check if our version is out of date.
     if (appcast->Version <= g_app_version) {
-      // The same or newer version is already installed.
+      LOG(INFO) << "No update: update version " << appcast->Version
+                << " <= installed version " << g_app_version;
       appcast.reset();
     }
   }
@@ -608,6 +594,11 @@ void UpdateNotifierManager::OnUpdateCheckResult(
     return;
   }
   active_version_check_ = false;
+
+  if (appcast && g_app_version.IsValid()) {
+    LOG(INFO) << "Newer version is available: " << appcast->Version << " > "
+              << g_app_version;
+  }
 
   // If the previous automated update check has found an update so appcast_ is
   // not null, the user ignored it and the new check generated an error, we want
@@ -678,11 +669,6 @@ void UpdateNotifierManager::OnNotificationAcceptance() {
 void UpdateNotifierManager::StartDownload() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
-  if (!IsUsingTaskScheduler()) {
-    // Make sure that at this point no downloads from the previous invocation of
-    // the notifier process exists.
-    EnsureOldDownloadsDeleted();
-  }
   if (!appcast_)
     return;
   if (active_download_)
@@ -702,16 +688,6 @@ void UpdateNotifierManager::StartDownload() {
   }
   vivaldi::DetachedThread::Start(
       std::make_unique<UpdateDownloadThread>(job_id, *appcast_));
-}
-
-// Ensure that download leftovers from the previous run were deleted.
-void UpdateNotifierManager::EnsureOldDownloadsDeleted() {
-  DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
-  static bool cleanup_done = false;
-  if (!cleanup_done) {
-    CleanDownloadLeftovers();
-    cleanup_done = true;
-  }
 }
 
 void UpdateNotifierManager::OnUpdateDownloadReport(JobId job_id,
@@ -812,31 +788,6 @@ void UpdateNotifierManager::FinishCheck() {
   }
   base::TimeDelta check_duration = base::Time::Now() - check_start_time_;
   LOG(INFO) << "Update check finished in " << check_duration;
-
-  if (!IsUsingTaskScheduler() && g_mode != UpdateMode::kNetworkInstall &&
-      g_install_type != vivaldi::InstallType::kStandalone) {
-    bool keep_running = vivaldi::IsUpdateNotifierEnabledAsAutorun(GetExeDir());
-    if (keep_running) {
-      base::TimeDelta next_check_delay;
-      if (kPeriodicAutomaticCheckInterval > check_duration) {
-        next_check_delay = kPeriodicAutomaticCheckInterval - check_duration;
-      }
-      LOG(INFO) << "Scheduling the next check in " << next_check_delay;
-
-      // Switch to automatic update check.
-      if (g_install_type == vivaldi::InstallType::kForAllUsers) {
-        g_mode = UpdateMode::kSilentDownload;
-      } else {
-        g_mode = UpdateMode::kSilentUpdate;
-      }
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE,
-          base::BindOnce(&UpdateNotifierManager::StartUpdateCheck,
-                         base::Unretained(this)),
-          next_check_delay);
-      return;
-    }
-  }
 
   run_loop_.Quit();
 }

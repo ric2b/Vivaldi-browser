@@ -31,6 +31,9 @@ class OptionsPrinter {
  public:
   OptionsPrinter() = default;
 
+  OptionsPrinter(const OptionsPrinter&) = delete;
+  OptionsPrinter& operator=(const OptionsPrinter&) = delete;
+
   // If this is the first printed option for the rule, add a $ separator,
   // otherwise a comma.
   std::string PrintOption(const std::string& option) {
@@ -41,8 +44,6 @@ class OptionsPrinter {
 
  private:
   bool printed_options_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(OptionsPrinter);
 };
 
 std::string PartyOptionsToString(
@@ -111,6 +112,8 @@ std::string TypeOptionsToString(
     out += options_printer->PrintOption("font");
   if (types & url_pattern_index::flat::ElementType_WEBSOCKET)
     out += options_printer->PrintOption("websocket");
+  if (types & url_pattern_index::flat::ElementType_WEBTRANSPORT)
+    out += options_printer->PrintOption("webtransport");
 
   return out;
 }

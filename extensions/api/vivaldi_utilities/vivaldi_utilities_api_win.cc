@@ -4,9 +4,9 @@
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
-#include <string>
 #include <windows.h>
 #include <winnls.h>
+#include <string>
 
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"

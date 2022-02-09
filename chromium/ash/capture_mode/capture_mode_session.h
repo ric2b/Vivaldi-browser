@@ -30,6 +30,7 @@ class Canvas;
 
 namespace ash {
 
+class CaptureModeAdvancedSettingsView;
 class CaptureModeBarView;
 class CaptureModeController;
 class CaptureModeSettingsView;
@@ -51,8 +52,9 @@ class ASH_EXPORT CaptureModeSession : public ui::LayerOwner,
                                       public aura::WindowObserver,
                                       public display::DisplayObserver {
  public:
-  // Creates the bar widget on a calculated root window.
-  explicit CaptureModeSession(CaptureModeController* controller);
+  // Creates the bar widget on a calculated root window. |projector_mode|
+  // specifies whether this session was started for the projector workflow.
+  CaptureModeSession(CaptureModeController* controller, bool projector_mode);
   CaptureModeSession(const CaptureModeSession&) = delete;
   CaptureModeSession& operator=(const CaptureModeSession&) = delete;
   ~CaptureModeSession() override;
@@ -68,6 +70,8 @@ class ASH_EXPORT CaptureModeSession : public ui::LayerOwner,
   views::Widget* capture_mode_bar_widget() {
     return capture_mode_bar_widget_.get();
   }
+  bool is_in_projector_mode() const { return is_in_projector_mode_; }
+  void set_can_exit_on_escape(bool value) { can_exit_on_escape_ = value; }
   bool is_selecting_region() const { return is_selecting_region_; }
   bool is_drag_in_progress() const { return is_drag_in_progress_; }
   void set_a11y_alert_on_session_exit(bool value) {
@@ -133,6 +137,10 @@ class ASH_EXPORT CaptureModeSession : public ui::LayerOwner,
   // tune position in region capture mode. We'll have a larger hit test region
   // for the touch events than the mouse events.
   void UpdateCursor(const gfx::Point& location_in_screen, bool is_touch);
+
+  // Highlights the give |window| for keyboard navigation
+  // events (tabbing through windows in capture window mode).
+  void HighlightWindowForTab(aura::Window* window);
 
  private:
   friend class CaptureModeSessionFocusCycler;
@@ -308,6 +316,15 @@ class ASH_EXPORT CaptureModeSession : public ui::LayerOwner,
   // Magnifier glass used during a region capture session.
   MagnifierGlass magnifier_glass_;
 
+  // Whether this session was started from a projector workflow.
+  const bool is_in_projector_mode_ = false;
+
+  // Whether pressing the escape key can exit the session. This is used when we
+  // find capturable content at the end of the 3-second count down, but we need
+  // to do some extra asynchronous operations before we start the actual
+  // recording. At this point we don't want the user to be able to bail out.
+  bool can_exit_on_escape_ = true;
+
   // Stores the data needed to select a region during a region capture session.
   // This variable indicates if the user is currently selecting a region to
   // capture, it will be true when the first mouse/touch presses down and will
@@ -371,6 +388,20 @@ class ASH_EXPORT CaptureModeSession : public ui::LayerOwner,
   // Accessibility features will focus on the capture bar widget while this
   // object is alive.
   std::unique_ptr<ScopedA11yOverrideWindowSetter> scoped_a11y_overrider_;
+
+  // This is guarded by the |ImprovedScreenCaptureSettings| feature flag.
+  // TODO(conniekxu): remove it when the work of capture mode new settings
+  // is done.
+  CaptureModeAdvancedSettingsView* capture_mode_advanced_settings_view_ =
+      nullptr;
+
+  // This helps indicating whether located events should be handled by the
+  // capture mode settings menu view or the capture mode Pre-EventHandler. When
+  // it's true, settings menu view should handle the event. Set it to true when
+  // the event is a press event and is located on the settings menu view. Set it
+  // to false when the event is a release event and "event_on_settings_menu_" is
+  // true.
+  bool located_press_event_on_settings_menu_ = false;
 };
 
 }  // namespace ash

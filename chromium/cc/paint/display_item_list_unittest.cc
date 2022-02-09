@@ -31,7 +31,7 @@
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 
 namespace cc {
 
@@ -112,7 +112,7 @@ TEST_F(DisplayItemListTest, TraceEmptyVisualRect) {
   ASSERT_TRUE(root_dict->GetDictionary("params", &params_dict));
   const base::ListValue* items;
   ASSERT_TRUE(params_dict->GetList("items", &items));
-  ASSERT_EQ(2u, items->GetSize());
+  ASSERT_EQ(2u, items->GetList().size());
 
   const base::DictionaryValue* item_dict;
   const base::ListValue* visual_rect;
@@ -472,7 +472,7 @@ TEST_F(DisplayItemListTest, AsValueWithNoOps) {
 
       // The items list is there but empty.
       ASSERT_TRUE(params_dict->GetList("items", &params_list));
-      EXPECT_EQ(0u, params_list->GetSize());
+      EXPECT_EQ(0u, params_list->GetList().size());
     }
   }
 
@@ -554,7 +554,7 @@ TEST_F(DisplayItemListTest, AsValueWithOps) {
       // The items list has 3 things in it since we built 3 visual rects.
       const base::ListValue* items;
       ASSERT_TRUE(params_dict->GetList("items", &items));
-      ASSERT_EQ(7u, items->GetSize());
+      ASSERT_EQ(7u, items->GetList().size());
 
       const char* expected_names[] = {"Save",      "Concat",   "SaveLayer",
                                       "Translate", "DrawRect", "Restore",

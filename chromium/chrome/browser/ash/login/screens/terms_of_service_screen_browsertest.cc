@@ -11,8 +11,9 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/screen_manager.h"
+#include "chrome/browser/ash/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
-#include "chrome/browser/ash/login/test/embedded_test_server_mixin.h"
+#include "chrome/browser/ash/login/test/embedded_test_server_setup_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
@@ -87,6 +88,15 @@ class PublicSessionTosScreenTest : public OobeBaseTest {
  public:
   PublicSessionTosScreenTest() {}
   ~PublicSessionTosScreenTest() override = default;
+
+  void SetUpOnMainThread() override {
+    OobeBaseTest::SetUpOnMainThread();
+
+    // Prevent browser start in user session so that we do not need to wait
+    // for its initialization.
+    ash::test::UserSessionManagerTestApi(ash::UserSessionManager::GetInstance())
+        .SetShouldLaunchBrowserInTests(false);
+  }
 
   void RegisterAdditionalRequestHandlers() override {
     embedded_test_server()->RegisterRequestHandler(
@@ -220,16 +230,15 @@ class PublicSessionTosScreenTest : public OobeBaseTest {
           kAccountId,
           policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION));
   policy::DevicePolicyCrosTestHelper policy_helper_;
-  chromeos::LocalPolicyTestServerMixin local_policy_mixin_{&mixin_host_};
-  chromeos::DeviceStateMixin device_state_{
-      &mixin_host_,
-      chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+  LocalPolicyTestServerMixin local_policy_mixin_{&mixin_host_};
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
 };
 
 IN_PROC_BROWSER_TEST_F(PublicSessionTosScreenTest, Skipped) {
   StartPublicSession();
 
-  chromeos::test::WaitForPrimaryUserSessionStart();
+  test::WaitForPrimaryUserSessionStart();
 
   histogram_tester_.ExpectTotalCount(
       "OOBE.StepCompletionTimeByExitReason.Terms-of-service.Accepted", 0);
@@ -255,7 +264,7 @@ IN_PROC_BROWSER_TEST_F(PublicSessionTosScreenTest, Accepted) {
       "OOBE.StepCompletionTimeByExitReason.Terms-of-service.Declined", 0);
   histogram_tester_.ExpectTotalCount("OOBE.StepCompletionTime.Tos", 1);
 
-  chromeos::test::WaitForPrimaryUserSessionStart();
+  test::WaitForPrimaryUserSessionStart();
 }
 
 IN_PROC_BROWSER_TEST_F(PublicSessionTosScreenTest, Declined) {
@@ -304,8 +313,8 @@ class ManagedUserTosScreenTest : public OobeBaseTest {
   }
 
   void SetUpTermsOfServiceUrlPolicy() {
-    std::unique_ptr<chromeos::ScopedUserPolicyUpdate>
-        scoped_user_policy_update = user_policy_mixin_.RequestPolicyUpdate();
+    std::unique_ptr<ScopedUserPolicyUpdate> scoped_user_policy_update =
+        user_policy_mixin_.RequestPolicyUpdate();
     scoped_user_policy_update->policy_payload()
         ->mutable_termsofserviceurl()
         ->set_value(TestServerBaseUrl(embedded_test_server()));
@@ -386,7 +395,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUserTosScreenTest, Skipped) {
   histogram_tester_.ExpectTotalCount(
       "OOBE.StepCompletionTimeByExitReason.Terms-of-service.Declined", 0);
   histogram_tester_.ExpectTotalCount("OOBE.StepCompletionTime.Tos", 0);
-  chromeos::test::WaitForPrimaryUserSessionStart();
+  test::WaitForPrimaryUserSessionStart();
 }
 
 IN_PROC_BROWSER_TEST_F(ManagedUserTosScreenTest, Accepted) {
@@ -406,7 +415,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUserTosScreenTest, Accepted) {
       "OOBE.StepCompletionTimeByExitReason.Terms-of-service.Declined", 0);
   histogram_tester_.ExpectTotalCount("OOBE.StepCompletionTime.Tos", 1);
 
-  chromeos::test::WaitForPrimaryUserSessionStart();
+  test::WaitForPrimaryUserSessionStart();
 }
 
 IN_PROC_BROWSER_TEST_F(ManagedUserTosScreenTest, Declined) {
@@ -433,7 +442,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUserTosScreenTest, TosSaved) {
   SetUpTermsOfServiceUrlPolicy();
   EXPECT_FALSE(TosFileExists());
   base::RunLoop run_loop;
-  GetTosScreen()->set_tos_saved_callback_for_testing(run_loop.QuitClosure());
+  TermsOfServiceScreen::SetTosSavedCallbackForTesting(run_loop.QuitClosure());
   StartManagedUserSession();
 
   WaitFosScreenShown();

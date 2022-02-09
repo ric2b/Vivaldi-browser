@@ -148,12 +148,15 @@ class ScopedPriorityClass {
   // Applies |priority_class|, returning an instance if a change was made.
   // Otherwise, returns an empty scoped_ptr.
   static std::unique_ptr<ScopedPriorityClass> Create(DWORD priority_class);
+
+  ScopedPriorityClass(const ScopedPriorityClass&) = delete;
+  ScopedPriorityClass& operator=(const ScopedPriorityClass&) = delete;
+
   ~ScopedPriorityClass();
 
  private:
   explicit ScopedPriorityClass(DWORD original_priority_class);
   DWORD original_priority_class_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedPriorityClass);
 };
 
 std::unique_ptr<ScopedPriorityClass> ScopedPriorityClass::Create(
@@ -246,8 +249,7 @@ TEST(SetupUtilTest, GetInstallAge) {
   FILE_BASIC_INFO info = {};
   ASSERT_NE(0, ::GetFileInformationByHandleEx(dir.Get(), FileBasicInfo, &info,
                                               sizeof(info)));
-  FILETIME creation_time =
-      (now - base::TimeDelta::FromDays(kAgeDays)).ToFileTime();
+  FILETIME creation_time = (now - base::Days(kAgeDays)).ToFileTime();
   info.CreationTime.u.LowPart = creation_time.dwLowDateTime;
   info.CreationTime.u.HighPart = creation_time.dwHighDateTime;
   ASSERT_NE(0, ::SetFileInformationByHandle(dir.Get(), FileBasicInfo, &info,
@@ -373,6 +375,10 @@ namespace {
 // A test fixture that configures an InstallationState and an InstallerState
 // with a product being updated.
 class FindArchiveToPatchTest : public testing::Test {
+ public:
+  FindArchiveToPatchTest(const FindArchiveToPatchTest&) = delete;
+  FindArchiveToPatchTest& operator=(const FindArchiveToPatchTest&) = delete;
+
  protected:
   class FakeInstallationState : public installer::InstallationState {};
 
@@ -469,8 +475,6 @@ class FindArchiveToPatchTest : public testing::Test {
 
  private:
   registry_util::RegistryOverrideManager registry_override_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(FindArchiveToPatchTest);
 };
 
 const bool FindArchiveToPatchTest::kSystemInstall_ = false;
@@ -601,12 +605,60 @@ TEST(SetupUtilTest, StoreDMTokenToRegistrySuccess) {
 TEST(SetupUtilTest, StoreDMTokenToRegistryShouldFailWhenDMTokenTooLarge) {
   install_static::ScopedInstallDetails scoped_install_details(true);
   registry_util::RegistryOverrideManager registry_override_manager;
-  registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE);
+  ASSERT_NO_FATAL_FAILURE(
+      registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE));
 
   std::string token_too_large(installer::kMaxDMTokenLength + 1, 'x');
   ASSERT_GT(token_too_large.size(), installer::kMaxDMTokenLength);
 
   EXPECT_FALSE(installer::StoreDMToken(token_too_large));
+}
+
+TEST(SetupUtilTest, RotateDTKeySuccess) {
+  install_static::ScopedInstallDetails scoped_install_details(true);
+  registry_util::RegistryOverrideManager registry_override_manager;
+  ASSERT_NO_FATAL_FAILURE(
+      registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE));
+
+  // Use the 2 argument std::string constructor so that the length of the string
+  // is not calculated by assuming the input char array is null terminated.
+  static constexpr char kTokenData[] = "tokens are \0 binary data";
+  constexpr DWORD kExpectedSize = sizeof(kTokenData) - 1;
+  std::string token(&kTokenData[0], kExpectedSize);
+  ASSERT_EQ(token.length(), kExpectedSize);
+  ASSERT_TRUE(installer::RotateDeviceTrustKey(token));
+
+  base::win::RegKey key;
+  std::wstring signingkey_name;
+  std::wstring tustlevel_name;
+  std::tie(key, signingkey_name, tustlevel_name) =
+      InstallUtil::GetDeviceTrustSigningKeyLocation(
+          InstallUtil::ReadOnly(true));
+  ASSERT_TRUE(key.Valid());
+
+  DWORD size = 0;
+  DWORD dtype = 0;
+  ASSERT_EQ(key.ReadValue(signingkey_name.c_str(), nullptr, &size, &dtype),
+            ERROR_SUCCESS);
+  EXPECT_EQ(dtype, REG_BINARY);
+  ASSERT_GT(size, 0u);
+
+  DWORD trust_level;
+  ASSERT_EQ(key.ReadValueDW(tustlevel_name.c_str(), &trust_level),
+            ERROR_SUCCESS);
+  EXPECT_NE(trust_level, 0u);
+}
+
+TEST(SetupUtilTest, RotateDTKeyShouldFailWhenDMTokenTooLarge) {
+  install_static::ScopedInstallDetails scoped_install_details(true);
+  registry_util::RegistryOverrideManager registry_override_manager;
+  ASSERT_NO_FATAL_FAILURE(
+      registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE));
+
+  std::string token_too_large(installer::kMaxDMTokenLength + 1, 'x');
+  ASSERT_GT(token_too_large.size(), installer::kMaxDMTokenLength);
+
+  EXPECT_FALSE(installer::RotateDeviceTrustKey(token_too_large));
 }
 
 namespace installer {
@@ -748,6 +800,10 @@ TEST_F(DeleteRegistryKeyPartialTest, NonEmptyKeyWithPreserve) {
 }
 
 class LegacyCleanupsTest : public ::testing::Test {
+ public:
+  LegacyCleanupsTest(const LegacyCleanupsTest&) = delete;
+  LegacyCleanupsTest& operator=(const LegacyCleanupsTest&) = delete;
+
  protected:
   LegacyCleanupsTest() = default;
   void SetUp() override {
@@ -836,7 +892,6 @@ class LegacyCleanupsTest : public ::testing::Test {
   base::ScopedTempDir temp_dir_;
   registry_util::RegistryOverrideManager registry_override_manager_;
   std::unique_ptr<FakeInstallerState> installer_state_;
-  DISALLOW_COPY_AND_ASSIGN(LegacyCleanupsTest);
 };
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

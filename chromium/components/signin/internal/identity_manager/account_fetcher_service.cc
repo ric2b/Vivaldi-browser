@@ -42,8 +42,7 @@
 
 namespace {
 
-const base::TimeDelta kRefreshFromTokenServiceDelay =
-    base::TimeDelta::FromHours(24);
+const base::TimeDelta kRefreshFromTokenServiceDelay = base::Hours(24);
 
 }  // namespace
 
@@ -242,8 +241,9 @@ bool AccountFetcherService::IsAccountCapabilitiesFetcherEnabled() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return ash::features::IsMinorModeRestrictionEnabled();
-#endif
+#else
   return false;
+#endif
 }
 
 void AccountFetcherService::StartFetchingAccountCapabilities(

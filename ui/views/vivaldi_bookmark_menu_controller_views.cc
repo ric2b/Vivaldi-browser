@@ -15,8 +15,11 @@ void BookmarkMenuController::RunMenuAt(const views::View* parent,
                           ui::MENU_SOURCE_NONE);
 }
 
-views::MenuItemView* BookmarkMenuController::GetNextSiblingMenu(bool next,
-    bool* has_mnemonics, gfx::Rect* rect, views::MenuAnchorPosition* anchor) {
+views::MenuItemView* BookmarkMenuController::GetNextSiblingMenu(
+    bool next,
+    bool* has_mnemonics,
+    gfx::Rect* rect,
+    views::MenuAnchorPosition* anchor) {
   int start_index;
   const bookmarks::BookmarkNode* node = vivaldi::GetNextNode(
       menu_delegate_->GetBookmarkModel(), next, &start_index, rect);

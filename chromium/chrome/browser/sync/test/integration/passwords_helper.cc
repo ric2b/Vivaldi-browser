@@ -23,7 +23,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
-#include "components/password_manager/core/browser/sync/password_sync_bridge.h"
+#include "components/password_manager/core/browser/sync/password_proto_utils.h"
 #include "components/sync/engine/loopback_server/persistent_unique_client_entity.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/nigori/cryptographer_impl.h"
@@ -42,11 +42,14 @@ namespace {
 const char kFakeSignonRealm[] = "http://fake-signon-realm.google.com/";
 const char kIndexedFakeOrigin[] = "http://fake-signon-realm.google.com/%d";
 
-
 class PasswordStoreConsumerHelper
     : public password_manager::PasswordStoreConsumer {
  public:
   PasswordStoreConsumerHelper() {}
+
+  PasswordStoreConsumerHelper(const PasswordStoreConsumerHelper&) = delete;
+  PasswordStoreConsumerHelper& operator=(const PasswordStoreConsumerHelper&) =
+      delete;
 
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<PasswordForm>> results) override {
@@ -63,8 +66,6 @@ class PasswordStoreConsumerHelper
  private:
   base::RunLoop run_loop_;
   std::vector<std::unique_ptr<PasswordForm>> result_;
-
-  DISALLOW_COPY_AND_ASSIGN(PasswordStoreConsumerHelper);
 };
 
 sync_pb::EntitySpecifics EncryptPasswordSpecifics(
@@ -126,7 +127,6 @@ PasswordStoreInterface* GetProfilePasswordStoreInterface(int index) {
                                              ServiceAccessType::IMPLICIT_ACCESS)
       .get();
 }
-
 
 PasswordStoreInterface* GetVerifierProfilePasswordStoreInterface() {
   return PasswordStoreFactory::GetForProfile(test()->verifier(),

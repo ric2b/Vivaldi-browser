@@ -47,8 +47,6 @@ class ContactEventRouter : public ContactModelObserver {
 
   void ExtensiveContactChangesBeginning(ContactService* model) override;
   void ExtensiveContactChangesEnded(ContactService* model) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactEventRouter);
 };
 
 class ContactsAPI : public BrowserContextKeyedAPI,
@@ -78,7 +76,6 @@ class ContactsAPI : public BrowserContextKeyedAPI,
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<ContactEventRouter> contact_event_router_;
-  DISALLOW_COPY_AND_ASSIGN(ContactsAPI);
 };
 
 class ContactAsyncFunction : public ExtensionFunction {
@@ -88,9 +85,6 @@ class ContactAsyncFunction : public ExtensionFunction {
  protected:
   Profile* GetProfile() const;
   ~ContactAsyncFunction() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactAsyncFunction);
 };
 
 // Base class for contact funciton APIs which require async interaction with
@@ -104,9 +98,6 @@ class ContactFunctionWithCallback : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactFunctionWithCallback);
 };
 
 class ContactsGetAllFunction : public ContactFunctionWithCallback {
@@ -114,7 +105,7 @@ class ContactsGetAllFunction : public ContactFunctionWithCallback {
  public:
   ContactsGetAllFunction() = default;
 
- protected:
+ private:
   ~ContactsGetAllFunction() override;
 
   // ExtensionFunction:
@@ -122,9 +113,6 @@ class ContactsGetAllFunction : public ContactFunctionWithCallback {
 
   // Callback for the contact function to provide results.
   void GetAllComplete(std::shared_ptr<contact::ContactQueryResults> results);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsGetAllFunction);
 };
 
 class ContactsGetAllEmailAddressesFunction
@@ -134,7 +122,7 @@ class ContactsGetAllEmailAddressesFunction
  public:
   ContactsGetAllEmailAddressesFunction() = default;
 
- protected:
+ private:
   ~ContactsGetAllEmailAddressesFunction() override;
 
   // ExtensionFunction:
@@ -143,9 +131,6 @@ class ContactsGetAllEmailAddressesFunction
   // Callback for the contact function to provide results.
   void GetAllEmailAddressesComplete(
       std::shared_ptr<contact::EmailAddressRows> results);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsGetAllEmailAddressesFunction);
 };
 
 class ContactsCreateFunction : public ContactAsyncFunction {
@@ -153,7 +138,7 @@ class ContactsCreateFunction : public ContactAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("contacts.create", CONTACTS_CREATE)
   ContactsCreateFunction() = default;
 
- protected:
+ private:
   ~ContactsCreateFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -161,11 +146,8 @@ class ContactsCreateFunction : public ContactAsyncFunction {
   // Callback for the contact function to provide results.
   void CreateComplete(std::shared_ptr<contact::ContactResults> results);
 
- private:
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactsCreateFunction);
 };
 
 class ContactsCreateManyFunction : public ContactAsyncFunction {
@@ -173,7 +155,7 @@ class ContactsCreateManyFunction : public ContactAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("contacts.createMany", CONTACTS_CREATE_MANY)
   ContactsCreateManyFunction() = default;
 
- protected:
+ private:
   ~ContactsCreateManyFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -182,11 +164,8 @@ class ContactsCreateManyFunction : public ContactAsyncFunction {
   void CreateManyComplete(
       std::shared_ptr<contact::CreateContactsResult> result);
 
- private:
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactsCreateManyFunction);
 };
 
 class ContactsUpdateFunction : public ContactAsyncFunction {
@@ -194,7 +173,7 @@ class ContactsUpdateFunction : public ContactAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("contacts.update", CONTACTS_UPDATE)
   ContactsUpdateFunction() = default;
 
- protected:
+ private:
   ~ContactsUpdateFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -203,9 +182,6 @@ class ContactsUpdateFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsUpdateFunction);
 };
 
 class ContactsDeleteFunction : public ContactAsyncFunction {
@@ -213,7 +189,7 @@ class ContactsDeleteFunction : public ContactAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("contacts.delete", CONTACTS_DELETE)
   ContactsDeleteFunction() = default;
 
- protected:
+ private:
   ~ContactsDeleteFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -222,9 +198,6 @@ class ContactsDeleteFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsDeleteFunction);
 };
 
 class ContactsAddPropertyItemFunction : public ContactAsyncFunction {
@@ -233,7 +206,7 @@ class ContactsAddPropertyItemFunction : public ContactAsyncFunction {
                              CONTACTS_ADD_PROPERTY_ITEM)
   ContactsAddPropertyItemFunction() = default;
 
- protected:
+ private:
   ~ContactsAddPropertyItemFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -242,9 +215,6 @@ class ContactsAddPropertyItemFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsAddPropertyItemFunction);
 };
 
 class ContactsUpdatePropertyItemFunction : public ContactAsyncFunction {
@@ -253,7 +223,7 @@ class ContactsUpdatePropertyItemFunction : public ContactAsyncFunction {
                              CONTACTS_UPDATE_PROPERTY_ITEM)
   ContactsUpdatePropertyItemFunction() = default;
 
- protected:
+ private:
   ~ContactsUpdatePropertyItemFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -262,9 +232,6 @@ class ContactsUpdatePropertyItemFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsUpdatePropertyItemFunction);
 };
 
 class ContactsRemovePropertyItemFunction : public ContactAsyncFunction {
@@ -273,7 +240,7 @@ class ContactsRemovePropertyItemFunction : public ContactAsyncFunction {
                              CONTACTS_REMOVE_PROPERTY_ITEM)
   ContactsRemovePropertyItemFunction() = default;
 
- protected:
+ private:
   ~ContactsRemovePropertyItemFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -282,9 +249,6 @@ class ContactsRemovePropertyItemFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsRemovePropertyItemFunction);
 };
 
 class ContactsAddEmailAddressFunction : public ContactAsyncFunction {
@@ -292,7 +256,7 @@ class ContactsAddEmailAddressFunction : public ContactAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("contacts.addEmailAddress", CONTACTS_ADD_EMAIL)
   ContactsAddEmailAddressFunction() = default;
 
- protected:
+ private:
   ~ContactsAddEmailAddressFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -302,9 +266,6 @@ class ContactsAddEmailAddressFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsAddEmailAddressFunction);
 };
 
 class ContactsRemoveEmailAddressFunction : public ContactAsyncFunction {
@@ -313,7 +274,7 @@ class ContactsRemoveEmailAddressFunction : public ContactAsyncFunction {
                              CONTACTS_REMOVE_EMAIL)
   ContactsRemoveEmailAddressFunction() = default;
 
- protected:
+ private:
   ~ContactsRemoveEmailAddressFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -323,9 +284,6 @@ class ContactsRemoveEmailAddressFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsRemoveEmailAddressFunction);
 };
 
 class ContactsUpdateEmailAddressFunction : public ContactAsyncFunction {
@@ -334,7 +292,7 @@ class ContactsUpdateEmailAddressFunction : public ContactAsyncFunction {
                              CONTACTS_UPDATE_EMAIL)
   ContactsUpdateEmailAddressFunction() = default;
 
- protected:
+ private:
   ~ContactsUpdateEmailAddressFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -344,9 +302,6 @@ class ContactsUpdateEmailAddressFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactsUpdateEmailAddressFunction);
 };
 
 }  // namespace extensions

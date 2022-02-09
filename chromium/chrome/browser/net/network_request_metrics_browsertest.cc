@@ -76,6 +76,12 @@ class WaitForMainFrameResourceObserver : public content::WebContentsObserver {
  public:
   explicit WaitForMainFrameResourceObserver(WebContents* web_contents)
       : content::WebContentsObserver(web_contents) {}
+
+  WaitForMainFrameResourceObserver(const WaitForMainFrameResourceObserver&) =
+      delete;
+  WaitForMainFrameResourceObserver& operator=(
+      const WaitForMainFrameResourceObserver&) = delete;
+
   ~WaitForMainFrameResourceObserver() override {}
 
   // content::WebContentsObserver implementation:
@@ -93,8 +99,6 @@ class WaitForMainFrameResourceObserver : public content::WebContentsObserver {
 
  private:
   base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(WaitForMainFrameResourceObserver);
 };
 
 // This test fixture tests code in content/. The fixture itself is in chrome/
@@ -400,7 +404,7 @@ IN_PROC_BROWSER_TEST_P(NetworkRequestMetricsBrowserTest, CancelDuringBody) {
   // recieved by the time Stop() is called, the test should still pass, however.
   base::RunLoop run_loop;
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, run_loop.QuitClosure(), base::TimeDelta::FromSeconds(1));
+      FROM_HERE, run_loop.QuitClosure(), base::Seconds(1));
   run_loop.Run();
 
   active_web_contents()->Stop();
@@ -433,7 +437,7 @@ IN_PROC_BROWSER_TEST_P(NetworkRequestMetricsBrowserTest,
   // recieved by the time Stop() is called, the test should still pass, however.
   base::RunLoop run_loop;
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, run_loop.QuitClosure(), base::TimeDelta::FromSeconds(1));
+      FROM_HERE, run_loop.QuitClosure(), base::Seconds(1));
   run_loop.Run();
 
   // Stop navigation to record histograms.
@@ -561,8 +565,8 @@ IN_PROC_BROWSER_TEST_P(NetworkRequestMetricsBrowserTest, FileURLError) {
     ASSERT_TRUE(base::WriteFile(main_frame_path, main_frame_data));
   }
 
-  ui_test_utils::NavigateToURL(browser(),
-                               net::FilePathToFileURL(main_frame_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), net::FilePathToFileURL(main_frame_path)));
   CheckHistograms(net::ERR_FILE_NOT_FOUND, HeadersReceived::kNoHeadersReceived,
                   NetworkAccessed::kNoNetworkAccessed);
 }
@@ -585,8 +589,8 @@ IN_PROC_BROWSER_TEST_P(NetworkRequestMetricsBrowserTest, FileURLSuccess) {
         temp_dir_.GetPath().AppendASCII(kSubresourcePath), subresource_data));
   }
 
-  ui_test_utils::NavigateToURL(browser(),
-                               net::FilePathToFileURL(main_frame_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), net::FilePathToFileURL(main_frame_path)));
   CheckHistograms(net::OK, HeadersReceived::kNoHeadersReceived,
                   NetworkAccessed::kNoNetworkAccessed);
 }

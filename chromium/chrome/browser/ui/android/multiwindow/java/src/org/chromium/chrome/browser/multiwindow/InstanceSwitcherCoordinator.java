@@ -12,13 +12,17 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.CheckBox;
 import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
@@ -93,7 +97,7 @@ public class InstanceSwitcherCoordinator {
             boolean newWindowEnabled, List<InstanceInfo> instanceInfo) {
         new InstanceSwitcherCoordinator(context, modalDialogManager, iconBridge, openCallback,
                 closeCallback, newWindowAction)
-                .showDialog(instanceInfo, newWindowEnabled);
+                .show(instanceInfo, newWindowEnabled);
     }
 
     private InstanceSwitcherCoordinator(Context context, ModalDialogManager modalDialogManager,
@@ -122,7 +126,7 @@ public class InstanceSwitcherCoordinator {
         listView.setAdapter(adapter);
     }
 
-    private void showDialog(List<InstanceInfo> items, boolean newWindowEnabled) {
+    private void show(List<InstanceInfo> items, boolean newWindowEnabled) {
         UiUtils.closeOpenDialogs();
         sPrevInstance = this;
         for (int i = 0; i < items.size(); ++i) {
@@ -142,7 +146,6 @@ public class InstanceSwitcherCoordinator {
         ModalDialogProperties.Controller controller = new ModalDialogProperties.Controller() {
             @Override
             public void onDismiss(PropertyModel model, @DialogDismissalCause int dismissalCause) {
-                InstanceSwitcherItemViewBinder.sMoreMenu = null;
                 sPrevInstance = null;
             }
 
@@ -150,19 +153,21 @@ public class InstanceSwitcherCoordinator {
             public void onClick(PropertyModel model, int buttonType) {
                 switch (buttonType) {
                     case ModalDialogProperties.ButtonType.POSITIVE:
-                        if (mIsShowingConfirmationMessage) {
-                            assert mItemToDelete != null;
-                            hideConfirmationMessage();
-                            removeInstance(mItemToDelete);
-                        } else {
-                            dismissDialog(DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-                        }
+                        assert mIsShowingConfirmationMessage;
+                        assert mItemToDelete != null;
+                        CheckBox skipConfirm =
+                                (CheckBox) mDialogView.findViewById(R.id.no_more_check);
+                        if (skipConfirm.isChecked()) setSkipCloseConfirmation();
+                        hideConfirmationMessage();
+                        removeInstance(mItemToDelete);
                         break;
                     case ModalDialogProperties.ButtonType.NEGATIVE:
-                        assert mIsShowingConfirmationMessage;
                         dismissDialog(DialogDismissalCause.NEGATIVE_BUTTON_CLICKED);
                         break;
-                    default:
+                    case ModalDialogProperties.ButtonType.TITLE_ICON:
+                        assert mIsShowingConfirmationMessage;
+                        hideConfirmationMessage();
+                        break;
                 }
             }
         };
@@ -173,7 +178,10 @@ public class InstanceSwitcherCoordinator {
                 .with(ModalDialogProperties.CANCEL_ON_TOUCH_OUTSIDE, true)
                 .with(ModalDialogProperties.CUSTOM_VIEW, dialogView)
                 .with(ModalDialogProperties.TITLE, title)
-                .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, resources, R.string.cancel)
+                .with(ModalDialogProperties.BUTTON_STYLES,
+                        ModalDialogProperties.ButtonStyles.PRIMARY_FILLED_NEGATIVE_OUTLINE)
+                .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, null)
+                .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, resources, R.string.cancel)
                 .build();
     }
 
@@ -216,7 +224,7 @@ public class InstanceSwitcherCoordinator {
         ListMenu.Delegate moreMenuDelegate = (model) -> {
             int textId = model.get(ListMenuItemProperties.TITLE_ID);
             if (textId == R.string.instance_switcher_close_window) {
-                if (UiUtils.totalTabCount(item) == 0 && item.type == InstanceInfo.Type.OTHER) {
+                if (canSkipConfirm(item)) {
                     removeInstance(item);
                 } else {
                     showConfirmationMessage(item);
@@ -261,11 +269,24 @@ public class InstanceSwitcherCoordinator {
         enableNewWindowCommand(true);
     }
 
+    private static boolean canSkipConfirm(InstanceInfo item) {
+        // Unrestorable, invisible instance can be deleted without confirmation.
+        if (UiUtils.totalTabCount(item) == 0 && item.type == InstanceInfo.Type.OTHER) return true;
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.MULTI_INSTANCE_CLOSE_WINDOW_SKIP_CONFIRM, false);
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    static void setSkipCloseConfirmation() {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.MULTI_INSTANCE_CLOSE_WINDOW_SKIP_CONFIRM, true);
+    }
+
     private void showConfirmationMessage(InstanceInfo item) {
         mItemToDelete = item;
         Resources res = mContext.getResources();
         String header = res.getString(R.string.instance_switcher_close_confirm_header);
-        String closeButton = res.getString(R.string.instance_switcher_close_confirm_button);
+        String closeButton = res.getString(R.string.close);
         mDialog.set(ModalDialogProperties.TITLE, header);
         mDialog.set(ModalDialogProperties.TITLE_ICON, mArrowBackIcon);
         mDialog.set(ModalDialogProperties.POSITIVE_BUTTON_TEXT, closeButton);
@@ -281,8 +302,8 @@ public class InstanceSwitcherCoordinator {
         Resources res = mContext.getResources();
         mDialog.set(ModalDialogProperties.TITLE, res.getString(R.string.instance_switcher_header));
         mDialog.set(ModalDialogProperties.TITLE_ICON, null);
-        mDialog.set(ModalDialogProperties.POSITIVE_BUTTON_TEXT, res.getString(R.string.cancel));
-        mDialog.set(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, null);
+        mDialog.set(ModalDialogProperties.POSITIVE_BUTTON_TEXT, "");
+        mDialog.set(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, res.getString(R.string.cancel));
         mDialogView.findViewById(R.id.list_view).setVisibility(View.VISIBLE);
         mDialogView.findViewById(R.id.close_confirm).setVisibility(View.GONE);
         mIsShowingConfirmationMessage = false;

@@ -60,7 +60,8 @@ class WebGraphicsContext3DProviderWrapper;
 class PLATFORM_EXPORT CanvasResourceProvider
     : public WebGraphicsContext3DProviderWrapper::DestructionObserver,
       public base::CheckedObserver,
-      public CanvasMemoryDumpClient {
+      public CanvasMemoryDumpClient,
+      public MemoryManagedPaintCanvas::Client {
  public:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -77,6 +78,20 @@ class PLATFORM_EXPORT CanvasResourceProvider
     kSkiaDawnSharedImage = 9,
     kMaxValue = kSkiaDawnSharedImage,
   };
+
+  // The following parameters attempt to reach a compromise between not flushing
+  // too often, and not accumulating an unreasonable backlog.  Flushing too
+  // often will hurt performance due to overhead costs. Accumulating large
+  // backlogs, in the case of OOPR-Canvas, results in poor parellelism and
+  // janky UI. With OOPR-Canvas disabled, it is still desirable to flush
+  // periodically to guard against run-away memory consumption caused by
+  // PaintOpBuffers that grow indefinitely. The OOPr-related jank is caused by
+  // long-running RasterCHROMIUM calls that monopolize the main thread
+  // of the GPU process.  By flushing periodically, we allow the rasterization
+  // of canvas contents to be interleaved with other compositing and UI work.
+  static constexpr size_t kMaxRecordedOpBytes = 4 * 1024 * 1024;
+  // The same value as is used in content::WebGraphicsConext3DProviderImpl.
+  static constexpr uint64_t kMaxPinnedImageBytes = 64 * 1024 * 1024;
 
   using RestoreMatrixClipStackCb =
       base::RepeatingCallback<void(cc::PaintCanvas*)>;
@@ -147,7 +162,10 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   cc::PaintCanvas* Canvas(bool needs_will_draw = false);
   void ReleaseLockedImages();
+  // FlushCanvas and do not preserve recordings.
   sk_sp<cc::PaintRecord> FlushCanvas();
+  // FlushCanvas and preserve recordings.
+  sk_sp<cc::PaintRecord> FlushCanvasAndPreserveRecording();
   const CanvasResourceParams& ColorParams() const { return params_; }
   void SetFilterQuality(cc::PaintFlags::FilterQuality quality) {
     filter_quality_ = quality;
@@ -227,7 +245,6 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   void SkipQueuedDrawCommands();
   void SetRestoreClipStackCallback(RestoreMatrixClipStackCb);
-  bool needs_flush() const { return needs_flush_; }
   virtual void RestoreBackBuffer(const cc::PaintImage&);
 
   ResourceProviderType GetType() const { return type_; }
@@ -238,6 +255,18 @@ class PLATFORM_EXPORT CanvasResourceProvider
   virtual void OnAcquireRecyclableCanvasResource() {}
   virtual void OnDestroyRecyclableCanvasResource(
       const gpu::SyncToken& sync_token) {}
+
+  void FlushIfRecordingLimitExceeded();
+
+  size_t TotalOpCount() const {
+    return recorder_ ? recorder_->TotalOpCount() : 0;
+  }
+  size_t TotalOpBytesUsed() const {
+    return recorder_ ? recorder_->BytesUsed() : 0;
+  }
+  size_t TotalPinnedImageBytes() const { return total_pinned_image_bytes_; }
+
+  void DidPinImage(size_t bytes) override;
 
  protected:
   class CanvasImageProvider;
@@ -257,6 +286,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
   }
   scoped_refptr<StaticBitmapImage> SnapshotInternal(const ImageOrientation&);
   scoped_refptr<CanvasResource> GetImportedResource() const;
+  sk_sp<cc::PaintRecord> FlushCanvasInternal(bool preserve_recording);
 
   CanvasResourceProvider(const ResourceProviderType&,
                          const IntSize&,
@@ -272,10 +302,11 @@ class PLATFORM_EXPORT CanvasResourceProvider
   // decodes/uploads in the cache is invalidated only when the canvas contents
   // change.
   cc::PaintImage MakeImageSnapshot();
-  virtual void RasterRecord(sk_sp<cc::PaintRecord>);
+  virtual void RasterRecord(sk_sp<cc::PaintRecord>, bool preserve_recording);
   void RasterRecordOOP(sk_sp<cc::PaintRecord> last_recording,
                        bool needs_clear,
-                       gpu::Mailbox mailbox);
+                       gpu::Mailbox mailbox,
+                       bool preserve_recording);
   void RestoreBackBufferOOP(const cc::PaintImage&);
 
   CanvasImageProvider* GetOrCreateCanvasImageProvider();
@@ -309,7 +340,6 @@ class PLATFORM_EXPORT CanvasResourceProvider
   cc::ImageDecodeCache* ImageDecodeCacheRGBA8();
   cc::ImageDecodeCache* ImageDecodeCacheF16();
   void EnsureSkiaCanvas();
-  void SetNeedsFlush() { needs_flush_ = true; }
 
   void Clear();
 
@@ -323,7 +353,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
   std::unique_ptr<cc::SkiaPaintCanvas> skia_canvas_;
   std::unique_ptr<MemoryManagedPaintRecorder> recorder_;
 
-  bool needs_flush_ = false;
+  size_t total_pinned_image_bytes_ = 0;
 
   const cc::PaintImage::Id snapshot_paint_image_id_;
   cc::PaintImage::ContentId snapshot_paint_image_content_id_ =
@@ -340,6 +370,8 @@ class PLATFORM_EXPORT CanvasResourceProvider
   static constexpr int kMaxRecycledCanvasResources = 2;
   // The maximum number of draw ops executed on the canvas, after which the
   // underlying GrContext is flushed.
+  // Note: This parameter does not affect the flushing of recorded PaintOps.
+  // See kMaxRecordedOpBytes above.
   static constexpr int kMaxDrawsBeforeContextFlush = 50;
 
   int num_inflight_resources_ = 0;
@@ -349,6 +381,13 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   base::WeakPtrFactory<CanvasResourceProvider> weak_ptr_factory_{this};
 };
+
+ALWAYS_INLINE void CanvasResourceProvider::FlushIfRecordingLimitExceeded() {
+  if (recorder_ && ((recorder_->BytesUsed() > kMaxRecordedOpBytes) ||
+                    total_pinned_image_bytes_ > kMaxPinnedImageBytes)) {
+    FlushCanvas();
+  }
+}
 
 }  // namespace blink
 

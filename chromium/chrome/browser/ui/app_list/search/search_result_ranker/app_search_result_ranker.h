@@ -10,6 +10,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -32,6 +33,9 @@ class AppSearchResultRanker {
   // after logging out.
   AppSearchResultRanker(const base::FilePath& profile_path,
                         bool is_ephemeral_user);
+
+  AppSearchResultRanker(const AppSearchResultRanker&) = delete;
+  AppSearchResultRanker& operator=(const AppSearchResultRanker&) = delete;
 
   ~AppSearchResultRanker();
 
@@ -64,8 +68,6 @@ class AppSearchResultRanker {
   const base::FilePath predictor_filename_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   base::WeakPtrFactory<AppSearchResultRanker> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppSearchResultRanker);
 };
 
 }  // namespace app_list

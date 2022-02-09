@@ -5,7 +5,9 @@
 #include "ash/system/message_center/unified_message_list_view.h"
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/metrics_util.h"
+#include "ash/system/message_center/message_center_constants.h"
 #include "ash/system/message_center/message_center_style.h"
 #include "ash/system/message_center/message_center_utils.h"
 #include "ash/system/message_center/message_view_factory.h"
@@ -21,7 +23,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/message_center/message_center.h"
+#include "ui/message_center/notification_view_controller.h"
 #include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/views/background.h"
@@ -38,12 +40,11 @@ namespace ash {
 
 namespace {
 
-constexpr base::TimeDelta kClosingAnimationDuration =
-    base::TimeDelta::FromMilliseconds(320);
+constexpr base::TimeDelta kClosingAnimationDuration = base::Milliseconds(320);
 constexpr base::TimeDelta kClearAllStackedAnimationDuration =
-    base::TimeDelta::FromMilliseconds(40);
+    base::Milliseconds(40);
 constexpr base::TimeDelta kClearAllVisibleAnimationDuration =
-    base::TimeDelta::FromMilliseconds(160);
+    base::Milliseconds(160);
 
 constexpr char kMessageViewContainerClassName[] = "MessageViewContainer";
 constexpr char kMoveDownAnimationSmoothnessHistogramName[] =
@@ -85,17 +86,30 @@ class UnifiedMessageListView::MessageViewContainer
         list_view_(list_view),
         control_view_(new NotificationSwipeControlView(message_view)) {
     message_view_->AddObserver(this);
+    if (!features::IsNotificationsRefreshEnabled()) {
+      message_view_->SetBackground(
+          views::CreateSolidBackground(SK_ColorTRANSPARENT));
+    }
 
     SetLayoutManager(std::make_unique<views::FillLayout>());
     AddChildView(control_view_);
     AddChildView(message_view_);
   }
 
+  MessageViewContainer(const MessageViewContainer&) = delete;
+  MessageViewContainer& operator=(const MessageViewContainer&) = delete;
+
   ~MessageViewContainer() override { message_view_->RemoveObserver(this); }
 
   // Update the border and background corners based on if the notification is
-  // at the top or the bottom.
-  void UpdateBorder(bool is_top, bool is_bottom) {
+  // at the top or the bottom. If `force_update` is true, ignore previous states
+  // and always update the border.
+  void UpdateBorder(bool is_top, bool is_bottom, bool force_update) {
+    if (is_top_ == is_top && is_bottom_ == is_bottom && !force_update)
+      return;
+    is_top_ = is_top;
+    is_bottom_ = is_bottom;
+
     message_view_->SetBorder(
         is_bottom ? views::NullBorder()
                   : views::CreateSolidSidedBorder(
@@ -232,11 +246,14 @@ class UnifiedMessageListView::MessageViewContainer
   // programagically. False if slid out manually by the user.
   bool is_slid_out_programatically = false;
 
+  // Keeps track if this view is at the top or bottom of `list_view_`. Storing
+  // this to prevent unnecessary update.
+  bool is_top_ = false;
+  bool is_bottom_ = false;
+
   MessageView* const message_view_;
   UnifiedMessageListView* const list_view_;
   NotificationSwipeControlView* const control_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(MessageViewContainer);
 };
 
 UnifiedMessageListView::UnifiedMessageListView(
@@ -245,10 +262,19 @@ UnifiedMessageListView::UnifiedMessageListView(
     : views::AnimationDelegateViews(this),
       message_center_view_(message_center_view),
       model_(model),
-      animation_(std::make_unique<gfx::LinearAnimation>(this)) {
+      animation_(std::make_unique<gfx::LinearAnimation>(this)),
+      is_notifications_refresh_enabled_(
+          features::IsNotificationsRefreshEnabled()),
+      message_view_width_(is_notifications_refresh_enabled_
+                              ? kTrayMenuWidth - (2 * kMessageCenterSidePadding)
+                              : kTrayMenuWidth) {
+  message_center_observation_.Observe(MessageCenter::Get());
   animation_->SetCurrentValue(1.0);
-  SetBackground(views::CreateSolidBackground(
-      message_center_style::kSwipeControlBackgroundColor));
+
+  if (!is_notifications_refresh_enabled_) {
+    SetBackground(views::CreateSolidBackground(
+        message_center_style::kSwipeControlBackgroundColor));
+  }
 }
 
 UnifiedMessageListView::~UnifiedMessageListView() {
@@ -261,11 +287,9 @@ void UnifiedMessageListView::Init() {
   bool is_latest = true;
   for (auto* notification :
        message_center_utils::GetSortedVisibleNotifications()) {
-    if (notification->group_child()) {
-      // TODO(crbug/1223697): Add grouped notifications to existing parent
-      // message views.
+    if (notification->group_child())
       continue;
-    }
+
     auto* view =
         new MessageViewContainer(CreateMessageView(*notification), this);
     view->LoadExpandedState(model_, is_latest);
@@ -274,7 +298,7 @@ void UnifiedMessageListView::Init() {
         notification->id(), message_center::DISPLAY_SOURCE_MESSAGE_CENTER);
     is_latest = false;
   }
-  UpdateBorders();
+  UpdateBorders(/*force_update=*/true);
   UpdateBounds();
 }
 
@@ -380,7 +404,7 @@ gfx::Rect UnifiedMessageListView::GetNotificationBoundsBelowY(
 }
 
 gfx::Size UnifiedMessageListView::CalculatePreferredSize() const {
-  return gfx::Size(kTrayMenuWidth,
+  return gfx::Size(message_view_width_,
                    gfx::Tween::IntValueBetween(GetCurrentValue(), start_height_,
                                                ideal_height_));
 }
@@ -402,6 +426,20 @@ UnifiedMessageListView::GetMessageViewForNotificationId(const std::string& id) {
   if (it == children().end())
     return nullptr;
   return static_cast<MessageViewContainer*>(*it)->message_view();
+}
+
+void UnifiedMessageListView::ConvertNotificationViewToGroupedNotificationView(
+    const std::string& ungrouped_notification_id,
+    const std::string& new_grouped_notification_id) {
+  GetMessageViewForNotificationId(ungrouped_notification_id)
+      ->set_notification_id(new_grouped_notification_id);
+}
+
+void UnifiedMessageListView::ConvertGroupedNotificationViewToNotificationView(
+    const std::string& grouped_notification_id,
+    const std::string& new_single_notification_id) {
+  GetMessageViewForNotificationId(grouped_notification_id)
+      ->set_notification_id(new_single_notification_id);
 }
 
 void UnifiedMessageListView::OnNotificationAdded(const std::string& id) {
@@ -437,7 +475,7 @@ void UnifiedMessageListView::OnNotificationAdded(const std::string& id) {
   auto* view = CreateMessageView(*notification);
   view->SetExpanded(view->IsAutoExpandingAllowed());
   AddChildViewAt(new MessageViewContainer(view, this), index_to_insert);
-  UpdateBorders();
+  UpdateBorders(/*force_update=*/false);
   ResetBounds();
 }
 
@@ -540,7 +578,7 @@ void UnifiedMessageListView::AnimationEnded(const gfx::Animation* animation) {
     UpdateClearAllAnimation();
   }
 
-  UpdateBorders();
+  UpdateBorders(/*force_update=*/false);
 
   if (state_ != State::IDLE)
     StartAnimation();
@@ -558,7 +596,9 @@ void UnifiedMessageListView::AnimationCanceled(
 
 MessageView* UnifiedMessageListView::CreateMessageView(
     const Notification& notification) {
-  auto* view = MessageViewFactory::Create(notification);
+  auto* view =
+      MessageViewFactory::Create(notification, /*shown_in_popup=*/false)
+          .release();
   view->SetIsNested();
   view->AddObserver(this);
   message_center_view_->ConfigureMessageView(view);
@@ -604,12 +644,22 @@ void UnifiedMessageListView::CollapseAllNotifications() {
     AsMVC(child)->Collapse();
 }
 
-void UnifiedMessageListView::UpdateBorders() {
+void UnifiedMessageListView::UpdateBorders(bool force_update) {
+  // We do not need individual notifications to have rounded corners
+  // on the borders with the new UI. This is because the entire
+  // scroll view has rounded corners now.
+  if (is_notifications_refresh_enabled_)
+    return;
+
   // The top notification is drawn with rounded corners when the stacking bar is
   // not shown.
-  bool is_top = children().size() == 1 && state_ != State::MOVE_DOWN;
+  bool is_top = state_ != State::MOVE_DOWN;
+  if (!is_notifications_refresh_enabled_)
+    is_top = is_top && children().size() == 1;
+
   for (auto* child : children()) {
-    AsMVC(child)->UpdateBorder(is_top, child == children().back());
+    AsMVC(child)->UpdateBorder(is_top, child == children().back(),
+                               force_update);
     is_top = false;
   }
 }
@@ -618,13 +668,17 @@ void UnifiedMessageListView::UpdateBounds() {
   int y = 0;
   for (auto* child : children()) {
     auto* view = AsMVC(child);
-    const int height = view->GetHeightForWidth(kTrayMenuWidth);
+    const int height = view->GetHeightForWidth(message_view_width_);
     const int direction = view->GetSlideDirection();
+
+    if (y > 0 && is_notifications_refresh_enabled_)
+      y += kMessageListNotificationSpacing;
+
     view->set_start_bounds(view->ideal_bounds());
-    view->set_ideal_bounds(
-        view->is_removed()
-            ? gfx::Rect(kTrayMenuWidth * direction, y, kTrayMenuWidth, height)
-            : gfx::Rect(0, y, kTrayMenuWidth, height));
+    view->set_ideal_bounds(view->is_removed()
+                               ? gfx::Rect(message_view_width_ * direction, y,
+                                           message_view_width_, height)
+                               : gfx::Rect(0, y, message_view_width_, height));
     y += height;
   }
 
@@ -670,7 +724,7 @@ void UnifiedMessageListView::DeleteRemovedNotifications() {
     }
   }
 
-  UpdateBorders();
+  UpdateBorders(/*force_update=*/false);
 }
 
 void UnifiedMessageListView::StartAnimation() {

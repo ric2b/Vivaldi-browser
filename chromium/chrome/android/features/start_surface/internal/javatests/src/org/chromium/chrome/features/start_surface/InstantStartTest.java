@@ -696,9 +696,10 @@ public class InstantStartTest {
         Assert.assertTrue(
                 TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
-        Assert.assertFalse(ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled());
 
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        Assert.assertFalse(ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(cta));
+
         Assert.assertEquals(1, cta.getTabModelSelector().getCurrentModel().getCount());
         Layout activeLayout = cta.getLayoutManager().getActiveLayout();
         Assert.assertTrue(activeLayout instanceof StaticLayout);
@@ -726,9 +727,9 @@ public class InstantStartTest {
         Assert.assertFalse(
                 TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
-        Assert.assertTrue(ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled());
 
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        Assert.assertFalse(ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(cta));
         Assert.assertEquals(1, cta.getTabModelSelector().getCurrentModel().getCount());
         Layout activeLayout = cta.getLayoutManager().getActiveLayout();
         Assert.assertTrue(activeLayout instanceof StaticLayout);
@@ -740,8 +741,9 @@ public class InstantStartTest {
     @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
     @Features.EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID,
             ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID})
+    @DisabledTest(message = "Failing at least on M, O and P: https://crbug.com/1254327")
     // clang-format off
-    public void  testInstantStartDisabledOnLowEndDevice() throws IOException {
+    public void testInstantStartDisabledOnLowEndDevice() throws IOException {
         // clang-format on
         StartSurfaceTestUtils.createTabStateFile(new int[] {123});
         mActivityTestRule.startMainActivityFromLauncher();
@@ -773,8 +775,7 @@ public class InstantStartTest {
                 NativeLibraryLoadedStatus.getProviderForTesting().areMainDexNativeMethodsReady());
         ReturnToChromeExperimentsUtil.shouldShowStartSurfaceAsTheHomePage(
                 mActivityTestRule.getActivity());
-        ReturnToChromeExperimentsUtil.shouldShowStartSurfaceAsTheHomePageNoTabs(
-                mActivityTestRule.getActivity());
+        ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(mActivityTestRule.getActivity());
         PseudoTab.getAllPseudoTabsFromStateFile(mActivityTestRule.getActivity());
 
         Assert.assertFalse("There should be no GURL usages triggering native library loading",
@@ -1179,6 +1180,34 @@ public class InstantStartTest {
         ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     @CommandLineFlags.Add({"force-fieldtrials=Study/Group", IMMEDIATE_RETURN_PARAMS +
         "/start_surface_variation/single"})
+    public void testNewIncognitoTabFromLauncher() throws IOException {
+        // clang-format on
+        testNewIncognitoTabFromLauncherImpl();
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
+        ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @DisableFeatures(ChromeFeatureList.INSTANT_START)
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group", IMMEDIATE_RETURN_PARAMS +
+        "/start_surface_variation/single"})
+    public void testNewIncognitoTabFromLauncher_NoInstant() throws IOException {
+        // clang-format on
+        Assert.assertFalse(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        testNewIncognitoTabFromLauncherImpl();
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
+        ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group", IMMEDIATE_RETURN_PARAMS +
+        "/start_surface_variation/single"})
     public void testShowTabSwitcherWhenHomepageDisabled() throws IOException {
         // clang-format on
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
@@ -1239,7 +1268,7 @@ public class InstantStartTest {
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
-        startNewTabFromLauncherIcon();
+        startNewTabFromLauncherIcon(false);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         StartSurfaceTestUtils.waitForTabModel(cta);
         TabUiTestHelper.verifyTabModelTabCount(cta, 2, 0);
@@ -1263,6 +1292,21 @@ public class InstantStartTest {
         });
     }
 
+    private void testNewIncognitoTabFromLauncherImpl() throws IOException {
+        StartSurfaceTestUtils.createTabStateFile(new int[] {0});
+        StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0);
+        TabAttributeCache.setTitleForTesting(0, "Google");
+
+        startNewTabFromLauncherIcon(true);
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        StartSurfaceTestUtils.waitForTabModel(cta);
+        TabUiTestHelper.verifyTabModelTabCount(cta, 1, 1);
+
+        Assert.assertFalse(cta.getLayoutManager().overviewVisible());
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { Assert.assertTrue(UrlUtilities.isNTPUrl(cta.getActivityTab().getUrl())); });
+    }
+
     private void testNewTabFromLauncherWithHomepageDisabledImpl() throws IOException {
         StartSurfaceTestUtils.createTabStateFile(new int[] {0});
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0);
@@ -1273,7 +1317,7 @@ public class InstantStartTest {
         Assert.assertFalse(HomepageManager.isHomepageEnabled());
 
         // Launches new Tab from the launcher icon and verifies that a NTP is created and showing.
-        startNewTabFromLauncherIcon();
+        startNewTabFromLauncherIcon(false);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         StartSurfaceTestUtils.waitForTabModel(cta);
         TabUiTestHelper.verifyTabModelTabCount(cta, 2, 0);
@@ -1332,9 +1376,9 @@ public class InstantStartTest {
         });
     }
 
-    private void startNewTabFromLauncherIcon() {
+    private void startNewTabFromLauncherIcon(boolean incognito) {
         Intent intent = IntentHandler.createTrustedOpenNewTabIntent(
-                ContextUtils.getApplicationContext(), false);
+                ContextUtils.getApplicationContext(), incognito);
         intent.putExtra(IntentHandler.EXTRA_INVOKED_FROM_SHORTCUT, true);
         mActivityTestRule.prepareUrlIntent(intent, null);
         mActivityTestRule.launchActivity(intent);
@@ -1393,7 +1437,7 @@ public class InstantStartTest {
                 .check(matches(isDisplayed()));
     }
 
-    public static Matcher<View> matchesBackgroundAlpha(final int expectedAlpha) {
+    private static Matcher<View> matchesBackgroundAlpha(final int expectedAlpha) {
         return new BoundedMatcher<View, View>(View.class) {
             String mMessage;
             int mActualAlpha;

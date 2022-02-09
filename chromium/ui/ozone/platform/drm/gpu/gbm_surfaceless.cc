@@ -71,17 +71,11 @@ gfx::SwapResult GbmSurfaceless::SwapBuffers(PresentationCallback callback) {
 }
 
 bool GbmSurfaceless::ScheduleOverlayPlane(
-    int z_order,
-    gfx::OverlayTransform transform,
     gl::GLImage* image,
-    const gfx::Rect& bounds_rect,
-    const gfx::RectF& crop_rect,
-    bool enable_blend,
-    const gfx::Rect& damage_rect,
-    std::unique_ptr<gfx::GpuFence> gpu_fence) {
+    std::unique_ptr<gfx::GpuFence> gpu_fence,
+    const gfx::OverlayPlaneData& overlay_plane_data) {
   unsubmitted_frames_.back()->overlays.push_back(
-      gl::GLSurfaceOverlay(z_order, transform, image, bounds_rect, crop_rect,
-                           enable_blend, damage_rect, std::move(gpu_fence)));
+      gl::GLSurfaceOverlay(image, std::move(gpu_fence), overlay_plane_data));
   return true;
 }
 

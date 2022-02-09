@@ -19,4 +19,4 @@ bool IsVivaldiWebPanel(content::WebContents* web_contents) {
   return web_view_guest && web_view_guest->IsVivaldiWebPanel();
 }
 
-}  // vivaldi
+}  // namespace vivaldi

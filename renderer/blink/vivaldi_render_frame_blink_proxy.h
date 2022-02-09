@@ -10,6 +10,7 @@
 #include "renderer/mojo/vivaldi_frame_host_service.mojom-blink-forward.h"
 
 namespace blink {
+class LocalFrame;
 class WebLocalFrame;
 class WebMediaPlayer;
 }  // namespace blink
@@ -24,9 +25,19 @@ class CORE_EXPORT VivaldiRenderFrameBlinkProxy {
  public:
   // Register the proxy instance as the global singleton.
   VivaldiRenderFrameBlinkProxy();
+  VivaldiRenderFrameBlinkProxy(const VivaldiRenderFrameBlinkProxy&) = delete;
+  VivaldiRenderFrameBlinkProxy& operator=(const VivaldiRenderFrameBlinkProxy&) =
+      delete;
 
   static VivaldiRenderFrameBlinkProxy* GetProxy();
+
   static void SendMediaElementAddedEvent(blink::WebMediaPlayer* player);
+
+  static void DidChangeLoadProgressExtended(blink::LocalFrame* local_frame,
+                                            double load_progress,
+                                            double loaded_bytes,
+                                            int loaded_elements,
+                                            int total_elements);
 
   virtual vivaldi::mojom::blink::VivaldiFrameHostService* GetFrameHostService(
       blink::WebLocalFrame* web_frame) = 0;
@@ -36,9 +47,6 @@ class CORE_EXPORT VivaldiRenderFrameBlinkProxy {
 
  protected:
   virtual ~VivaldiRenderFrameBlinkProxy();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiRenderFrameBlinkProxy);
 };
 
 #endif  // RENDERER_BLINK_VIVALDI_RENDER_FRAME_BLINK_PROXY_H_

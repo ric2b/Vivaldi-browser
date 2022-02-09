@@ -8,8 +8,8 @@
 #include "chrome/android/chrome_jni_headers/VivaldiSyncService_jni.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/sync/driver/sync_token_status.h"
-#include "sync/vivaldi_sync_service_impl.h"
 #include "sync/vivaldi_sync_service_factory.h"
+#include "sync/vivaldi_sync_service_impl.h"
 #include "sync/vivaldi_sync_ui_helper.h"
 
 static jlong JNI_VivaldiSyncService_Init(
@@ -24,8 +24,7 @@ static jlong JNI_VivaldiSyncService_Init(
   return reinterpret_cast<intptr_t>(vivaldi_account_manager_android);
 }
 
-VivaldiSyncServiceAndroid::VivaldiSyncServiceAndroid(JNIEnv* env,
-                                                                   jobject obj)
+VivaldiSyncServiceAndroid::VivaldiSyncServiceAndroid(JNIEnv* env, jobject obj)
     : weak_java_ref_(env, obj) {
   profile_ = ProfileManager::GetActiveUserProfile();
   DCHECK(profile_);

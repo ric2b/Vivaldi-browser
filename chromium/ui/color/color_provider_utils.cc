@@ -35,6 +35,18 @@ base::StringPiece ContrastModeName(
   }
 }
 
+base::StringPiece SystemThemeName(
+    ColorProviderManager::SystemTheme system_theme) {
+  switch (system_theme) {
+    case ColorProviderManager::SystemTheme::kDefault:
+      return "kDefault";
+    case ColorProviderManager::SystemTheme::kCustom:
+      return "kCustom";
+    default:
+      return "<invalid>";
+  }
+}
+
 #define E1(enum_name) \
   { enum_name, #enum_name }
 #define E2(enum_name, old_enum_name) \
@@ -186,7 +198,7 @@ std::string SkColorName(SkColor color) {
           {SK_ColorGRAY, "SK_ColorGRAY"},
           {SK_ColorLTGRAY, "SK_ColorLTGRAY"},
           {SK_ColorWHITE, "SK_ColorWHITE"},
-          {SK_ColorRED, "kPlaceholderColor(SK_ColorRED)"},
+          {SK_ColorRED, "kPlaceholderColor"},
           {SK_ColorGREEN, "SK_ColorGREEN"},
           {SK_ColorBLUE, "SK_ColorBLUE"},
           {SK_ColorYELLOW, "SK_ColorYELLOW"},

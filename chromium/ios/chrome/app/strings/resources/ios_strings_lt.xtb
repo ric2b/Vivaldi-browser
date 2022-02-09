@@ -16,6 +16,7 @@ Jūsų paieškos variklis yra „<ph name="DSE_NAME" />“. Peržiūrėkite jo i
 <translation id="1066060668811609597">Sinchronizavimo tvarkymas</translation>
 <translation id="1076421457278169141">Kodas nuskaitytas</translation>
 <translation id="1084365883616172403">„Facebook“ įrašas paskelbtas.</translation>
+<translation id="1086486568852410168">Paieška naudojant „Google Lens“</translation>
 <translation id="1103523840287552314">Visada versti <ph name="LANGUAGE" /></translation>
 <translation id="1104948393051856124">Sutikti ir tęsti</translation>
 <translation id="110724200315609752">Perjungti į atidarytą langą</translation>
@@ -28,7 +29,6 @@ Jūsų paieškos variklis yra „<ph name="DSE_NAME" />“. Peržiūrėkite jo i
 <translation id="1165039591588034296">Klaida</translation>
 <translation id="1172898394251786223">Kitas laukas</translation>
 <translation id="1176932207622159128">Nepav. išs. vaizdo</translation>
-<translation id="1180526666083833456">Sinchronizuojama ir suasmeninama įvairiuose įrenginiuose.</translation>
 <translation id="1181037720776840403">Pašalinti</translation>
 <translation id="1207113853726624428">Nauja paieška</translation>
 <translation id="1209206284964581585">Slėpti dabar</translation>
@@ -58,6 +58,7 @@ Jūsų paieškos variklis yra „<ph name="DSE_NAME" />“. Peržiūrėkite jo i
 <translation id="1400642268715879018">Pastarosios 4 savaitės</translation>
 <translation id="1407135791313364759">Atidaryti viską</translation>
 <translation id="1430915738399379752">Spausdinti</translation>
+<translation id="1434356225517321998">Jūsų naršyklė tvarkoma. <ph name="BEGIN_LINK" />Išsami informacija<ph name="END_LINK" /></translation>
 <translation id="1449835205994625556">Slėpti slaptažodį</translation>
 <translation id="145015347812617860">Elementų: <ph name="COUNT" /></translation>
 <translation id="149095475893949513">Ši svetainė bando atsisiųsti konfigūracijos profilį.</translation>
@@ -117,9 +118,11 @@ Jūsų paieškos variklis yra „<ph name="DSE_NAME" />“. Peržiūrėkite jo i
 <translation id="2073572773299281212">Aktyvus prieš <ph name="DAYS" /> d.</translation>
 <translation id="2074131957428911366">Bet kada galite pasirinkti, ką norite sinchronizuoti, skiltyje <ph name="BEGIN_LINK" />„Nustatymai“<ph name="END_LINK" />.</translation>
 <translation id="2079545284768500474">Anuliuoti</translation>
+<translation id="2080769225927880590">Prisijungimas naudojant galiojančią paskyrą</translation>
 <translation id="209018056901015185">Užkl. dėl svet. v. komp.</translation>
 <translation id="2103075008456228677">Atidaryti history.google.com</translation>
 <translation id="2116625576999540962">Perkelta elementų: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
+<translation id="2122754583996902531">Jūsų naršyklė tvarkoma. <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="212623074644302906">Klausiama, ar pridėti prie skaitymo sąrašo</translation>
 <translation id="2139867232736819575">Ieškoti nukopijuoto teksto</translation>
 <translation id="214201757571129614">Prisijungti…</translation>
@@ -128,6 +131,7 @@ Jūsų paieškos variklis yra „<ph name="DSE_NAME" />“. Peržiūrėkite jo i
 <translation id="2218443599109088993">Tolinti</translation>
 <translation id="2230173723195178503">TInklalapis įkeltas</translation>
 <translation id="2239626343334228536">Išvalomi naršymo duomenis...</translation>
+<translation id="2256933947031277845">Organizacijoje leidžiama prisijungti tik naudojant tam tikras paskyras.</translation>
 <translation id="225943865679747347">Klaidos kodas: <ph name="ERROR_CODE" /></translation>
 <translation id="2267753748892043616">Pridėti paskyrą</translation>
 <translation id="2268044343513325586">Patikslinti</translation>
@@ -135,7 +139,6 @@ Jūsų paieškos variklis yra „<ph name="DSE_NAME" />“. Peržiūrėkite jo i
 <translation id="2302742851632557585">Pakeisti slaptažodį svetainėje</translation>
 <translation id="2316709634732130529">Naudoti siūl. slapt.</translation>
 <translation id="2320166752086256636">Slėpti klaviatūrą</translation>
-<translation id="2339560363438331454">Sinchron. ir „Google“ paslaugos</translation>
 <translation id="2351097562818989364">Vertimo nustatymai buvo nustatyti iš naujo.</translation>
 <translation id="235789365079050412">„Google“ privatumo politika</translation>
 <translation id="2359043044084662842">Versti</translation>
@@ -185,7 +188,6 @@ Svetainės negali naudoti slapukų, kad sužinotų apie naršymo veiklą skirtin
 <translation id="2820289420301699633">Jūsų administratorius valdo naršyklę „Chrome“ ir gali pasiekti jos duomenis</translation>
 <translation id="2830972654601096923">Tvarkyti adresus...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
-<translation id="2840687315230832938">Pradinė sinchronizavimo sąranka nebaigta</translation>
 <translation id="2843803966603263712">Nust. Vert. nust. iš n.</translation>
 <translation id="2848086008667475748">Nustatyti kaip numatytąją nustatymuose…</translation>
 <translation id="2858204748079866344">Siekiant apsaugoti jūsų privatumą, „Chrome“ šio lauko automatiškai nepildys jūsų slaptažodžiu.</translation>
@@ -224,7 +226,6 @@ Peržiūrėkite paieškos variklio instrukcijas, kaip ištrinti paieškos istori
 <translation id="3153862085237805241">Kortelės išsaugojimas</translation>
 <translation id="3157387275655328056">Pridėti prie skaitomų sąrašo</translation>
 <translation id="3157684681743766797">Pažymėti visus...</translation>
-<translation id="3161291298470460782">Būsite atjungti, bus išjungtas sinchronizavimas ir išvalyti visi „Chrome“ duomenys iš šio įrenginio. Sinchronizuojami duomenys liks „Google“ paskyroje.</translation>
 <translation id="3169472444629675720">Discover</translation>
 <translation id="3175081911749765310">Žin. pasl.</translation>
 <translation id="3178650076442119961">Aktyvus šiandien</translation>
@@ -233,6 +234,7 @@ Peržiūrėkite paieškos variklio instrukcijas, kaip ištrinti paieškos istori
 <translation id="3184767182050912705">Atrakinti naudojant <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="3207960819495026254">Pažymėta</translation>
 <translation id="3224641773458703735">Jei norite eksportuoti slaptažodžius, pirmiausia turite nustatyti įrenginio slaptažodį.</translation>
+<translation id="3230318355092723906">Kai sinchronizavimas išjungtas, vis tiek galite peržiūrėti visas žymes, istoriją, slaptažodžius ir kitus nustatymus šiame įrenginyje. Jei atliksite pakeitimų, jie nebus sinchronizuojami su jūsų paskyra.</translation>
 <translation id="3240426699337459095">Nuoroda nukopijuota</translation>
 <translation id="3244271242291266297">MM</translation>
 <translation id="3252394070589632019"><ph name="VALUE" />, <ph name="ADDITIONAL_INFO" />, <ph name="INDEX" /> iš <ph name="NUM_SUGGESTIONS" /></translation>
@@ -259,6 +261,7 @@ Peržiūrėkite paieškos variklio instrukcijas, kaip ištrinti paieškos istori
 <translation id="345565170154308620">Tvarkyti slaptažodžius...</translation>
 <translation id="3469166899695866866">Sustabdyti atsisiuntimą?</translation>
 <translation id="3470502288861289375">Kopijuojama...</translation>
+<translation id="3472993688462687965">Kai įjungsite sinchronizavimą, duomenys gali būti apriboti pagal tai, ką leidžia jūsų organizacija.</translation>
 <translation id="3474624961160222204">Tęsti kaip <ph name="NAME" /></translation>
 <translation id="3478058380795961209">Gal. pab. mėnuo</translation>
 <translation id="3482959374254649722">Sinchronizuojami skirtukai...</translation>
@@ -267,7 +270,6 @@ Peržiūrėkite paieškos variklio instrukcijas, kaip ištrinti paieškos istori
 <translation id="3494788280727468875">Patvirtinti naršymo duomenų išvalymą</translation>
 <translation id="35083190962747987">Atidaryti ${url}</translation>
 <translation id="3519193562722059437">Norėdami naršyti žiniatinklį, atidarykite skirtuką.</translation>
-<translation id="3523473570015918798">Atsijungus su jūsų „Google“ paskyra nebebus sinchronizuojamos žymės, istorija, slaptažodžiai ir kiti „Chrome“ duomenys.</translation>
 <translation id="3527085408025491307">Aplankas</translation>
 <translation id="3529024052484145543">Nesaugu</translation>
 <translation id="3533202363250687977">Uždaryti visus inkognito skirtukus</translation>
@@ -316,7 +318,6 @@ Atlikite toliau nurodytus veiksmus.</translation>
 <translation id="4038354071007134711">Šiame įreng. nėra progr., gal. atidaryti failą.</translation>
 <translation id="4042870976416480368">Rasti puslapyje</translation>
 <translation id="4049507953662678203">Įsitikinkite, kad yra tinklo ryšys ir bandykite dar kartą.</translation>
-<translation id="4079195788735381731">Jūsų organizacija jus atjungė</translation>
 <translation id="408404951701638773">Dabar paieškos juostą pasiekti lengviau</translation>
 <translation id="411254640334432676">Nepavyko atsisiųsti.</translation>
 <translation id="4112644173421521737">Ieškoti</translation>
@@ -360,6 +361,7 @@ Atlikite toliau nurodytus veiksmus.</translation>
 <translation id="4619564267100705184">Patvirtinti tapatybę</translation>
 <translation id="4619615317237390068">Skirtukai iš kitų įrenginių</translation>
 <translation id="4620246317052452550">Perskaityti puslapiai</translation>
+<translation id="4620888520263267479">Nuorodų peržiūrų rodymas</translation>
 <translation id="4630540211544979320">Versti puslapius</translation>
 <translation id="4634124774493850572">Naudoti slaptažodį</translation>
 <translation id="4636930964841734540">Informacija</translation>
@@ -371,10 +373,12 @@ Atlikite toliau nurodytus veiksmus.</translation>
 
 Duomenys užšifruoti naudojant slaptafrazę. Įveskite ją, kad pradėtumėte sinchronizuoti.</translation>
 <translation id="4689564913179979534">Tvarkyti mokėjimo metodus...</translation>
+<translation id="469022783543509074">Buvote atjungti</translation>
 <translation id="470966556546083668">Neįjungti sinchronizavimo</translation>
 <translation id="473775607612524610">Atnaujinti</translation>
 <translation id="4747097190499141774">Slaptafrazės šifruotė neapima mokėjimo metodų ir adresų iš „Google Pay“. Tik jūsų slaptafrazę žinantis asmuo gali skaityti šifruotus duomenis. Slaptafrazė nesiunčiama į sistemą „Google“ ir joje nesaugoma. Pamiršę slaptafrazę arba norėdami pakeisti šį nustatymą turėsite iš naujo nustatyti sinchronizavimą. <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="4751645464639803239">Naujas inkognito skirtukas</translation>
+<translation id="4764612367328936189">Organizacijoje leidžiama prisijungti tik naudojant tam tikras paskyras. Neleidžiamos paskyros yra paslėptos. <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="4775879719735953715">Numatytoji naršyklė</translation>
 <translation id="4778644898150334464">Naudoti kitą slaptažodį</translation>
 <translation id="4802417911091824046">Slaptafrazės šifruotė neapima mokėjimo metodų ir adresų iš „Google Pay“.
@@ -447,7 +451,6 @@ Jei norite pakeisti šį nustatymą, <ph name="BEGIN_LINK" />iš naujo nustatyki
 <translation id="5457226814769348910">Atidaryti versiją neprisijungus</translation>
 <translation id="5489208564673669003">Jei norite tvarkyti visų svetainių slapukus, žr. <ph name="BEGIN_LINK" />„Slapukų nustatymai“<ph name="END_LINK" />.</translation>
 <translation id="5490005495580364134">Blokuoti visus slapukus (nerekomenduojama)</translation>
-<translation id="5508435575041083207">Atsijungimas ir duomenų išvalymas iš šio įrenginio</translation>
 <translation id="5513681519188741830">Prieš <ph name="TIME" /> val.</translation>
 <translation id="5525269841082836315">Kurti slaptafrazę</translation>
 <translation id="5532698011560297095">Nepavyksta prisijungti</translation>
@@ -458,6 +461,7 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="5556459405103347317">Įkelti iš naujo</translation>
 <translation id="5580834567471114021">Pridėti prie skaitymo sąrašo, norint skaityti vėliau?</translation>
 <translation id="5592679540098330836">Naudotojo <ph name="NAME" /> sinchronizavimo įjungimas</translation>
+<translation id="560322036295180549">Išjungė jūsų organizacija</translation>
 <translation id="5614553682702429503">Išsaugoti slaptažodį?</translation>
 <translation id="5626245204502895507">Šiuo metu negalima atsisiųsti programos.</translation>
 <translation id="5631164295104953411">Pridėti mokėjimo metodą</translation>
@@ -470,9 +474,12 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="5711039611392265845">Daugiau nustatymų, susijusių su privatumu, sauga ir duomenų rinkimu, žr. skiltyje <ph name="BEGIN_LINK" />„Sinchronizavimas ir „Google“ paslaugos“<ph name="END_LINK" />.</translation>
 <translation id="5724941645893276623">Norėdami žiniatinklyje naršyti privačiai, pridėkite naują skirtuką</translation>
 <translation id="5728700505257787410">Apgailestaujame, prisijungiant prie paskyros kilo problema.</translation>
+<translation id="5731784586962650619">Kitų programų slaptažodžiai</translation>
 <translation id="5737974891429562743">Išsami paskyros prisijungimo informacija pasenusi. Atnaujinkite, kad pradėtumėte sinchronizuoti.</translation>
 <translation id="5738887413654608789">Tai naudodami galite atrasti aktualių tinklalapių, kurie teikiami atsižvelgiant į aplinką.</translation>
 <translation id="5758631781033351321">Čia rasite skaitymo sąrašą</translation>
+<translation id="575902488528307720">Ieškoti vaizdo</translation>
+<translation id="5781453543752460388">Pridėti prie Nuotraukų</translation>
 <translation id="5782227691023083829">Verčiama...</translation>
 <translation id="5803566855766646066">Ar tikrai norite atmesti šią naują kortelę?</translation>
 <translation id="5812974770859303494">Pridėjimas prie...</translation>
@@ -510,6 +517,7 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="6042308850641462728">Daugiau</translation>
 <translation id="605721222689873409">MM</translation>
 <translation id="6059830886158432458">Čia galite valdyti savo pasakojimus ir veiklą</translation>
+<translation id="6064824697233747382">Jūsų organizacija reikalauja išjungti sinchronizavimą.</translation>
 <translation id="6066301408025741299">Palieskite, jei norite atšaukti.</translation>
 <translation id="60829778314739003">Sutikti ir tęsti</translation>
 <translation id="6084848228346514841">Skirtukų pasirinkimas</translation>
@@ -525,6 +533,7 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="6189413832092199491">Neskaityti</translation>
 <translation id="6196207969502475924">Paieška balsu</translation>
 <translation id="6202364442240589072">{COUNT,plural, =1{Uždaryti {COUNT} skirtuką}one{Uždaryti {COUNT} skirtuką}few{Uždaryti {COUNT} skirtukus}many{Uždaryti {COUNT} skirtuko}other{Uždaryti {COUNT} skirtukų}}</translation>
+<translation id="6207754106943147310"><ph name="BEGIN_LINK" />Žr., ką galite sinchronizuoti<ph name="END_LINK" />.</translation>
 <translation id="6219688215832490856">Niekada neversti</translation>
 <translation id="6223816392543092032">Gaukite žymes, istoriją, slaptažodžius ir kitus nustatymus visuose įrenginiuose.</translation>
 <translation id="6232329973559504466">Paieška inkognito režimu</translation>
@@ -585,7 +594,6 @@ Kiekvienoje svetainėje stenkitės naudoti unikalius slaptažodžius.</translati
 <translation id="6628106477656132239">Netinkama galiojimo laiko pabaigos data</translation>
 <translation id="6634432609054530164">Jūsų organizacija išjungė inkognito režimą</translation>
 <translation id="6638511529934826365">Keisti teksto mastelį…</translation>
-<translation id="6639730758971422557">Norėdami įjungti saugų naršymą, atidarykite <ph name="BEGIN_LINK" />„Sinchron. ir „Google“ paslaugos“<ph name="END_LINK" /> ir palieskite „Saugus naršymas“.</translation>
 <translation id="6642362222295953972">Perjungti į esamą skirtuką</translation>
 <translation id="6643016212128521049">Išvalyti</translation>
 <translation id="6645899968535965230">QR kodas: <ph name="PAGE_TITLE" /></translation>
@@ -610,10 +618,12 @@ Kai įjungtas inkognito režimas, svetainės negali naudoti slapukų, siekdamos 
 <translation id="6801927553864092214">Kad galėtumėte naršyti privačiai, atidarykite inkognito skirtuką</translation>
 <translation id="6807889908376551050">Rodyti viską...</translation>
 <translation id="681368974849482173">Elementas sukurtas</translation>
+<translation id="681450999322335505">Sinchronizavimas išjungtas organizacijoje.</translation>
 <translation id="6830804042318138535">Skaityti daugiau</translation>
 <translation id="6831043979455480757">Vertėjas</translation>
 <translation id="6842136130964845393">Kad užtikrintumėte galimybę visada pasiekti išsaugotus slaptažodžius, patvirtinkite savo tapatybę</translation>
 <translation id="6851516051005285358">Užklausa dėl kompiuteriui skirtos svetainės versijos</translation>
+<translation id="6856384753476268833">Tvarko jūsų organizacija.</translation>
 <translation id="6858855187367714033">Nuskaityta</translation>
 <translation id="6859944681507688231">Jei norite nuskaityti QR kodą ar kredito kortelę, nustatymuose įgalinkite fotoaparatą.</translation>
 <translation id="6869389390665537774">Galite peržiūrėti puslapius, kuriuose lankėtės, arba išvalyti juos iš istorijos</translation>
@@ -635,7 +645,6 @@ Kai įjungtas inkognito režimas, svetainės negali naudoti slapukų, siekdamos 
 <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="7004499039102548441">Naujausi skirtukai</translation>
 <translation id="7006788746334555276">Turinio nustatymai</translation>
-<translation id="7015203776128479407">Pradinis sinchronizavimo nustatymas nebaigtas. Sinchronizavimas išjungtas.</translation>
 <translation id="7029809446516969842">Slaptažodžiai</translation>
 <translation id="7053983685419859001">Blokuoti</translation>
 <translation id="7062545763355031412">Sutikti ir perjungti paskyras</translation>
@@ -658,7 +667,6 @@ Kai įjungtas inkognito režimas, svetainės negali naudoti slapukų, siekdamos 
 <translation id="7265758999917665941">Niekada šioje svetainėje</translation>
 <translation id="7272437679830969316">Nepavyko patvirtinti tapatybės. Slaptažodis nenukopijuotas.</translation>
 <translation id="7291368939935408496">Ruošiami slaptažodžiai…</translation>
-<translation id="7293171162284876153">Norėdami pradėti sinchronizuoti, įjunkite parinktį „Chrome“ duomenų sinchronizavimas“.</translation>
 <translation id="7313347584264171202">Čia rasite inkognito skirtukus</translation>
 <translation id="7319242366286515846">Tęsdami sutinkate su <ph name="BEGIN_LINK" />paslaugų teikimo sąlygomis<ph name="END_LINK" /></translation>
 <translation id="7336264872878993241">Atsisiųsta <ph name="PERCENT" /> proc.</translation>
@@ -702,9 +710,6 @@ Kai įjungtas inkognito režimas, svetainės negali naudoti slapukų, siekdamos 
 <translation id="7701040980221191251">Nėra</translation>
 <translation id="7741325291586284254">Naujas inkognito skirtuko puslapis</translation>
 <translation id="7765158879357617694">Perkelti</translation>
-<translation id="7771470029643830783">Atsijungus su jūsų „Google“ paskyra nebebus sinchronizuojamos žymės, istorija, slaptažodžiai ir kiti „Chrome“ duomenys.
-
-Kadangi paskyrą tvarko <ph name="HOSTED_DOMAIN" />, atsijungus „Chrome“ duomenys bus ištrinti iš šio įrenginio. Sinchronizuojami duomenys liks „Google“ paskyroje.</translation>
 <translation id="7772032839648071052">Patvirtinti slaptafrazę</translation>
 <translation id="7778472311864276518">Paskyros pašalinimas iš šio įrenginio</translation>
 <translation id="7781011649027948662">Versti puslapį?</translation>
@@ -717,6 +722,7 @@ Kadangi paskyrą tvarko <ph name="HOSTED_DOMAIN" />, atsijungus „Chrome“ duo
 <translation id="7856733331829174190">Nepavyko atsisiųsti</translation>
 <translation id="7859704718976024901">Naršymo istorija</translation>
 <translation id="7887198238286927132">Siekiant apsaugoti jūsų privatumą, „Chrome“ šio lauko automatiškai nepildys.</translation>
+<translation id="7911190106180361398">Jūsų organizacija neleidžia jums visko sinchronizuoti.</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Eksportuoti slaptažodžius...</translation>
 <translation id="794799177247607889">Pradėti įrašyti į žurnalą</translation>
@@ -726,6 +732,7 @@ Kadangi paskyrą tvarko <ph name="HOSTED_DOMAIN" />, atsijungus „Chrome“ duo
 
 Svetainės gali naudoti slapukus, kad sužinotų apie naršymo veiklą skirtingose svetainėse, pvz., kad galėtų suasmeninti skelbimus.</translation>
 <translation id="7971521879845308059">Blok. iššok. l.</translation>
+<translation id="797413074872316787">Kad turinys būtų sinchronizuojamas ir suasmeninamas visuose įrenginiuose, įjunkite sinchronizavimą.</translation>
 <translation id="7982789257301363584">Tinklas</translation>
 <translation id="7993619969781047893">Funkcijos gali neveikti tam tikrose svetainėse</translation>
 <translation id="800361585186029508">Atidaromi įvesti URL naršyklėje „Google Chrome“.</translation>
@@ -744,8 +751,8 @@ Svetainės gali naudoti slapukus, kad sužinotų apie naršymo veiklą skirtingo
 <translation id="8080028325999236607">Uždaryti visus skirtukus</translation>
 <translation id="8105368624971345109">Išjungti</translation>
 <translation id="8114753159095730575">Galima atsisiųsti failą. Parinktys pasiekiamos netoli ekrano apačios.</translation>
-<translation id="8131740175452115882">Patvirtinti</translation>
 <translation id="8156478151976189188">Slaptažodžio sinchronizavimas neveikia</translation>
+<translation id="8193953846147532858"><ph name="BEGIN_LINK" />Jūsų įrenginiai<ph name="END_LINK" /> · <ph name="EMAIL" /></translation>
 <translation id="8197543752516192074">Versti puslapį</translation>
 <translation id="8205564605687841303">Atšaukti</translation>
 <translation id="8206354486702514201">Šį nustatymą vykdo jūsų administratorius.</translation>
@@ -771,10 +778,8 @@ Svetainės gali naudoti slapukus, kad sužinotų apie naršymo veiklą skirtingo
 <translation id="8487667956631253959">Įjungta</translation>
 <translation id="8487700953926739672">Pasiekiama neprisijungus</translation>
 <translation id="8490978609246021741">Išsaugoti pakeitimus</translation>
-<translation id="8495097701594799854">Išjungė jūsų organizacija.</translation>
 <translation id="8503813439785031346">Vartotojo vardas</translation>
 <translation id="850600235656508448">Atidaryti inkognito režimu</translation>
-<translation id="8510057420705599706">Būsite atjungti ir bus išjungtas sinchronizavimas, bet žymės, istorija, slaptažodžiai ir kiti „Chrome“ duomenys liks šiame įrenginyje.</translation>
 <translation id="8517375800490286174">Atvirojo šaltinio licencijos</translation>
 <translation id="8524799873541103884"><ph name="INCOGNITO" /> skirtukai: <ph name="FIRST_VISIBLE_TAB" />–<ph name="LAST_VISIBLE_TAB" /> iš <ph name="NUMBER_OF_OPEN_TABS" /></translation>
 <translation id="8529767659511976195">Nauja</translation>
@@ -831,6 +836,7 @@ Svetainės gali naudoti slapukus, kad sužinotų apie naršymo veiklą skirtingo
 <translation id="9081058212938299310">Atnaujinti <ph name="USERNAME" /> slaptažodį?</translation>
 <translation id="9083392325882095631">Elementų: 1</translation>
 <translation id="9083838294503912307">Kad turinys būtų sinchronizuojamas ir suasmeninamas visuose įrenginiuose, įjunkite sinchronizavimą</translation>
+<translation id="9084677839771512880">Jūsų organizacija riboja, ką galite sinchronizuoti. <ph name="BEGIN_LINK" />Išsami informacija<ph name="END_LINK" /></translation>
 <translation id="9087108903408689779">„Chrome“ siūlomas slaptažodis:</translation>
 <translation id="9094033019050270033">Atnaujinti slaptažodį</translation>
 <translation id="9100610230175265781">Būtina slaptafrazė</translation>
@@ -845,6 +851,7 @@ Svetainės gali naudoti slapukus, kad sužinotų apie naršymo veiklą skirtingo
 <translation id="9203116392574189331">Handoff</translation>
 <translation id="9223358826628549784">Strigties ataskaita išsiųsta.</translation>
 <translation id="952704832371081537">Atšaukti</translation>
+<translation id="981498610235328462">Organizacijoje leidžiama prisijungti tik naudojant tam tikras paskyras. Neleidžiamos paskyros yra paslėptos.</translation>
 <translation id="984509647832111802">Sinchronizavimas neveikia.</translation>
 <translation id="988141524645182168">Kiti įrenginiai</translation>
 <translation id="989988560359834682">Adreso redagavimas</translation>

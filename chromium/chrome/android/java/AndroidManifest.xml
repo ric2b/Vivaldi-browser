@@ -197,7 +197,7 @@ by a child template that "extends" this file.
         android:largeHeap="false"
         android:manageSpaceActivity="org.vivaldi.browser.preferences.VivaldiManageSpaceActivity"
         android:supportsRtl="true"
-        android:zygotePreloadName="org.chromium.content.app.ZygotePreload"
+        android:zygotePreloadName="{{ zygote_preload_class }}"
         android:requestLegacyExternalStorage="true"
         {% if backup_key is defined %}
         android:allowBackup="true"
@@ -652,6 +652,12 @@ by a child template that "extends" this file.
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        <activity android:name="org.vivaldi.browser.notes.NoteAppendActivity"
+            android:theme="@style/NoteAppendActivityTheme"
+            android:windowSoftInputMode="stateAlwaysHidden"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+        </activity>
         <activity android:name="org.vivaldi.browser.panels.PanelActivity"
             android:theme="@style/PanelActivityTheme"
             android:windowSoftInputMode="stateAlwaysHidden|adjustPan"
@@ -776,13 +782,13 @@ by a child template that "extends" this file.
 
         <!-- Activities for feed. -->
         <activity android:name="org.chromium.chrome.browser.app.feedmanagement.FeedManagementActivity"
-            android:theme="@style/Base.Theme.Chromium.Settings"
+            android:theme="@style/Theme.Chromium.Settings"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.app.followmanagement.FollowManagementActivity"
-            android:theme="@style/Base.Theme.Chromium.Settings"
+            android:theme="@style/Theme.Chromium.Settings"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
@@ -1081,7 +1087,8 @@ by a child template that "extends" this file.
             android:exported="false">
         </service>
 
-        {% if channel in ['canary', 'default'] %}
+        <!-- Not used by Vivaldi -->
+        {% if is_vivaldi == 'false' %}
         <!-- Quick Action Search widget -->
         <receiver
             android:name="org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider$QuickActionSearchWidgetProviderSmall"
@@ -1118,24 +1125,8 @@ by a child template that "extends" this file.
                 android:name="android.appwidget.provider"
                 android:resource="@xml/quick_action_search_widget_dino_info" />
         </receiver>
-        {% endif %}
-
-        <receiver
-            android:name="org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="org.chromium.chrome.browser.ui.quickactionsearchwidget.START_TEXT_QUERY" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="org.chromium.chrome.browser.ui.quickactionsearchwidget.START_VOICE_QUERY" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="org.chromium.chrome.browser.ui.quickactionsearchwidget.START_DINO_GAME" />
-            </intent-filter>
-        </receiver>
 
         <!-- Bookmarks widget -->
-        <!-- Not used by Vivaldi
         <receiver android:name="com.google.android.apps.chrome.appwidget.bookmarks.BookmarkThumbnailWidgetProvider"
             android:label="@string/bookmark_widget_title"
             android:exported="true">
@@ -1152,7 +1143,7 @@ by a child template that "extends" this file.
             android:exported="false" />
         <receiver android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProxy"
             android:exported="false" />
-        -->
+        {% endif %}
 
         <!-- Search widget -->
         <receiver
@@ -1296,6 +1287,15 @@ by a child template that "extends" this file.
 
         <activity
             android:name="org.chromium.chrome.browser.notifications.NotificationIntentInterceptor$TrampolineActivity"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:exported="false"
+            android:autoRemoveFromRecents="true"
+            android:excludeFromRecents="true"
+            android:documentLaunchMode="always"
+            android:noHistory="true"/>
+
+        <activity
+            android:name="org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager$TrampolineActivity"
             android:theme="@android:style/Theme.NoDisplay"
             android:exported="false"
             android:autoRemoveFromRecents="true"

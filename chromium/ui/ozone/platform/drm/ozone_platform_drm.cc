@@ -60,7 +60,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ui/base/ime/chromeos/input_method_chromeos.h"
+#include "ui/base/ime/ash/input_method_ash.h"
 #else
 #include "ui/base/ime/input_method_minimal.h"
 #endif
@@ -177,7 +177,7 @@ class OzonePlatformDrm : public OzonePlatform {
       internal::InputMethodDelegate* delegate,
       gfx::AcceleratedWidget) override {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    return std::make_unique<InputMethodChromeOS>(delegate);
+    return std::make_unique<InputMethodAsh>(delegate);
 #else
     return std::make_unique<InputMethodMinimal>(delegate);
 #endif
@@ -275,7 +275,7 @@ class OzonePlatformDrm : public OzonePlatform {
     }
   }
 
-  const InitializedHostProperties& GetInitializedHostProperties() override {
+  const PlatformRuntimeProperties& GetPlatformRuntimeProperties() override {
     DCHECK(has_initialized_ui());
     return host_properties_;
   }
@@ -343,7 +343,7 @@ class OzonePlatformDrm : public OzonePlatform {
   std::unique_ptr<DrmCursor> cursor_;
   std::unique_ptr<EventFactoryEvdev> event_factory_ozone_;
   std::unique_ptr<DrmDisplayHostManager> display_manager_;
-  InitializedHostProperties host_properties_;
+  PlatformRuntimeProperties host_properties_;
 
   base::WeakPtrFactory<OzonePlatformDrm> weak_factory_{this};
   base::WeakPtrFactory<OzonePlatformDrm> weak_factory_on_drm_{this};

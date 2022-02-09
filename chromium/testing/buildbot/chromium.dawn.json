@@ -7,7 +7,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -33,7 +32,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -61,7 +60,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -89,7 +87,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -168,7 +165,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -197,9 +193,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
         ],
@@ -231,10 +225,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
@@ -270,7 +261,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -296,7 +286,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -324,7 +314,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -352,7 +341,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -431,7 +419,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -460,9 +447,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
         ],
@@ -494,10 +479,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
@@ -533,7 +515,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -559,7 +540,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -587,7 +568,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -615,7 +595,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -694,7 +673,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -723,9 +701,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
         ],
@@ -757,10 +733,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
@@ -796,7 +769,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -822,7 +794,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -850,7 +822,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -878,7 +849,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--no-xvfb",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
@@ -957,7 +927,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -986,9 +955,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
         ],
@@ -1020,10 +987,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
           "--no-xvfb",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan"
@@ -1061,7 +1025,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1089,7 +1052,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1119,7 +1082,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1149,7 +1111,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1178,14 +1139,15 @@
       },
       {
         "args": [
-          "--use-cmd-decoder=validating",
+          "--use-cmd-decoder=passthrough",
+          "--use-gl=angle",
           "--use-gpu-in-tests"
         ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "gl_tests_validating",
+        "name": "gl_tests_passthrough",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -1198,7 +1160,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -1232,7 +1195,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -1264,10 +1226,8 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
-          "--platform=mac-mac10.13"
+          "--flag-specific=webgpu",
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -1300,12 +1260,9 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
-          "--platform=mac-mac10.13"
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -1341,7 +1298,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1356,8 +1312,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1367,7 +1323,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1383,8 +1339,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1395,7 +1351,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1411,8 +1366,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1423,7 +1378,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1439,8 +1393,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1464,8 +1418,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1487,8 +1441,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1500,7 +1454,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -1519,8 +1472,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1530,10 +1483,8 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
-          "--platform=mac-mac10.13"
+          "--flag-specific=webgpu",
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -1552,8 +1503,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -1564,12 +1515,9 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
-          "--platform=mac-mac10.13"
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -1588,8 +1536,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -1600,10 +1548,47 @@
     ]
   },
   "Dawn Mac x64 Experimental Release (AMD)": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "noop_sleep",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "noop_sleep_tests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "display_attached": "1",
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-11.4",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "expiration": 21600,
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      }
+    ]
+  },
+  "Dawn Mac x64 Experimental Release (Intel)": {
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1618,10 +1603,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1632,7 +1615,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1648,10 +1631,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1663,7 +1644,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1679,10 +1659,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1694,7 +1672,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1710,10 +1687,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1738,10 +1713,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1764,10 +1737,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1780,7 +1751,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -1799,10 +1769,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1813,10 +1781,8 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
-          "--platform=mac-mac10.13"
+          "--flag-specific=webgpu",
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -1835,10 +1801,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1850,12 +1814,9 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
-          "--platform=mac-mac10.13"
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -1874,10 +1835,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "Mac-11.4",
-              "pool": "chromium.tests.gpu"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "expiration": 21600,
@@ -1892,7 +1851,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1920,7 +1878,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1950,7 +1908,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -1980,7 +1937,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2009,14 +1965,15 @@
       },
       {
         "args": [
-          "--use-cmd-decoder=validating",
+          "--use-cmd-decoder=passthrough",
+          "--use-gl=angle",
           "--use-gpu-in-tests"
         ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "gl_tests_validating",
+        "name": "gl_tests_passthrough",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -2029,7 +1986,8 @@
               "pool": "chromium.tests.gpu"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "gl_tests",
         "test_id_prefix": "ninja://gpu:gl_tests/"
@@ -2063,7 +2021,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -2095,10 +2052,8 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
-          "--platform=mac-mac10.13"
+          "--flag-specific=webgpu",
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -2131,12 +2086,9 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
-          "--platform=mac-mac10.13"
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -2172,7 +2124,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2187,8 +2138,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2198,7 +2149,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2214,8 +2165,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2226,7 +2177,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2242,8 +2192,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2254,7 +2204,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2270,8 +2219,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2295,8 +2244,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2318,8 +2267,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2331,7 +2280,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -2350,8 +2298,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2361,10 +2309,8 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
-          "--platform=mac-mac10.13"
+          "--flag-specific=webgpu",
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -2383,8 +2329,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -2395,12 +2341,9 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-backend-validation",
           "--time-out-ms=30000",
-          "--platform=mac-mac10.13"
+          "--platform=mac-mac11"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -2419,8 +2362,8 @@
             {
               "cpu": "x86-64",
               "display_attached": "1",
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.15.7"
+              "gpu": "8086:3e9b",
+              "os": "Mac-11.5.2"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -2434,7 +2377,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2464,7 +2406,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2496,7 +2438,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2587,7 +2528,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -2621,9 +2561,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--target=Release_x64",
           "--time-out-ms=48000"
         ],
@@ -2665,7 +2603,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2690,7 +2627,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2717,7 +2654,6 @@
       {
         "args": [
           "--enable-backend-validation=partial",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2744,7 +2680,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2820,7 +2755,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -2849,9 +2783,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--target=Release_x64"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -2882,10 +2814,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000",
           "--target=Release_x64"
         ],
@@ -2896,7 +2825,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -2920,7 +2849,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2945,7 +2873,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2972,7 +2900,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -2999,7 +2926,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3075,7 +3001,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -3104,9 +3029,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--target=Release_x64"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -3137,10 +3060,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000",
           "--target=Release_x64"
         ],
@@ -3151,7 +3071,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -3175,7 +3095,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3200,7 +3119,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3227,7 +3146,6 @@
       {
         "args": [
           "--enable-backend-validation=partial",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3254,7 +3172,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3330,7 +3247,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -3359,9 +3275,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--target=Release_x64"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -3392,10 +3306,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000",
           "--target=Release_x64"
         ],
@@ -3406,7 +3317,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -3430,7 +3341,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3455,7 +3365,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3482,7 +3392,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3509,7 +3418,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3585,7 +3493,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -3614,9 +3521,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu",
           "--target=Release_x64"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -3647,10 +3552,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000",
           "--target=Release_x64"
         ],
@@ -3661,7 +3563,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -3687,7 +3589,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3712,7 +3613,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3739,7 +3640,6 @@
       {
         "args": [
           "--enable-backend-validation=partial",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3766,7 +3666,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3842,7 +3741,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -3871,9 +3769,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator"
+          "--flag-specific=webgpu"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -3903,10 +3799,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -3916,7 +3809,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -3940,7 +3833,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3965,7 +3857,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -3992,7 +3884,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4019,7 +3910,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4095,7 +3985,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -4124,9 +4013,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator"
+          "--flag-specific=webgpu"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -4156,10 +4043,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -4169,7 +4053,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -4193,7 +4077,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4218,7 +4101,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4245,7 +4128,6 @@
       {
         "args": [
           "--enable-backend-validation=partial",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4272,7 +4154,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4348,7 +4229,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -4377,9 +4257,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator"
+          "--flag-specific=webgpu"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -4409,10 +4287,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -4422,7 +4297,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },
@@ -4446,7 +4321,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4471,7 +4345,7 @@
       },
       {
         "args": [
-          "--enable-toggles=skip_validation,use_tint_generator",
+          "--enable-toggles=skip_validation",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4498,7 +4372,6 @@
       {
         "args": [
           "--enable-backend-validation",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4525,7 +4398,6 @@
       {
         "args": [
           "--use-wire",
-          "--enable-toggles=use_tint_generator",
           "--use-gpu-in-tests",
           "--test-launcher-retry-limit=0",
           "--exclusive-device-type-preference=discrete,integrated"
@@ -4601,7 +4473,6 @@
     "isolated_scripts": [
       {
         "args": [
-          "--enable-toggles=use_tint_generator",
           "--override-steps=1",
           "--gtest-benchmark-name=dawn_perf_tests",
           "-v"
@@ -4630,9 +4501,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator"
+          "--flag-specific=webgpu"
         ],
         "isolate_name": "webgpu_blink_web_tests",
         "merge": {
@@ -4662,10 +4531,7 @@
       {
         "args": [
           "--initialize-webgpu-adapter-at-startup-timeout-ms=60000",
-          "--additional-driver-flag=--enable-dawn-backend-validation=partial",
-          "--additional-driver-flag=--disable-dawn-features=disallow_unsafe_apis",
-          "--additional-driver-flag=--use-gpu-in-tests",
-          "--additional-driver-flag=--enable-dawn-features=use_tint_generator",
+          "--flag-specific=webgpu-with-partial-backend-validation",
           "--time-out-ms=30000"
         ],
         "isolate_name": "webgpu_blink_web_tests",
@@ -4675,7 +4541,7 @@
           ],
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
-        "name": "webgpu_blink_web_tests_with_backend_validation",
+        "name": "webgpu_blink_web_tests_with_partial_backend_validation",
         "resultdb": {
           "enable": true
         },

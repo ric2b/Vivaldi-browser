@@ -39,7 +39,6 @@
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/common/input/web_pointer_event.h"
-#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -202,7 +201,7 @@ class TestPluginWebFrameClient : public frame_test_helpers::TestWebFrameClient {
       const WebString& fallback_name,
       const FramePolicy&,
       const WebFrameOwnerProperties&,
-      mojom::blink::FrameOwnerElementType owner_type,
+      FrameOwnerElementType owner_type,
       WebPolicyContainerBindParams policy_container_bind_params) override {
     return CreateLocalChild(*Frame(), scope,
                             std::make_unique<TestPluginWebFrameClient>(),
@@ -1322,8 +1321,8 @@ TEST_F(WebPluginContainerTest, ClippedRectsForShiftedIframedElement) {
       web_view->SmoothScroll(root_document_scroll_to.Width(),
                              root_document_scroll_to.Height(),
                              base::TimeDelta());
-      iframe->SetScrollOffset(gfx::ScrollOffset(iframe_scroll_to.Width(),
-                                                iframe_scroll_to.Height()));
+      iframe->SetScrollOffset(
+          gfx::Vector2dF(iframe_scroll_to.Width(), iframe_scroll_to.Height()));
       UpdateAllLifecyclePhases(web_view);
       RunPendingTasks();
 
@@ -1476,7 +1475,7 @@ TEST_F(WebPluginContainerTest, CompositedPluginCAP) {
   auto paint_controller =
       std::make_unique<PaintController>(PaintController::kTransient);
   paint_controller->UpdateCurrentPaintChunkProperties(
-      nullptr, PropertyTreeState::Root());
+      PropertyTreeState::Root());
   GraphicsContext graphics_context(*paint_controller);
   container->Paint(graphics_context, kGlobalPaintNormalPhase,
                    CullRect(IntRect(10, 10, 400, 300)));

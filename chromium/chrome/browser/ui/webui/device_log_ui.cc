@@ -29,14 +29,18 @@ namespace {
 class DeviceLogMessageHandler : public content::WebUIMessageHandler {
  public:
   DeviceLogMessageHandler() {}
+
+  DeviceLogMessageHandler(const DeviceLogMessageHandler&) = delete;
+  DeviceLogMessageHandler& operator=(const DeviceLogMessageHandler&) = delete;
+
   ~DeviceLogMessageHandler() override {}
 
   // WebUIMessageHandler implementation.
   void RegisterMessages() override {
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "getLog", base::BindRepeating(&DeviceLogMessageHandler::GetLog,
                                       base::Unretained(this)));
-    web_ui()->RegisterMessageCallback(
+    web_ui()->RegisterDeprecatedMessageCallback(
         "clearLog", base::BindRepeating(&DeviceLogMessageHandler::ClearLog,
                                         base::Unretained(this)));
   }
@@ -54,8 +58,6 @@ class DeviceLogMessageHandler : public content::WebUIMessageHandler {
   void ClearLog(const base::ListValue* value) const {
     device_event_log::ClearAll();
   }
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceLogMessageHandler);
 };
 
 }  // namespace

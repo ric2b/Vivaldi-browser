@@ -10,7 +10,7 @@
 // #import {FakeContactManager} from '../../nearby_share/shared/fake_nearby_contact_manager.m.js';
 // #import {FakeNearbyShareSettings} from '../../nearby_share/shared/fake_nearby_share_settings.m.js';
 // #import {FakeReceiveManager} from './fake_receive_manager.m.js'
-// #import {isVisible, waitAfterNextRender} from 'chrome://test/test_util.m.js';
+// #import {isVisible, waitAfterNextRender} from 'chrome://test/test_util.js';
 // #import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 // clang-format on
 
@@ -51,43 +51,15 @@ suite('NearbyShare', function() {
   /** @type {nearby_share.AccountManagerBrowserProxy} */
   let accountManagerBrowserProxy = null;
   /** @type {!nearby_share.FakeContactManager} */
-  const fakeContactManager = new nearby_share.FakeContactManager();
+  let fakeContactManager = null;
   /** @type {!nearby_share.FakeNearbyShareSettings} */
   let fakeSettings = null;
 
   setup(function() {
-    accountManagerBrowserProxy = new TestAccountManagerBrowserProxy();
-    nearby_share.NearbyAccountManagerBrowserProxyImpl.instance_ =
-        accountManagerBrowserProxy;
-
-    fakeReceiveManager = new nearby_share.FakeReceiveManager();
-    nearby_share.setReceiveManagerForTesting(fakeReceiveManager);
-
-    nearby_share.setContactManagerForTesting(fakeContactManager);
-    fakeContactManager.setupContactRecords();
-
-    fakeSettings = new nearby_share.FakeNearbyShareSettings();
+    setupFakes();
     fakeSettings.setEnabled(true);
-    nearby_share.setNearbyShareSettingsForTesting(fakeSettings);
 
-    PolymerTest.clearBody();
-    subpage = document.createElement('settings-nearby-share-subpage');
-    subpage.prefs = {
-      'nearby_sharing': {
-        'enabled': {
-          value: true,
-        },
-        'data_usage': {
-          value: 3,
-        },
-        'device_name': {
-          value: '',
-        }
-      }
-    };
-
-    document.body.appendChild(subpage);
-    Polymer.dom.flush();
+    createSubpage(/*is_enabled=*/ true, /*is_onboarding_complete=*/ true);
 
     featureToggleButton = subpage.$$('#featureToggleButton');
   });
@@ -97,11 +69,80 @@ suite('NearbyShare', function() {
     settings.Router.getInstance().resetRouteForTesting();
   });
 
+  function setupFakes() {
+    accountManagerBrowserProxy = new TestAccountManagerBrowserProxy();
+    nearby_share.NearbyAccountManagerBrowserProxyImpl.instance_ =
+        accountManagerBrowserProxy;
+
+    fakeReceiveManager = new nearby_share.FakeReceiveManager();
+    nearby_share.setReceiveManagerForTesting(fakeReceiveManager);
+
+    fakeContactManager = new nearby_share.FakeContactManager();
+    nearby_share.setContactManagerForTesting(fakeContactManager);
+    fakeContactManager.setupContactRecords();
+
+    fakeSettings = new nearby_share.FakeNearbyShareSettings();
+    nearby_share.setNearbyShareSettingsForTesting(fakeSettings);
+  }
+
+  function createSubpage(is_enabled, is_onboarding_complete) {
+    PolymerTest.clearBody();
+
+    subpage = document.createElement('settings-nearby-share-subpage');
+    subpage.prefs = {
+      'nearby_sharing': {
+        'enabled': {
+          value: is_enabled,
+        },
+        'data_usage': {
+          value: 3,
+        },
+        'device_name': {
+          value: '',
+        },
+        'onboarding_complete': {
+          value: is_onboarding_complete,
+        },
+      }
+    };
+
+    document.body.appendChild(subpage);
+    Polymer.dom.flush();
+  }
+
   // Returns true if the element exists and has not been 'removed' by the
   // Polymer template system.
   function doesElementExist(selector) {
     const el = subpage.$$(selector);
     return (el !== null) && (el.style.display !== 'none');
+  }
+
+  function subpageControlsHidden(is_hidden) {
+    assertEquals(is_hidden, !doesElementExist('#highVisibilityToggle'));
+    assertEquals(is_hidden, !doesElementExist('#editDeviceNameButton'));
+    assertEquals(is_hidden, !doesElementExist('#editVisibilityButton'));
+    assertEquals(is_hidden, !doesElementExist('#editDataUsageButton'));
+  }
+
+  function subpageControlsDisabled(is_disabled) {
+    assertEquals(
+        is_disabled,
+        subpage.$$('#highVisibilityToggle').hasAttribute('disabled'));
+    assertEquals(
+        is_disabled,
+        subpage.$$('#editDeviceNameButton').hasAttribute('disabled'));
+    assertEquals(
+        is_disabled,
+        subpage.$$('#editVisibilityButton').hasAttribute('disabled'));
+    assertEquals(
+        is_disabled,
+        subpage.$$('#editDataUsageButton').hasAttribute('disabled'));
+  }
+
+  function flushAsync() {
+    Polymer.dom.flush();
+    // Use setTimeout to wait for the next macrotask.
+    return new Promise(resolve => setTimeout(resolve));
   }
 
   test('feature toggle button controls preference', function() {
@@ -110,10 +151,8 @@ suite('NearbyShare', function() {
     assertEquals(true, featureToggleButton.checked);
     assertEquals(true, subpage.prefs.nearby_sharing.enabled.value);
     assertEquals('On', featureToggleButton.label.trim());
-    assertTrue(doesElementExist('#highVisibilityToggle'));
-    assertTrue(doesElementExist('#editDeviceNameButton'));
-    assertTrue(doesElementExist('#editVisibilityButton'));
-    assertTrue(doesElementExist('#editDataUsageButton'));
+    subpageControlsHidden(false);
+    subpageControlsDisabled(false);
 
     featureToggleButton.click();
     Polymer.dom.flush();
@@ -121,10 +160,7 @@ suite('NearbyShare', function() {
     assertEquals(false, featureToggleButton.checked);
     assertEquals(false, subpage.prefs.nearby_sharing.enabled.value);
     assertEquals('Off', featureToggleButton.label.trim());
-    assertFalse(doesElementExist('#highVisibilityToggle'));
-    assertFalse(doesElementExist('#editDeviceNameButton'));
-    assertFalse(doesElementExist('#editVisibilityButton'));
-    assertFalse(doesElementExist('#editDataUsageButton'));
+    subpageControlsHidden(true);
   });
 
   test('toggle row controls preference', function() {
@@ -152,10 +188,6 @@ suite('NearbyShare', function() {
       test(
           'Deep link to nearby setting element ' + testData.deepLinkElement,
           async () => {
-            loadTimeData.overrideValues({
-              isDeepLinkingEnabled: true,
-            });
-
             const params = new URLSearchParams;
             params.append('settingId', testData.settingId);
             settings.Router.getInstance().navigateTo(
@@ -388,9 +420,46 @@ suite('NearbyShare', function() {
     performance.now = originalNow;
   });
 
-  test('download contacts on attach', () => {
+  test('download contacts on attach', async () => {
+    await flushAsync();
     // Ensure contacts download occurs when the subpage is attached.
     assertTrue(fakeContactManager.downloadContactsCalled);
+  });
+
+  test('Do not download contacts on attach pre-onboarding', async () => {
+    await flushAsync();
+
+    subpage.remove();
+    settings.Router.getInstance().resetRouteForTesting();
+
+    setupFakes();
+    fakeSettings.setEnabled(false);
+    createSubpage(/*is_enabled=*/ false, /*is_onboarding_complete=*/ false);
+
+    await flushAsync();
+    // Ensure contacts download occurs when the subpage is attached.
+    assertFalse(fakeContactManager.downloadContactsCalled);
+  });
+
+  test('Show setup button pre-onboarding', async () => {
+    await flushAsync();
+
+    subpage.remove();
+    settings.Router.getInstance().resetRouteForTesting();
+
+    setupFakes();
+    createSubpage(/*is_enabled=*/ false, /*is_onboarding_complete=*/ false);
+
+    await flushAsync();
+    assertFalse(doesElementExist('#featureToggleButton'));
+    assertTrue(doesElementExist('#setupRow'));
+
+    // Clicking starts onboarding flow
+    subpage.$$('#setupRow').querySelector('cr-button').click();
+    await flushAsync();
+    assertTrue(doesElementExist('#receiveDialog'));
+    assertEquals(
+        'active', subpage.$$('#receiveDialog').$$('#onboarding').className);
   });
 
   test('feature toggle UI changes', function() {
@@ -451,11 +520,57 @@ suite('NearbyShare', function() {
     assertEquals('Off', featureToggleButton.label.trim());
     assertEquals('none', subpageContent.style.display);
     assertEquals('none', subpage.$$('#helpContent').style.display);
-    assertFalse(doesElementExist('#highVisibilityToggle'));
-    assertFalse(doesElementExist('#editDeviceNameButton'));
-    assertFalse(doesElementExist('#editVisibilityButton'));
-    assertFalse(doesElementExist('#editDataUsageButton'));
+    subpageControlsHidden(true);
     assertFalse(doesElementExist('#help'));
   });
 
+  test('Fast init toggle doesn\'t exist', function() {
+    assertFalse(!!subpage.$$('#fastInitiationNotificationToggle'));
+  });
+
+  suite('Background Scanning Enabled', function() {
+    suiteSetup(function() {
+      loadTimeData.overrideValues({
+        isNearbyShareBackgroundScanningEnabled: true,
+      });
+    });
+
+    test('Fast initiation notification toggle', async () => {
+      const fastInitToggle = subpage.$$('#fastInitiationNotificationToggle');
+      assertTrue(!!fastInitToggle);
+      await flushAsync();
+      assertTrue(fastInitToggle.checked);
+      assertEquals(
+          nearbyShare.mojom.FastInitiationNotificationState.kEnabled,
+          subpage.settings.fastInitiationNotificationState);
+
+      fastInitToggle.click();
+      await flushAsync();
+      assertFalse(fastInitToggle.checked);
+      assertEquals(
+          nearbyShare.mojom.FastInitiationNotificationState.kDisabledByUser,
+          subpage.settings.fastInitiationNotificationState);
+    });
+
+    test('Subpage content visible but disabled when feature off', async () => {
+      featureToggleButton.click();
+      Polymer.dom.flush();
+
+      assertEquals(false, featureToggleButton.checked);
+      assertEquals(false, subpage.prefs.nearby_sharing.enabled.value);
+      assertEquals('Off', featureToggleButton.label.trim());
+
+      subpageControlsHidden(false);
+      subpageControlsDisabled(true);
+    });
+
+    test('Subpage content not visible pre-onboarding', async () => {
+      featureToggleButton.click();
+      subpage.set('prefs.nearby_sharing.onboarding_complete.value', false);
+      await flushAsync();
+
+      assertEquals(false, subpage.prefs.nearby_sharing.enabled.value);
+      subpageControlsHidden(true);
+    });
+  });
 });

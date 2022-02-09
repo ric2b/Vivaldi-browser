@@ -26,6 +26,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/language_preferences.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/ash/login/error_screens_histogram_helper.h"
@@ -49,7 +50,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_metrics.h"
@@ -92,10 +92,10 @@
 #include "extensions/browser/api/extensions_api_client.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
-#include "ui/base/ime/chromeos/ime_keyboard.h"
-#include "ui/base/ime/chromeos/input_method_descriptor.h"
-#include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/base/ime/chromeos/input_method_util.h"
+#include "ui/base/ime/ash/ime_keyboard.h"
+#include "ui/base/ime/ash/input_method_descriptor.h"
+#include "ui/base/ime/ash/input_method_manager.h"
+#include "ui/base/ime/ash/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -105,19 +105,16 @@
 
 namespace {
 
-// Max number of users to show.
-const size_t kMaxUsers = 18;
-
 // Timeout to delay first notification about offline state for a
 // current network.
-constexpr base::TimeDelta kOfflineTimeout = base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kOfflineTimeout = base::Seconds(1);
 
 // Timeout to delay first notification about offline state when authenticating
 // to a proxy.
-constexpr base::TimeDelta kProxyAuthTimeout = base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta kProxyAuthTimeout = base::Seconds(5);
 
 // Timeout used to prevent infinite connecting to a flaky network.
-constexpr base::TimeDelta kConnectingTimeout = base::TimeDelta::FromSeconds(60);
+constexpr base::TimeDelta kConnectingTimeout = base::Seconds(60);
 
 // Max number of Gaia Reload to Show Proxy Auth Dialog.
 const int kMaxGaiaReloadForProxyAuthDialog = 3;
@@ -126,6 +123,9 @@ class CallOnReturn {
  public:
   explicit CallOnReturn(base::OnceClosure callback)
       : callback_(std::move(callback)), call_scheduled_(false) {}
+
+  CallOnReturn(const CallOnReturn&) = delete;
+  CallOnReturn& operator=(const CallOnReturn&) = delete;
 
   ~CallOnReturn() {
     if (call_scheduled_ && !callback_.is_null())
@@ -138,8 +138,6 @@ class CallOnReturn {
  private:
   base::OnceClosure callback_;
   bool call_scheduled_;
-
-  DISALLOW_COPY_AND_ASSIGN(CallOnReturn);
 };
 
 }  // namespace
@@ -192,7 +190,8 @@ SigninScreenHandler::SigninScreenHandler(
       core_oobe_view_(core_oobe_view),
       proxy_auth_dialog_reload_times_(kMaxGaiaReloadForProxyAuthDialog),
       gaia_screen_handler_(gaia_screen_handler),
-      histogram_helper_(new ErrorScreensHistogramHelper("Signin")) {
+      histogram_helper_(
+          std::make_unique<ErrorScreensHistogramHelper>("Signin")) {
   DCHECK(network_state_informer_.get());
   DCHECK(error_screen_);
   DCHECK(core_oobe_view_);
@@ -386,16 +385,6 @@ void SigninScreenHandler::SetOfflineTimeoutForTesting(
     base::TimeDelta offline_timeout) {
   is_offline_timeout_for_test_set_ = true;
   offline_timeout_for_test_ = offline_timeout;
-}
-
-// TODO (crbug.com/1168114): Such method should be implemented in
-// native-view-based UI, and be removed here.
-bool SigninScreenHandler::GetKeyboardRemappedPrefValue(
-    const std::string& pref_name,
-    int* value) {
-  return focused_pod_account_id_ && focused_pod_account_id_->is_valid() &&
-         user_manager::known_user::GetIntegerPref(*focused_pod_account_id_,
-                                                  pref_name, value);
 }
 
 // SigninScreenHandler, private: -----------------------------------------------
@@ -720,10 +709,7 @@ void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
   if (!webui_visible_) {
     // There might be multiple messages from OOBE UI so send notifications after
     // the first one only.
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-        content::NotificationService::AllSources(),
-        content::NotificationService::NoDetails());
+    session_manager::SessionManager::Get()->NotifyLoginOrLockScreenVisible();
     TRACE_EVENT_NESTABLE_ASYNC_END0(
         "ui", "ShowLoginWebUI",
         TRACE_ID_WITH_SCOPE(LoginDisplayHostWebUI::kShowLoginWebUIid,
@@ -759,39 +745,6 @@ void SigninScreenHandler::HandleShowLoadingTimeoutError() {
 
 void SigninScreenHandler::HandleNoPodFocused() {
   focused_pod_account_id_.reset();
-}
-
-bool SigninScreenHandler::AllAllowlistedUsersPresent() {
-  CrosSettings* cros_settings = CrosSettings::Get();
-  bool allow_new_user = false;
-  cros_settings->GetBoolean(kAccountsPrefAllowNewUser, &allow_new_user);
-  if (allow_new_user)
-    return false;
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  const user_manager::UserList& users = user_manager->GetUsers();
-  if (!delegate_ || users.size() > kMaxUsers) {
-    return false;
-  }
-
-  bool allow_family_link = false;
-  cros_settings->GetBoolean(kAccountsPrefFamilyLinkAccountsAllowed,
-                            &allow_family_link);
-  if (allow_family_link)
-    return false;
-
-  const base::ListValue* allowlist = nullptr;
-  if (!cros_settings->GetList(kAccountsPrefUsers, &allowlist) || !allowlist)
-    return false;
-  for (size_t i = 0; i < allowlist->GetSize(); ++i) {
-    std::string allowlisted_user;
-    // NB: Wildcards in the allowlist are also detected as not present here.
-    if (!allowlist->GetString(i, &allowlisted_user) ||
-        !user_manager->IsKnownUser(
-            AccountId::FromUserEmail(allowlisted_user))) {
-      return false;
-    }
-  }
-  return true;
 }
 
 bool SigninScreenHandler::IsGaiaVisible() {

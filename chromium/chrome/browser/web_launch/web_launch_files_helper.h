@@ -40,6 +40,9 @@ class WebLaunchFilesHelper
  public:
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 
+  WebLaunchFilesHelper(const WebLaunchFilesHelper&) = delete;
+  WebLaunchFilesHelper& operator=(const WebLaunchFilesHelper&) = delete;
+
   ~WebLaunchFilesHelper() override;
 
   static WebLaunchFilesHelper* GetForWebContents(
@@ -80,8 +83,10 @@ class WebLaunchFilesHelper
   // renderer is ready to receive them.
   void MaybeSendLaunchEntries();
 
-  // After a permission check, tries to send the launch entries to the renderer.
-  void MaybeSendLaunchEntriesWithPermission(ContentSetting content_setting);
+  void OnPermissionRequestResponse(ContentSetting content_setting);
+
+  // Closes the app window/tab.
+  void CloseApp();
 
   // Send the launch entries to the renderer.
   void SendLaunchEntries();
@@ -103,7 +108,6 @@ class WebLaunchFilesHelper
   bool passed_permission_check_ = false;
 
   base::WeakPtrFactory<WebLaunchFilesHelper> weak_ptr_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(WebLaunchFilesHelper);
 };
 
 }  // namespace web_launch

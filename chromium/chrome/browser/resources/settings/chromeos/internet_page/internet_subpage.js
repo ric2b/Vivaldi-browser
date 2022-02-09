@@ -19,7 +19,7 @@ import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../os_settings_icons_css.m.js';
 import '../../settings_shared_css.js';
-import '../localized_link/localized_link.js';
+import '//resources/cr_components/chromeos/localized_link/localized_link.js';
 import './cellular_networks_list.js';
 import './network_always_on_vpn.js';
 
@@ -246,7 +246,10 @@ Polymer({
   /** @override */
   ready() {
     this.browserProxy_.setGmsCoreNotificationsDisabledDeviceNamesCallback(
-        this.onNotificationsDisabledDeviceNamesReceived_.bind(this));
+        (notificationsDisabledDeviceNames) => {
+          this.notificationsDisabledDeviceNames_ =
+              notificationsDisabledDeviceNames;
+        });
     this.browserProxy_.requestGmsCoreNotificationsDisabledDeviceNames();
 
     this.addFocusConfig_(routes.KNOWN_NETWORKS, '#knownNetworksSubpageButton');
@@ -514,6 +517,7 @@ Polymer({
         switch (state.typeState.vpn.type) {
           case mojom.VpnType.kL2TPIPsec:
           case mojom.VpnType.kOpenVPN:
+          case mojom.VpnType.kWireGuard:
             builtinNetworkStates.push(state);
             break;
           case mojom.VpnType.kArc:
@@ -573,15 +577,6 @@ Polymer({
       }
     }
     return configuredProviders.concat(unconfiguredProviders);
-  },
-
-  /**
-   * @param {!Array<string>} notificationsDisabledDeviceNames
-   * @private
-   */
-  onNotificationsDisabledDeviceNamesReceived_(
-      notificationsDisabledDeviceNames) {
-    this.notificationsDisabledDeviceNames_ = notificationsDisabledDeviceNames;
   },
 
   /**

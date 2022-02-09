@@ -51,6 +51,8 @@ class ThumbnailCaptureContents : protected content::WebContentsDelegate,
  private:
   ThumbnailCaptureContents();
   ~ThumbnailCaptureContents() override;
+  ThumbnailCaptureContents(const ThumbnailCaptureContents&) = delete;
+  ThumbnailCaptureContents& operator=(const ThumbnailCaptureContents&) = delete;
 
   void Start(content::BrowserContext* browser_context,
              const GURL& start_url,
@@ -128,8 +130,6 @@ class ThumbnailCaptureContents : protected content::WebContentsDelegate,
   CaptureCallback callback_;
 
   base::WeakPtrFactory<ThumbnailCaptureContents> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThumbnailCaptureContents);
 };
 
 }  // namespace vivaldi

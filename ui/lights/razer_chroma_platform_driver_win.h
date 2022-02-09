@@ -6,15 +6,15 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
-#include "base/task/cancelable_task_tracker.h"
 #include "thirdparty/ChromaSDK/inc/RzChromaSDKDefines.h"
 #include "thirdparty/ChromaSDK/inc/RzChromaSDKTypes.h"
 #include "thirdparty/ChromaSDK/inc/RzErrors.h"
 #include "ui/lights/razer_chroma_handler.h"
 
-#define MAX_EFFECTS     100
+#define MAX_EFFECTS 100
 
 struct EFFECTDATATYPE {
   LONG num_effects;
@@ -30,9 +30,8 @@ struct GUIDCompare {
   }
 };
 
-
 class RazerChromaPlatformDriverWin : public RazerChromaPlatformDriver {
-public:
+ public:
   explicit RazerChromaPlatformDriverWin(Profile* profile);
   ~RazerChromaPlatformDriverWin() override;
 

@@ -167,7 +167,6 @@ bool MenubarAPI::HasActiveWindow() {
   for (auto* browser : *BrowserList::GetInstance()) {
     if (browser->window() && browser->window()->IsActive()) {
       return true;
-      break;
     }
   }
   return false;
@@ -191,14 +190,14 @@ bool MenubarAPI::HandleActionById(content::BrowserContext* browser_context,
 }
 
 ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
-  auto params = menubar::Setup::Params::Create(*args_);
+  auto params = menubar::Setup::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   // Set up map based on the incoming actions and update id to match this map.
   if (SetIds(&params->items, true)) {
     for (auto* browser : *BrowserList::GetInstance()) {
       chrome::BrowserCommandController* command_controller =
-        browser->command_controller();
+          browser->command_controller();
       command_controller->InitVivaldiCommandState();
     }
   }
@@ -206,7 +205,8 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
 #if defined(OS_MAC)
   // There may be no windows. Allow a nullptr profile.
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode, IDC_VIV_DYNAMIC_MENU_ID_START, tag_counter);
+  ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode,
+                                   IDC_VIV_DYNAMIC_MENU_ID_START, tag_counter);
   return RespondNow(NoArguments());
 #else
   return RespondNow(Error("NOT IMPLEMENTED"));

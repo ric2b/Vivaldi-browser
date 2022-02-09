@@ -61,6 +61,9 @@ class SharedWorkerHost::ScopedDevToolsHandle {
         owner, &pause_on_start_, &dev_tools_token_);
   }
 
+  ScopedDevToolsHandle(const ScopedDevToolsHandle&) = delete;
+  ScopedDevToolsHandle& operator=(const ScopedDevToolsHandle&) = delete;
+
   ~ScopedDevToolsHandle() {
     SharedWorkerDevToolsManager::GetInstance()->WorkerDestroyed(owner_);
   }
@@ -88,20 +91,18 @@ class SharedWorkerHost::ScopedDevToolsHandle {
   bool pause_on_start_;
 
   base::UnguessableToken dev_tools_token_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedDevToolsHandle);
 };
 
 class SharedWorkerHost::ScopedProcessHostRef {
  public:
   explicit ScopedProcessHostRef(RenderProcessHost* render_process_host)
       : render_process_host_(render_process_host) {
-    render_process_host_->IncrementKeepAliveRefCount();
+    render_process_host_->IncrementWorkerRefCount();
   }
 
   ~ScopedProcessHostRef() {
-    if (!render_process_host_->IsKeepAliveRefCountDisabled())
-      render_process_host_->DecrementKeepAliveRefCount();
+    if (!render_process_host_->AreRefCountsDisabled())
+      render_process_host_->DecrementWorkerRefCount();
   }
 
   ScopedProcessHostRef(const ScopedProcessHostRef& other) = delete;
@@ -163,6 +164,15 @@ SharedWorkerHost::~SharedWorkerHost() {
       info.client->OnScriptLoadFailed(/*error_message=*/"");
   }
 
+  // Send any final reports and allow the reporting configuration to be
+  // removed.
+  if (site_instance_->HasProcess()) {
+    GetProcessHost()
+        ->GetStoragePartition()
+        ->GetNetworkContext()
+        ->SendReportsAndRemoveSource(reporting_source_);
+  }
+
   // Notify the service that each client still connected will be removed and
   // that the worker will terminate.
   for (const auto& client : clients_) {
@@ -211,6 +221,18 @@ void SharedWorkerHost::Start(
       // result of obtaining an embedder policy from response.
       worker_cross_origin_embedder_policy_ = CoepFromMainResponse(
           final_response_url, main_script_load_params->response_head.get());
+    }
+    switch (worker_cross_origin_embedder_policy_->value) {
+      case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
+        OnFeatureUsed(blink::mojom::WebFeature::kCoepNoneSharedWorker);
+        break;
+      case network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless:
+        OnFeatureUsed(
+            blink::mojom::WebFeature::kCoepCredentiallessSharedWorker);
+        break;
+      case network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp:
+        OnFeatureUsed(blink::mojom::WebFeature::kCoepRequireCorpSharedWorker);
+        break;
     }
 
     // Create a COEP reporter with worker's policy.
@@ -280,13 +302,11 @@ void SharedWorkerHost::Start(
   factory_->CreateSharedWorker(
       std::move(info), token_, instance_.storage_key().origin(),
       GetContentClient()->browser()->GetUserAgent(),
+      GetContentClient()->browser()->GetReducedUserAgent(),
       GetContentClient()->browser()->GetUserAgentMetadata(),
       devtools_handle_->pause_on_start(), devtools_handle_->dev_tools_token(),
       std::move(renderer_preferences), std::move(preference_watcher_receiver),
       std::move(content_settings), service_worker_handle_->TakeContainerInfo(),
-      appcache_handle_
-          ? absl::make_optional(appcache_handle_->appcache_host_id())
-          : absl::nullopt,
       std::move(main_script_load_params),
       std::move(subresource_loader_factories), std::move(controller),
       receiver_.BindNewPipeAndPassRemote(), std::move(worker_receiver_),
@@ -297,13 +317,8 @@ void SharedWorkerHost::Start(
   // request endpoint was sent, it can be used, so add it to
   // ServiceWorkerObjectHost.
   if (service_worker_remote_object.is_valid()) {
-    RunOrPostTaskOnThread(
-        FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
-        base::BindOnce(
-            &ServiceWorkerObjectHost::AddRemoteObjectPtrAndUpdateState,
-            controller_service_worker_object_host,
-            std::move(service_worker_remote_object),
-            service_worker_sent_state));
+    controller_service_worker_object_host->AddRemoteObjectPtrAndUpdateState(
+        std::move(service_worker_remote_object), service_worker_sent_state);
   }
 
   // Monitor the lifetime of the worker.
@@ -367,8 +382,15 @@ SharedWorkerHost::CreateNetworkFactoryParamsForSubresources() {
       URLLoaderFactoryParamsHelper::CreateForWorker(
           GetProcessHost(), origin,
           net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                     // TODO(https://crbug.com/1147281): We
+                                     // should pass the top_level_site from
+                                     // `GetStorageKey()` instead.
                                      origin, origin,
-                                     net::SiteForCookies::FromOrigin(origin)),
+                                     net::SiteForCookies::FromOrigin(origin),
+                                     /*party_context=*/absl::nullopt,
+                                     GetStorageKey().nonce().has_value()
+                                         ? &GetStorageKey().nonce().value()
+                                         : nullptr),
           std::move(coep_reporter),
           /*url_loader_network_observer=*/mojo::NullRemote(),
           /*devtools_observer=*/mojo::NullRemote(),

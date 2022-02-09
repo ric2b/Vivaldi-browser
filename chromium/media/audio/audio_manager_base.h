@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
@@ -34,6 +35,9 @@ class AudioOutputDispatcher;
 class MEDIA_EXPORT AudioManagerBase : public AudioManager {
  public:
   enum class VoiceProcessingMode { kDisabled = 0, kEnabled = 1 };
+
+  AudioManagerBase(const AudioManagerBase&) = delete;
+  AudioManagerBase& operator=(const AudioManagerBase&) = delete;
 
   ~AudioManagerBase() override;
 
@@ -211,8 +215,6 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
 
   // Debug recording manager.
   std::unique_ptr<AudioDebugRecordingManager> debug_recording_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(AudioManagerBase);
 };
 
 }  // namespace media

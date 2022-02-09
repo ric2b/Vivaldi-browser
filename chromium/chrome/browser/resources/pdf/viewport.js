@@ -4,10 +4,10 @@
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
-import {$, hasKeyModifiers} from 'chrome://resources/js/util.m.js';
+import {$, hasKeyModifiers, isRTL} from 'chrome://resources/js/util.m.js';
 
 import {FittingType, Point} from './constants.js';
-import {GestureDetector, PinchEventDetail} from './gesture_detector.js';
+import {Gesture, GestureDetector, PinchEventDetail} from './gesture_detector.js';
 import {InactiveZoomManager, ZoomManager} from './zoom_manager.js';
 
 /**
@@ -22,6 +22,7 @@ let DocumentDimensions;
 
 /**
  * @typedef {{
+ *   direction: number,
  *   defaultPageOrientation: number,
  *   twoUpViewEnabled: boolean,
  * }}
@@ -1042,9 +1043,16 @@ export class Viewport {
 
   /**
    * @param {!KeyboardEvent} e
+   * @param {boolean} formFieldFocused
    * @private
    */
-  pageUpDownSpaceHandler_(e) {
+  pageUpDownSpaceHandler_(e, formFieldFocused) {
+    // Avoid scrolling if the space key is down while a form field is focused
+    // on since the user might be typing space into the field.
+    if (formFieldFocused && e.key === ' ') {
+      return;
+    }
+
     const direction =
         e.key === 'PageUp' || (e.key === ' ' && e.shiftKey) ? -1 : 1;
     // Go to the previous/next page if we are fit-to-page or fit-to-height.
@@ -1055,7 +1063,10 @@ export class Viewport {
     } else if (
         /** @type {!{fromScriptingAPI: (boolean|undefined)}} */ (e)
             .fromScriptingAPI) {
-      this.position.y += direction * this.size.height;
+      this.position = {
+        x: this.position.x,
+        y: this.position.y + direction * this.size.height,
+      };
     }
   }
 
@@ -1140,7 +1151,7 @@ export class Viewport {
       case ' ':
       case 'PageUp':
       case 'PageDown':
-        this.pageUpDownSpaceHandler_(e);
+        this.pageUpDownSpaceHandler_(e, formFieldFocused);
         return true;
       case 'ArrowLeft':
         this.arrowLeftHandler_(e, formFieldFocused);
@@ -1237,6 +1248,18 @@ export class Viewport {
     this.mightZoom_(() => {
       const initialDimensions = !this.documentDimensions_;
       this.documentDimensions_ = documentDimensions;
+
+      // Override layout direction based on isRTL().
+      if (this.documentDimensions_.layoutOptions) {
+        if (isRTL()) {
+          // `base::i18n::TextDirection::RIGHT_TO_LEFT`
+          this.documentDimensions_.layoutOptions.direction = 1;
+        } else {
+          // `base::i18n::TextDirection::LEFT_TO_RIGHT`
+          this.documentDimensions_.layoutOptions.direction = 2;
+        }
+      }
+
       this.pageDimensions_ = this.documentDimensions_.pageDimensions;
       if (initialDimensions) {
         this.setZoomInternal_(Math.min(
@@ -1378,6 +1401,15 @@ export class Viewport {
     if (this.tracker_) {
       this.tracker_.removeAll();
     }
+  }
+
+  /**
+   * Dispatches a gesture external to this viewport.
+   * @param {!Gesture} gesture The gesture to dispatch.
+   */
+  dispatchGesture(gesture) {
+    this.gestureDetector_.getEventTarget().dispatchEvent(
+        new CustomEvent(gesture.type, {detail: gesture.detail}));
   }
 
   /**

@@ -78,11 +78,6 @@ BOOL IsShowcaseModelValid(NSArray<showcase::ModelRow*>* model) {
     },
 #endif
     @{
-      showcase::kClassForDisplayKey : @"ContentSuggestionsViewController",
-      showcase::kClassForInstantiationKey : @"SCContentSuggestionsCoordinator",
-      showcase::kUseCaseKey : @"Content Suggestions UI",
-    },
-    @{
       showcase::kClassForDisplayKey : @"SettingsViewController",
       showcase::kClassForInstantiationKey : @"SCSettingsCoordinator",
       showcase::kUseCaseKey : @"Main settings screen",
@@ -193,6 +188,11 @@ BOOL IsShowcaseModelValid(NSArray<showcase::ModelRow*>* model) {
       showcase::
       kClassForInstantiationKey : @"SCFirstRunScrollingScreenCoordinator",
       showcase::kUseCaseKey : @"New FRE screen with scrolling example",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"LinkPreviewViewController",
+      showcase::kClassForInstantiationKey : @"SCLinkPreviewCoordinator",
+      showcase::kUseCaseKey : @"Link Preview",
     },
   ];
   DCHECK(IsShowcaseModelValid(model));

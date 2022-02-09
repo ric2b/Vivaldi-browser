@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_split.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/hang_watcher.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -45,6 +49,7 @@
 #include "media/mojo/buildflags.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -64,12 +69,6 @@ namespace {
 class DelayedHttpResponseWithResolver final
     : public net::test_server::BasicHttpResponse {
  public:
-  struct ResponseWithCallbacks final {
-    net::test_server::SendBytesCallback send_callback;
-    net::test_server::SendCompleteCallback done_callback;
-    std::string response_string;
-  };
-
   class Resolver final : public base::RefCountedThreadSafe<Resolver> {
    public:
     void Resolve() {
@@ -81,17 +80,17 @@ class DelayedHttpResponseWithResolver final
         return;
       }
 
-      task_runner_->PostTask(
-          FROM_HERE,
-          base::BindOnce(&Resolver::ResolveInServerTaskRunner, this));
+      for (auto& response : response_closures_)
+        task_runner_->PostTask(FROM_HERE, std::move(response));
+
+      response_closures_.clear();
     }
 
-    void Add(ResponseWithCallbacks response) {
+    void Add(base::OnceClosure response) {
       base::AutoLock auto_lock(lock_);
 
       if (resolved_) {
-        response.send_callback.Run(response.response_string,
-                                   std::move(response.done_callback));
+        std::move(response).Run();
         return;
       }
 
@@ -103,25 +102,16 @@ class DelayedHttpResponseWithResolver final
         task_runner_ = std::move(task_runner);
       }
 
-      responses_with_callbacks_.push_back(std::move(response));
+      response_closures_.push_back(std::move(response));
     }
 
    private:
-    void ResolveInServerTaskRunner() {
-      auto responses_with_callbacks = std::move(responses_with_callbacks_);
-      for (auto& response_with_callbacks : responses_with_callbacks) {
-        response_with_callbacks.send_callback.Run(
-            response_with_callbacks.response_string,
-            std::move(response_with_callbacks.done_callback));
-      }
-    }
-
     friend class base::RefCountedThreadSafe<Resolver>;
     ~Resolver() = default;
 
     base::Lock lock_;
 
-    std::vector<ResponseWithCallbacks> responses_with_callbacks_;
+    std::vector<base::OnceClosure> response_closures_;
     bool resolved_ GUARDED_BY(lock_) = false;
     scoped_refptr<base::SingleThreadTaskRunner> task_runner_ GUARDED_BY(lock_);
   };
@@ -134,9 +124,12 @@ class DelayedHttpResponseWithResolver final
   DelayedHttpResponseWithResolver& operator=(
       const DelayedHttpResponseWithResolver&) = delete;
 
-  void SendResponse(const net::test_server::SendBytesCallback& send,
-                    net::test_server::SendCompleteCallback done) override {
-    resolver_->Add({send, std::move(done), ToResponseString()});
+  void SendResponse(
+      base::WeakPtr<net::test_server::HttpResponseDelegate> delegate) override {
+    resolver_->Add(base::BindOnce(
+        &net::test_server::HttpResponseDelegate::SendHeadersContentAndFinish,
+        delegate, code(), GetHttpReasonPhrase(code()), BuildHeaders(),
+        content()));
   }
 
  private:
@@ -547,6 +540,11 @@ class RenderProcessHostObserverCounter : public RenderProcessHostObserver {
     observed_host_ = host;
   }
 
+  RenderProcessHostObserverCounter(const RenderProcessHostObserverCounter&) =
+      delete;
+  RenderProcessHostObserverCounter& operator=(
+      const RenderProcessHostObserverCounter&) = delete;
+
   ~RenderProcessHostObserverCounter() override {
     if (observing_)
       observed_host_->RemoveObserver(this);
@@ -577,12 +575,12 @@ class RenderProcessHostObserverCounter : public RenderProcessHostObserver {
   int destroyed_count_ = 0;
   bool observing_ = false;
   RenderProcessHost* observed_host_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderProcessHostObserverCounter);
 };
 
-// Check that the spare renderer is properly destroyed via
-// DisableKeepAliveRefCount.
+// Check that the spare renderer is properly destroyed via DisableRefCounts().
+// Note: DisableRefCounts() used to be called DisableKeepAliveRefCount();
+// the name if this test is left unchanged to avoid disrupt any tracking
+// tools (e.g. flakiness) that might reference the old name.
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareVsDisableKeepAliveRefCount) {
   RenderProcessHost::WarmupSpareRenderProcessHost(
       ShellContentBrowserClient::Get()->browser_context());
@@ -595,7 +593,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareVsDisableKeepAliveRefCount) {
   RenderProcessHostWatcher process_watcher(
       spare_renderer, RenderProcessHostWatcher::WATCH_FOR_HOST_DESTRUCTION);
 
-  spare_renderer->DisableKeepAliveRefCount();
+  spare_renderer->DisableRefCounts();
 
   process_watcher.Wait();
   EXPECT_TRUE(process_watcher.did_exit_normally());
@@ -611,8 +609,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareVsDisableKeepAliveRefCount) {
   DCHECK_EQ(1, counter.destroyed_count());
 }
 
-// Check that the spare renderer is properly destroyed via
-// DisableKeepAliveRefCount.
+// Check that the spare renderer is properly destroyed via DisableRefCounts().
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareVsFastShutdown) {
   RenderProcessHost::WarmupSpareRenderProcessHost(
       ShellContentBrowserClient::Get()->browser_context());
@@ -1065,7 +1062,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess) {
   host_destructions_ = 0;
   process_exits_ = 0;
   Observe(rph);
-  rfh->SetKeepAliveTimeoutForTesting(base::TimeDelta::FromSeconds(30));
+  rfh->SetKeepAliveTimeoutForTesting(base::Seconds(30));
 
   // Navigate to a site that will be in a different process.
   base::TimeTicks start = base::TimeTicks::Now();
@@ -1074,7 +1071,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess) {
 
   WaitUntilProcessExits(1);
 
-  EXPECT_LT(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(30));
+  EXPECT_LT(base::TimeTicks::Now() - start, base::Seconds(30));
 }
 
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
@@ -1092,7 +1089,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
       shell()->web_contents()->GetMainFrame()->GetProcess());
   // 1 for the service worker.
-  EXPECT_EQ(rph->keep_alive_ref_count(), 1u);
+  EXPECT_EQ(rph->worker_ref_count(), 1u);
+  EXPECT_EQ(rph->keep_alive_ref_count(), 0u);
 
   // We use /workers/send-beacon.html, not send-beacon.html, due to the
   // service worker scope rule.
@@ -1103,7 +1101,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   // We are still using the same process.
   ASSERT_EQ(shell()->web_contents()->GetMainFrame()->GetProcess(), rph);
   // 1 for the service worker, 1 for the keepalive fetch.
-  EXPECT_EQ(rph->keep_alive_ref_count(), 2u);
+  EXPECT_EQ(rph->keep_alive_ref_count(), 1u);
+  EXPECT_EQ(rph->worker_ref_count(), 1u);
 }
 
 // Test is flaky on Android builders: https://crbug.com/875179
@@ -1115,6 +1114,17 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
 #endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
                        MAYBE_KeepAliveRendererProcess_Hung) {
+  // Disable HangWatcher so it doesn't interfere with this test when hangs take
+  // place.
+  base::HangWatcher::StopMonitoringForTesting();
+
+  // The test assumes that the render process exits after 1 second. But this
+  // will be prevented if the process still hosts a bfcached page. So disable
+  // BFCache for this test.
+  content::DisableBackForwardCacheForTesting(
+      shell()->web_contents(),
+      content::BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   embedded_test_server()->RegisterRequestHandler(
       base::BindRepeating(HandleHungBeacon, base::RepeatingClosure()));
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1140,14 +1150,14 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   host_destructions_ = 0;
   process_exits_ = 0;
   Observe(rph);
-  rfh->SetKeepAliveTimeoutForTesting(base::TimeDelta::FromSeconds(1));
+  rfh->SetKeepAliveTimeoutForTesting(base::Seconds(1));
 
   base::TimeTicks start = base::TimeTicks::Now();
   EXPECT_TRUE(NavigateToURL(shell(), GURL("data:text/html,<p>hello</p>")));
 
   WaitUntilProcessExits(1);
 
-  EXPECT_GE(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(1));
+  EXPECT_GE(base::TimeTicks::Now() - start, base::Seconds(1));
 }
 
 // Test is flaky on Android builders: https://crbug.com/875179
@@ -1160,6 +1170,17 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
 #endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
                        MAYBE_FetchKeepAliveRendererProcess_Hung) {
+  // Disable HangWatcher so it doesn't interfere with this test when hangs take
+  // place.
+  base::HangWatcher::StopMonitoringForTesting();
+
+  // The test assumes that the render process exits after 1 second. But this
+  // will be prevented if the process still hosts a bfcached page. So disable
+  // BFCache for this test.
+  content::DisableBackForwardCacheForTesting(
+      shell()->web_contents(),
+      content::BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   embedded_test_server()->RegisterRequestHandler(
       base::BindRepeating(HandleHungBeacon, base::RepeatingClosure()));
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1187,14 +1208,14 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   host_destructions_ = 0;
   process_exits_ = 0;
   Observe(rph);
-  rfh->SetKeepAliveTimeoutForTesting(base::TimeDelta::FromSeconds(1));
+  rfh->SetKeepAliveTimeoutForTesting(base::Seconds(1));
 
   base::TimeTicks start = base::TimeTicks::Now();
   EXPECT_TRUE(NavigateToURL(shell(), GURL("data:text/html,<p>hello</p>")));
 
   WaitUntilProcessExits(1);
 
-  EXPECT_GE(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(1));
+  EXPECT_GE(base::TimeTicks::Now() - start, base::Seconds(1));
 }
 
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, ManyKeepaliveRequests) {

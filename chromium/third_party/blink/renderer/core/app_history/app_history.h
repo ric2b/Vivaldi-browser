@@ -9,6 +9,7 @@
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -25,11 +26,13 @@ class AppHistoryEntry;
 class AppHistoryNavigateEvent;
 class AppHistoryNavigateOptions;
 class AppHistoryReloadOptions;
+class AppHistoryResult;
 class AppHistoryNavigationOptions;
+class AppHistoryTransition;
+class DOMException;
 class HTMLFormElement;
 class HistoryItem;
 class KURL;
-class ScriptPromise;
 class SerializedScriptValue;
 
 // TODO(japhet): This should probably move to frame_loader_types.h and possibly
@@ -58,32 +61,34 @@ class CORE_EXPORT AppHistory final : public EventTargetWithInlineData,
   AppHistoryEntry* current() const;
   HeapVector<Member<AppHistoryEntry>> entries();
   void updateCurrent(AppHistoryUpdateCurrentOptions*, ExceptionState&);
+  AppHistoryTransition* transition() const { return transition_; }
 
   bool canGoBack() const;
   bool canGoForward() const;
 
-  ScriptPromise navigate(ScriptState*,
-                         const String& url,
-                         AppHistoryNavigateOptions*,
-                         ExceptionState&);
-  ScriptPromise reload(ScriptState*, AppHistoryReloadOptions*, ExceptionState&);
+  AppHistoryResult* navigate(ScriptState*,
+                             const String& url,
+                             AppHistoryNavigateOptions*);
+  AppHistoryResult* reload(ScriptState*, AppHistoryReloadOptions*);
 
-  ScriptPromise goTo(ScriptState*,
-                     const String& key,
-                     AppHistoryNavigationOptions*,
-                     ExceptionState&);
-  ScriptPromise back(ScriptState*,
-                     AppHistoryNavigationOptions*,
-                     ExceptionState&);
-  ScriptPromise forward(ScriptState*,
-                        AppHistoryNavigationOptions*,
-                        ExceptionState&);
+  AppHistoryResult* goTo(ScriptState*,
+                         const String& key,
+                         AppHistoryNavigationOptions*);
+  AppHistoryResult* back(ScriptState*, AppHistoryNavigationOptions*);
+  AppHistoryResult* forward(ScriptState*, AppHistoryNavigationOptions*);
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(navigate, kNavigate)
+  // onnavigate is defined manually so that a UseCounter can be applied to just
+  // the setter
+  void setOnnavigate(EventListener* listener);
+  EventListener* onnavigate() {
+    return GetAttributeEventListener(event_type_names::kNavigate);
+  }
+
   DEFINE_ATTRIBUTE_EVENT_LISTENER(navigatesuccess, kNavigatesuccess)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(navigateerror, kNavigateerror)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(currentchange, kCurrentchange)
 
-  enum class DispatchResult { kContinue, kAbort, kRespondWith };
+  enum class DispatchResult { kContinue, kAbort, kTransitionWhile };
   DispatchResult DispatchNavigateEvent(const KURL& url,
                                        HTMLFormElement* form,
                                        NavigateEventType,
@@ -105,21 +110,25 @@ class CORE_EXPORT AppHistory final : public EventTargetWithInlineData,
 
  private:
   friend class NavigateReaction;
+  friend class AppHistoryApiNavigation;
   void PopulateKeySet();
   void FinalizeWithAbortedNavigationError(ScriptState*,
                                           AppHistoryApiNavigation*);
+  void RejectPromiseAndFireNavigateErrorEvent(AppHistoryApiNavigation*,
+                                              ScriptValue);
 
-  ScriptPromise PerformNonTraverseNavigation(
+  AppHistoryResult* PerformNonTraverseNavigation(
       ScriptState*,
       const KURL&,
       scoped_refptr<SerializedScriptValue>,
       AppHistoryNavigationOptions*,
-      WebFrameLoadType,
-      ExceptionState&);
+      WebFrameLoadType);
 
-  void PerformSharedNavigationChecks(
-      ExceptionState&,
+  DOMException* PerformSharedNavigationChecks(
       const String& method_name_for_error_message);
+
+  void PromoteUpcomingNavigationToOngoing(const String& key);
+  void CleanupApiNavigation(AppHistoryApiNavigation&);
 
   scoped_refptr<SerializedScriptValue> SerializeState(const ScriptValue&,
                                                       ExceptionState&);
@@ -128,14 +137,14 @@ class CORE_EXPORT AppHistory final : public EventTargetWithInlineData,
   HashMap<String, int> keys_to_indices_;
   int current_index_ = -1;
 
-  Member<AppHistoryApiNavigation> ongoing_non_traversal_navigation_;
-  HeapHashMap<String, Member<AppHistoryApiNavigation>> ongoing_traversals_;
+  Member<AppHistoryTransition> transition_;
+
+  Member<AppHistoryApiNavigation> ongoing_navigation_;
+  HeapHashMap<String, Member<AppHistoryApiNavigation>> upcoming_traversals_;
   Member<AppHistoryApiNavigation> upcoming_non_traversal_navigation_;
 
   Member<AppHistoryNavigateEvent> ongoing_navigate_event_;
-  Member<AbortSignal> post_navigate_event_ongoing_navigation_signal_;
-
-  scoped_refptr<SerializedScriptValue> to_be_set_serialized_state_;
+  Member<AbortSignal> ongoing_navigation_signal_;
 };
 
 }  // namespace blink

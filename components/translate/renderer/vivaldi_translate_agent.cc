@@ -12,7 +12,7 @@
 namespace {
 // Language name passed to the Translate element for it to detect the language.
 const char kAutoDetectionLanguage[] = "auto";
-}
+}  // namespace
 
 using blink::WebDocumentLoader;
 using blink::WebLocalFrame;
@@ -48,7 +48,8 @@ bool VivaldiTranslateAgent::IsTranslateLibReady() {
 }
 
 bool VivaldiTranslateAgent::HasTranslationFinished() {
-  return ExecuteScriptAndGetBoolResult("window.vivaldiTranslate.isTranslated", true);
+  return ExecuteScriptAndGetBoolResult("window.vivaldiTranslate.isTranslated",
+                                       true);
 }
 
 bool VivaldiTranslateAgent::HasTranslationFailed() {
@@ -105,7 +106,6 @@ base::TimeDelta VivaldiTranslateAgent::AdjustDelay(int delay_in_milliseconds) {
   return base::TimeDelta::FromMilliseconds(kVivaldiTranslateStatusCheckDelayMs);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // TranslateAgent, private:
 
@@ -122,4 +122,4 @@ std::string VivaldiTranslateAgent::BuildTranslationScript(
          base::GetQuotedJSONString(target_lang) + ")";
 }
 
-}  // namespace translate
+}  // namespace vivaldi

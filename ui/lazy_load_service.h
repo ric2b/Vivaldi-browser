@@ -16,6 +16,8 @@ class LazyLoadService
  public:
   explicit LazyLoadService(Profile* profile);
   ~LazyLoadService() override = default;
+  LazyLoadService(const LazyLoadService&) = delete;
+  LazyLoadService& operator=(const LazyLoadService&) = delete;
 
   static const char kLazyLoadIsSafe[];
 
@@ -27,7 +29,6 @@ class LazyLoadService
 
  private:
   Profile* profile_;
-  DISALLOW_COPY_AND_ASSIGN(LazyLoadService);
 };
 
 }  // namespace vivaldi

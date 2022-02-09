@@ -21,14 +21,18 @@ class VivaldiSubresourceFilterAdblockingThrottleManager
 
   VivaldiSubresourceFilterAdblockingThrottleManager();
   ~VivaldiSubresourceFilterAdblockingThrottleManager() override;
+  VivaldiSubresourceFilterAdblockingThrottleManager(
+      const VivaldiSubresourceFilterAdblockingThrottleManager&) = delete;
+  VivaldiSubresourceFilterAdblockingThrottleManager& operator=(
+      const VivaldiSubresourceFilterAdblockingThrottleManager&) = delete;
 
   static void CreateForWebContents(content::WebContents* web_contents);
 
   static VivaldiSubresourceFilterAdblockingThrottleManager* FromWebContents(
       content::WebContents* web_contents);
 
-  // Creates a VivaldiSubresourceFilterAdblockingThrottleManager and attaches it to
-  // |web_contents|.
+  // Creates a VivaldiSubresourceFilterAdblockingThrottleManager and attaches it
+  // to |web_contents|.
   static void CreateSubresourceFilterWebContentsHelper(
       content::WebContents* web_contents);
 
@@ -39,9 +43,9 @@ class VivaldiSubresourceFilterAdblockingThrottleManager
       std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles,
       bool done_mainframe = false);
 
-  void set_adblock_list(AdverseAdFilterListService* list) { adblock_list_ = list; }
+  void set_adblock_list(AdverseAdFilterListService* list) {
+    adblock_list_ = list;
+  }
 
   AdverseAdFilterListService* adblock_list() { return adblock_list_; }
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSubresourceFilterAdblockingThrottleManager);
 };

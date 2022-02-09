@@ -92,13 +92,14 @@ class TestShellDelegateChromeOS : public ash::TestShellDelegate {
  public:
   TestShellDelegateChromeOS() {}
 
+  TestShellDelegateChromeOS(const TestShellDelegateChromeOS&) = delete;
+  TestShellDelegateChromeOS& operator=(const TestShellDelegateChromeOS&) =
+      delete;
+
   bool CanShowWindowForUser(const aura::Window* window) const override {
     return ::CanShowWindowForUser(window,
                                   base::BindRepeating(&GetActiveContext));
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestShellDelegateChromeOS);
 };
 
 std::unique_ptr<Browser> CreateTestBrowser(aura::Window* window,
@@ -123,6 +124,9 @@ class MultiProfileSupportTest : public ChromeAshTestBase {
   MultiProfileSupportTest()
       : fake_user_manager_(new FakeChromeUserManager),
         user_manager_enabler_(base::WrapUnique(fake_user_manager_)) {}
+
+  MultiProfileSupportTest(const MultiProfileSupportTest&) = delete;
+  MultiProfileSupportTest& operator=(const MultiProfileSupportTest&) = delete;
 
   // ChromeAshTestBase:
   void SetUp() override;
@@ -284,8 +288,6 @@ class MultiProfileSupportTest : public ChromeAshTestBase {
 
   // The maximized window manager (if enabled).
   std::unique_ptr<TabletModeWindowManager> tablet_mode_window_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(MultiProfileSupportTest);
 };
 
 void MultiProfileSupportTest::SetUp() {
@@ -327,9 +329,9 @@ MultiProfileSupportTest::SetUpOneWindowEachDeskForUser(AccountId account_id) {
   // Set restore in progress to avoid activating desk activation during
   // `window->Show()` in `CreateTestWidget()`.
   test_shell_delegate->SetSessionRestoreInProgress(true);
-  auto* desks_helper = ash::DesksHelper::Get();
+  auto* desks_controller = ash::DesksController::Get();
   const int kActiveDeskIndex = 0;
-  for (int i = 0; i < desks_helper->GetNumberOfDesks(); i++) {
+  for (int i = 0; i < desks_controller->GetNumberOfDesks(); i++) {
     widgets.push_back(
         CreateTestWidget(nullptr, container_ids[i], gfx::Rect(700, 0, 50, 50)));
     aura::Window* win = widgets[i]->GetNativeWindow();
@@ -343,7 +345,7 @@ MultiProfileSupportTest::SetUpOneWindowEachDeskForUser(AccountId account_id) {
     EXPECT_TRUE(ash::AutotestDesksApi().IsWindowInDesk(win,
                                                        /*desk_index=*/i));
   }
-  EXPECT_EQ(kActiveDeskIndex, desks_helper->GetActiveDeskIndex());
+  EXPECT_EQ(kActiveDeskIndex, desks_controller->GetActiveDeskIndex());
   test_shell_delegate->SetSessionRestoreInProgress(false);
   return widgets;
 }
@@ -1379,6 +1381,10 @@ TEST_F(MultiProfileSupportTest, ShowForUserSwitchesDesktop) {
 class TestWindowObserver : public aura::WindowObserver {
  public:
   TestWindowObserver() : resize_calls_(0) {}
+
+  TestWindowObserver(const TestWindowObserver&) = delete;
+  TestWindowObserver& operator=(const TestWindowObserver&) = delete;
+
   ~TestWindowObserver() override {}
 
   void OnWindowBoundsChanged(aura::Window* window,
@@ -1392,8 +1398,6 @@ class TestWindowObserver : public aura::WindowObserver {
 
  private:
   int resize_calls_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestWindowObserver);
 };
 
 // Test that switching between different user won't change the activated windows

@@ -13,24 +13,32 @@ using guest_view::GuestViewManager;
 
 namespace extensions {
 
+constexpr char kTabIdKey[] = "tab_id";
+constexpr char kInspectTabIdKey[] = "inspect_tab_id";
+
 bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
-  base::DictionaryValue* create_params) {
+    const base::Value& create_params) {
+  DCHECK(create_params.is_dict());
+
   GuestViewManager::WebContentsCreatedCallback callback = base::BindOnce(
-    &GuestViewInternalCreateGuestFunction::CreateGuestCallback, this);
+      &GuestViewInternalCreateGuestFunction::CreateGuestCallback, this);
   content::WebContents* contents = nullptr;
 
-  std::string guest_id_str;
-  int tab_id;
-  if (create_params->GetInteger("tab_id", &tab_id) ||
-      create_params->GetInteger("inspect_tab_id", &tab_id)) {
+  auto tab_id_value = create_params.FindIntKey(kTabIdKey);
+  auto inspect_tab_id_value = create_params.FindIntKey(kInspectTabIdKey);
+  int tab_id = (tab_id_value.has_value() ? tab_id_value.value()
+                                         : (inspect_tab_id_value.has_value()
+                                                ? inspect_tab_id_value.value()
+                                                : 0));
+  if (tab_id) {
     int tab_index = 0;
     bool include_incognito = true;
     Profile* profile = Profile::FromBrowserContext(browser_context());
     Browser* browser;
     TabStripModel* tab_strip;
     extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
-      &browser, &tab_strip, &contents,
-      &tab_index);
+                                             &browser, &tab_strip, &contents,
+                                             &tab_index);
   }
 
   // We also need to clean up guests used for webviews in our docked devtools.
@@ -38,8 +46,7 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
   // is a devtools item with a webcontents. Find the guest and delete it to
   // prevent dangling guest objects.
   content::WebContents* devtools_contents =
-  DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
-    contents);
+      DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(contents);
 
   if (devtools_contents) {
     contents = devtools_contents;

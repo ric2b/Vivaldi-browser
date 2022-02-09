@@ -81,6 +81,8 @@ cast_source_set("named_message_port_connector_cast") {
     "named_message_port_connector_cast.h",
   ]
 
+  public_deps = [ ":client" ]
+
   deps = [
     "//base",
     "//chromecast/browser:public",
@@ -100,6 +102,8 @@ cast_source_set("browser_base") {
     "application_media_capabilities.h",
     "application_media_info_manager.cc",
     "application_media_info_manager.h",
+    "audio_socket_broker.cc",
+    "audio_socket_broker.h",
     "bluetooth/cast_bluetooth_chooser.cc",
     "bluetooth/cast_bluetooth_chooser.h",
     "cast_browser_context.cc",
@@ -190,12 +194,15 @@ cast_source_set("browser_base") {
   ]
 
   public_deps = [
+    ":client",
     ":feature_list",
     ":prefs",
     ":public",
     "//chromecast/browser/metrics",
     "//chromecast/browser/mojom",
+    "//chromecast/common/mojom",
     "//chromecast/metrics",
+    "//chromecast/mojo",
     "//components/media_control/mojom",
   ]
 
@@ -205,7 +212,6 @@ cast_source_set("browser_base") {
     ":web_preferences",
     "//base",
     "//base:i18n",
-    "//base/util/memory_pressure",
     "//cc",
     "//chromecast:chromecast_buildflags",
     "//chromecast/activity",
@@ -220,15 +226,17 @@ cast_source_set("browser_base") {
     "//chromecast/browser/general_audience_browsing/mojom",
     "//chromecast/browser/webui/mojom",
     "//chromecast/common",
+    "//chromecast/common:activity_url_filter",
     "//chromecast/common:queryable_data",
     "//chromecast/common/media",
-    "//chromecast/common/mojom",
     "//chromecast/external_mojo/broker_service",
     "//chromecast/external_mojo/external_service_support:external_service",
     "//chromecast/graphics",
     "//chromecast/media",
     "//chromecast/media:libcast_media",
     "//chromecast/media/audio",
+    "//chromecast/media/audio:audio_io_thread",
+    "//chromecast/media/audio/audio_output_service:constants",
     "//chromecast/media/base:media_codec_support",
     "//chromecast/media/base:video_plane_controller",
     "//chromecast/media/cdm:cdm_origin_provider",
@@ -242,6 +250,7 @@ cast_source_set("browser_base") {
     "//components/cdm/browser",
     "//components/download/public/common:public",
     "//components/media_control/browser",
+    "//components/memory_pressure",
     "//components/metrics",
     "//components/metrics:content",
     "//components/metrics:net",
@@ -270,6 +279,7 @@ cast_source_set("browser_base") {
     "//media/mojo/mojom:remoting",
     "//media/mojo/services",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/platform",
     "//net",
     "//services/cert_verifier/public/mojom",
     "//services/media_session/public/mojom",
@@ -579,6 +589,7 @@ cast_source_set("public") {
   # Need to expose this so that internal public_configs are propagated.
   public_deps = [
     ":base_types",
+    ":client",
     "//chromecast/browser/mojom",
     "//chromecast/common/mojom",
     "//content/public/browser",
@@ -592,6 +603,21 @@ cast_source_set("public") {
     "//chromecast/ui/mojom",
     "//content/public/common",
     "//ui/events",
+    "//url",
+  ]
+}
+
+cast_source_set("client") {
+  public = [ "cast_web_contents_observer.h" ]
+  sources = [ "cast_web_contents_observer.cc" ]
+
+  public_deps = [
+    ":base_types",
+    "//chromecast/browser/mojom",
+    "//chromecast/common/mojom",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+    "//ui/gfx/geometry",
     "//url",
   ]
 }
@@ -643,6 +669,7 @@ cast_source_set("browsertests") {
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
   deps = [
+    ":client",
     ":test_interfaces",
     ":test_support",
     "//base",
@@ -651,6 +678,7 @@ cast_source_set("browsertests") {
     "//chromecast/base:chromecast_switches",
     "//chromecast/base/metrics",
     "//chromecast/graphics:graphics",
+    "//chromecast/mojo",
     "//components/keyed_service/content",
     "//components/prefs",
     "//content/public/browser",
@@ -676,6 +704,7 @@ cast_source_set("unittests") {
 
   sources = [
     "application_media_info_manager_unittest.cc",
+    "audio_socket_broker_unittest.cc",
     "bluetooth/cast_bluetooth_chooser_unittest.cc",
     "cast_media_blocker_unittest.cc",
     "cast_resource_bundle_unittest.cc",
@@ -691,6 +720,7 @@ cast_source_set("unittests") {
     "//base/test:test_support",
     "//chromecast/base",
     "//chromecast/bindings/public/mojom",
+    "//chromecast/net:socket_util",
     "//components/on_load_script_injector/browser",
     "//content/public/browser",
     "//content/test:test_support",

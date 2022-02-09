@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
+#include <bits/stdint-intn.h>
 #include <wayland-cursor.h>
 #include <algorithm>
 #include <memory>
@@ -162,13 +163,16 @@ uint32_t WaylandWindow::GetPreferredEnteredOutputId() {
   // output that has the biggest scale factor. Otherwise, use the very first one
   // that was entered. This way, we can be sure that the contents of the Window
   // are rendered at correct dpi when a user moves the window between displays.
-  auto* preferred_output = *root_surface_->entered_outputs().begin();
-  for (WaylandOutput* output : root_surface_->entered_outputs()) {
+  uint32_t preferred_output_id = *root_surface_->entered_outputs().begin();
+  for (uint32_t output_id : root_surface_->entered_outputs()) {
+    auto* output_manager = connection_->wayland_output_manager();
+    auto* output = output_manager->GetOutput(output_id);
+    auto* preferred_output = output_manager->GetOutput(preferred_output_id);
     if (output->scale_factor() > preferred_output->scale_factor())
-      preferred_output = output;
+      preferred_output_id = output_id;
   }
 
-  return preferred_output->output_id();
+  return preferred_output_id;
 }
 
 void WaylandWindow::SetPointerFocus(bool focus) {
@@ -181,13 +185,20 @@ void WaylandWindow::SetPointerFocus(bool focus) {
     UpdateCursorShape(cursor_);
 }
 
+void WaylandWindow::RemoveEnteredOutput(uint32_t output_id) {
+  root_surface_->RemoveEnteredOutput(output_id);
+}
+
 bool WaylandWindow::StartDrag(const ui::OSExchangeData& data,
-                              int operation,
+                              int operations,
+                              mojom::DragEventSource source,
                               gfx::NativeCursor cursor,
                               bool can_grab_pointer,
                               WmDragHandler::Delegate* delegate) {
-  if (!connection_->data_drag_controller()->StartSession(data, operation))
+  if (!connection_->data_drag_controller()->StartSession(data, operations,
+                                                         source)) {
     return false;
+  }
 
   DCHECK(!drag_handler_delegate_);
   drag_handler_delegate_ = delegate;
@@ -257,11 +268,9 @@ void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
     return;
   bounds_px_ = adjusted_bounds_px;
 
-  pending_buffer_scale_.emplace_back(
-      std::make_pair(bounds_px_.size(), window_scale()));
-
   if (update_visual_size_immediately_)
     UpdateVisualSize(bounds_px.size());
+
   delegate_->OnBoundsChanged(bounds_px_);
 }
 
@@ -354,12 +363,30 @@ gfx::Rect WaylandWindow::GetRestoredBoundsInPixels() const {
 }
 
 bool WaylandWindow::ShouldWindowContentsBeTransparent() const {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return false;
+  // Wayland compositors always support translucency.
+  return true;
 }
 
 void WaylandWindow::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
   NOTIMPLEMENTED_LOG_ONCE();
+}
+
+bool WaylandWindow::IsTranslucentWindowOpacitySupported() const {
+  // Wayland compositors always support translucency.
+  return true;
+}
+
+void WaylandWindow::SetDecorationInsets(const gfx::Insets* insets_px) {
+  if ((!frame_insets_px_ && !insets_px) ||
+      (frame_insets_px_ && insets_px && *frame_insets_px_ == *insets_px)) {
+    return;
+  }
+  if (insets_px)
+    frame_insets_px_ = *insets_px;
+  else
+    frame_insets_px_ = absl::nullopt;
+  UpdateDecorations();
+  connection_->ScheduleFlush();
 }
 
 void WaylandWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
@@ -368,11 +395,6 @@ void WaylandWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
 }
 
 void WaylandWindow::SizeConstraintsChanged() {}
-
-bool WaylandWindow::IsTranslucentWindowOpacitySupported() const {
-  // Wayland compositors always support translucency.
-  return true;
-}
 
 bool WaylandWindow::ShouldUpdateWindowShape() const {
   return false;
@@ -453,6 +475,11 @@ void WaylandWindow::UpdateVisualSize(const gfx::Size& size_px) {
     return;
   visual_size_px_ = size_px;
   UpdateWindowMask();
+
+  if (apply_pending_state_on_update_visual_size_) {
+    root_surface_->ApplyPendingState();
+    connection_->ScheduleFlush();
+  }
 }
 
 void WaylandWindow::OnCloseRequest() {
@@ -465,7 +492,8 @@ absl::optional<std::vector<gfx::Rect>> WaylandWindow::GetWindowShape() const {
 
 void WaylandWindow::UpdateWindowMask() {
   UpdateWindowShape();
-  root_surface_->SetOpaqueRegion(gfx::Rect(visual_size_px()));
+  std::vector<gfx::Rect> region{gfx::Rect{visual_size_px()}};
+  root_surface_->SetOpaqueRegion(&region);
 }
 
 void WaylandWindow::UpdateWindowShape() {}
@@ -538,7 +566,8 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   // Update visual size in tests immediately if the test config is set.
   // Otherwise, such tests as interactive_ui_tests fail.
-  set_update_visual_size_immediately(UseTestConfigForPlatformWindows());
+  if (!update_visual_size_immediately_)
+    set_update_visual_size_immediately(UseTestConfigForPlatformWindows());
 
   // Properties contain DIP bounds but the buffer scale is initially 1 so it's
   // OK to assign.  The bounds will be recalculated when the buffer scale
@@ -561,15 +590,20 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
         GetWidget(), primary_subsurface_.get());
   }
 
-  connection_->ScheduleFlush();
-
   PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
   delegate_->OnAcceleratedWidgetAvailable(GetWidget());
 
-  root_surface_->SetOpaqueRegion(gfx::Rect(bounds_px_.size()));
+  std::vector<gfx::Rect> region{gfx::Rect{bounds_px_.size()}};
+  root_surface_->SetOpaqueRegion(&region);
+  root_surface_->ApplyPendingState();
+  connection_->ScheduleFlush();
 
   return true;
 }
+
+void WaylandWindow::SetWindowGeometry(gfx::Rect bounds) {}
+
+void WaylandWindow::UpdateDecorations() {}
 
 WaylandWindow* WaylandWindow::GetRootParentWindow() {
   return parent_window_ ? parent_window_->GetRootParentWindow() : this;
@@ -750,20 +784,8 @@ bool WaylandWindow::CommitOverlays(
     auto main_overlay = split;
     if (split == overlays.end() && overlays.front()->z_order == INT32_MIN)
       main_overlay = overlays.begin();
-
-    // Either use current scale of the window or pending scale whenever visual
-    // size updates. window_scale() won't be used if we are in process of
-    // changing bounds.
-    int32_t buffer_scale = window_scale();
-    auto result =
-        std::find_if(pending_buffer_scale_.begin(), pending_buffer_scale_.end(),
-                     [&visual_size = (*main_overlay)->bounds_rect.size()](
-                         auto& item) { return visual_size == item.first; });
-    if (result != pending_buffer_scale_.end()) {
-      buffer_scale = result->second;
-      pending_buffer_scale_.erase(pending_buffer_scale_.begin(), ++result);
-    }
-    root_surface()->SetSurfaceBufferScale(buffer_scale);
+    root_surface()->SetSurfaceBufferScale(
+        ceil((*main_overlay)->surface_scale_factor));
   }
 
   {
@@ -785,13 +807,26 @@ bool WaylandWindow::CommitOverlays(
           reference_above = (*std::next(iter))->wayland_surface();
         }
         (*iter)->ConfigureAndShowSurface(
-            (*overlay_iter)->transform, (*overlay_iter)->bounds_rect,
-            root_surface()->buffer_scale(), (*overlay_iter)->enable_blend,
-            nullptr, reference_above);
+            (*overlay_iter)->bounds_rect, (*split)->bounds_rect,
+            root_surface()->pending_buffer_scale(), nullptr, reference_above);
+
+        (*iter)->wayland_surface()->SetBufferTransform(
+            (*overlay_iter)->transform);
+        (*iter)->wayland_surface()->SetSurfaceBufferScale(
+            root_surface()->pending_buffer_scale());
         (*iter)->wayland_surface()->SetViewportSource(
             (*overlay_iter)->crop_rect);
+        (*iter)->wayland_surface()->SetOverlayPriority(
+            (*overlay_iter)->priority_hint);
         (*iter)->wayland_surface()->SetViewportDestination(
             (*overlay_iter)->bounds_rect.size());
+        gfx::Rect region_px =
+            (*overlay_iter)->enable_blend
+                ? gfx::Rect()
+                : gfx::Rect((*overlay_iter)->bounds_rect.size());
+        std::vector<gfx::Rect> opaque_region{region_px};
+        (*iter)->wayland_surface()->SetOpaqueRegion(&opaque_region);
+        (*iter)->wayland_surface()->SetOpacity((*overlay_iter)->opacity);
         connection_->buffer_manager_host()->CommitBufferInternal(
             (*iter)->wayland_surface(), (*overlay_iter)->buffer_id,
             (*overlay_iter)->damage_region,
@@ -821,13 +856,26 @@ bool WaylandWindow::CommitOverlays(
           reference_below = (*std::prev(iter))->wayland_surface();
         }
         (*iter)->ConfigureAndShowSurface(
-            (*overlay_iter)->transform, (*overlay_iter)->bounds_rect,
-            root_surface()->buffer_scale(), (*overlay_iter)->enable_blend,
-            reference_below, nullptr);
+            (*overlay_iter)->bounds_rect, (*split)->bounds_rect,
+            root_surface()->pending_buffer_scale(), reference_below, nullptr);
+
+        (*iter)->wayland_surface()->SetBufferTransform(
+            (*overlay_iter)->transform);
+        (*iter)->wayland_surface()->SetSurfaceBufferScale(
+            root_surface()->pending_buffer_scale());
         (*iter)->wayland_surface()->SetViewportSource(
             (*overlay_iter)->crop_rect);
+        (*iter)->wayland_surface()->SetOverlayPriority(
+            (*overlay_iter)->priority_hint);
         (*iter)->wayland_surface()->SetViewportDestination(
             (*overlay_iter)->bounds_rect.size());
+        gfx::Rect region_px =
+            (*overlay_iter)->enable_blend
+                ? gfx::Rect()
+                : gfx::Rect((*overlay_iter)->bounds_rect.size());
+        std::vector<gfx::Rect> opaque_region{region_px};
+        (*iter)->wayland_surface()->SetOpaqueRegion(&opaque_region);
+        (*iter)->wayland_surface()->SetOpacity((*overlay_iter)->opacity);
         connection_->buffer_manager_host()->CommitBufferInternal(
             (*iter)->wayland_surface(), (*overlay_iter)->buffer_id,
             (*overlay_iter)->damage_region,
@@ -869,16 +917,24 @@ bool WaylandWindow::CommitOverlays(
     //   to apply viewport.destination is made at commit time. Right now PIP
     //   would have incorrect size b/c it is fullscreen overlay scheduled at
     //   z_order=0.
-    primary_subsurface_->ConfigureAndShowSurface(
-        (*split)->transform, (*split)->bounds_rect,
-        root_surface()->buffer_scale(), (*split)->enable_blend, nullptr,
-        nullptr);
+    primary_subsurface_->wayland_surface()->SetBufferTransform(
+        (*split)->transform);
+    primary_subsurface_->wayland_surface()->SetSurfaceBufferScale(
+        root_surface()->pending_buffer_scale());
     primary_subsurface_->wayland_surface()->SetViewportSource(
         (*split)->crop_rect);
+    primary_subsurface_->wayland_surface()->SetOverlayPriority(
+        (*split)->priority_hint);
     primary_subsurface_->wayland_surface()->SetViewportDestination(
         (*split)->crop_rect == gfx::RectF(1.f, 1.f)
             ? gfx::Size()
             : (*split)->bounds_rect.size());
+    gfx::Rect region_px = (*split)->enable_blend
+                              ? gfx::Rect()
+                              : gfx::Rect((*split)->bounds_rect.size());
+    std::vector<gfx::Rect> opaque_region{region_px};
+    primary_subsurface_->wayland_surface()->SetOpaqueRegion(&opaque_region);
+    primary_subsurface_->wayland_surface()->SetOpacity((*split)->opacity);
     connection_->buffer_manager_host()->CommitBufferInternal(
         primary_subsurface_->wayland_surface(), (*split)->buffer_id,
         (*split)->damage_region,

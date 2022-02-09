@@ -37,6 +37,8 @@ class NoteModelMerger {
   NoteModelMerger(syncer::UpdateResponseDataList updates,
                   vivaldi::NotesModel* notes_model,
                   SyncedNoteTracker* note_tracker);
+  NoteModelMerger(const NoteModelMerger&) = delete;
+  NoteModelMerger& operator=(const NoteModelMerger&) = delete;
 
   ~NoteModelMerger();
 
@@ -196,8 +198,6 @@ class NoteModelMerger {
   // permanent node. Computed upon construction via BuildRemoteForest().
   const RemoteForest remote_forest_;
   std::unordered_map<base::GUID, GuidMatch, base::GUIDHash> guid_to_match_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteModelMerger);
 };
 
 }  // namespace sync_notes

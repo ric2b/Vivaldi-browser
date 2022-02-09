@@ -578,6 +578,8 @@ void GpuServiceImpl::InitializeWithHost(
     // corresponding to a mailbox.
     const bool display_context_on_another_thread = features::IsDrDcEnabled();
     bool thread_safe_manager = display_context_on_another_thread;
+    // Raw draw needs to access shared image backing on the compositor thread.
+    thread_safe_manager |= features::IsUsingRawDraw();
 #if defined(USE_OZONE)
     thread_safe_manager |= features::ShouldUseRealBuffersForPageFlipTest();
 #endif
@@ -1100,6 +1102,9 @@ void GpuServiceImpl::GpuSwitched(gl::GpuPreference active_gpu_heuristic) {
     return;
   }
   DVLOG(1) << "GPU: GPU has switched";
+
+  if (watchdog_thread_)
+    watchdog_thread_->ReportProgress();
 
   if (!in_host_process()) {
     ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched(

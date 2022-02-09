@@ -22,7 +22,7 @@ namespace vivaldi {
 namespace runtime_private {
 struct ProfileStatEntry;
 }
-}
+}  // namespace vivaldi
 
 class RuntimeAPI {
  public:
@@ -39,8 +39,6 @@ class RuntimePrivateExitFunction : public ExtensionFunction {
  private:
   ~RuntimePrivateExitFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateExitFunction);
 };
 
 class RuntimePrivateRestartFunction : public ExtensionFunction {
@@ -52,8 +50,6 @@ class RuntimePrivateRestartFunction : public ExtensionFunction {
  private:
   ~RuntimePrivateRestartFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateRestartFunction);
 };
 
 class RuntimePrivateGetAllFeatureFlagsFunction : public ExtensionFunction {
@@ -67,8 +63,6 @@ class RuntimePrivateGetAllFeatureFlagsFunction : public ExtensionFunction {
   ~RuntimePrivateGetAllFeatureFlagsFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetAllFeatureFlagsFunction);
 };
 
 class RuntimePrivateSetFeatureEnabledFunction : public ExtensionFunction {
@@ -82,8 +76,6 @@ class RuntimePrivateSetFeatureEnabledFunction : public ExtensionFunction {
   ~RuntimePrivateSetFeatureEnabledFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateSetFeatureEnabledFunction);
 };
 
 class RuntimePrivateIsGuestSessionFunction : public ExtensionFunction {
@@ -97,8 +89,6 @@ class RuntimePrivateIsGuestSessionFunction : public ExtensionFunction {
   ~RuntimePrivateIsGuestSessionFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateIsGuestSessionFunction);
 };
 
 class RuntimePrivateHasGuestSessionFunction : public ExtensionFunction {
@@ -112,8 +102,6 @@ class RuntimePrivateHasGuestSessionFunction : public ExtensionFunction {
   ~RuntimePrivateHasGuestSessionFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateHasGuestSessionFunction);
 };
 
 class RuntimePrivateSwitchToGuestSessionFunction : public ExtensionFunction {
@@ -127,8 +115,6 @@ class RuntimePrivateSwitchToGuestSessionFunction : public ExtensionFunction {
   ~RuntimePrivateSwitchToGuestSessionFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateSwitchToGuestSessionFunction);
 };
 
 class RuntimePrivateCloseGuestSessionFunction : public ExtensionFunction {
@@ -142,8 +128,6 @@ class RuntimePrivateCloseGuestSessionFunction : public ExtensionFunction {
   ~RuntimePrivateCloseGuestSessionFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCloseGuestSessionFunction);
 };
 
 class RuntimePrivateOpenProfileSelectionWindowFunction
@@ -158,8 +142,6 @@ class RuntimePrivateOpenProfileSelectionWindowFunction
   ~RuntimePrivateOpenProfileSelectionWindowFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateOpenProfileSelectionWindowFunction);
 };
 
 class RuntimePrivateGetUserProfilesFunction : public ExtensionFunction {
@@ -178,8 +160,6 @@ class RuntimePrivateGetUserProfilesFunction : public ExtensionFunction {
       std::vector<vivaldi::runtime_private::UserProfile> profiles);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetUserProfilesFunction);
 };
 
 class RuntimePrivateOpenNamedProfileFunction : public ExtensionFunction {
@@ -193,8 +173,6 @@ class RuntimePrivateOpenNamedProfileFunction : public ExtensionFunction {
   ~RuntimePrivateOpenNamedProfileFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateOpenNamedProfileFunction);
 };
 
 class RuntimePrivateCloseActiveProfileFunction : public ExtensionFunction {
@@ -208,8 +186,6 @@ class RuntimePrivateCloseActiveProfileFunction : public ExtensionFunction {
   ~RuntimePrivateCloseActiveProfileFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCloseActiveProfileFunction);
 };
 
 class RuntimePrivateGetUserProfileImagesFunction : public ExtensionFunction {
@@ -223,8 +199,6 @@ class RuntimePrivateGetUserProfileImagesFunction : public ExtensionFunction {
   ~RuntimePrivateGetUserProfileImagesFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetUserProfileImagesFunction);
 };
 
 class RuntimePrivateUpdateActiveProfileFunction : public ExtensionFunction {
@@ -238,8 +212,6 @@ class RuntimePrivateUpdateActiveProfileFunction : public ExtensionFunction {
   ~RuntimePrivateUpdateActiveProfileFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateUpdateActiveProfileFunction);
 };
 
 class RuntimePrivateGetProfileDefaultsFunction : public ExtensionFunction {
@@ -253,8 +225,6 @@ class RuntimePrivateGetProfileDefaultsFunction : public ExtensionFunction {
   ~RuntimePrivateGetProfileDefaultsFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetProfileDefaultsFunction);
 };
 
 class RuntimePrivateCreateProfileFunction : public ExtensionFunction {
@@ -276,8 +246,6 @@ class RuntimePrivateCreateProfileFunction : public ExtensionFunction {
   void OpenNewWindowForProfile(Profile* profile, Profile::CreateStatus status);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCreateProfileFunction);
 };
 
 class RuntimePrivateGetProfileStatisticsFunction : public ExtensionFunction {
@@ -297,8 +265,6 @@ class RuntimePrivateGetProfileStatisticsFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   std::vector<vivaldi::runtime_private::ProfileStatEntry> results_;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetProfileStatisticsFunction);
 };
 
 class RuntimePrivateDeleteProfileFunction : public ExtensionFunction {
@@ -312,8 +278,6 @@ class RuntimePrivateDeleteProfileFunction : public ExtensionFunction {
   ~RuntimePrivateDeleteProfileFunction() override = default;
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateDeleteProfileFunction);
 };
 
 class RuntimePrivateHasDesktopShortcutFunction : public ExtensionFunction {
@@ -329,8 +293,6 @@ class RuntimePrivateHasDesktopShortcutFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnHasProfileShortcuts(bool has_shortcuts);
-
-  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateHasDesktopShortcutFunction);
 };
 
 }  // namespace extensions

@@ -27,8 +27,8 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/skia_util.h"
 #include "ui/native_theme/common_theme.h"
 
 namespace {
@@ -371,8 +371,9 @@ gfx::Rect NativeThemeBase::GetNinePatchAperture(Part part) const {
 
 NativeThemeBase::NativeThemeBase() : NativeThemeBase(false) {}
 
-NativeThemeBase::NativeThemeBase(bool should_only_use_dark_colors)
-    : NativeTheme(should_only_use_dark_colors) {}
+NativeThemeBase::NativeThemeBase(bool should_only_use_dark_colors,
+                                 bool is_custom_system_theme)
+    : NativeTheme(should_only_use_dark_colors, is_custom_system_theme) {}
 
 NativeThemeBase::~NativeThemeBase() = default;
 

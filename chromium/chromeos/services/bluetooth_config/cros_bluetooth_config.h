@@ -21,6 +21,8 @@ namespace bluetooth_config {
 
 class AdapterStateController;
 class DeviceCache;
+class DeviceOperationHandler;
+class DiscoverySessionManager;
 class Initializer;
 class SystemPropertiesProvider;
 
@@ -44,12 +46,20 @@ class CrosBluetoothConfig : public mojom::CrosBluetoothConfig {
   void ObserveSystemProperties(
       mojo::PendingRemote<mojom::SystemPropertiesObserver> observer) override;
   void SetBluetoothEnabledState(bool enabled) override;
+  void StartDiscovery(
+      mojo::PendingRemote<mojom::BluetoothDiscoveryDelegate> delegate) override;
+  void Connect(const std::string& device_id, ConnectCallback callback) override;
+  void Disconnect(const std::string& device_id,
+                  DisconnectCallback callback) override;
+  void Forget(const std::string& device_id, ForgetCallback callback) override;
 
   mojo::ReceiverSet<mojom::CrosBluetoothConfig> receivers_;
 
   std::unique_ptr<AdapterStateController> adapter_state_controller_;
   std::unique_ptr<DeviceCache> device_cache_;
   std::unique_ptr<SystemPropertiesProvider> system_properties_provider_;
+  std::unique_ptr<DiscoverySessionManager> discovery_session_manager_;
+  std::unique_ptr<DeviceOperationHandler> device_operation_handler_;
 };
 
 }  // namespace bluetooth_config

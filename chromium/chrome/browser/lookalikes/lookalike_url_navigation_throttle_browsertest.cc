@@ -545,7 +545,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // metrics for the first URL. Regression test for crbug.com/1136296.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        TargetEmbedding_TopDomain_Redirect_Match) {
-  const GURL kNavigatedUrl = GetLongRedirect("google.com-test.com", "site.com",
+  const GURL kNavigatedUrl = GetLongRedirect("google.com-test.com", "site.test",
                                              "youtube.com-test.com");
   // UKM will record the final URL of the redirect:
   const GURL kLastUrl = GetURL("youtube.com-test.com");
@@ -751,7 +751,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // considered for lookalike suggestions.
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   // Advance clock to force a fetch of new engaged sites list.
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
 
   TestInterstitialNotShown(browser(), kNavigatedUrl);
   histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
@@ -767,7 +767,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // This should record metrics, but should not show a lookalike warning
 // interstitial yet.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
-                       CharacterSwap_EngagedDomain_Match) {
+                       CharacterSwap_EngagedDomain_SkeletonMatch) {
   base::HistogramTester histograms;
   SetEngagementScore(browser(), GURL("https://character-swap.com"),
                      kHighEngagement);
@@ -779,7 +779,39 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // considered for lookalike suggestions.
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   // Advance clock to force a fetch of new engaged sites list.
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
+
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::WebContentsConsoleObserver console_observer(tab);
+  console_observer.SetPattern("Chrome has determined that*character-wsap.com*");
+
+  TestInterstitialNotShown(browser(), kNavigatedUrl);
+  console_observer.Wait();
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
+  histograms.ExpectBucketCount(
+      lookalikes::kHistogramName,
+      NavigationSuggestionEvent::kMatchCharacterSwapSiteEngagement, 1);
+
+  CheckUkm({kNavigatedUrl}, "MatchType",
+           LookalikeUrlMatchType::kCharacterSwapSiteEngagement);
+}
+
+// Same as CharacterSwap_EngagedDomain_SkeletonMatch, but this time
+// the match is on the actual hostnames and not skeletons. Note that
+// the skeletons of example.com and éxaplme.com don't have exactly
+// one character swap (exarnple.com and exaprnle.com)
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
+                       CharacterSwap_EngagedDomain_HostnameMatch) {
+  base::HistogramTester histograms;
+  SetEngagementScore(browser(), GURL("https://example.com"), kHighEngagement);
+  const GURL kNavigatedUrl = GetURL("éxapmle.com");
+  // Even if the navigated site has a low engagement score, it should be
+  // considered for lookalike suggestions.
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  // Advance clock to force a fetch of new engaged sites list.
+  test_clock()->Advance(base::Hours(1));
 
   TestInterstitialNotShown(browser(), kNavigatedUrl);
   histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
@@ -835,6 +867,23 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
            LookalikeUrlMatchType::kCharacterSwapTop500);
 }
 
+// Navigate to a domain within a character swap of 1 to a top domain,
+// but the character swap is at the registry. This should not be flagged
+// as a character swap match.
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
+                       CharacterSwap_TopDomainWithDifferentRegistry_NoMatch) {
+  base::HistogramTester histograms;
+  // google.sr is within one character swap of google.rs which is a top domain.
+  const GURL kNavigatedUrl = GetURL("google.sr");
+  // Even if the navigated site has a low engagement score, it should be
+  // considered for lookalike suggestions.
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+
+  TestInterstitialNotShown(browser(), kNavigatedUrl);
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 0);
+  CheckNoUkm();
+}
+
 // Navigate to a domain within an edit distance of 1 to a top domain, but that
 // matches the allowlist. This should neither record metrics nor show an
 // interstitial.
@@ -871,7 +920,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // considered for lookalike suggestions.
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   // Advance clock to force a fetch of new engaged sites list.
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
 
   TestInterstitialNotShown(browser(), kNavigatedUrl);
   histograms.ExpectTotalCount(lookalikes::kHistogramName, 0);
@@ -902,7 +951,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   SetEngagementScore(browser(), GURL("https://1234.com"), kHighEngagement);
   SetEngagementScore(browser(), GURL("https://gooogle.com"), kHighEngagement);
   // Advance clock to force a fetch of new engaged sites list.
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
 
   // Matches test-site.com.tr but only differs in registry.
   TestInterstitialNotShown(browser(), GetURL("test-site.com.tw"));
@@ -928,7 +977,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 
   SetEngagementScore(browser(), GURL("http://site1.com"), kHighEngagement);
   // Advance clock to force a fetch of new engaged sites list.
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
 
   TestInterstitialNotShown(
       browser(), custom_test_server.GetURL("sité1.com", "/title1.html"));
@@ -1002,7 +1051,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
     SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
     // Advance the clock to force LookalikeUrlService to fetch a new engaged
     // site list.
-    test_clock()->Advance(base::TimeDelta::FromHours(1));
+    test_clock()->Advance(base::Hours(1));
 
     base::HistogramTester histograms;
     TestMetricsRecordedAndInterstitialShown(
@@ -1084,7 +1133,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // no engaged nonunique site).
   SetEngagementScore(browser(), GURL("http://localhost6.localhost"),
                      kHighEngagement);
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
   // The skeleton of this URL is localhost6.localpost which is at one edit
   // distance from localhost6.localhost. We use localpost here to prevent an
   // early return in LookalikeUrlNavigationThrottle::HandleThrottleRequest().
@@ -1105,7 +1154,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 
   // Advance the clock to force LookalikeUrlService to fetch a new engaged
   // site list.
-  test_clock()->Advance(base::TimeDelta::FromHours(1));
+  test_clock()->Advance(base::Hours(1));
 
   base::HistogramTester histograms;
   TestMetricsRecordedAndInterstitialShown(
@@ -1137,7 +1186,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   {
     // Advance the clock to force LookalikeUrlService to fetch a new engaged
     // site list.
-    test_clock()->Advance(base::TimeDelta::FromHours(1));
+    test_clock()->Advance(base::Hours(1));
     base::HistogramTester histograms;
     TestMetricsRecordedAndInterstitialShown(
         browser(), histograms, kNavigatedUrl, kEngagedUrl,
@@ -1150,7 +1199,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // Incognito shouldn't record metrics because there are no engaged sites.
   {
     base::HistogramTester histograms;
-    test_clock()->Advance(base::TimeDelta::FromHours(1));
+    test_clock()->Advance(base::Hours(1));
     TestInterstitialNotShown(incognito, kNavigatedUrl);
     histograms.ExpectTotalCount(lookalikes::kHistogramName, 0);
   }
@@ -1162,7 +1211,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 
   // Incognito should start recording metrics and main profile should stop.
   {
-    test_clock()->Advance(base::TimeDelta::FromHours(1));
+    test_clock()->Advance(base::Hours(1));
 
     base::HistogramTester histograms;
     TestMetricsRecordedAndInterstitialShown(
@@ -1175,7 +1224,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // Main profile shouldn't record metrics because there are no engaged sites.
   {
     base::HistogramTester histograms;
-    test_clock()->Advance(base::TimeDelta::FromHours(1));
+    test_clock()->Advance(base::Hours(1));
     TestInterstitialNotShown(browser(), kNavigatedUrl);
     histograms.ExpectTotalCount(lookalikes::kHistogramName, 0);
   }
@@ -1637,7 +1686,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleSignedExchangeBrowserTest,
   const GURL kSgxCacheUrl = https_server_.GetURL(
       "google-com.test.com", "/sxg/test.example.org_test.sxg");
   const GURL kNavigatedUrl = embedded_test_server()->GetURL(
-      "apple-com.site.com", "/server-redirect?" + kSgxCacheUrl.spec());
+      "apple-com.site.test", "/server-redirect?" + kSgxCacheUrl.spec());
 
   TestInterstitialNotShown(browser(), kNavigatedUrl);
 
@@ -1771,7 +1820,7 @@ class LookalikeUrlNavigationThrottleDigitalAssetLinksBrowserTest
     for (const TestSite& site : sites) {
       if (params->url_request.url == MakeManifestURL(site.hostname)) {
         if (site.slow_load) {
-          test_clock()->Advance(base::TimeDelta::FromMinutes(15));
+          test_clock()->Advance(base::Minutes(15));
         }
         if (!site.manifest.empty()) {
           // Serve manifest contents:

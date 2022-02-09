@@ -10,7 +10,6 @@
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_main_resource_loader_interceptor.h"
-#include "content/browser/worker_host/worker_script_fetch_initiator.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/url_request/redirect_util.h"
@@ -25,6 +24,7 @@ WorkerScriptLoader::WorkerScriptLoader(
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& resource_request,
+    const net::IsolationInfo& isolation_info,
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     base::WeakPtr<ServiceWorkerMainResourceHandle> service_worker_handle,
     base::WeakPtr<AppCacheHost> appcache_host,
@@ -50,7 +50,8 @@ WorkerScriptLoader::WorkerScriptLoader(
   }
   auto service_worker_interceptor =
       ServiceWorkerMainResourceLoaderInterceptor::CreateForWorker(
-          resource_request_, process_id, worker_token, service_worker_handle_);
+          resource_request_, isolation_info, process_id, worker_token,
+          service_worker_handle_);
 
   if (service_worker_interceptor)
     interceptors_.push_back(std::move(service_worker_interceptor));

@@ -83,6 +83,10 @@ content::WebUIDataSource* CreateNaClUIHTMLSource() {
 class NaClDomHandler : public WebUIMessageHandler {
  public:
   NaClDomHandler();
+
+  NaClDomHandler(const NaClDomHandler&) = delete;
+  NaClDomHandler& operator=(const NaClDomHandler&) = delete;
+
   ~NaClDomHandler() override;
 
   // WebUIMessageHandler implementation.
@@ -137,8 +141,6 @@ class NaClDomHandler : public WebUIMessageHandler {
   std::string pnacl_version_string_;
 
   base::WeakPtrFactory<NaClDomHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NaClDomHandler);
 };
 
 NaClDomHandler::NaClDomHandler()
@@ -150,7 +152,7 @@ NaClDomHandler::NaClDomHandler()
 NaClDomHandler::~NaClDomHandler() = default;
 
 void NaClDomHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "requestNaClInfo",
       base::BindRepeating(&NaClDomHandler::HandleRequestNaClInfo,
                           base::Unretained(this)));
@@ -295,7 +297,7 @@ void NaClDomHandler::AddNaClInfo(base::ListValue* list) {
 
 void NaClDomHandler::HandleRequestNaClInfo(const base::ListValue* args) {
   CHECK(callback_id_.empty());
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   callback_id_ = args->GetList()[0].GetString();
 
   if (!has_plugin_info_) {

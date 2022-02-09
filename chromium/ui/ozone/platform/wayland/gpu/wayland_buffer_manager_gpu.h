@@ -43,6 +43,10 @@ struct OverlayPlane;
 class WaylandBufferManagerGpu : public ozone::mojom::WaylandBufferManagerGpu {
  public:
   WaylandBufferManagerGpu();
+
+  WaylandBufferManagerGpu(const WaylandBufferManagerGpu&) = delete;
+  WaylandBufferManagerGpu& operator=(const WaylandBufferManagerGpu&) = delete;
+
   ~WaylandBufferManagerGpu() override;
 
   // WaylandBufferManagerGpu overrides:
@@ -111,6 +115,7 @@ class WaylandBufferManagerGpu : public ozone::mojom::WaylandBufferManagerGpu {
   void CommitBuffer(gfx::AcceleratedWidget widget,
                     uint32_t buffer_id,
                     const gfx::Rect& bounds_rect,
+                    float surface_scale_factor,
                     const gfx::Rect& damage_region);
   // Send overlay configurations for a frame to a WaylandWindow identified by
   // |widget|.
@@ -231,8 +236,6 @@ class WaylandBufferManagerGpu : public ozone::mojom::WaylandBufferManagerGpu {
 
   // Keeps track of the next unique buffer ID.
   uint32_t next_buffer_id_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(WaylandBufferManagerGpu);
 };
 
 }  // namespace ui

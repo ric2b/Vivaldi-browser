@@ -42,6 +42,9 @@ class FakeTaskRunner : public base::SingleThreadTaskRunner {
  public:
   FakeTaskRunner() = default;
 
+  FakeTaskRunner(const FakeTaskRunner&) = delete;
+  FakeTaskRunner& operator=(const FakeTaskRunner&) = delete;
+
  protected:
   ~FakeTaskRunner() override {}
 
@@ -59,8 +62,6 @@ class FakeTaskRunner : public base::SingleThreadTaskRunner {
     return PostDelayedTask(from_here, std::move(task), delay);
   }
   bool RunsTasksInCurrentSequence() const override { return true; }
-
-  DISALLOW_COPY_AND_ASSIGN(FakeTaskRunner);
 };
 
 }  // namespace
@@ -275,6 +276,7 @@ void FakeChromeUserManager::OnSessionStarted() {}
 
 void FakeChromeUserManager::RemoveUser(
     const AccountId& account_id,
+    user_manager::UserRemovalReason reason,
     user_manager::RemoveUserDelegate* delegate) {}
 
 void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
@@ -727,6 +729,21 @@ bool FakeChromeUserManager::IsManagedSessionEnabledForUser(
 bool FakeChromeUserManager::IsFullManagementDisclosureNeeded(
     policy::DeviceLocalAccountPolicyBroker* broker) const {
   return true;
+}
+
+void FakeChromeUserManager::CacheRemovedUser(
+    const std::string& user_email,
+    user_manager::UserRemovalReason reason) {
+  removed_user_cache_.push_back(std::make_pair(user_email, reason));
+}
+
+std::vector<std::pair<std::string, user_manager::UserRemovalReason>>
+FakeChromeUserManager::GetRemovedUserCache() const {
+  return removed_user_cache_;
+}
+
+void FakeChromeUserManager::MarkReporterInitialized() {
+  removed_user_cache_.clear();
 }
 
 user_manager::User* FakeChromeUserManager::GetActiveUserInternal() const {

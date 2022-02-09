@@ -71,7 +71,7 @@ class EnrollmentHandler : public CloudPolicyClient::Observer,
       chromeos::InstallAttributes* install_attributes,
       ServerBackedStateKeysBroker* state_keys_broker,
       chromeos::attestation::AttestationFlow* attestation_flow,
-      SigningService* signing_service,
+      std::unique_ptr<SigningService> signing_service,
       std::unique_ptr<CloudPolicyClient> client,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner,
       ActiveDirectoryJoinDelegate* ad_join_delegate,
@@ -81,6 +81,10 @@ class EnrollmentHandler : public CloudPolicyClient::Observer,
       const std::string& requisition,
       const std::string& sub_organization,
       EnrollmentCallback completion_callback);
+
+  EnrollmentHandler(const EnrollmentHandler&) = delete;
+  EnrollmentHandler& operator=(const EnrollmentHandler&) = delete;
+
   ~EnrollmentHandler() override;
 
   // Starts the enrollment process and reports the result to
@@ -214,7 +218,8 @@ class EnrollmentHandler : public CloudPolicyClient::Observer,
   chromeos::InstallAttributes* install_attributes_;
   ServerBackedStateKeysBroker* state_keys_broker_;
   chromeos::attestation::AttestationFlow* attestation_flow_;
-  SigningService* signing_service_;
+  // SigningService to be used by |client_| to register with.
+  std::unique_ptr<SigningService> signing_service_;
   std::unique_ptr<CloudPolicyClient> client_;
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
   ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
@@ -248,8 +253,6 @@ class EnrollmentHandler : public CloudPolicyClient::Observer,
   int lockbox_init_duration_ = 0;
 
   base::WeakPtrFactory<EnrollmentHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(EnrollmentHandler);
 };
 
 }  // namespace policy

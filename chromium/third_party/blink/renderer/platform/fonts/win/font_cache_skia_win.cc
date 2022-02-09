@@ -378,7 +378,7 @@ scoped_refptr<SimpleFontData> FontCache::GetDWriteFallbackFamily(
     }
     return FontDataFromFontPlatformData(data, kDoNotRetain);
   } else {
-    std::string family_name = font_description.Family().Family().Utf8();
+    std::string family_name = font_description.Family().FamilyName().Utf8();
 
     Bcp47Vector locales;
     locales.push_back(fallback_locale->LocaleForSkFontMgr());
@@ -658,13 +658,19 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
     }
   }
 
-  std::unique_ptr<FontPlatformData> result = std::make_unique<FontPlatformData>(
-      typeface, name.data(), font_size,
+  bool synthetic_bold_requested =
       (font_description.Weight() >= BoldThreshold() && !typeface->isBold()) ||
-          font_description.IsSyntheticBold(),
+      font_description.IsSyntheticBold();
+
+  bool synthetic_italic_requested =
       ((font_description.Style() == ItalicSlopeValue()) &&
        !typeface->isItalic()) ||
-          font_description.IsSyntheticItalic(),
+      font_description.IsSyntheticItalic();
+
+  std::unique_ptr<FontPlatformData> result = std::make_unique<FontPlatformData>(
+      typeface, name.data(), font_size,
+      synthetic_bold_requested && font_description.SyntheticBoldAllowed(),
+      synthetic_italic_requested && font_description.SyntheticItalicAllowed(),
       font_description.Orientation());
 
   result->SetAvoidEmbeddedBitmaps(

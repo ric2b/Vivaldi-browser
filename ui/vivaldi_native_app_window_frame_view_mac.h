@@ -13,6 +13,10 @@ class VivaldiNativeAppWindowFrameViewMac : public views::NativeFrameView {
  public:
   VivaldiNativeAppWindowFrameViewMac(VivaldiNativeAppWindowViews* views_);
   ~VivaldiNativeAppWindowFrameViewMac() override;
+  VivaldiNativeAppWindowFrameViewMac(
+      const VivaldiNativeAppWindowFrameViewMac&) = delete;
+  VivaldiNativeAppWindowFrameViewMac& operator=(
+      const VivaldiNativeAppWindowFrameViewMac&) = delete;
 
   void Layout() override;
 
@@ -24,8 +28,6 @@ class VivaldiNativeAppWindowFrameViewMac : public views::NativeFrameView {
  private:
   // Owner.
   VivaldiNativeAppWindowViews* const views_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowFrameViewMac);
 };
 
 #endif  // UI_VIVALDI_NATIVE_APP_WINDOW_FRAME_VIEW_MAC_H_

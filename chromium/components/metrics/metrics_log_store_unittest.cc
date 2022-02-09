@@ -44,6 +44,10 @@ class MetricsLogStoreTest : public testing::Test {
     MetricsLogStore::RegisterPrefs(pref_service_.registry());
     TestUnsentLogStore::RegisterPrefs(pref_service_.registry());
   }
+
+  MetricsLogStoreTest(const MetricsLogStoreTest&) = delete;
+  MetricsLogStoreTest& operator=(const MetricsLogStoreTest&) = delete;
+
   ~MetricsLogStoreTest() override {}
 
   MetricsLog* CreateLog(MetricsLog::LogType log_type) {
@@ -55,14 +59,11 @@ class MetricsLogStoreTest : public testing::Test {
     const char* pref = log_type == MetricsLog::INITIAL_STABILITY_LOG
                            ? prefs::kMetricsInitialLogs
                            : prefs::kMetricsOngoingLogs;
-    return pref_service_.GetList(pref)->GetSize();
+    return pref_service_.GetList(pref)->GetList().size();
   }
 
   TestMetricsServiceClient client_;
   TestingPrefServiceSimple pref_service_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MetricsLogStoreTest);
 };
 
 }  // namespace

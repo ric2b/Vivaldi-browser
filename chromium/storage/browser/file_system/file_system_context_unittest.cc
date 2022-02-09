@@ -210,7 +210,6 @@ TEST_F(FileSystemContextTest, CrackFileSystemURL) {
       "ext", kFileSystemTypeLocal, FileSystemMountOption(),
       base::FilePath(DRIVE FPL("/test/local/ext/"))));
 
-  const GURL kTestOrigin = GURL("http://chromium.org/");
   const base::FilePath kVirtualPathNoRoot = base::FilePath(FPL("root/file"));
 
   struct TestCase {
@@ -264,7 +263,7 @@ TEST_F(FileSystemContextTest, CrackFileSystemURL) {
 
   for (size_t i = 0; i < base::size(kTestCases); ++i) {
     const base::FilePath virtual_path =
-        base::FilePath::FromUTF8Unsafe(kTestCases[i].root)
+        base::FilePath::FromASCII(kTestCases[i].root)
             .Append(kVirtualPathNoRoot);
 
     GURL raw_url =

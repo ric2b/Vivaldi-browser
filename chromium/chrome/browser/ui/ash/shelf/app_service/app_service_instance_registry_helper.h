@@ -31,6 +31,12 @@ class AppServiceInstanceRegistryHelper {
  public:
   explicit AppServiceInstanceRegistryHelper(
       AppServiceAppWindowShelfController* controller);
+
+  AppServiceInstanceRegistryHelper(const AppServiceInstanceRegistryHelper&) =
+      delete;
+  AppServiceInstanceRegistryHelper& operator=(
+      const AppServiceInstanceRegistryHelper&) = delete;
+
   ~AppServiceInstanceRegistryHelper();
 
   void ActiveUserChanged();
@@ -100,10 +106,12 @@ class AppServiceInstanceRegistryHelper {
   // application.
   std::string GetAppId(content::WebContents* contents) const;
 
-  // Returns a window to represent |contents| in InstanceRegistry. If |contents|
-  // is a Web app, returns the native window for it. If there is no app in
-  // |contents|, returns the toplevel window.
-  aura::Window* GetWindow(content::WebContents* contents);
+  // Returns an InstanceKey to represent |contents| in InstanceRegistry. If
+  // |contents| is a Web app, returns an InstanceKey representing the
+  // WebContents for it. If there is no app in |contents|, returns an
+  // InstanceKey for the toplevel window.
+  apps::Instance::InstanceKey GetInstanceKeyForWebContents(
+      content::WebContents* contents);
 
   // Returns instance keys in InstanceRegistry for the given |app_id|.
   std::set<apps::Instance::InstanceKey> GetInstanceKeys(
@@ -142,8 +150,6 @@ class AppServiceInstanceRegistryHelper {
   // Maps the tab instance to the browser window in the browser.
   std::map<apps::Instance::InstanceKey, aura::Window*>
       tab_instance_to_browser_window_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppServiceInstanceRegistryHelper);
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_SHELF_APP_SERVICE_APP_SERVICE_INSTANCE_REGISTRY_HELPER_H_

@@ -46,6 +46,8 @@ class RazerChromaHandler {
  public:
   explicit RazerChromaHandler(Profile* profile);
   ~RazerChromaHandler();
+  RazerChromaHandler(const RazerChromaHandler&) = delete;
+  RazerChromaHandler& operator=(const RazerChromaHandler&) = delete;
 
   void Shutdown();
 
@@ -68,8 +70,6 @@ class RazerChromaHandler {
   bool initialized_ = false;
   std::unique_ptr<RazerChromaPlatformDriver> platform_driver_;
   Profile* profile_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(RazerChromaHandler);
 };
 
 #endif  // COMPONENTS_LIGHTS_RAZER_CHROMA_HANDLER_H_

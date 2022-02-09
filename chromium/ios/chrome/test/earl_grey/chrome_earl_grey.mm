@@ -21,6 +21,10 @@
 #include "ios/web/public/test/element_selector.h"
 #include "net/base/mac/url_conversions.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::kWaitForJSCompletionTimeout;
 using base::test::ios::kWaitForPageLoadTimeout;
@@ -45,9 +49,6 @@ NSString* const kWaitForRestoreSessionToFinishError =
 
 namespace chrome_test_util {
 UIWindow* GetAnyKeyWindow() {
-#if !defined(__IPHONE_13_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_13_0
-  return [GREY_REMOTE_CLASS_IN_APP(UIApplication) sharedApplication].keyWindow;
-#else
   // Only one or zero foreground scene should be available if this is called.
   NSSet<UIScene*>* scenes =
       [GREY_REMOTE_CLASS_IN_APP(UIApplication) sharedApplication]
@@ -68,13 +69,8 @@ UIWindow* GetAnyKeyWindow() {
       return window;
   }
   return nil;
-#endif
 }
 }  // namespace chrome_test_util
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
@@ -258,7 +254,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
   // Saving is always performed on a separate thread, so spin the run loop a
   // bit to ensure save.
-  base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSeconds(1));
+  base::test::ios::SpinRunLoopWithMaxDelay(base::Seconds(1));
 }
 
 - (void)setCurrentTabsToBeColdStartTabs {
@@ -685,19 +681,23 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 }
 
 - (void)triggerRestoreViaTabGridRemoveAllUndo {
-  [ChromeEarlGreyAppInterface disableCloseAllTabsConfirmation];
-
   [ChromeEarlGrey showTabSwitcher];
   GREYWaitForAppToIdle(@"App failed to idle");
-  [ChromeEarlGrey
-      waitForAndTapButton:chrome_test_util::TabGridCloseAllButton()];
+  if ([self isTabGridBulkActionsEnabled]) {
+    [ChromeEarlGrey
+        waitForAndTapButton:grey_allOf(chrome_test_util::TabGridEditButton(),
+                                       grey_sufficientlyVisible(), nil)];
+    [ChromeEarlGrey
+        waitForAndTapButton:chrome_test_util::TabGridEditMenuCloseAllButton()];
+  } else {
+    [ChromeEarlGrey
+        waitForAndTapButton:chrome_test_util::TabGridCloseAllButton()];
+  }
   [ChromeEarlGrey
       waitForAndTapButton:chrome_test_util::TabGridUndoCloseAllButton()];
   [ChromeEarlGrey waitForAndTapButton:chrome_test_util::TabGridDoneButton()];
   [self waitForRestoreSessionToFinish];
   [self waitForPageToFinishLoading];
-
-  [ChromeEarlGreyAppInterface resetCloseAllTabsConfirmation];
 }
 
 - (BOOL)webStateWebViewUsesContentInset {
@@ -1219,8 +1219,12 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   return [ChromeEarlGreyAppInterface areMultipleWindowsSupported];
 }
 
-- (BOOL)isCloseAllTabsConfirmationEnabled {
-  return [ChromeEarlGreyAppInterface isCloseAllTabsConfirmationEnabled];
+- (BOOL)isContextMenuActionsRefreshEnabled {
+  return [ChromeEarlGreyAppInterface isContextMenuActionsRefreshEnabled];
+}
+
+- (BOOL)isTabGridBulkActionsEnabled {
+  return [ChromeEarlGreyAppInterface isTabGridBulkActionsEnabled];
 }
 
 #pragma mark - ScopedBlockPopupsPref
@@ -1274,6 +1278,13 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   BOOL success = value && value->is_string();
   EG_TEST_HELPER_ASSERT_TRUE(success, @"Expected string");
   return success ? value->GetString() : "";
+}
+
+- (void)setIntegerValue:(int)value
+      forLocalStatePref:(const std::string&)prefName {
+  [ChromeEarlGreyAppInterface
+        setIntegerValue:value
+      forLocalStatePref:base::SysUTF8ToNSString(prefName)];
 }
 
 // Returns a base::Value representation of the requested pref.

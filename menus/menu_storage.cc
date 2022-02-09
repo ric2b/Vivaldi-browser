@@ -30,14 +30,12 @@ namespace menus {
 
 const base::FilePath::CharType kVivaldiResourcesFolder[] =
     FILE_PATH_LITERAL("vivaldi");
-const base::FilePath::CharType kMenuFolder[] =
-    FILE_PATH_LITERAL("menus");
+const base::FilePath::CharType kMenuFolder[] = FILE_PATH_LITERAL("menus");
 const base::FilePath::CharType kMainMenuFileName[] =
     FILE_PATH_LITERAL("mainmenu.json");
 const base::FilePath::CharType kContextMenuFileName[] =
     FILE_PATH_LITERAL("contextmenu.json");
-const base::FilePath::CharType kBackupExtension[] =
-    FILE_PATH_LITERAL("bak");
+const base::FilePath::CharType kBackupExtension[] = FILE_PATH_LITERAL("bak");
 
 // How often we save.
 const int kSaveDelayMS = 2500;
@@ -94,46 +92,60 @@ bool HasVersionStepped(const std::string& bundled_version,
                        const std::string& profile_version) {
   if (bundled_version != profile_version) {
     std::vector<std::string> bundled_array = base::SplitString(
-      bundled_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+        bundled_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     std::vector<std::string> profile_array = base::SplitString(
-      profile_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+        profile_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     if (bundled_array.size() != 4) {
       LOG(ERROR) << "Menu Storage: Failed to upgrade, illegal bundled version: "
                  << bundled_version;
-      return false; // Should never happen. We have full control of the string.
+      return false;  // Should never happen. We have full control of the string.
     }
     if (profile_array.size() != 4) {
-      return true; // If profile is broken we should upgrade to correct it.
+      return true;  // If profile is broken we should upgrade to correct it.
     }
-    bool increased[4]; // major, minor, build, patch
+    bool increased[4];  // major, minor, build, patch
     for (int i = 0; i < 4; i++) {
       int bundled, profile;
       if (!base::StringToInt(bundled_array[i], &bundled)) {
-        LOG(ERROR) << "Menu Storage: Failed to upgrade, illegal bundled version: "
-                 << bundled_version;
-        return false; // Should never happen. We have full control of the string.
+        LOG(ERROR)
+            << "Menu Storage: Failed to upgrade, illegal bundled version: "
+            << bundled_version;
+        return false;  // Should never happen. We have full control of the
+                       // string.
       }
       if (!base::StringToInt(profile_array[i], &profile)) {
-        return true; // If profile is broken we should upgrade to correct it.
+        return true;  // If profile is broken we should upgrade to correct it.
       }
       increased[i] = bundled > profile;
     }
     // We only upgrade upwards to prevent potential looping if sync is enabled
     // between two diffrent builds.
-    return increased[0] ||
-           (!increased[0] && increased[1]) ||
-           increased[2] ||
+    return increased[0] || (!increased[0] && increased[1]) || increased[2] ||
            (!increased[2] && increased[3]);
   }
   return false;
 }
 
 void OnLoad(const base::FilePath& profile_file,
-            const base::FilePath& bundled_file,
+            const base::FilePath::StringPieceType& filename,
             const base::WeakPtr<menus::MenuStorage> storage,
             std::unique_ptr<MenuLoadDetails> details) {
   bool exists;
   const base::FilePath* file;
+
+  // Set up the bundled path here as GetDeveloperFilePath() calls code that
+  // should not be used in the UI thread. We will use a developer version of
+  // this file if appropriate (non official build and using load-and-launch-app)
+  // to simplify testing and general workflow. Note that if there is a proper
+  // file present in the profile it will overrule this bundled file
+  // regardless of type.
+  base::FilePath bundled_file;
+  if (!vivaldi::GetDeveloperFilePath(filename, &bundled_file)) {
+    base::PathService::Get(chrome::DIR_RESOURCES, &bundled_file);
+    bundled_file = bundled_file.Append(kVivaldiResourcesFolder)
+                       .Append(kMenuFolder)
+                       .Append(filename);
+  }
 
   if (details->force_bundle()) {
     // Revert to default while running.
@@ -151,16 +163,16 @@ void OnLoad(const base::FilePath& profile_file,
         std::string bundled_version = details->control()->version;
         if (HasVersionStepped(bundled_version, profile_version)) {
           MenuUpgrade upgrade;
-          std::unique_ptr<base::Value> root(upgrade.Run(profile_file,
-              bundled_file, bundled_version));
+          std::unique_ptr<base::Value> root(
+              upgrade.Run(profile_file, bundled_file, bundled_version));
           if (root.get()) {
             MenuCodec codec;
             if (!codec.Decode(details->mainmenu_node(), details->control(),
-                *root.get(), false, "")) {
-              LOG(ERROR) << "Menu Storage: Failed to decode JSON content after upgrade";
+                              *root.get(), false, "")) {
+              LOG(ERROR) << "Menu Storage: Failed to decode JSON content after "
+                            "upgrade";
             } else {
-              details->SetHasUpgraded();
-              storage->SaveValue(*root.get());
+              details->SetUpgradeRoot(std::move(root));
             }
           }
         }
@@ -182,29 +194,49 @@ void OnLoad(const base::FilePath& profile_file,
     if (!exists) {
       if (details->force_bundle()) {
         LOG(ERROR) << "Menu Storage: File does not exist: " << bundled_file;
-      }  else {
+      } else {
         LOG(ERROR) << "Menu Storage: No files exists:\n"
-            << profile_file
-            << "\n"
-            << bundled_file;
+                   << profile_file << "\n"
+                   << bundled_file;
       }
     } else {
-      JSONFileValueDeserializer serializer(*file);
-      std::unique_ptr<base::Value> root(serializer.Deserialize(NULL, NULL));
-      if (!root.get()) {
-        LOG(ERROR) << "Menu Storage: Failed to parse JSON. Check format";
-        std::string content;
-        base::ReadFileToString(*file, &content);
-        LOG(ERROR) << "Menu Storage: Content: " << content;
-      } else {
-        MenuCodec codec;
-        // Use the version set up in 'details' when reading from the bundle.
-        std::string version = file == &bundled_file ?
-          details->control()->version : "";
-        if (!codec.Decode(details->mainmenu_node(), details->control(),
-                          *root.get(), file == &bundled_file, version)) {
-          LOG(ERROR) << "Menu Storage: Failed to decode JSON content from: "
-                     << *file;
+      // Loop so that we can attempt the bundled file if the local fails.
+      while (exists) {
+        bool is_error = false;
+
+        JSONFileValueDeserializer serializer(*file);
+        std::unique_ptr<base::Value> root(serializer.Deserialize(NULL, NULL));
+        if (!root.get()) {
+          LOG(ERROR) << "Menu Storage: Failed to parse JSON. Check format";
+          std::string content;
+          base::ReadFileToString(*file, &content);
+          LOG(ERROR) << "Menu Storage: " << *file;
+          LOG(ERROR) << "Menu Storage: Content: " << content;
+          is_error = true;
+        } else {
+          MenuCodec codec;
+          // Use the version set up in 'details' when reading from the bundle.
+          std::string version =
+              file == &bundled_file ? details->control()->version : "";
+          if (!codec.Decode(details->mainmenu_node(), details->control(),
+                            *root.get(), file == &bundled_file, version)) {
+            LOG(ERROR) << "Menu Storage: Failed to decode JSON content from: "
+                       << *file;
+            is_error = true;
+          }
+        }
+
+        if (!is_error || file == &bundled_file) {
+          break;
+        }
+        // Fallback to bundled file.
+        file = &bundled_file;
+        exists = base::PathExists(*file);
+        if (!exists) {
+          LOG(ERROR) << "Menu Storage: Bundled file does not exist "
+                     << bundled_file;
+        } else {
+          LOG(ERROR) << "Menu Storage: Attempting fallback " << bundled_file;
         }
       }
     }
@@ -216,52 +248,42 @@ void OnLoad(const base::FilePath& profile_file,
 }
 
 MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
-                                 Menu_Control* control, int64_t id,
+                                 Menu_Control* control,
+                                 int64_t id,
                                  bool force_bundle)
-  : mainmenu_node_(mainmenu_node),
-    control_(control),
-    id_(id),
-    has_upgraded_(false),
-    force_bundle_(force_bundle) {}
+    : mainmenu_node_(mainmenu_node),
+      control_(control),
+      id_(id),
+      force_bundle_(force_bundle) {}
 
 MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
-                                 Menu_Control* control, const std::string& menu,
+                                 Menu_Control* control,
+                                 const std::string& menu,
                                  bool force_bundle)
-  : mainmenu_node_(mainmenu_node),
-    control_(control),
-    id_(-1),
-    has_upgraded_(false),
-    force_bundle_(force_bundle),
-    menu_(menu) {}
+    : mainmenu_node_(mainmenu_node),
+      control_(control),
+      id_(-1),
+      force_bundle_(force_bundle),
+      menu_(menu) {}
 
 MenuLoadDetails::~MenuLoadDetails() {}
 
-void MenuLoadDetails::SetHasUpgraded() {
-  has_upgraded_ = true;
+void MenuLoadDetails::SetUpgradeRoot(
+    std::unique_ptr<base::Value> upgrade_root) {
+  upgrade_root_ = std::move(upgrade_root);
 }
 
 MenuStorage::MenuStorage(content::BrowserContext* context,
                          Menu_Model* model,
                          base::SequencedTaskRunner* sequenced_task_runner)
-  : model_(model),
-    writer_(context->GetPath().Append(GetFileName(model)),
-            sequenced_task_runner,
-            base::TimeDelta::FromMilliseconds(kSaveDelayMS)),
-    weak_factory_(this) {
-  // Set up bundled file. We will use a developer version of this file if
-  // appropriate (non official build and using load-and-launch-app) to simplify
-  // testing and general workflow. Note that if there is a proper file present
-  // in the profile it will overrule this bundled file regardless of type.
-  if (!vivaldi::GetDeveloperFilePath(GetFileName(model), &bundled_file_)) {
-    base::PathService::Get(chrome::DIR_RESOURCES, &bundled_file_);
-    bundled_file_ = bundled_file_.Append(kVivaldiResourcesFolder)
-                                 .Append(kMenuFolder)
-                                 .Append(GetFileName(model));
-  }
-
+    : model_(model),
+      writer_(context->GetPath().Append(GetFileName(model)),
+              sequenced_task_runner,
+              base::TimeDelta::FromMilliseconds(kSaveDelayMS)),
+      weak_factory_(this) {
   sequenced_task_runner_ = sequenced_task_runner;
-  sequenced_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&MakeBackup, writer_.path()));
+  sequenced_task_runner_->PostTask(FROM_HERE,
+                                   base::BindOnce(&MakeBackup, writer_.path()));
 }
 
 MenuStorage::~MenuStorage() {
@@ -273,7 +295,7 @@ void MenuStorage::Load(std::unique_ptr<MenuLoadDetails> details) {
   DCHECK(details);
   sequenced_task_runner_->PostTask(
       FROM_HERE,
-      base::BindRepeating(&OnLoad, writer_.path(), bundled_file_,
+      base::BindRepeating(&OnLoad, writer_.path(), GetFileName(model_),
                           weak_factory_.GetWeakPtr(), base::Passed(&details)));
 }
 
@@ -318,10 +340,12 @@ bool MenuStorage::SerializeData(std::string* output) {
 }
 
 void MenuStorage::OnLoadFinished(std::unique_ptr<MenuLoadDetails> details) {
-  if (!model_)
-    return;
-
-  model_->LoadFinished(std::move(details));
+  if (details->has_upgraded()) {
+    SaveValue(details->get_upgrade_root());
+  }
+  if (model_) {
+    model_->LoadFinished(std::move(details));
+  }
 }
 
 bool MenuStorage::SaveNow() {
@@ -339,11 +363,11 @@ bool MenuStorage::SaveNow() {
   return true;
 }
 
-bool MenuStorage::SaveValue(const base::Value& value) {
+bool MenuStorage::SaveValue(const std::unique_ptr<base::Value>& value) {
   std::unique_ptr<std::string> data(new std::string);
   JSONStringValueSerializer serializer(data.get());
   serializer.set_pretty_print(true);
-  if (!serializer.Serialize(value)) {
+  if (!serializer.Serialize(*(value.get()))) {
     return false;
   }
   writer_.WriteNow(std::move(data));

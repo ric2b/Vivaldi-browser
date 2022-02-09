@@ -7,9 +7,11 @@
 
 #include "base/containers/circular_deque.h"
 #include "build/chromeos_buildflags.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/platform_window/extensions/desk_extension.h"
+#include "ui/platform_window/extensions/pinned_mode_extension.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/extensions/workspace_extension.h"
 #include "ui/platform_window/extensions/workspace_extension_delegate.h"
@@ -26,7 +28,8 @@ class WaylandToplevelWindow : public WaylandWindow,
                               public WmMoveLoopHandler,
                               public WaylandExtension,
                               public WorkspaceExtension,
-                              public DeskExtension {
+                              public DeskExtension,
+                              public PinnedModeExtension {
  public:
   WaylandToplevelWindow(PlatformWindowDelegate* delegate,
                         WaylandConnection* connection);
@@ -64,13 +67,20 @@ class WaylandToplevelWindow : public WaylandWindow,
   bool ShouldUseNativeFrame() const override;
   bool ShouldUpdateWindowShape() const override;
   bool CanSetDecorationInsets() const override;
-  void SetDecorationInsets(gfx::Insets insets_px) override;
-  void SetOpaqueRegion(std::vector<gfx::Rect> region_px) override;
-  void SetInputRegion(gfx::Rect region_px) override;
+  void SetOpaqueRegion(const std::vector<gfx::Rect>* region_px) override;
+  void SetInputRegion(const gfx::Rect* region_px) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
 
   // WaylandWindow overrides:
   absl::optional<std::vector<gfx::Rect>> GetWindowShape() const override;
+
+  // Client-side decorations on Wayland take some portion of the window surface,
+  // and when they are turned on or off, the window geometry is changed.  That
+  // happens only once at the moment of switching the decoration mode, and has
+  // no further impact on the user experience, but the initial geometry of a
+  // top-level window is different on Wayland if compared to other platforms,
+  // which affects certain tests.
+  static void AllowSettingDecorationInsetsForTest(bool allow);
 
  private:
   // WaylandWindow overrides:
@@ -85,6 +95,8 @@ class WaylandToplevelWindow : public WaylandWindow,
   bool OnInitialize(PlatformWindowInitProperties properties) override;
   bool IsActive() const override;
   bool IsSurfaceConfigured() override;
+  void SetWindowGeometry(gfx::Rect bounds) override;
+  void UpdateDecorations() override;
 
   // zaura_surface listeners
   static void OcclusionChanged(void* data,
@@ -131,6 +143,10 @@ class WaylandToplevelWindow : public WaylandWindow,
   void SetWorkspaceExtensionDelegate(
       WorkspaceExtensionDelegate* delegate) override;
 
+  // PinnedModeExtension:
+  void Pin(bool trusted) const override;
+  void Unpin() const override;
+
   void TriggerStateChanges();
   void SetWindowState(PlatformWindowState state);
 
@@ -142,6 +158,9 @@ class WaylandToplevelWindow : public WaylandWindow,
   // Propagates the |min_size_| and |max_size_| to the ShellToplevel.
   void SetSizeConstraints();
 
+  // If current state is not PlatformWindowState::kNormal, stores the current
+  // bounds into restored_bounds_px_ so that they can be restored when the
+  // window gets back to normal state.  Otherwise, resets the restored bounds.
   void SetOrResetRestoredBounds();
 
   // Initializes additional shell integration, if the appropriate interfaces are
@@ -161,6 +180,10 @@ class WaylandToplevelWindow : public WaylandWindow,
   // Called when a window is moved to another desk or assigned to
   // all desks state.
   void OnDeskChanged(int state);
+
+  // Sets |workspace_| to |aura_surface_|.
+  // This must be called in SetUpShellIntegration().
+  void SetInitialWorkspace();
 
   // Wrappers around shell surface.
   std::unique_ptr<ShellToplevelWrapper> shell_toplevel_;
@@ -216,6 +239,8 @@ class WaylandToplevelWindow : public WaylandWindow,
 
   absl::optional<std::vector<gfx::Rect>> window_shape_in_dips_;
 
+  absl::optional<gfx::Rect> input_region_px_;
+
   // Pending xdg-shell configures, once this window is drawn to |bounds_dip|,
   // ack_configure with |serial| will be sent to the Wayland compositor.
   struct PendingConfigure {
@@ -233,6 +258,24 @@ class WaylandToplevelWindow : public WaylandWindow,
   // (PlatformWindowDelegate) more than once, for the same window show state
   // change.
   uint32_t requested_window_show_state_count_ = 0;
+  // Prevents the window geometry from being changed during transitions of the
+  // window state.
+  //
+  // Due to expectations of the higher levels, when the window changes its
+  // state, the DWTH is notified about the state change before the one actually
+  // happens, see TriggerStateChanges().  However, one of consequences of the
+  // DWTH being notified is that it wants to update the decoration insets, which
+  // implies updating the window geometry.  This flag is used to skip updating
+  // the geometry until new window bounds are applied.
+  //
+  // See https://crbug.com/1223005
+  bool state_change_in_transit_ = false;
+  // Some use cases such as changing the theme need to update the window
+  // geometry without changing its configuration.  They should set this flag.
+  // It will result in sending the updated geometry in the next frame update.
+  //
+  // See https://crbug.com/1223005
+  bool set_geometry_on_next_frame_ = false;
 
   // The desk index for the window.
   // If |workspace_| is -1, window is visible on all workspaces.

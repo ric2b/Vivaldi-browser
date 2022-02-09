@@ -53,6 +53,7 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
   bool IsInherited() const { return flags_ & kInherited; }
   bool IsVisited() const { return flags_ & kVisited; }
   bool IsInternal() const { return flags_ & kInternal; }
+  bool IsAnimationProperty() const { return flags_ & kAnimation; }
   bool IsValidForFirstLetter() const { return flags_ & kValidForFirstLetter; }
   bool IsValidForFirstLine() const { return flags_ & kValidForFirstLine; }
   bool IsValidForCue() const { return flags_ & kValidForCue; }
@@ -155,6 +156,11 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
     kInLogicalPropertyGroup = 1 << 20,
     // https://drafts.csswg.org/css-pseudo-4/#first-line-styling
     kValidForFirstLine = 1 << 21,
+    // The property participates in paired cascade, such that when encountered
+    // in highlight styles, we make all other highlight color properties default
+    // to initial, rather than the UA default.
+    // https://drafts.csswg.org/css-pseudo-4/#highlight-cascade
+    kHighlightColors = 1 << 22,
   };
 
   constexpr CSSProperty(CSSPropertyID property_id,

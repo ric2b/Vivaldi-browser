@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/download/test_download_shelf.h"
 #include "chrome/browser/ui/autofill/test/test_autofill_bubble_handler.h"
 #include "chrome/browser/ui/browser.h"
@@ -123,6 +124,7 @@ class TestBrowserWindow : public BrowserWindow {
   void FocusInactivePopupForAccessibility() override {}
   void FocusHelpBubble() override {}
   void RotatePaneFocus(bool forwards) override {}
+  void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
@@ -141,7 +143,8 @@ class TestBrowserWindow : public BrowserWindow {
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
       qrcode_generator::QRCodeGeneratorBubbleController* controller,
-      const GURL& url) override;
+      const GURL& url,
+      bool show_back_button) override;
 #if !defined(OS_ANDROID)
   sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
       content::WebContents* contents,
@@ -217,8 +220,6 @@ class TestBrowserWindow : public BrowserWindow {
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
-
-  void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
 
   void SetNativeWindow(gfx::NativeWindow window);
 

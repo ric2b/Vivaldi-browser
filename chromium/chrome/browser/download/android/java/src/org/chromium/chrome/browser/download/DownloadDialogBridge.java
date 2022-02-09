@@ -44,7 +44,10 @@ import android.text.TextUtils;
 import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.Log;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 
 import java.io.File;
 import java.util.Locale;
@@ -117,7 +120,7 @@ public class DownloadDialogBridge
     @CalledByNative
     private void showDialog(WindowAndroid windowAndroid, long totalBytes,
             @ConnectionType int connectionType, @DownloadLocationDialogType int dialogType,
-            String suggestedPath, boolean supportsLaterDialog) {
+            String suggestedPath, boolean supportsLaterDialog, boolean isIncognito) {
         Activity activity = windowAndroid.getActivity().get();
         if (activity == null) {
             onCancel();
@@ -141,7 +144,7 @@ public class DownloadDialogBridge
             }
 
             showDialog(activity, modalDialogManager, getPrefService(), totalBytes, connectionType,
-                    suggestedDialogType, suggestedPath, supportsLaterDialog);
+                    suggestedDialogType, suggestedPath, supportsLaterDialog, isIncognito);
         });
     }
 
@@ -149,7 +152,7 @@ public class DownloadDialogBridge
     void showDialog(Context context, ModalDialogManager modalDialogManager, PrefService prefService,
             long totalBytes, @ConnectionType int connectionType,
             @DownloadLocationDialogType int dialogType, String suggestedPath,
-            boolean supportsLaterDialog) {
+            boolean supportsLaterDialog, boolean isIncognito) {
         mContext = context;
         mModalDialogManager = modalDialogManager;
         mPrefService = prefService;
@@ -170,7 +173,7 @@ public class DownloadDialogBridge
         }
 
         mLocationDialog.showDialog(
-                mContext, mModalDialogManager, totalBytes, dialogType, suggestedPath);
+                mContext, mModalDialogManager, totalBytes, dialogType, suggestedPath, isIncognito);
     }
 
     private void onComplete() {
@@ -204,8 +207,8 @@ public class DownloadDialogBridge
         }
 
         // The location dialog has error message text, show the location dialog after the download
-        // later dialog.
-        showLocationDialog(false /*editLocation*/);
+        // later dialog. isIncognito is false because DownloadLater is not available in Incognito.
+        showLocationDialog(false /*editLocation*/, false /* isIncognito */);
     }
 
     @Override
@@ -221,17 +224,18 @@ public class DownloadDialogBridge
                 DownloadLaterUiEvent.DOWNLOAD_LATER_DIALOG_EDIT_CLICKED);
         mDownloadLaterDialog.dismissDialog(DialogDismissalCause.ACTION_ON_CONTENT);
 
-        // The user clicked the edit location text.
-        showLocationDialog(true /* editLocation */);
+        // The user clicked the edit location text. isIncognito is false because DownloadLater is
+        // not available in Incognito.
+        showLocationDialog(true /* editLocation */, false /* isIncognito */);
     }
 
-    private void showLocationDialog(boolean editLocation) {
+    private void showLocationDialog(boolean editLocation, boolean isIncognito) {
         mEditLocation = editLocation;
 
         mDownloadLaterChoice = mDownloadLaterDialog.getChoice();
 
-        mLocationDialog.showDialog(
-                mContext, mModalDialogManager, mTotalBytes, mLocationDialogType, mSuggestedPath);
+        mLocationDialog.showDialog(mContext, mModalDialogManager, mTotalBytes, mLocationDialogType,
+                mSuggestedPath, isIncognito);
     }
 
     private void showDownloadLaterDialog() {
@@ -394,6 +398,9 @@ public class DownloadDialogBridge
             return false;
         }
 
+        // If downloading is disabled, return and cancel the download
+        if (checkIfDownloadDisabled(activity, windowAndroid)) return true;
+
         boolean isExternalDownloadManagerEnabled = sharedPreferencesManager.readBoolean(
                 VivaldiPreferences.EXTERNAL_DOWNLOAD_MANAGER_ENABLED, false);
 
@@ -439,6 +446,30 @@ public class DownloadDialogBridge
                 builder.setPositiveButton(R.string.ok, (dialog, id) -> { dialog.dismiss(); });
                 builder.create().show();
             }
+        }
+        return false;
+    }
+
+    /** Vivaldi **/
+    private boolean checkIfDownloadDisabled(Activity activity, WindowAndroid windowAndroid) {
+        // Note(Nagamani): File download should be disabled in Polestar builds. Ref. POLE-10
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            // Snackbar to show the error message.
+            SnackbarManager.SnackbarController snackbarController
+                    = new SnackbarManager.SnackbarController() {
+                @Override
+                public void onAction(Object actionData) {
+                }
+            };
+            Snackbar snackbar = Snackbar.make(
+                    activity.getString(R.string.download_disabled),
+                    snackbarController, Snackbar.TYPE_ACTION, Snackbar.UMA_UNKNOWN)
+                    .setAction(activity.getString(R.string.ok), null)
+                    .setDuration(5000); // Snackbar duration of 5000ms
+            new SnackbarManager(
+                    activity, activity.findViewById(android.R.id.content), windowAndroid)
+                    .showSnackbar(snackbar);
+            return true;
         }
         return false;
     }

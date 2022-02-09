@@ -17,6 +17,7 @@
 #define BASE_COMMAND_LINE_H_
 
 #include <stddef.h>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 namespace base {
 
 class FilePath;
+class DuplicateSwitchHandler;
 
 class BASE_EXPORT CommandLine {
  public:
@@ -207,6 +209,10 @@ class BASE_EXPORT CommandLine {
   void ParseFromString(StringPieceType command_line);
 #endif
 
+  // Sets a delegate that's called when we encounter a duplicate switch
+  static void SetDuplicateSwitchHandler(
+      std::unique_ptr<DuplicateSwitchHandler>);
+
  private:
   // Disallow default constructor; a program name must be explicitly specified.
   CommandLine() = delete;
@@ -253,6 +259,15 @@ class BASE_EXPORT CommandLine {
 
   // The index after the program and switches, any arguments start here.
   size_t begin_args_;
+};
+
+class BASE_EXPORT DuplicateSwitchHandler {
+ public:
+  // out_value contains the existing value of the switch
+  virtual void ResolveDuplicate(base::StringPiece key,
+                                CommandLine::StringPieceType new_value,
+                                CommandLine::StringType& out_value) = 0;
+  virtual ~DuplicateSwitchHandler() = default;
 };
 
 }  // namespace base

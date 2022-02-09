@@ -34,6 +34,9 @@ class DocumentBlockedInterstitial
           controller_client);
 
   ~DocumentBlockedInterstitial() override;
+  DocumentBlockedInterstitial(const DocumentBlockedInterstitial&) = delete;
+  DocumentBlockedInterstitial& operator=(const DocumentBlockedInterstitial&) =
+      delete;
 
   // SecurityInterstitialPage method:
   security_interstitials::SecurityInterstitialPage::TypeID GetTypeForTesting()
@@ -51,8 +54,6 @@ class DocumentBlockedInterstitial
   friend class LookalikeUrlNavigationThrottleBrowserTest;
 
   RuleGroup blocking_group_;
-
-  DISALLOW_COPY_AND_ASSIGN(DocumentBlockedInterstitial);
 };
 }  // namespace adblock_filter
 

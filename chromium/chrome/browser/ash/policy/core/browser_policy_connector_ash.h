@@ -45,7 +45,7 @@ class AffiliatedRemoteCommandsInvalidator;
 class BluetoothPolicyHandler;
 class DeviceActiveDirectoryPolicyManager;
 class DeviceCloudPolicyInitializer;
-class DeviceCloudStateKeysUploader;
+class ActiveDirectoryDeviceStateUploader;
 class DeviceDockMacAddressHandler;
 class DeviceLocalAccountPolicyService;
 class DeviceNamePolicyHandler;
@@ -68,6 +68,10 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
  public:
   BrowserPolicyConnectorAsh();
 
+  BrowserPolicyConnectorAsh(const BrowserPolicyConnectorAsh&) = delete;
+  BrowserPolicyConnectorAsh& operator=(const BrowserPolicyConnectorAsh&) =
+      delete;
+
   ~BrowserPolicyConnectorAsh() override;
 
   // Helper that returns a new BACKGROUND SequencedTaskRunner. Each
@@ -86,7 +90,7 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
 
   // Shutdown() is called from BrowserProcessImpl::StartTearDown() but |this|
   // observes some objects that get destroyed earlier. PreShutdown() is called
-  // from ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun(), allowing the
+  // from `ChromeBrowserMainPartsAsh::PostMainMessageLoopRun()`, allowing the
   // connection to these dependencies to be severed earlier.
   void PreShutdown();
 
@@ -132,6 +136,9 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   // Returns the cloud directory API ID or an empty string if it is not set.
   std::string GetDirectoryApiID() const;
 
+  // Returns the obfuscated customer's ID or an empty string if it not set.
+  std::string GetObfuscatedCustomerID() const;
+
   // Returns the organization logo URL or an empty string if it is not set.
   std::string GetCustomerLogoURL() const;
 
@@ -158,11 +165,6 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   DeviceActiveDirectoryPolicyManager* GetDeviceActiveDirectoryPolicyManager()
       const {
     return device_active_directory_policy_manager_;
-  }
-
-  // May be nullptr, e.g. for devices managed by Active Directory.
-  DeviceCloudPolicyInitializer* GetDeviceCloudPolicyInitializer() const {
-    return device_cloud_policy_initializer_.get();
   }
 
   // May be nullptr, e.g. for devices managed by Active Directory.
@@ -281,8 +283,8 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   DeviceCloudPolicyManagerAsh* device_cloud_policy_manager_ = nullptr;
   DeviceActiveDirectoryPolicyManager* device_active_directory_policy_manager_ =
       nullptr;
-  std::unique_ptr<DeviceCloudStateKeysUploader>
-      state_keys_uploader_for_active_directory_;
+  std::unique_ptr<ActiveDirectoryDeviceStateUploader>
+      active_directory_device_state_uploader_;
   PrefService* local_state_ = nullptr;
   std::unique_ptr<DeviceCloudPolicyInitializer>
       device_cloud_policy_initializer_;
@@ -341,8 +343,6 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   std::unique_ptr<chromeos::attestation::AttestationFlow> attestation_flow_;
 
   base::WeakPtrFactory<BrowserPolicyConnectorAsh> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserPolicyConnectorAsh);
 };
 
 }  // namespace policy

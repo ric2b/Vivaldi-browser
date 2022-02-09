@@ -17,6 +17,9 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import androidx.annotation.ColorInt;
+import androidx.annotation.ColorRes;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.widget.TextViewCompat;
 
@@ -25,7 +28,9 @@ import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.widget.ChromeImageView;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
 /**
  * Represents a generic toolbar used in the bottom strip/grid component.
@@ -40,6 +45,10 @@ public class TabGroupUiToolbarView extends FrameLayout {
     private ViewGroup mContainerView;
     private EditText mTitleTextView;
     private LinearLayout mMainContent;
+
+    // Vivaldi
+    private ThemeColorProvider.ThemeColorObserver mThemeColorObserver;
+    private ThemeColorProvider.TintObserver mTintObserver;
 
     public TabGroupUiToolbarView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -63,6 +72,10 @@ public class TabGroupUiToolbarView extends FrameLayout {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             if (getId() == -1) setVisibility(View.GONE);
         }
+
+        // Vivaldi
+        mThemeColorObserver = (color, shouldAnimate) -> setPrimaryColor(color);
+        mTintObserver = (tint, useLight) -> setTint(tint);
     }
 
     void setLeftButtonOnClickListener(OnClickListener listener) {
@@ -154,6 +167,20 @@ public class TabGroupUiToolbarView extends FrameLayout {
         mTitleTextView.setText(title);
     }
 
+    void setIsIncognito(boolean isIncognito) {
+        @ColorRes
+        int primaryColorRes = isIncognito ? R.color.dialog_bg_color_dark : R.color.dialog_bg_color;
+        @ColorInt
+        int primaryColor = getResources().getColor(primaryColorRes);
+        setPrimaryColor(primaryColor);
+
+        @ColorRes
+        int tintListRes = isIncognito ? R.color.default_icon_color_light_tint_list
+                                      : R.color.default_icon_color_tint_list;
+        ColorStateList tintList = ContextCompat.getColorStateList(getContext(), tintListRes);
+        setTint(tintList);
+    }
+
     void setPrimaryColor(int color) {
         mMainContent.setBackgroundColor(color);
         if (mFadingEdgeStart == null || mFadingEdgeEnd == null) return;
@@ -217,5 +244,11 @@ public class TabGroupUiToolbarView extends FrameLayout {
      */
     void setRightButtonContentDescription(String string) {
         mRightButton.setContentDescription(string);
+    }
+
+    /** Vivaldi **/
+    public void setThemeColorProvider(ThemeColorProvider provider) {
+        provider.addThemeColorObserver(mThemeColorObserver);
+        provider.addTintObserver(mTintObserver);
     }
 }

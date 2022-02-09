@@ -288,7 +288,7 @@ ExtensionFunction::ResponseAction ManagementGetAllFunction::Run() {
 
 ExtensionFunction::ResponseAction ManagementGetFunction::Run() {
   std::unique_ptr<management::Get::Params> params(
-      management::Get::Params::Create(*args_));
+      management::Get::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
 
@@ -309,7 +309,7 @@ ExtensionFunction::ResponseAction ManagementGetSelfFunction::Run() {
 ExtensionFunction::ResponseAction
 ManagementGetPermissionWarningsByIdFunction::Run() {
   std::unique_ptr<management::GetPermissionWarningsById::Params> params(
-      management::GetPermissionWarningsById::Params::Create(*args_));
+      management::GetPermissionWarningsById::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const Extension* extension =
@@ -326,7 +326,7 @@ ManagementGetPermissionWarningsByIdFunction::Run() {
 ExtensionFunction::ResponseAction
 ManagementGetPermissionWarningsByManifestFunction::Run() {
   std::unique_ptr<management::GetPermissionWarningsByManifest::Params> params(
-      management::GetPermissionWarningsByManifest::Params::Create(*args_));
+      management::GetPermissionWarningsByManifest::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const ManagementAPIDelegate* delegate = ManagementAPI::GetFactoryInstance()
@@ -385,7 +385,7 @@ void ManagementGetPermissionWarningsByManifestFunction::OnParse(
 
 ExtensionFunction::ResponseAction ManagementLaunchAppFunction::Run() {
   std::unique_ptr<management::LaunchApp::Params> params(
-      management::LaunchApp::Params::Create(*args_));
+      management::LaunchApp::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (vivaldi::IsVivaldiApp(params->id)) {
@@ -417,7 +417,7 @@ ManagementSetEnabledFunction::~ManagementSetEnabledFunction() = default;
 
 ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
   std::unique_ptr<management::SetEnabled::Params> params(
-      management::SetEnabled::Params::Create(*args_));
+      management::SetEnabled::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   extension_id_ = params->id;
 
@@ -692,7 +692,7 @@ ManagementUninstallFunction::~ManagementUninstallFunction() {
 
 ExtensionFunction::ResponseAction ManagementUninstallFunction::Run() {
   std::unique_ptr<management::Uninstall::Params> params(
-      management::Uninstall::Params::Create(*args_));
+      management::Uninstall::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool show_confirm_dialog = params->options.get() &&
@@ -709,7 +709,7 @@ ManagementUninstallSelfFunction::~ManagementUninstallSelfFunction() {
 
 ExtensionFunction::ResponseAction ManagementUninstallSelfFunction::Run() {
   std::unique_ptr<management::UninstallSelf::Params> params(
-      management::UninstallSelf::Params::Create(*args_));
+      management::UninstallSelf::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   EXTENSION_FUNCTION_VALIDATE(extension_.get());
 
@@ -744,7 +744,7 @@ ExtensionFunction::ResponseAction ManagementCreateAppShortcutFunction::Run() {
     return RespondNow(Error(keys::kGestureNeededForCreateAppShortcutError));
 
   std::unique_ptr<management::CreateAppShortcut::Params> params(
-      management::CreateAppShortcut::Params::Create(*args_));
+      management::CreateAppShortcut::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   const Extension* extension =
       ExtensionRegistry::Get(browser_context())
@@ -795,7 +795,7 @@ ExtensionFunction::ResponseAction ManagementSetLaunchTypeFunction::Run() {
     return RespondNow(Error(keys::kGestureNeededForSetLaunchTypeError));
 
   std::unique_ptr<management::SetLaunchType::Params> params(
-      management::SetLaunchType::Params::Create(*args_));
+      management::SetLaunchType::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   const Extension* extension =
       ExtensionRegistry::Get(browser_context())
@@ -868,7 +868,7 @@ ExtensionFunction::ResponseAction ManagementGenerateAppForLinkFunction::Run() {
     return RespondNow(Error(keys::kGestureNeededForGenerateAppForLinkError));
 
   std::unique_ptr<management::GenerateAppForLink::Params> params(
-      management::GenerateAppForLink::Params::Create(*args_));
+      management::GenerateAppForLink::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL launch_url(params->url);

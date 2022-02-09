@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "base/win/wmi.h"
 #include "chrome/installer/setup/install_params.h"
@@ -49,6 +50,9 @@
 namespace vivaldi {
 
 namespace {
+
+// Registry name for older autorun-based update notifier.
+const wchar_t kUpdateNotifierOldAutorunName[] = L"Vivaldi Update Notifier";
 
 bool g_start_browser_after_install = false;
 bool g_silent_install = false;
@@ -664,28 +668,28 @@ void RestartUpdateNotifier(const installer::InstallerState& installer_state) {
     QuitAllUpdateNotifiers(exe_dir, /*quit_old=*/true);
   }
 
+  // Remove an older autorun entry registry entry if any.
+  base::win::RemoveCommandFromAutoRun(HKEY_CURRENT_USER,
+                                      ::vivaldi::kUpdateNotifierOldAutorunName);
+
   if (IsInstallStandalone()) {
     // An update check for a standalone install is always run by the browser.
-    // Check if we have older an autorun entry and remove it.
-    DisableUpdateNotifierAsAutorun(exe_dir);
     return;
   }
 
   if (!IsInstallUpdate()) {
-    // Enable update notifier for a new installation.
-    base::CommandLine update_notifier_command =
-        GetCommonUpdateNotifierCommand(exe_dir);
-    update_notifier_command.AppendSwitch(vivaldi_update_notifier::kEnable);
-    if (installer_state.system_install() && !IsInstallSilentUpdate()) {
-      // We must not use LaunchNotifierProcess() as the installer is a
-      // privileged process at this point and we must start a normal process
-      // here.
-      ShellExecuteFromExplorer(update_notifier_command.GetProgram(),
-                               update_notifier_command.GetArgumentsString(),
-                               exe_dir);
-    } else {
-      // For system installs with silent updates this starts the notifier as
-      // an elevated process so it can create a timer for the system account.
+    // As this is a new installation, there should be no any update notification
+    // task for the installation path. Running the browser for the first time
+    // will create it. But if we are running with administrative privileges, we
+    // want to remove any existing update task to ensure a clean start in case
+    // the user created such task accidentally via running a Vivaldi installer
+    // or browser with administrative privileges. Such task cannot be altered
+    // when running as normal user without UAC, see VB-83328.
+    if (::IsUserAnAdmin()) {
+      base::CommandLine update_notifier_command =
+          GetCommonUpdateNotifierCommand(exe_dir);
+      update_notifier_command.AppendSwitch(
+          vivaldi_update_notifier::kUnregister);
       LaunchNotifierProcess(update_notifier_command);
     }
   }

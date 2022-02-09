@@ -26,21 +26,18 @@ VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
                                       button_rect);
 }
 
-void ConvertContainerRectToScreen(
-    content::WebContents* web_contents,
-    BookmarkMenuContainer& container) {
-
+void ConvertContainerRectToScreen(content::WebContents* web_contents,
+                                  BookmarkMenuContainer& container) {
   views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
       VivaldiMenu::GetActiveNativeViewFromWebContents(web_contents));
   gfx::Point screen_loc;
   views::View::ConvertPointToScreen(widget->GetContentsView(), &screen_loc);
-  for (BookmarkMenuContainerEntry& e: container.siblings) {
+  for (BookmarkMenuContainerEntry& e : container.siblings) {
     gfx::Point point(e.rect.origin());
     point.Offset(screen_loc.x(), screen_loc.y());
     e.rect.set_origin(point);
   }
 }
-
 
 VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
     content::WebContents* web_contents,
@@ -48,14 +45,14 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
     const bookmarks::BookmarkNode* node,
     int offset,
     const gfx::Rect& button_rect)
-  : web_contents_(web_contents),
-    button_rect_(button_rect),
-    controller_(nullptr),
-    observer_(nullptr) {
+    : web_contents_(web_contents),
+      button_rect_(button_rect),
+      controller_(nullptr),
+      observer_(nullptr) {
   Browser* browser = vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
   if (browser) {
     int index = 0;
-    for (BookmarkMenuContainerEntry e: container->siblings) {
+    for (BookmarkMenuContainerEntry e : container->siblings) {
       if (e.id == node->id()) {
         SetBookmarkContainer(container, index);
         controller_ = new BookmarkMenuController(
@@ -65,13 +62,13 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
         controller_->set_observer(this);
         break;
       }
-      index ++;
+      index++;
     }
   }
 }
 
 VivaldiBookmarkMenuViews::~VivaldiBookmarkMenuViews() {
-  SetBookmarkContainer(nullptr, 0); // Cleanup. No deletion.
+  SetBookmarkContainer(nullptr, 0);  // Cleanup. No deletion.
   if (controller_) {
     controller_->set_observer(nullptr);
   }
@@ -110,6 +107,5 @@ VivaldiBookmarkMenuViews::GetPageNavigatorGetter() {
   };
   return base::BindRepeating(getter, weak_ptr_factory_.GetWeakPtr());
 }
-
 
 }  // namespace vivaldi

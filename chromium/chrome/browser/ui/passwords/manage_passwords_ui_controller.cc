@@ -129,11 +129,6 @@ ManagePasswordsUIController::~ManagePasswordsUIController() = default;
 
 void ManagePasswordsUIController::OnPasswordSubmitted(
     std::unique_ptr<PasswordFormManagerForUI> form_manager) {
-  // If the save bubble is already shown (possibly manual fallback for saving)
-  // then ignore the changes because the user may interact with it right now.
-  if (bubble_status_ == BubbleStatus::SHOWN &&
-      GetState() == password_manager::ui::PENDING_PASSWORD_STATE)
-    return;
   bool show_bubble = !form_manager->IsBlocklisted();
   DestroyAccountChooser();
   save_fallback_timer_.Stop();
@@ -539,8 +534,8 @@ void ManagePasswordsUIController::SavePassword(const std::u16string& username,
       std::make_unique<password_manager::PostSaveCompromisedHelper>(
           passwords_data_.form_manager()->GetInsecureCredentials(), username);
   post_save_compromised_helper_->AnalyzeLeakedCredentials(
-      passwords_data_.client()->GetProfilePasswordStoreInterface(),
-      passwords_data_.client()->GetAccountPasswordStoreInterface(),
+      passwords_data_.client()->GetProfilePasswordStore(),
+      passwords_data_.client()->GetAccountPasswordStore(),
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
           ->GetPrefs(),
       base::BindOnce(
@@ -559,7 +554,7 @@ void ManagePasswordsUIController::SaveUnsyncedCredentialsInProfileStore(
     const std::vector<password_manager::PasswordForm>& selected_credentials) {
   auto profile_store_form_saver =
       std::make_unique<password_manager::FormSaverImpl>(
-          passwords_data_.client()->GetProfilePasswordStoreInterface());
+          passwords_data_.client()->GetProfilePasswordStore());
   for (const password_manager::PasswordForm& form : selected_credentials) {
     // Only newly-saved or newly-updated credentials can be unsynced. Since
     // conflicts are solved in that process, any entry in the profile store
@@ -791,7 +786,7 @@ void ManagePasswordsUIController::OnVisibilityChanged(
 
 // static
 base::TimeDelta ManagePasswordsUIController::GetTimeoutForSaveFallback() {
-  return base::TimeDelta::FromSeconds(
+  return base::Seconds(
       ManagePasswordsUIController::save_fallback_timeout_in_seconds_);
 }
 
@@ -968,4 +963,4 @@ void ManagePasswordsUIController::
   move_to_account_store_helpers_.erase(done_helper_it);
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(ManagePasswordsUIController)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(ManagePasswordsUIController);

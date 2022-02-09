@@ -51,6 +51,10 @@ class RequestFilterProxyingURLLoaderFactory
                       uint64_t request_id,
                       int32_t frame_routing_id,
                       const network::ResourceRequest& request);
+
+    InProgressRequest(const InProgressRequest&) = delete;
+    InProgressRequest& operator=(const InProgressRequest&) = delete;
+
     ~InProgressRequest() override;
 
     void Restart();
@@ -203,20 +207,18 @@ class RequestFilterProxyingURLLoaderFactory
     // filters made to headers in their callbacks.
     struct FollowRedirectParams {
       FollowRedirectParams();
+      FollowRedirectParams(const FollowRedirectParams&) = delete;
+      FollowRedirectParams& operator=(const FollowRedirectParams&) = delete;
       ~FollowRedirectParams();
       std::vector<std::string> removed_headers;
       net::HttpRequestHeaders modified_headers;
       net::HttpRequestHeaders modified_cors_exempt_headers;
       absl::optional<GURL> new_url;
-
-      DISALLOW_COPY_AND_ASSIGN(FollowRedirectParams);
     };
     std::unique_ptr<FollowRedirectParams> pending_follow_redirect_params_;
     State state_ = State::kInProgress;
 
     base::WeakPtrFactory<InProgressRequest> weak_factory_{this};
-
-    DISALLOW_COPY_AND_ASSIGN(InProgressRequest);
   };
 
   RequestFilterProxyingURLLoaderFactory(
@@ -236,6 +238,11 @@ class RequestFilterProxyingURLLoaderFactory
           forwarding_header_client,
       RequestFilterManager::ProxySet* proxies,
       content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type);
+
+  RequestFilterProxyingURLLoaderFactory(
+      const RequestFilterProxyingURLLoaderFactory&) = delete;
+  RequestFilterProxyingURLLoaderFactory& operator=(
+      const RequestFilterProxyingURLLoaderFactory&) = delete;
 
   ~RequestFilterProxyingURLLoaderFactory() override;
 
@@ -322,8 +329,6 @@ class RequestFilterProxyingURLLoaderFactory
 
   base::WeakPtrFactory<RequestFilterProxyingURLLoaderFactory> weak_factory_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(RequestFilterProxyingURLLoaderFactory);
 };
 
 }  // namespace vivaldi

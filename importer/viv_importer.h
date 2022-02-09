@@ -31,6 +31,8 @@ class OperaImporter : public Importer {
 
  private:
   ~OperaImporter() override;
+  OperaImporter(const OperaImporter&) = delete;
+  OperaImporter& operator=(const OperaImporter&) = delete;
 
   // Returns false on error in which case error is filled with an error message.
   bool ImportBookMarks(std::string* error);
@@ -75,8 +77,6 @@ class OperaImporter : public Importer {
 
   unordered_map<std::u16string, pair<std::u16string, >>;
   */
-
-  DISALLOW_COPY_AND_ASSIGN(OperaImporter);
 };
 
 #endif  // IMPORTER_VIV_IMPORTER_H_

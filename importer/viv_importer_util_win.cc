@@ -55,7 +55,8 @@ base::FilePath GetMailDirectory() {
     return base::FilePath();
 
   profile_dir = profile_dir.Append(kOpera);
-  if (base::PathExists(profile_dir.Append(kOpera64bitFolder).Append(kMailFolder)))
+  if (base::PathExists(
+          profile_dir.Append(kOpera64bitFolder).Append(kMailFolder)))
     return profile_dir.Append(kOpera64bitFolder).Append(kMailFolder);
   else if (base::PathExists(profile_dir.Append(kOpera).Append(kMailFolder)))
     return profile_dir.Append(kOpera).Append(kMailFolder);

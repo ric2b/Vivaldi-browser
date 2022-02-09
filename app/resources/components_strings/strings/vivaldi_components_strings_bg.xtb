@@ -8,10 +8,9 @@
 <translation id="1161325031994447685">Да се свържете отново по Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Отпечатай…</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Опитайте да изчистите бисквитките<ph name="END_LINK" /></translation>
-<translation id="1375198122581997741">За браузъра</translation>
+<translation id="1375198122581997741">За версията</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не изпраща никакви данни.</translation>
 <translation id="1559528461873125649">Няма такъв файл или директория</translation>
-<translation id="1620510694547887537">Камера</translation>
 <translation id="1640244768702815859">Опитайте да <ph name="BEGIN_LINK" />посетите началната страница на сайта<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Неподдържан протокол</translation>
 <translation id="1710259589646384581">Операционна система</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Опитайте да изпълните Диагностика на мрежата на Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Сайтът съдържа затормозяващи програми</translation>
 <translation id="1916770123977586577">Презаредете страницата за прилагане на обновените настройки</translation>
-<translation id="1919345977826869612">Реклами</translation>
 <translation id="1974060860693918893">Разширени</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Да проверите посредника и защитната стена<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Звук</translation>
 <translation id="2119505898009119320">Издадено на: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Фоново сверяване</translation>
 <translation id="2166378884831602661">Сайт без защитено свързване</translation>
 <translation id="2187317261103489799">Отчитай (фабрично)</translation>
 <translation id="2224337661447660594">Няма интернет</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">Блокиран достъп до интернет</translation>
 <translation id="2317259163369394535">Домейнът <ph name="DOMAIN" /> изисква потребител и парола.</translation>
 <translation id="2337852623177822836">Контролирано от администратора</translation>
-<translation id="2344028582131185878">Автоизтегляниe</translation>
 <translation id="2355395290879513365">Злоумишленици могат да видят преглежданите от вас картини в сайта и да ви подмамят, като ги променят.</translation>
 <translation id="2356070529366658676">Питай</translation>
 <translation id="2359808026110333948">Продължи</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Да изпълните Диагностика на мрежата<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Известяване</translation>
 <translation id="2491414235131909199">Страницата се блокира от разширение</translation>
 <translation id="2501278716633472235">Развий</translation>
 <translation id="2539524384386349900">Отчитай</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> изпрати недействителен отговор.</translation>
-<translation id="2586657967955657006">Клипборд</translation>
 <translation id="2609632851001447353">Вариации</translation>
 <translation id="2634124572758952069">Намиране на адрес IP на сървъра <ph name="HOST_NAME" /> е невъзможно.</translation>
 <translation id="2649204054376361687"><ph name="CITY" /> <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
 Ако смятате, че не би трябвало да ползвате сървър посредник,
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Натиснете бутона за презареждане за препредаване на данните, необходими за зареждане на страницата.</translation>
-<translation id="3227137524299004712">Микрофон</translation>
 <translation id="3234666976984236645">Отчитай винаги важното в сайта</translation>
 <translation id="3308738399950580893">реклами</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> е недостъпен в момента.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Подробности</translation>
 <translation id="4558551763791394412">Опитайте да забраните разширенията.</translation>
 <translation id="4592951414987517459">Свързването със <ph name="DOMAIN" /> се шифрова чрез съвременен комплект за шифроване.</translation>
-<translation id="4690462567478992370">Спри недействителното удостоверение</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Прекъснато свързване</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Да изпълните Диагностика на мрежата на Windows<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">Изпълним файл</translation>
 <translation id="4750917950439032686">Данни като пароли или номера на кредитни карти се изпращат поверително до сайта.</translation>
 <translation id="4764776831041365478">Страница <ph name="URL" /> може да е недостъпна или окончателно преместена на нов адрес.</translation>
+<translation id="483241715238664915">Включи предупрежденията</translation>
 <translation id="4943872375798546930">Няма резултати</translation>
-<translation id="4974590756084640048">Възобнови предизвестията</translation>
 <translation id="5023310440958281426">Проверете правилата на администратора</translation>
 <translation id="5039804452771397117">Позволи</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1{(използва се 1)} other {(използват се #)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">Да проверите свързването</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> пренасочва твърде много пъти.</translation>
 <translation id="5675650730144413517">Неработеща страница</translation>
-<translation id="5689516760719285838">Местоположение</translation>
-<translation id="5710435578057952990">Самоличността на сайта не е потвърдена.</translation>
-<translation id="5778550464785688721">Kонтрол над устройства MIDI</translation>
 <translation id="5785756445106461925">Впрочем страницата включва други ресурси, които не са защитени. Същите могат да бъдат гледани от трети лица при предаването им или променени от злоумишленик, така че да изменят облика на страницата.</translation>
 <translation id="5799902971440853357">Посещаване на <ph name="SITE" /> в момента е невъзможно, защото сайтът изпрати зашифровани вписващи данни, които Vivaldi не е в състояние да обработи. Мрежовите сривове и атаки обикновено са временно явление, така че по всяка вероятност по-късно страницата ще заработи отново.</translation>
 <translation id="5810442152076338065">Свързването със <ph name="DOMAIN" /> се шифрова чрез остарял пакет за шифроване.</translation>
@@ -153,7 +141,6 @@
 <translation id="6177128806592000436">Свързването е незащитено</translation>
 <translation id="6203231073485539293">Проверете свързването с интернет</translation>
 <translation id="6225522625585012689">Посетете &lt;strong&gt;vivaldi://policy&lt;/strong&gt; и прегледайте блокираните адреси и другите правила, наложени от системния администратор.</translation>
-<translation id="625755898061068298">Предизвестията за защита в сайта са забранени по ваш избор.</translation>
 <translation id="6264485186158353794">Изведи ме от тук</translation>
 <translation id="6305205051461490394"><ph name="URL" /> е недостъпен.</translation>
 <translation id="6321917430147971392">Проверете настройките на DNS</translation>
@@ -171,6 +158,7 @@
 <translation id="6897140037006041989">Потребителски агент</translation>
 <translation id="7053983685419859001">Блокирай</translation>
 <translation id="7079718277001814089">Сайтът съдържа злонамерен софтуер</translation>
+<translation id="7096937462164235847">Самоличността на сайта не е потвърдена.</translation>
 <translation id="7108819624672055576">Позволено от разширение</translation>
 <translation id="7111012039238467737">(действително)</translation>
 <translation id="7113310725918019676">Позволи <ph name="BLOCKED_TYPE" /> от <ph name="DOMAIN" /></translation>
@@ -183,7 +171,6 @@
 <translation id="7445762425076701745">Самоличността на сървъра, към който сте свързан, не може да бъде потвърдена изцяло. Към него сте свързан с име, явяващо се действително само в рамките на вашата мрежа и собствеността на което няма начин да се потвърди от външен удостоверяващ орган. И въпреки че определени удостоверяващи органи издават удостоверения за подобни имена, няма начин да се гарантира, че към желания сайт сте свързан именно вие, а не злоумишеник.</translation>
 <translation id="7455133967321480974">Ползвай всеобщо „Блокирай“</translation>
 <translation id="7518003948725431193">Няма намерена страница на адрес: <ph name="URL" /></translation>
-<translation id="7521387064766892559">Джаваскрипт</translation>
 <translation id="7549584377607005141">За правилно показване страницата изисква данните, въведени от вас по-рано. Може да изпратите данните отново, но ще се наложи да повторите всяко действие изпълнено в нея досега.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> не е в състояние да обработи в момента заявката.</translation>
 <translation id="7662298039739062396">Контролирано от разширение</translation>
@@ -226,11 +213,11 @@
 <translation id="9039213469156557790">Впрочем страницата включва други ресурси, които не са защитени. Същите могат да бъдат гледани от трети лица при предаването им или променени от злоумишленик, така че да изменят поведението на страницата.</translation>
 <translation id="9062620674789239642">Възможно е преместен, редактиран или изтрит.</translation>
 <translation id="9069693763241529744">Блокирано от разширение</translation>
+<translation id="9073799351042754113">Избрахте да изключите предупрежденията за защита за сайта.</translation>
 <translation id="910924428752220542">Пароли във Vivaldi</translation>
 <translation id="9169664750068251925">Блокирай винаги в сайта</translation>
 <translation id="9180553614777056266">Блокер на реклами</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> ползва неподдържан протокол.</translation>
-<translation id="9219103736887031265">Картини</translation>
 <translation id="936602727769022409">Възможно е да изгубите достъп до профила в Google. Препоръчваме да промените паролата си сега. Ще получите подкана при вписване.</translation>
 <translation id="969892804517981540">Официална компилация</translation>
 <translation id="988159990683914416">Развойна компилация</translation>

@@ -16,11 +16,11 @@
 #include "chrome/browser/extensions/install_observer.h"
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
-#include "chrome/browser/web_applications/components/app_registrar_observer.h"
-#include "chrome/browser/web_applications/components/web_app_id.h"
+#include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager_observer.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/favicon/core/favicon_service.h"
@@ -64,6 +64,10 @@ class AppLauncherHandler
  public:
   AppLauncherHandler(extensions::ExtensionService* extension_service,
                      web_app::WebAppProvider* web_app_provider);
+
+  AppLauncherHandler(const AppLauncherHandler&) = delete;
+  AppLauncherHandler& operator=(const AppLauncherHandler&) = delete;
+
   ~AppLauncherHandler() override;
 
   void CreateWebAppInfo(const web_app::AppId& app_id,
@@ -187,7 +191,7 @@ class AppLauncherHandler
 
   // Records result to UMA after OS Hooks are installed.
   void OnOsHooksInstalled(const web_app::AppId& app_id,
-                          const web_app::OsHooksResults os_hooks_results);
+                          const web_app::OsHooksErrors os_hooks_errors);
 
   // ExtensionUninstallDialog::Delegate:
   void OnExtensionUninstallDialogClosed(bool did_start_uninstall,
@@ -279,8 +283,6 @@ class AppLauncherHandler
 
   // Used for passing callbacks.
   base::WeakPtrFactory<AppLauncherHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppLauncherHandler);
 };
 
 #endif  // CHROME_BROWSER_UI_WEBUI_NTP_APP_LAUNCHER_HANDLER_H_

@@ -20,15 +20,17 @@ class VivaldiBrowserSyncedWindowDelegate : public BrowserSyncedWindowDelegate {
  public:
   explicit VivaldiBrowserSyncedWindowDelegate(Browser* browser);
   ~VivaldiBrowserSyncedWindowDelegate() override;
+  VivaldiBrowserSyncedWindowDelegate(
+      const VivaldiBrowserSyncedWindowDelegate&) = delete;
+  VivaldiBrowserSyncedWindowDelegate& operator=(
+      const VivaldiBrowserSyncedWindowDelegate&) = delete;
 
   // BrowserSyncedWindowDelegate:
   sync_sessions::SyncedTabDelegate* GetTabAt(int index) const override;
   SessionID GetTabIdAt(int index) const override;
 
  private:
-   Browser* browser_copy_ = nullptr; // Already private member in base
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserSyncedWindowDelegate);
+  Browser* browser_copy_ = nullptr;  // Already private member in base
 };
 
 #endif  // SYNC_VIVALDI_BROWSER_SYNCED_WINDOW_DELEGATE_H_

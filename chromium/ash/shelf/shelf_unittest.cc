@@ -5,8 +5,8 @@
 #include <memory>
 #include <utility>
 
-#include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/test/test_shelf_item_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/session/test_session_controller_client.h"
@@ -27,20 +27,13 @@
 namespace ash {
 namespace {
 
-class TestShelfItemDelegate : public ShelfItemDelegate {
- public:
-  explicit TestShelfItemDelegate(const ShelfID& shelf_id)
-      : ShelfItemDelegate(shelf_id) {}
-  void ExecuteCommand(bool from_context_menu,
-                      int64_t command_id,
-                      int32_t event_flags,
-                      int64_t display_id) override {}
-  void Close() override {}
-};
-
 class ShelfTest : public AshTestBase {
  public:
   ShelfTest() = default;
+
+  ShelfTest(const ShelfTest&) = delete;
+  ShelfTest& operator=(const ShelfTest&) = delete;
+
   ~ShelfTest() override = default;
 
   void SetUp() override {
@@ -68,8 +61,6 @@ class ShelfTest : public AshTestBase {
   ShelfView* shelf_view_ = nullptr;
   ShelfModel* shelf_model_ = nullptr;
   std::unique_ptr<ShelfViewTestAPI> test_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShelfTest);
 };
 
 // Confirms that ShelfItem reflects the appropriated state.

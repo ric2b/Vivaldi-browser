@@ -23,6 +23,10 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
  public:
   VivaldiNativeAppWindowViewsMac();
   ~VivaldiNativeAppWindowViewsMac() override;
+  VivaldiNativeAppWindowViewsMac(const VivaldiNativeAppWindowViewsMac&) =
+      delete;
+  VivaldiNativeAppWindowViewsMac& operator=(
+      const VivaldiNativeAppWindowViewsMac&) = delete;
 
   // Called by |nswindow_observer_| for window resize events.
   void OnWindowWillStartLiveResize();
@@ -63,8 +67,6 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
   bool in_fullscreen_transition_ = false;
 
   base::scoped_nsobject<VivaldiFullscreenMenubarTracker> menubarTracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowViewsMac);
 };
 
 #endif  // UI_VIVALDI_NATIVE_APP_WINDOW_VIEWS_MAC_H_

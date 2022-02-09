@@ -17,6 +17,21 @@
 #include "cc/metrics/ukm_smoothness_data.h"
 
 namespace cc {
+namespace {
+
+// The start ranges of each bucket, up to but not including the start of the
+// next bucket. The last bucket contains the remaining values.
+constexpr double kBucketBounds[7] = {0, 3, 6, 12, 25, 50, 75};
+
+// Search backwards using the bucket bounds defined above.
+size_t DecideSmoothnessBucket(double pdf) {
+  size_t i = base::size(kBucketBounds) - 1;
+  while (pdf < kBucketBounds[i])
+    i--;
+  return i;
+}
+
+}  // namespace
 
 using SlidingWindowHistogram = DroppedFrameCounter::SlidingWindowHistogram;
 
@@ -26,6 +41,7 @@ void SlidingWindowHistogram::AddPercentDroppedFrame(
   DCHECK_GE(percent_dropped_frame, 0.0);
   DCHECK_GE(100.0, percent_dropped_frame);
   histogram_bins_[static_cast<int>(std::round(percent_dropped_frame))] += count;
+  smoothness_buckets_[DecideSmoothnessBucket(percent_dropped_frame)] += count;
   total_count_ += count;
 }
 
@@ -47,8 +63,21 @@ uint32_t SlidingWindowHistogram::GetPercentDroppedFramePercentile(
   return current_index;
 }
 
+std::vector<double> SlidingWindowHistogram::GetPercentDroppedFrameBuckets()
+    const {
+  if (total_count_ == 0)
+    return std::vector<double>(base::size(kBucketBounds), 0);
+  std::vector<double> buckets(base::size(kBucketBounds));
+  for (size_t i = 0; i < base::size(kBucketBounds); ++i) {
+    buckets[i] =
+        static_cast<double>(smoothness_buckets_[i]) * 100 / total_count_;
+  }
+  return buckets;
+}
+
 void SlidingWindowHistogram::Clear() {
   std::fill(std::begin(histogram_bins_), std::end(histogram_bins_), 0);
+  std::fill(std::begin(smoothness_buckets_), std::end(smoothness_buckets_), 0);
   total_count_ = 0;
 }
 
@@ -182,9 +211,11 @@ void DroppedFrameCounter::OnEndFrame(const viz::BeginFrameArgs& args,
   if (!args.interval.is_zero())
     total_frames_in_window_ = kSlidingWindowInterval / args.interval;
 
-  if (is_dropped) {
-    if (fcp_received_)
-      ++total_smoothness_dropped_;
+  // Don't measure smoothness for frames that start before FCP is received, or
+  // that have already been reported as dropped.
+  if (is_dropped && fcp_received_ && args.frame_time >= time_fcp_received_ &&
+      !frame_sorter_.IsFrameDropped(args.frame_id)) {
+    ++total_smoothness_dropped_;
     ReportFrames();
   }
   auto iter = scroll_start_per_frame_.find(args.frame_id);
@@ -193,9 +224,8 @@ void DroppedFrameCounter::OnEndFrame(const viz::BeginFrameArgs& args,
     if (args.frame_id.source_id == scroll_start.frame_id.source_id) {
       UMA_HISTOGRAM_CUSTOM_TIMES(
           "Graphics.Smoothness.Diagnostic.DroppedFrameAfterScrollStart.Time",
-          (args.frame_time - scroll_start.timestamp),
-          base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromSeconds(4),
-          50);
+          (args.frame_time - scroll_start.timestamp), base::Milliseconds(1),
+          base::Seconds(4), 50);
       UMA_HISTOGRAM_CUSTOM_COUNTS(
           "Graphics.Smoothness.Diagnostic.DroppedFrameAfterScrollStart.Frames",
           (args.frame_id.sequence_number -
@@ -249,6 +279,13 @@ void DroppedFrameCounter::ReportFrames() {
         static_cast<double>(total_smoothness_dropped_) * 100 / total_frames;
     smoothness_data.worst_smoothness = sliding_window_max_percent_dropped_;
     smoothness_data.percentile_95 = sliding_window_95pct_percent_dropped;
+
+    std::vector<double> sliding_window_buckets =
+        sliding_window_histogram_.GetPercentDroppedFrameBuckets();
+    DCHECK_EQ(sliding_window_buckets.size(),
+              base::size(smoothness_data.buckets));
+    std::copy(sliding_window_buckets.begin(), sliding_window_buckets.end(),
+              smoothness_data.buckets);
 
     if (sliding_window_max_percent_dropped_After_1_sec_.has_value())
       smoothness_data.worst_smoothness_after1sec =
@@ -384,21 +421,22 @@ void DroppedFrameCounter::UpdateMaxPercentDroppedFrame(
 
   const auto fcp_time_delta = base::TimeTicks::Now() - time_fcp_received_;
 
-  if (fcp_time_delta > base::TimeDelta::FromSeconds(1))
+  if (fcp_time_delta > base::Seconds(1))
     sliding_window_max_percent_dropped_After_1_sec_ =
         std::max(sliding_window_max_percent_dropped_After_1_sec_.value_or(0.0),
                  percent_dropped_frame);
-  if (fcp_time_delta > base::TimeDelta::FromSeconds(2))
+  if (fcp_time_delta > base::Seconds(2))
     sliding_window_max_percent_dropped_After_2_sec_ =
         std::max(sliding_window_max_percent_dropped_After_2_sec_.value_or(0.0),
                  percent_dropped_frame);
-  if (fcp_time_delta > base::TimeDelta::FromSeconds(5))
+  if (fcp_time_delta > base::Seconds(5))
     sliding_window_max_percent_dropped_After_5_sec_ =
         std::max(sliding_window_max_percent_dropped_After_5_sec_.value_or(0.0),
                  percent_dropped_frame);
 }
 
 void DroppedFrameCounter::OnFcpReceived() {
+  DCHECK(!fcp_received_);
   fcp_received_ = true;
   time_fcp_received_ = base::TimeTicks::Now();
 }

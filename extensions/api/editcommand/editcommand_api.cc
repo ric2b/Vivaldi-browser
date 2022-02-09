@@ -6,7 +6,7 @@
 
 #include "extensions/api/editcommand/editcommand_api.h"
 
-#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h"  // nogncheck
 
 #include "app/vivaldi_constants.h"
 #include "ui/vivaldi_browser_window.h"
@@ -16,7 +16,7 @@ namespace extensions {
 ExtensionFunction::ResponseAction EditcommandExecuteFunction::Run() {
   using vivaldi::editcommand::Execute::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   VivaldiBrowserWindow* window =

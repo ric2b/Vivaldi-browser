@@ -12,9 +12,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
+#include "chrome/browser/ash/login/test/login_or_lock_screen_visible_waiter.h"
 #include "chrome/browser/ash/policy/affiliation/affiliation_mixin.h"
 #include "chrome/browser/ash/policy/affiliation/affiliation_test_helper.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -31,7 +31,6 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_utils.h"
@@ -120,6 +119,10 @@ class UserAffiliationBrowserTest
     affiliation_mixin_.set_affiliated(GetParam().affiliated);
   }
 
+  UserAffiliationBrowserTest(const UserAffiliationBrowserTest&) = delete;
+  UserAffiliationBrowserTest& operator=(const UserAffiliationBrowserTest&) =
+      delete;
+
  protected:
   // MixinBasedInProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -161,9 +164,7 @@ class UserAffiliationBrowserTest
     MixinBasedInProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
 
     login_ui_visible_waiter_ =
-        std::make_unique<content::WindowedNotificationObserver>(
-            chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-            content::NotificationService::AllSources());
+        std::make_unique<ash::LoginOrLockScreenVisibleWaiter>();
   }
 
   void SetUpOnMainThread() override {
@@ -217,7 +218,8 @@ class UserAffiliationBrowserTest
  private:
   void SetUpTestSystemSlotOnIO(bool* out_system_slot_constructed_successfully) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-    test_system_slot_ = std::make_unique<crypto::ScopedTestSystemNSSKeySlot>();
+    test_system_slot_ = std::make_unique<crypto::ScopedTestSystemNSSKeySlot>(
+        /*simulate_token_loader=*/false);
     *out_system_slot_constructed_successfully =
         test_system_slot_->ConstructedSuccessfully();
   }
@@ -239,17 +241,14 @@ class UserAffiliationBrowserTest
 
   std::unique_ptr<crypto::ScopedTestSystemNSSKeySlot> test_system_slot_;
 
-  std::unique_ptr<content::WindowedNotificationObserver>
-      login_ui_visible_waiter_;
+  std::unique_ptr<ash::LoginOrLockScreenVisibleWaiter> login_ui_visible_waiter_;
 
-  chromeos::DeviceStateMixin device_state_{
+  ash::DeviceStateMixin device_state_{
       &mixin_host_,
       GetParam().active_directory
-          ? chromeos::DeviceStateMixin::State::
+          ? ash::DeviceStateMixin::State::
                 OOBE_COMPLETED_ACTIVE_DIRECTORY_ENROLLED
-          : chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
-
-  DISALLOW_COPY_AND_ASSIGN(UserAffiliationBrowserTest);
+          : ash::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
 };
 
 IN_PROC_BROWSER_TEST_P(UserAffiliationBrowserTest, PRE_PRE_TestAffiliation) {

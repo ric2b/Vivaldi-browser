@@ -40,7 +40,7 @@
 #include "chrome/test/base/android/android_browser_test.h"
 #else
 #include "chrome/browser/extensions/install_verifier.h"
-#include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/browser/signin/identity_browser_test_base.h"
 #endif
 
 // The E2E tests are designed to run against real backend servers. To identify
@@ -105,7 +105,7 @@ extern const char kSyncPasswordForTest[];
 //    username and password are ignored if this is set.
 // Other switches may modify the behavior of helper classes frequently used in
 // sync integration tests, see StatusChangeChecker for example.
-class SyncTest : public PlatformBrowserTest {
+class SyncTest : public IdentityPlatformBrowserTest {
  public:
   // The different types of live sync tests that can be implemented.
   enum TestType {
@@ -132,6 +132,10 @@ class SyncTest : public PlatformBrowserTest {
    public:
     explicit FakeInstanceID(const std::string& app_id,
                             gcm::GCMDriver* gcm_driver);
+
+    FakeInstanceID(const FakeInstanceID&) = delete;
+    FakeInstanceID& operator=(const FakeInstanceID&) = delete;
+
     ~FakeInstanceID() override = default;
 
     void GetID(GetIDCallback callback) override {}
@@ -164,12 +168,15 @@ class SyncTest : public PlatformBrowserTest {
     static std::string GenerateNextToken();
 
     std::string token_;
-    DISALLOW_COPY_AND_ASSIGN(FakeInstanceID);
   };
 
   class FakeInstanceIDDriver : public instance_id::InstanceIDDriver {
    public:
     explicit FakeInstanceIDDriver(gcm::GCMDriver* gcm_driver);
+
+    FakeInstanceIDDriver(const FakeInstanceIDDriver&) = delete;
+    FakeInstanceIDDriver& operator=(const FakeInstanceIDDriver&) = delete;
+
     ~FakeInstanceIDDriver() override;
     instance_id::InstanceID* GetInstanceID(const std::string& app_id) override;
     void RemoveInstanceID(const std::string& app_id) override {}
@@ -178,11 +185,13 @@ class SyncTest : public PlatformBrowserTest {
    private:
     gcm::GCMDriver* gcm_driver_;
     std::map<std::string, std::unique_ptr<FakeInstanceID>> fake_instance_ids_;
-    DISALLOW_COPY_AND_ASSIGN(FakeInstanceIDDriver);
   };
 
   // A SyncTest must be associated with a particular test type.
   explicit SyncTest(TestType test_type);
+
+  SyncTest(const SyncTest&) = delete;
+  SyncTest& operator=(const SyncTest&) = delete;
 
   ~SyncTest() override;
 
@@ -552,8 +561,6 @@ class SyncTest : public PlatformBrowserTest {
   std::vector<syncer::FCMHandler*> sync_invalidations_fcm_handlers_;
   std::unique_ptr<fake_server::FakeServerSyncInvalidationSender>
       fake_server_sync_invalidation_sender_;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncTest);
 };
 
 #endif  // CHROME_BROWSER_SYNC_TEST_INTEGRATION_SYNC_TEST_H_

@@ -96,7 +96,7 @@ VivaldiAccountManagerAndroid::GetPendingRegistration(
     return nullptr;
   }
   std::string password;
-  //Android uses the posix implementation, which is non-blocking.
+  // Android uses the posix implementation, which is non-blocking.
   if (!OSCrypt::DecryptString(encrypted_password, &password)) {
     return nullptr;
   }
@@ -113,7 +113,7 @@ jboolean VivaldiAccountManagerAndroid::SetPendingRegistration(
     const base::android::JavaParamRef<jstring>& password,
     const base::android::JavaParamRef<jstring>& recovery_email) {
   std::string encrypted_password;
-  //Android uses the posix implementation, which is non-blocking.
+  // Android uses the posix implementation, which is non-blocking.
   if (!OSCrypt::EncryptString(
           base::android::ConvertJavaStringToUTF8(env, password),
           &encrypted_password)) {

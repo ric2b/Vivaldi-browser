@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/vivaldi_switches.h"
 #include "browser/stats_reporter.h"
 #include "browser/translate/vivaldi_translate_client.h"
 #include "browser/vivaldi_runtime_feature.h"
@@ -24,7 +25,7 @@
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "contact/contact_service_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
@@ -53,6 +54,8 @@
 #include "extensions/api/settings/settings_api.h"
 #include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/api/theme/theme_private_api.h"
+#include "extensions/api/translate_history/translate_history_api.h"
 #include "extensions/api/vivaldi_account/vivaldi_account_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/window/window_private_api.h"
@@ -72,7 +75,9 @@ VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
-  stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
+  base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  if (!cmd_line.HasSwitch(switches::kAutoTestMode))
+    stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
 #if defined(OS_LINUX) || defined(OS_MAC)
   base::FilePath messaging(
   // Hardcoded from chromium/chrome/common/chrome_paths.cc
@@ -95,7 +100,7 @@ void VivaldiBrowserMainExtraParts::
   contact::ContactServiceFactory::GetInstance();
   vivaldi_runtime_feature::Init();
 #endif
-  VivaldiDataSourcesAPI::InitFactory();
+  VivaldiImageStore::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::AutoUpdateAPI::Init();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
@@ -110,6 +115,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::NotesAPI::GetFactoryInstance();
   extensions::MenuContentAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::Init();
+  extensions::ThemePrivateAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiAccountAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
@@ -120,6 +126,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiWindowsAPI::Init();
   extensions::ZoomAPI::GetFactoryInstance();
   extensions::HistoryPrivateAPI::GetFactoryInstance();
+  extensions::TranslateHistoryAPI::GetFactoryInstance();
 #endif
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 
@@ -148,8 +155,7 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
 
 #if !defined(OS_ANDROID)
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  vivaldi::CommandLineAppendSwitchNoDup(cmd_line,
-                                        switches::kSavePageAsMHTML);
+  vivaldi::CommandLineAppendSwitchNoDup(cmd_line, switches::kSavePageAsMHTML);
 
   if (cmd_line.HasSwitch(switches::kAppId)) {
     std::string extension_app_id =

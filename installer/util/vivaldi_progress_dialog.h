@@ -22,6 +22,8 @@ class VivaldiProgressDialog {
 
   VivaldiProgressDialog();
   ~VivaldiProgressDialog();
+  VivaldiProgressDialog(const VivaldiProgressDialog&) = delete;
+  VivaldiProgressDialog& operator=(const VivaldiProgressDialog&) = delete;
 
   static INT_PTR CALLBACK DlgProc(HWND hdlg,
                                   UINT msg,
@@ -38,8 +40,6 @@ class VivaldiProgressDialog {
   HWND hdlg_ = nullptr;
   HANDLE dlg_event_ = nullptr;
   static VivaldiProgressDialog* this_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiProgressDialog);
 };
 
 }  // namespace installer

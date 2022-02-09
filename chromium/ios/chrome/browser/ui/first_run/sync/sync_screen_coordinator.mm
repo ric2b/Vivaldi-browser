@@ -6,6 +6,7 @@
 
 #import "base/metrics/histogram_functions.h"
 #include "components/sync/driver/sync_service.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/first_run/first_run_metrics.h"
 #include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/policy/policy_watcher_browser_agent.h"
@@ -18,7 +19,9 @@
 #include "ios/chrome/browser/sync/sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#import "ios/chrome/browser/ui/authentication/signin/user_signin/user_policy_signout_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
+#import "ios/chrome/browser/ui/authentication/enterprise/user_policy_signout/user_policy_signout_coordinator.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/first_run/sync/sync_screen_mediator.h"
@@ -72,6 +75,7 @@
   self = [super initWithBaseViewController:navigationController
                                    browser:browser];
   if (self) {
+    DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
     _baseNavigationController = navigationController;
     _delegate = delegate;
     _policyWatcherObserverBridge =
@@ -84,6 +88,9 @@
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
+
+  PolicyWatcherBrowserAgent::FromBrowser(self.browser)
+      ->AddObserver(_policyWatcherObserverBridge.get());
 
   if (!authenticationService->GetPrimaryIdentity(
           signin::ConsentLevel::kSignin)) {
@@ -108,7 +115,8 @@
 
   self.viewController = [[SyncScreenViewController alloc] init];
   self.viewController.delegate = self;
-
+  self.viewController.syncTypesRestricted =
+      HasManagedSyncDataType(browserState);
   // Setup mediator.
   self.mediator = [[SyncScreenMediator alloc]
       initWithAuthenticationService:authenticationService
@@ -120,7 +128,9 @@
                                         browserState)
                    syncSetupService:syncSetupService
               unifiedConsentService:UnifiedConsentServiceFactory::
-                                        GetForBrowserState(browserState)];
+                                        GetForBrowserState(browserState)
+                        syncService:SyncServiceFactory::GetForBrowserState(
+                                        self.browser->GetBrowserState())];
 
   self.mediator.delegate = self;
   self.mediator.consumer = self.viewController;
@@ -130,9 +140,7 @@
   BOOL animated = self.baseNavigationController.topViewController != nil;
   [self.baseNavigationController setViewControllers:@[ self.viewController ]
                                            animated:animated];
-  if (@available(iOS 13, *)) {
-    self.viewController.modalInPresentation = YES;
-  }
+  self.viewController.modalInPresentation = YES;
 }
 
 - (void)stop {
@@ -150,17 +158,23 @@
 #pragma mark - SyncScreenViewControllerDelegate
 
 - (void)didTapPrimaryActionButton {
-  [self startSyncWithAdvancedSettings:NO];
+  [self startSyncOrAdvancedSettings:NO];
 }
 
 - (void)didTapSecondaryActionButton {
   base::UmaHistogramEnumeration("FirstRun.Stage",
                                 first_run::kSyncScreenCompletionWithoutSync);
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
+  // Call StopAndClear() to clear the encryption passphrase, in case the
+  // user entered it before canceling the sync opt-in flow, and also to set
+  // sync as requested.
+  syncService->StopAndClear();
   [self.delegate willFinishPresenting];
 }
 
 - (void)showSyncSettings {
-  [self startSyncWithAdvancedSettings:YES];
+  [self startSyncOrAdvancedSettings:YES];
 }
 
 - (void)addConsentStringID:(const int)stringID {
@@ -169,15 +183,15 @@
 
 #pragma mark - SyncScreenMediatorDelegate
 
-- (void)syncScreenMediator:(SyncScreenMediator*)mediator
-    didFinishSigninWithResult:(SigninCoordinatorResult)result {
-  if (result != SigninCoordinatorResultSuccess)
-    return;
-
+- (void)syncScreenMediatorDidSuccessfulyFinishSignin:
+    (SyncScreenMediator*)mediator {
   if (self.advancedSettingsRequested) {
     base::UmaHistogramEnumeration(
         "FirstRun.Stage", first_run::kSyncScreenCompletionWithSyncSettings);
-    [self.delegate skipAllAndShowSyncSettings];
+    id<ApplicationCommands> handler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), ApplicationCommands);
+    [handler showAdvancedSigninSettingsFromViewController:
+                 self.baseNavigationController];
   } else {
     base::UmaHistogramEnumeration("FirstRun.Stage",
                                   first_run::kSyncScreenCompletionWithSync);
@@ -219,23 +233,26 @@
   [self.delegate skipAll];
 }
 
-// Starts syncing from |advancedSettings|.
-- (void)startSyncWithAdvancedSettings:(BOOL)advancedSettings {
+// Starts syncing or opens |advancedSettings|.
+- (void)startSyncOrAdvancedSettings:(BOOL)advancedSettings {
   self.advancedSettingsRequested = advancedSettings;
   int confirmationID = advancedSettings
-                           ? IDS_IOS_FIRST_RUN_SYNC_SCREEN_ADVANCE_SETTINGS
-                           : IDS_IOS_FIRST_RUN_SYNC_SCREEN_PRIMARY_ACTION;
+                           ? self.viewController.openSettingsStringID
+                           : self.viewController.activateSyncButtonID;
 
   ChromeIdentity* identity =
       AuthenticationServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState())
           ->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
 
+  PostSignInAction postSignInAction = advancedSettings
+                                          ? POST_SIGNIN_ACTION_NONE
+                                          : POST_SIGNIN_ACTION_COMMIT_SYNC;
   AuthenticationFlow* authenticationFlow =
       [[AuthenticationFlow alloc] initWithBrowser:self.browser
                                          identity:identity
                                   shouldClearData:SHOULD_CLEAR_DATA_MERGE_DATA
-                                 postSignInAction:POST_SIGNIN_ACTION_NONE
+                                 postSignInAction:postSignInAction
                          presentingViewController:self.viewController];
   authenticationFlow.dispatcher = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), BrowsingDataCommands);

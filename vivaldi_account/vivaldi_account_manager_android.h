@@ -15,6 +15,9 @@ class VivaldiAccountManagerAndroid
  public:
   VivaldiAccountManagerAndroid(JNIEnv* env, jobject obj);
   ~VivaldiAccountManagerAndroid() override;
+  VivaldiAccountManagerAndroid(const VivaldiAccountManagerAndroid&) = delete;
+  VivaldiAccountManagerAndroid& operator=(const VivaldiAccountManagerAndroid&) =
+      delete;
 
   static void CreateNow();
 
@@ -55,8 +58,6 @@ class VivaldiAccountManagerAndroid
   void SendStateUpdate();
 
   JavaObjectWeakGlobalRef weak_java_ref_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountManagerAndroid);
 };
 
 #endif  // VIVALDI_ACCOUNT_VIVALDI_ACCOUNT_MANAGER_H_

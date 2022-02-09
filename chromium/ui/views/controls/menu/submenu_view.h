@@ -19,6 +19,10 @@
 #include "ui/views/controls/prefix_selector.h"
 #include "ui/views/view.h"
 
+namespace ui {
+struct OwnedWindowAnchor;
+}  // namespace ui
+
 namespace views {
 
 class MenuItemView;
@@ -53,6 +57,10 @@ class VIEWS_EXPORT SubmenuView : public View,
 
   // Creates a SubmenuView for the specified menu item.
   explicit SubmenuView(MenuItemView* parent);
+
+  SubmenuView(const SubmenuView&) = delete;
+  SubmenuView& operator=(const SubmenuView&) = delete;
+
   ~SubmenuView() override;
 
   // Returns true if the submenu has at least one empty menu item.
@@ -90,6 +98,8 @@ class VIEWS_EXPORT SubmenuView : public View,
   void OnDragExited() override;
   ui::mojom::DragOperation OnPerformDrop(
       const ui::DropTargetEvent& event) override;
+  views::View::DropCallback GetDropCallback(
+      const ui::DropTargetEvent& event) override;
 
   // Scrolls on menu item boundaries.
   bool OnMouseWheel(const ui::MouseWheelEvent& e) override;
@@ -111,8 +121,8 @@ class VIEWS_EXPORT SubmenuView : public View,
   // in screen coordinates.
   void ShowAt(const MenuHost::InitParams& init_params);
 
-  // Resets the bounds of the submenu to |bounds|.
-  void Reposition(const gfx::Rect& bounds);
+  // Resets the bounds of the submenu to |bounds| and its anchor to |anchor|.
+  void Reposition(const gfx::Rect& bounds, const ui::OwnedWindowAnchor& anchor);
 
   // Closes the menu, destroying the host.
   void Close();
@@ -144,7 +154,7 @@ class VIEWS_EXPORT SubmenuView : public View,
   // Returns whether the selection should be shown for the specified item.
   // The selection is NOT shown during drag and drop when the drop is over
   // the menu.
-  bool GetShowSelection(MenuItemView* item);
+  bool GetShowSelection(const MenuItemView* item) const;
 
   // Returns the container for the SubmenuView.
   MenuScrollViewContainer* GetScrollViewContainer();
@@ -230,8 +240,6 @@ class VIEWS_EXPORT SubmenuView : public View,
   float roundoff_error_;
 
   PrefixSelector prefix_selector_;
-
-  DISALLOW_COPY_AND_ASSIGN(SubmenuView);
 };
 
 }  // namespace views

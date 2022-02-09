@@ -64,6 +64,8 @@ class RulesIndex : public content::RenderProcessHostObserver {
              std::unique_ptr<std::string> rules_index_buffer,
              const flat::RulesIndex* const rules_index);
   ~RulesIndex() override;
+  RulesIndex(const RulesIndex&) = delete;
+  RulesIndex& operator=(const RulesIndex&) = delete;
 
   ActivationsFound FindMatchingActivationsRules(
       const GURL& url,
@@ -122,8 +124,6 @@ class RulesIndex : public content::RenderProcessHostObserver {
   const flat::RulesIndex* const rules_index_;
   std::map<int, std::map<int, base::circular_deque<CachedActivation>>>
       cached_activations_;
-
-  DISALLOW_COPY_AND_ASSIGN(RulesIndex);
 };
 
 }  // namespace adblock_filter

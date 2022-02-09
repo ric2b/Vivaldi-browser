@@ -73,6 +73,6 @@ public class EmptyTabModelFilter extends TabModelFilter {
      */
     @Override
     protected boolean shouldNotifyObservers() {
-        return !SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", false);
+        return !SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", true);
     }
 }

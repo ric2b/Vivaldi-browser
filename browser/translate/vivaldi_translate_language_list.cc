@@ -180,7 +180,8 @@ void VivaldiTranslateLanguageList::StartDownload() {
   url_loader_->DownloadToString(
       url_loader_factory.get(),
       base::BindOnce(&VivaldiTranslateLanguageList::OnListDownloaded,
-                     weak_factory_.GetWeakPtr()), kMaxListSize);
+                     weak_factory_.GetWeakPtr()),
+      kMaxListSize);
 }
 
 void VivaldiTranslateLanguageList::OnListDownloaded(
@@ -200,11 +201,12 @@ void VivaldiTranslateLanguageList::OnListDownloaded(
       }
       if (args.size()) {
         // The chromium language list code likes the list sorted.
-        std::sort(args.begin(), args.end(), [](base::Value& v1, base::Value& v2) {
-          std::string n1 = v1.GetString();
-          std::string n2 = v2.GetString();
-          return n1 < n2;
-        });
+        std::sort(args.begin(), args.end(),
+                  [](base::Value& v1, base::Value& v2) {
+                    std::string n1 = v1.GetString();
+                    std::string n2 = v2.GetString();
+                    return n1 < n2;
+                  });
         PrefService* prefs = g_browser_process->local_state();
         prefs->Set(vivaldiprefs::kVivaldiTranslateLanguageList,
                    base::ListValue(args));

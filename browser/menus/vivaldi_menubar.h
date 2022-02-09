@@ -24,12 +24,11 @@ struct FaviconImageResult;
 namespace views {
 class MenuItemView;
 class MenuRunner;
-}
+}  // namespace views
 
 namespace vivaldi {
 
 struct MenubarMenuParams;
-
 
 class Menubar : public views::MenuDelegate {
  public:
@@ -52,9 +51,10 @@ class Menubar : public views::MenuDelegate {
   }
 
   // MenuDelegate overrides:
-  bool ShouldExecuteCommandWithoutClosingMenu(int id, const ui::Event& e) override;
+  bool ShouldExecuteCommandWithoutClosingMenu(int id,
+                                              const ui::Event& e) override;
   bool ShouldTryPositioningBesideAnchor() const override;
-  bool VivaldiShouldTryPositioningInMenuBar() const  override;
+  bool VivaldiShouldTryPositioningInMenuBar() const override;
   void ExecuteCommand(int id, int mouse_event_flags) override;
   bool IsItemChecked(int id) const override;
   bool GetAccelerator(int id, ui::Accelerator* accelerator) const override;
@@ -99,8 +99,7 @@ class Menubar : public views::MenuDelegate {
                           int menu_id,
                           const favicon_base::FaviconImageResult& image_result);
 
-
-  views::MenuItemView*  bookmark_menu_ = nullptr;
+  views::MenuItemView* bookmark_menu_ = nullptr;
   std::unique_ptr<BookmarkMenuDelegate> bookmark_menu_delegate_;
 
   std::unique_ptr<views::MenuRunner> menu_runner_;
@@ -115,6 +114,6 @@ class Menubar : public views::MenuDelegate {
   bool has_been_shown_ = false;
 };
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif

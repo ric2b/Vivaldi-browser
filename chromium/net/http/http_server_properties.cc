@@ -31,7 +31,7 @@ namespace {
 // Time to wait before starting an update the preferences from the
 // http_server_properties_impl_ cache. Scheduling another update during this
 // period will be a no-op.
-constexpr base::TimeDelta kUpdatePrefsDelay = base::TimeDelta::FromSeconds(60);
+constexpr base::TimeDelta kUpdatePrefsDelay = base::Seconds(60);
 
 url::SchemeHostPort NormalizeSchemeHostPort(
     const url::SchemeHostPort& scheme_host_port) {
@@ -1161,9 +1161,9 @@ void HttpServerProperties::OnServerInfoLoaded(
         it->first.network_isolation_key);
     // If we already have a valid canonical server, we're done.
     if (base::Contains(canonical_alt_svc_map_, key)) {
-      auto it = server_info_map_.Peek(key);
-      if (it != server_info_map_.end() &&
-          it->second.alternative_services.has_value()) {
+      auto key_it = server_info_map_.Peek(key);
+      if (key_it != server_info_map_.end() &&
+          key_it->second.alternative_services.has_value()) {
         continue;
       }
     }

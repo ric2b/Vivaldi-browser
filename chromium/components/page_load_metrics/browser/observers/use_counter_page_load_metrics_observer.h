@@ -25,9 +25,9 @@ const char kAnimatedCssPropertiesHistogramName[] =
 const char kPermissionsPolicyViolationHistogramName[] =
     "Blink.UseCounter.PermissionsPolicy.Violation.Enforce";
 const char kPermissionsPolicyHeaderHistogramName[] =
-    "Blink.UseCounter.PermissionsPolicy.Allow";
+    "Blink.UseCounter.PermissionsPolicy.Header2";
 const char kPermissionsPolicyIframeAttributeHistogramName[] =
-    "Blink.UseCounter.PermissionsPolicy.Header";
+    "Blink.UseCounter.PermissionsPolicy.Allow2";
 
 }  // namespace internal
 
@@ -35,6 +35,12 @@ class UseCounterPageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver {
  public:
   UseCounterPageLoadMetricsObserver();
+
+  UseCounterPageLoadMetricsObserver(const UseCounterPageLoadMetricsObserver&) =
+      delete;
+  UseCounterPageLoadMetricsObserver& operator=(
+      const UseCounterPageLoadMetricsObserver&) = delete;
+
   ~UseCounterPageLoadMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver.
@@ -98,7 +104,6 @@ class UseCounterPageLoadMetricsObserver
                   blink::mojom::PermissionsPolicyFeature::kMaxValue) +
               1>
       header_permissions_policy_features_recorded_;
-  DISALLOW_COPY_AND_ASSIGN(UseCounterPageLoadMetricsObserver);
 };
 
 #endif  // COMPONENTS_PAGE_LOAD_METRICS_BROWSER_OBSERVERS_USE_COUNTER_PAGE_LOAD_METRICS_OBSERVER_H_

@@ -10,7 +10,7 @@ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min
 import {PrivacyPageBrowserProxyImpl, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {TestPrivacyPageBrowserProxy} from 'chrome://test/settings/test_privacy_page_browser_proxy.js';
 import {TestSyncBrowserProxy} from 'chrome://test/settings/test_sync_browser_proxy.js';
-import {eventToPromise, isChildVisible, isVisible} from 'chrome://test/test_util.m.js';
+import {eventToPromise, isChildVisible, isVisible} from 'chrome://test/test_util.js';
 
 // clang-format on
 
@@ -49,7 +49,7 @@ suite('PersonalizationOptionsTests_AllBuilds', function() {
 
   setup(function() {
     testBrowserProxy = new TestPrivacyPageBrowserProxy();
-    PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
+    PrivacyPageBrowserProxyImpl.setInstance(testBrowserProxy);
     syncBrowserProxy = new TestSyncBrowserProxy();
     SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
     buildTestElement();
@@ -194,7 +194,7 @@ suite('PersonalizationOptionsTests_OfficialBuild', function() {
 
   setup(function() {
     testBrowserProxy = new TestPrivacyPageBrowserProxy();
-    PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
+    PrivacyPageBrowserProxyImpl.setInstance(testBrowserProxy);
     PolymerTest.clearBody();
     testElement = document.createElement('settings-personalization-options');
     document.body.appendChild(testElement);

@@ -29,8 +29,7 @@ void SafeBrowsingSubresourceTabHelper::ReadyToCommitNavigation(
               navigation_handle->GetURL(), {resource},
               /*should_trigger_reporting=*/true);
       security_interstitials::SecurityInterstitialTabHelper::
-          AssociateBlockingPage(navigation_handle->GetWebContents(),
-                                navigation_handle->GetNavigationId(),
+          AssociateBlockingPage(navigation_handle,
                                 base::WrapUnique(blocking_page));
     }
   }
@@ -41,6 +40,6 @@ SafeBrowsingSubresourceTabHelper::SafeBrowsingSubresourceTabHelper(
     SafeBrowsingUIManager* manager)
     : WebContentsObserver(web_contents), manager_(manager) {}
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(SafeBrowsingSubresourceTabHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(SafeBrowsingSubresourceTabHelper);
 
 }  // namespace safe_browsing

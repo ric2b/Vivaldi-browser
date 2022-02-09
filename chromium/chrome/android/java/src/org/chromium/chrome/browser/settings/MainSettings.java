@@ -22,7 +22,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.datareduction.settings.DataReductionPreferenceFragment;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
+import org.chromium.chrome.browser.night_mode.NightModeMetrics.ThemeSettingsEntry;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
+import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
@@ -54,6 +56,8 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import java.util.HashMap;
 import java.util.Map;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.preferences.AdsAndTrackerPreference;
@@ -94,6 +98,8 @@ public class MainSettings extends PreferenceFragmentCompat
 
     public static final String PREF_VIVALDI_SYNC = "vivaldi_sync";
     public static final String PREF_VIVALDI_GAME = "vivaldi_game";
+    public static final String PREF_STATUS_BAR_VISIBILITY = "status_bar_visibility";
+    public static final String PREF_DOUBLE_TAP_BACK_TO_EXIT = "double_tap_back_to_exit";
 
     private final ManagedPreferenceDelegate mManagedPreferenceDelegate;
     protected final Map<String, Preference> mAllPreferences = new HashMap<>();
@@ -190,6 +196,12 @@ public class MainSettings extends PreferenceFragmentCompat
         if (ChromeApplicationImpl.isVivaldi()) {
             if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext()))
                 removePreferenceIfPresent(VivaldiPreferences.SHOW_TAB_STRIP);
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+                removePreferenceIfPresent(VivaldiPreferences.ALWAYS_SHOW_CONTROLS);
+                removePreferenceIfPresent(PREF_DOWNLOADS); // Ref. POLE-20
+                removePreferenceIfPresent(PREF_STATUS_BAR_VISIBILITY); // Ref. POLE-26
+                removePreferenceIfPresent(PREF_DOUBLE_TAP_BACK_TO_EXIT); // Ref. POLE-30
+            }
         }
 
         updatePasswordsPreference();
@@ -270,7 +282,10 @@ public class MainSettings extends PreferenceFragmentCompat
         setOnOffSummary(homepagePref, HomepageManager.isHomepageEnabled());
 
         if (NightModeUtils.isNightModeSupported()) {
-            addPreferenceIfAbsent(PREF_UI_THEME);
+            addPreferenceIfAbsent(PREF_UI_THEME)
+                    .getExtras()
+                    .putInt(ThemeSettingsFragment.KEY_THEME_SETTINGS_ENTRY,
+                            ThemeSettingsEntry.SETTINGS);
         } else {
             removePreferenceIfPresent(PREF_UI_THEME);
         }
@@ -290,8 +305,9 @@ public class MainSettings extends PreferenceFragmentCompat
         // Vivaldi: Update summaries.
         Preference pref = getPreferenceScreen().findPreference("new_tab_position");
         pref.setSummary(NewTabPositionMainPreference.updateSummary());
-        pref = getPreferenceScreen().findPreference("status_bar_visibility");
-        pref.setSummary(StatusBarVisibilityPreference.updateSummary());
+        pref = getPreferenceScreen().findPreference(PREF_STATUS_BAR_VISIBILITY);
+        if (pref != null)
+            pref.setSummary(StatusBarVisibilityPreference.updateSummary());
         pref = getPreferenceScreen().findPreference("ui_theme");
         String themeSummary = getString(VivaldiThemePreference.updateSummary()).replace("\n", " ");
         pref.setSummary(themeSummary);
@@ -393,7 +409,7 @@ public class MainSettings extends PreferenceFragmentCompat
                 mSyncPromoPreference.getState() == State.PERSONALIZED_SIGNIN_PROMO;
         findPreference(PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION)
                 .setVisible(!isShowingPersonalizedSigninPromo);
-        mSignInPreference.setVisible(!isShowingPersonalizedSigninPromo);
+        mSignInPreference.setIsShowingPersonalizedSigninPromo(isShowingPersonalizedSigninPromo);
     }
 
     // TemplateUrlService.LoadListener implementation.

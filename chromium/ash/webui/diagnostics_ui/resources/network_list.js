@@ -8,10 +8,11 @@ import './diagnostics_shared_css.js';
 import './network_card.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
-import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {afterNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {NetworkHealthProviderInterface, NetworkListObserverInterface, NetworkListObserverReceiver} from './diagnostics_types.js'
 import {getNetworkHealthProvider} from './mojo_interface_provider.js';
+import {TestSuiteStatus} from './routine_list_executor.js';
 
 /**
  * @fileoverview
@@ -37,11 +38,10 @@ Polymer({
   networkListObserverReceiver_: null,
 
   properties: {
-    /** @type {boolean} */
-    isTestRunning: {
-      type: Boolean,
-      value: false,
-      notify: true,
+    /** @type {!TestSuiteStatus} */
+    testSuiteStatus: {
+      type: Number,
+      value: TestSuiteStatus.kNotRunning,
     },
 
     /** @private {Array<?string>} */
@@ -108,6 +108,21 @@ Polymer({
    */
   onNavigationPageChanged({isActive}) {
     this.isActive = isActive;
+    // TODO(ashleydp): Update when connectivity/network card's are merged.
+    if (isActive) {
+      // Focus the first visible card title. If no cards are present,
+      // fallback to focusing the element's main container.
+      afterNextRender(this, () => {
+        if (this.activeGuid_) {
+          this.$$('connectivity-card').$$('#cardTitle').focus();
+          return;
+        } else if (this.otherNetworkGuids_.length > 0) {
+          this.$$('network-card').$$('#cardTitle').focus();
+          return;
+        }
+        this.$.networkListContainer.focus();
+      });
+    }
   },
 
   /** @protected */

@@ -6,8 +6,8 @@
 #include "chrome/common/initialize_extensions_client.h"
 
 #include "base/no_destructor.h"
-#include "extensions/vivaldi_extensions_client.h"
 #include "extensions/common/extensions_client.h"
+#include "extensions/vivaldi_extensions_client.h"
 
 void EnsureExtensionsClientInitialized() {
   static bool initialized = false;

@@ -8,13 +8,12 @@
 #include <memory>
 #include <string>
 
+#include "ash/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "ash/public/cpp/ash_public_export.h"
-#include "ash/public/cpp/assistant/assistant_state.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/timer/timer.h"
-#include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 
 class PrefChangeRegistrar;
 class PrefService;
@@ -44,7 +43,7 @@ class ASH_PUBLIC_EXPORT QuickAnswersStateObserver
 };
 
 // A class that holds Quick Answers related prefs and states.
-class ASH_PUBLIC_EXPORT QuickAnswersState : public AssistantStateObserver {
+class ASH_PUBLIC_EXPORT QuickAnswersState {
  public:
   static QuickAnswersState* Get();
 
@@ -53,25 +52,20 @@ class ASH_PUBLIC_EXPORT QuickAnswersState : public AssistantStateObserver {
   QuickAnswersState(const QuickAnswersState&) = delete;
   QuickAnswersState& operator=(const QuickAnswersState&) = delete;
 
-  ~QuickAnswersState() override;
+  ~QuickAnswersState();
 
   void AddObserver(QuickAnswersStateObserver* observer);
   void RemoveObserver(QuickAnswersStateObserver* observer);
 
   void RegisterPrefChanges(PrefService* pref_service);
 
-  // AssistantStateObserver:
-  void OnAssistantFeatureAllowedChanged(
-      chromeos::assistant::AssistantAllowedState state) override;
-  void OnAssistantSettingsEnabled(bool enabled) override;
-  void OnAssistantContextEnabled(bool enabled) override;
-  void OnLocaleChanged(const std::string& locale) override;
-
   void StartConsent();
   void OnConsentResult(ConsentResultType result);
 
+  bool ShouldUseQuickAnswersTextAnnotator();
+
   bool settings_enabled() const { return settings_enabled_; }
-  chromeos::quick_answers::prefs::ConsentStatus consent_status() const {
+  quick_answers::prefs::ConsentStatus consent_status() const {
     return consent_status_;
   }
   bool definition_enabled() const { return definition_enabled_; }
@@ -81,6 +75,9 @@ class ASH_PUBLIC_EXPORT QuickAnswersState : public AssistantStateObserver {
 
   void set_eligibility_for_testing(bool is_eligible) {
     is_eligible_ = is_eligible;
+  }
+  void set_use_text_annotator_for_testing() {
+    use_text_annotator_for_testing_ = true;
   }
 
  private:
@@ -100,8 +97,8 @@ class ASH_PUBLIC_EXPORT QuickAnswersState : public AssistantStateObserver {
   bool settings_enabled_ = false;
 
   // Status of the user's consent for the Quick Answers feature.
-  chromeos::quick_answers::prefs::ConsentStatus consent_status_ =
-      chromeos::quick_answers::prefs::ConsentStatus::kUnknown;
+  quick_answers::prefs::ConsentStatus consent_status_ =
+      quick_answers::prefs::ConsentStatus::kUnknown;
 
   // Whether the Quick Answers definition is enabled.
   bool definition_enabled_ = true;
@@ -118,6 +115,9 @@ class ASH_PUBLIC_EXPORT QuickAnswersState : public AssistantStateObserver {
 
   // Whether the pref values has been initialized.
   bool prefs_initialized_ = false;
+
+  // Whether to use text annotator for testing.
+  bool use_text_annotator_for_testing_ = false;
 
   // Time when the notice is shown.
   base::TimeTicks consent_start_time_;

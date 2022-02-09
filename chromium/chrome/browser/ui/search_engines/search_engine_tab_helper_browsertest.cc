@@ -45,14 +45,17 @@ class TemplateURLServiceObserver {
             &TemplateURLServiceObserver::StopLoop, base::Unretained(this)));
     service->Load();
   }
+
+  TemplateURLServiceObserver(const TemplateURLServiceObserver&) = delete;
+  TemplateURLServiceObserver& operator=(const TemplateURLServiceObserver&) =
+      delete;
+
   ~TemplateURLServiceObserver() {}
 
  private:
   void StopLoop() { runner_->Quit(); }
   base::RunLoop* runner_;
   base::CallbackListSubscription template_url_subscription_;
-
-  DISALLOW_COPY_AND_ASSIGN(TemplateURLServiceObserver);
 };
 
 testing::AssertionResult VerifyTemplateURLServiceLoad(
@@ -72,6 +75,12 @@ testing::AssertionResult VerifyTemplateURLServiceLoad(
 class SearchEngineTabHelperBrowserTest : public InProcessBrowserTest {
  public:
   SearchEngineTabHelperBrowserTest() = default;
+
+  SearchEngineTabHelperBrowserTest(const SearchEngineTabHelperBrowserTest&) =
+      delete;
+  SearchEngineTabHelperBrowserTest& operator=(
+      const SearchEngineTabHelperBrowserTest&) = delete;
+
   ~SearchEngineTabHelperBrowserTest() override = default;
 
  private:
@@ -107,8 +116,6 @@ class SearchEngineTabHelperBrowserTest : public InProcessBrowserTest {
   }
 
   void SetUpOnMainThread() override { ASSERT_TRUE(StartTestServer()); }
-
-  DISALLOW_COPY_AND_ASSIGN(SearchEngineTabHelperBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(SearchEngineTabHelperBrowserTest,
@@ -122,7 +129,7 @@ IN_PROC_BROWSER_TEST_F(SearchEngineTabHelperBrowserTest,
   // Navigate to a page with a search descriptor. Path doesn't matter as the
   // test server always serves the same HTML.
   GURL url(embedded_test_server()->GetURL("/"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   // No new search engines should be added.
   EXPECT_EQ(template_urls, url_service->GetTemplateURLs());
 }
@@ -214,7 +221,7 @@ IN_PROC_BROWSER_TEST_F(SearchEngineTabHelperPrerenderingBrowserTest,
       url_service->GetTemplateURLs();
 
   GURL url = embedded_test_server()->GetURL("/empty.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   // Loads a page in the prerender.
   auto prerender_url = embedded_test_server()->GetURL("/form_search.html");

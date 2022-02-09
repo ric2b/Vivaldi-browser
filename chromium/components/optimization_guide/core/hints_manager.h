@@ -28,6 +28,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class OptimizationGuideNavigationData;
+class OptimizationGuideTestAppInterfaceWrapper;
 class PrefService;
 
 namespace network {
@@ -108,7 +109,6 @@ class HintsManager : public OptimizationHintsComponentObserver,
   // |optimization_metadata| will be populated, if applicable.
   optimization_guide::OptimizationTypeDecision CanApplyOptimization(
       const GURL& navigation_url,
-      const absl::optional<int64_t>& navigation_id,
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationMetadata* optimization_metadata);
 
@@ -117,7 +117,6 @@ class HintsManager : public OptimizationHintsComponentObserver,
   // |this| to make the decision. Virtual for testing.
   virtual void CanApplyOptimizationAsync(
       const GURL& navigation_url,
-      const absl::optional<int64_t>& navigation_id,
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationGuideDecisionCallback callback);
 
@@ -188,6 +187,8 @@ class HintsManager : public OptimizationHintsComponentObserver,
       const absl::optional<optimization_guide::OptimizationMetadata>& metadata);
 
  private:
+  friend class ::OptimizationGuideTestAppInterfaceWrapper;
+
   // Processes the optimization filters contained in the hints component.
   void ProcessOptimizationFilters(
       const google::protobuf::RepeatedPtrField<
@@ -331,6 +332,8 @@ class HintsManager : public OptimizationHintsComponentObserver,
       const GURL& navigation_url,
       optimization_guide::proto::OptimizationType optimization_type);
 
+  optimization_guide::HintsFetcherFactory* GetHintsFetcherFactory();
+
   // The information of the latest component delivered by
   // |optimization_guide_service_|.
   absl::optional<optimization_guide::HintsComponentInfo> hints_component_info_;
@@ -362,15 +365,12 @@ class HintsManager : public OptimizationHintsComponentObserver,
                  std::unique_ptr<optimization_guide::OptimizationFilter>>
       blocklist_optimization_filters_;
 
-  // A map from URL to a map of callbacks (along with the navigation IDs that
-  // they were called for) keyed by their optimization type.
+  // A map from URL to a map of callbacks keyed by their optimization type.
   base::flat_map<
       GURL,
       base::flat_map<
           optimization_guide::proto::OptimizationType,
-          std::vector<std::pair<
-              absl::optional<int64_t>,
-              optimization_guide::OptimizationGuideDecisionCallback>>>>
+          std::vector<optimization_guide::OptimizationGuideDecisionCallback>>>
       registered_callbacks_;
 
   // Whether |this| was created for an off the record profile.

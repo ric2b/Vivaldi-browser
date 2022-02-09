@@ -383,8 +383,8 @@ scoped_refptr<X11Cursor> XCursorLoader::CreateCursor(
   auto* connection = x11::Connection::Get();
   x11::PutImageRequest put_image_request{
       .format = x11::ImageFormat::ZPixmap,
-      .drawable = static_cast<x11::Pixmap>(pixmap),
-      .gc = static_cast<x11::GraphicsContext>(gc),
+      .drawable = pixmap,
+      .gc = gc,
       .width = width,
       .height = height,
       .depth = 32,
@@ -589,9 +589,9 @@ std::vector<XCursorLoader::Image> ParseCursorFile(
     bitmap.allocN32Pixels(image.width, image.height);
     if (!ReadU32s(bitmap.getPixels(), bitmap.computeByteSize()))
       continue;
-    images.push_back(
-        XCursorLoader::Image{bitmap, gfx::Point(image.xhot, image.yhot),
-                             base::TimeDelta::FromMilliseconds(image.delay)});
+    images.push_back(XCursorLoader::Image{bitmap,
+                                          gfx::Point(image.xhot, image.yhot),
+                                          base::Milliseconds(image.delay)});
   }
   return images;
 }

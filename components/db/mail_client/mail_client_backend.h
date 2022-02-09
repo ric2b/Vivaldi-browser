@@ -57,6 +57,8 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend> {
   };
 
   explicit MailClientBackend(MailClientDelegate* delegate);
+  MailClientBackend(const MailClientBackend&) = delete;
+  MailClientBackend& operator=(const MailClientBackend&) = delete;
 
   // This constructor is fast and does no I/O, so can be called at any time.
   MailClientBackend(MailClientDelegate* delegate,
@@ -138,8 +140,6 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend> {
   // not be opened, all users must first check for null and return immediately
   // if it is.
   std::unique_ptr<MailClientDatabase> db_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailClientBackend);
 };
 
 }  // namespace mail_client

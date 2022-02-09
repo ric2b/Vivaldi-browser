@@ -24,34 +24,8 @@ class CalendarBackendNotifier {
 
   // Sends notification that |event| was created
   virtual void NotifyEventCreated(const EventResult& event) = 0;
-
-  // Sends notification that |events| have been changed or added.
-  virtual void NotifyEventModified(const EventResult& event) = 0;
-
-  // Sends notification that |event| has been deleted.
-  virtual void NotifyEventDeleted(const EventResult& event) = 0;
-
-  // Sends notification that |calendar| was created
-  virtual void NotifyCalendarCreated(const CalendarRow& row) = 0;
-
-  // Sends notification that |calendar| has been changed
-  virtual void NotifyCalendarModified(const CalendarRow& row) = 0;
-
-  // Sends notification that |calendar| was deleted
-  virtual void NotifyCalendarDeleted(const CalendarRow& row) = 0;
-
-  // Sends notification that |event type| was created
-  virtual void NotifyEventTypeCreated(const EventTypeRow& row) = 0;
-
-  // Sends notification that |event type| has been changed
-  virtual void NotifyEventTypeModified(const EventTypeRow& row) = 0;
-
-  // Sends notification that |event type| was deleted
-  virtual void NotifyEventTypeDeleted(const EventTypeRow& row) = 0;
-
   // Sends notification that notification was changed, deleted or created
   virtual void NotifyNotificationChanged(const NotificationRow& row) = 0;
-
   // Sends notification that the calendar datamodel has changed
   virtual void NotifyCalendarChanged() = 0;
 };

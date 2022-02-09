@@ -20,11 +20,11 @@ namespace media {
 
 base::TimeDelta MEDIA_EXPORT GetStartTimeFromTrack(AVAssetTrack* track);
 
-PlatformVideoConfig MEDIA_EXPORT GetPlatformVideoConfig(
-    CMFormatDescriptionRef description,
-    CGAffineTransform transform,
-    size_t stride_Y = 0,
-    size_t stride_UV = 0);
+PlatformVideoConfig MEDIA_EXPORT
+GetPlatformVideoConfig(CMFormatDescriptionRef description,
+                       CGAffineTransform transform,
+                       size_t stride_Y = 0,
+                       size_t stride_UV = 0);
 
 }  // namespace media
 

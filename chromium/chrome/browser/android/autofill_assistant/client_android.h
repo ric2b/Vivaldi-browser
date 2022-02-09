@@ -40,6 +40,9 @@ class ClientAndroid : public Client,
                       public AccessTokenFetcher,
                       public content::WebContentsUserData<ClientAndroid> {
  public:
+  ClientAndroid(const ClientAndroid&) = delete;
+  ClientAndroid& operator=(const ClientAndroid&) = delete;
+
   ~ClientAndroid() override;
 
   base::WeakPtr<ClientAndroid> GetWeakPtr();
@@ -101,6 +104,11 @@ class ClientAndroid : public Client,
   void ShowFatalError(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& jcaller);
 
+  void OnSpokenFeedbackAccessibilityServiceChanged(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jcaller,
+      jboolean enabled);
+
   // Overrides Client
   void AttachUI() override;
   void DestroyUI() override;
@@ -116,6 +124,7 @@ class ClientAndroid : public Client,
   std::string GetCountryCode() const override;
   DeviceContext GetDeviceContext() const override;
   bool IsAccessibilityEnabled() const override;
+  bool IsSpokenFeedbackAccessibilityServiceEnabled() const override;
   content::WebContents* GetWebContents() const override;
   void Shutdown(Metrics::DropOutReason reason) override;
   void RecordDropOut(Metrics::DropOutReason reason) override;
@@ -175,8 +184,6 @@ class ClientAndroid : public Client,
       fetch_access_token_callback_;
 
   base::WeakPtrFactory<ClientAndroid> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ClientAndroid);
 };
 
 }  // namespace autofill_assistant.

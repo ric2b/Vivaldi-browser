@@ -9,7 +9,7 @@ import {Network} from 'chrome://diagnostics/diagnostics_types.js';
 import {fakeEthernetNetwork, fakeWifiNetwork, fakeWifiNetworkEmptyNameServers, fakeWifiNetworkMultipleNameServers, fakeWifiNetworkNoNameServers} from 'chrome://diagnostics/fake_data.js';
 
 import {assertFalse, assertTrue} from '../../chai_assert.js';
-import {flushTasks, isVisible} from '../../test_util.m.js';
+import {flushTasks, isVisible} from '../../test_util.js';
 
 import * as dx_utils from './diagnostics_test_utils.js';
 import {TestDiagnosticsBrowserProxy} from './test_diagnostics_browser_proxy.js';
@@ -93,18 +93,6 @@ export function ipConfigInfoDrawerTestSuite() {
         .then(() => {
           // Confirm expanded state visibility is correctly updated.
           assertTrue(!!(getDrawerContentContainer()));
-        });
-  });
-
-  test('ConfigDrawerOpenDisplaysMacAddressBasedOnNetwork', () => {
-    return initializeIpConfigInfoDrawerElement()
-        // Opening drawer to test visibility and content of data points.
-        .then(() => getDrawerToggle().click())
-        .then(() => {
-          dx_utils.assertDataPointHasExpectedHeaderAndValue(
-              ipConfigInfoDrawerElement, '#macAddress',
-              ipConfigInfoDrawerElement.i18n('ipConfigInfoDrawerMacAddress'),
-              `${fakeEthernetNetwork.macAddress}`);
         });
   });
 

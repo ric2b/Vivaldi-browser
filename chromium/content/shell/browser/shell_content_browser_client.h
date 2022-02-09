@@ -97,6 +97,7 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   base::DictionaryValue GetNetLogConstants() override;
   base::FilePath GetSandboxedStorageServiceDataDirectory() override;
   std::string GetUserAgent() override;
+  std::string GetReducedUserAgent() override;
   blink::UserAgentMetadata GetUserAgentMetadata() override;
   void OverrideURLLoaderFactoryParams(
       BrowserContext* browser_context,
@@ -218,7 +219,7 @@ class ShellContentBrowserClient : public ContentBrowserClient {
 
 // The delay for sending reports when running with --run-web-tests
 constexpr base::TimeDelta kReportingDeliveryIntervalTimeForWebTests =
-    base::TimeDelta::FromMilliseconds(100);
+    base::Milliseconds(100);
 
 }  // namespace content
 

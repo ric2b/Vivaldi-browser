@@ -12,12 +12,14 @@ import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
  */
 
 /**
- * @see chrome/browser/ui/webui/settings/search_engine_manager_handler.cc
+ * @see chrome/browser/ui/webui/settings/search_engines_handler.cc
  */
 export type SearchEngine = {
   canBeDefault: boolean,
   canBeEdited: boolean,
   canBeRemoved: boolean,
+  canBeActivated: boolean,
+  canBeDeactivated: boolean,
   default: boolean,
   displayName: string,
   extension?: {id: string, name: string, canBeDisabled: boolean, icon: string},
@@ -42,6 +44,8 @@ export type SearchEnginesInfo = {
 export interface SearchEnginesBrowserProxy {
   setDefaultSearchEngine(modelIndex: number): void;
 
+  setIsActiveSearchEngine(modelIndex: number, isActive: boolean): void;
+
   removeSearchEngine(modelIndex: number): void;
 
   searchEngineEditStarted(modelIndex: number): void;
@@ -61,6 +65,10 @@ export class SearchEnginesBrowserProxyImpl implements
     SearchEnginesBrowserProxy {
   setDefaultSearchEngine(modelIndex: number) {
     chrome.send('setDefaultSearchEngine', [modelIndex]);
+  }
+
+  setIsActiveSearchEngine(modelIndex: number, isActive: boolean) {
+    chrome.send('setIsActiveSearchEngine', [modelIndex, isActive]);
   }
 
   removeSearchEngine(modelIndex: number) {

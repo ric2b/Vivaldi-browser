@@ -537,6 +537,20 @@ BuildContainerQueryContainerHighlightConfigInfo(
   return container_config_info;
 }
 
+std::unique_ptr<protocol::DictionaryValue>
+BuildIsolationModeHighlightConfigInfo(
+    const InspectorIsolationModeHighlightConfig& config) {
+  std::unique_ptr<protocol::DictionaryValue> config_info =
+      protocol::DictionaryValue::create();
+
+  config_info->setString("resizerColor", config.resizer_color.Serialized());
+  config_info->setString("resizerHandleColor",
+                         config.resizer_handle_color.Serialized());
+  config_info->setString("maskColor", config.mask_color.Serialized());
+
+  return config_info;
+}
+
 // Swaps |left| and |top| of an offset.
 PhysicalOffset Transpose(PhysicalOffset& offset) {
   return PhysicalOffset(offset.top, offset.left);
@@ -953,7 +967,7 @@ int GetRotationAngle(LayoutObject* layout_object) {
   double theta = atan2(abs_b.X() - abs_a.X(), abs_a.Y() - abs_b.Y());
   if (theta < 0.0)
     theta += kTwoPiDouble;
-  int bearing = std::round(rad2deg(theta));
+  int bearing = std::round(Rad2deg(theta));
   return bearing - local_vector_bearing;
 }
 
@@ -1242,22 +1256,30 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
   // all the way to the left. In NG, this is not the case, and will stop sooner
   // if the tracks don't take up the full size of the grid.
   LayoutUnit rtl_offset;
-  if (layout_object->IsLayoutNGGrid())
-    rtl_offset = To<LayoutBox>(layout_object)->LogicalWidth() - columns.back();
+  if (layout_object->IsLayoutNGGrid()) {
+    const LayoutBox* layout_box = To<LayoutBox>(layout_object);
+    rtl_offset = layout_box->LogicalWidth() - columns.back() -
+                 layout_box->BorderAndPaddingLogicalRight();
+  }
 
   if (grid_highlight_config.show_track_sizes) {
     Element* element = DynamicTo<Element>(node);
     DCHECK(element);
     StyleResolver& style_resolver = element->GetDocument().GetStyleResolver();
+
     HeapHashMap<CSSPropertyName, Member<const CSSValue>> cascaded_values =
         style_resolver.CascadedValuesForElement(element, kPseudoIdNone);
+
+    auto FindCSSValue =
+        [&cascaded_values](CSSPropertyID id) -> const CSSValue* {
+      auto it = cascaded_values.find(CSSPropertyName(id));
+      return it != cascaded_values.end() ? it->value : nullptr;
+    };
     Vector<String> column_authored_values = GetAuthoredGridTrackSizes(
-        cascaded_values.DeprecatedAtOrEmptyValue(
-            CSSPropertyName(CSSPropertyID::kGridTemplateColumns)),
+        FindCSSValue(CSSPropertyID::kGridTemplateColumns),
         grid_interface->AutoRepeatCountForDirection(kForColumns));
     Vector<String> row_authored_values = GetAuthoredGridTrackSizes(
-        cascaded_values.DeprecatedAtOrEmptyValue(
-            CSSPropertyName(CSSPropertyID::kGridTemplateRows)),
+        FindCSSValue(CSSPropertyID::kGridTemplateRows),
         grid_interface->AutoRepeatCountForDirection(kForRows));
 
     grid_info->setValue(
@@ -1523,7 +1545,7 @@ InspectorHighlightBase::InspectorHighlightBase(float scale)
 
 InspectorHighlightBase::InspectorHighlightBase(Node* node)
     : highlight_paths_(protocol::ListValue::create()), scale_(1.f) {
-  DCHECK(!DisplayLockUtilities::NearestLockedExclusiveAncestor(*node));
+  DCHECK(!DisplayLockUtilities::LockedAncestorPreventingPaint(*node));
   LocalFrameView* frame_view = node->GetDocument().View();
   if (frame_view)
     scale_ = DeviceScaleFromFrameView(frame_view);
@@ -2089,7 +2111,7 @@ bool InspectorHighlight::GetContentQuads(
 std::unique_ptr<protocol::DictionaryValue> InspectorGridHighlight(
     Node* node,
     const InspectorGridHighlightConfig& config) {
-  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node)) {
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*node)) {
     // Skip if node is part of display locked tree.
     return nullptr;
   }
@@ -2111,7 +2133,7 @@ std::unique_ptr<protocol::DictionaryValue> InspectorGridHighlight(
 std::unique_ptr<protocol::DictionaryValue> InspectorFlexContainerHighlight(
     Node* node,
     const InspectorFlexContainerHighlightConfig& config) {
-  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node)) {
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*node)) {
     // Skip if node is part of display locked tree.
     return nullptr;
   }
@@ -2307,6 +2329,74 @@ std::unique_ptr<protocol::DictionaryValue> BuildContainerQueryContainerInfo(
   return container_query_container_info;
 }
 
+std::unique_ptr<protocol::DictionaryValue> BuildIsolatedElementInfo(
+    Element& element,
+    const InspectorIsolationModeHighlightConfig& config,
+    float scale) {
+  LayoutBox* layout_box = element.GetLayoutBox();
+  if (!layout_box)
+    return nullptr;
+
+  LocalFrameView* containing_view = element.GetDocument().View();
+  if (!containing_view)
+    return nullptr;
+
+  auto isolated_element_info = protocol::DictionaryValue::create();
+
+  auto element_box = layout_box->PhysicalContentBoxRect();
+  FloatQuad element_box_quad = layout_box->LocalRectToAbsoluteQuad(element_box);
+  FrameQuadToViewport(containing_view, element_box_quad);
+  isolated_element_info->setDouble("currentX", element_box_quad.P1().X());
+  isolated_element_info->setDouble("currentY", element_box_quad.P1().Y());
+
+  // Isolation mode's resizer size should be consistent with
+  // Device Mode's resizer size, which is 20px.
+  const LayoutUnit resizer_size(20 / scale);
+  PhysicalRect width_resizer_box(
+      layout_box->ContentLeft() + layout_box->ContentWidth(),
+      layout_box->ContentTop(), resizer_size, layout_box->ContentHeight());
+  isolated_element_info->setValue(
+      "widthResizerBorder",
+      BuildPathFromQuad(containing_view, layout_box->LocalRectToAbsoluteQuad(
+                                             width_resizer_box)));
+  PhysicalRect height_resizer_box(
+      layout_box->ContentLeft(),
+      layout_box->ContentTop() + layout_box->ContentHeight(),
+      layout_box->ContentWidth(), resizer_size);
+  isolated_element_info->setValue(
+      "heightResizerBorder",
+      BuildPathFromQuad(containing_view, layout_box->LocalRectToAbsoluteQuad(
+                                             height_resizer_box)));
+
+  PhysicalRect bidirection_resizer_box(
+      layout_box->ContentLeft() + layout_box->ContentWidth(),
+      layout_box->ContentTop() + layout_box->ContentHeight(), resizer_size,
+      resizer_size);
+  isolated_element_info->setValue(
+      "bidirectionResizerBorder",
+      BuildPathFromQuad(containing_view, layout_box->LocalRectToAbsoluteQuad(
+                                             bidirection_resizer_box)));
+
+  CSSComputedStyleDeclaration* style =
+      MakeGarbageCollected<CSSComputedStyleDeclaration>(&element, true);
+  const CSSValue* width = style->GetPropertyCSSValue(CSSPropertyID::kWidth);
+  if (width && width->IsNumericLiteralValue()) {
+    isolated_element_info->setDouble(
+        "currentWidth", To<CSSNumericLiteralValue>(width)->DoubleValue());
+  }
+  const CSSValue* height = style->GetPropertyCSSValue(CSSPropertyID::kHeight);
+  if (height && height->IsNumericLiteralValue()) {
+    isolated_element_info->setDouble(
+        "currentHeight", To<CSSNumericLiteralValue>(height)->DoubleValue());
+  }
+
+  isolated_element_info->setValue(
+      "isolationModeHighlightConfig",
+      BuildIsolationModeHighlightConfigInfo(config));
+
+  return isolated_element_info;
+}
+
 std::unique_ptr<protocol::DictionaryValue> InspectorContainerQueryHighlight(
     Node* node,
     const InspectorContainerQueryContainerHighlightConfig& config) {
@@ -2322,6 +2412,25 @@ std::unique_ptr<protocol::DictionaryValue> InspectorContainerQueryHighlight(
     return nullptr;
 
   return container_query_container_info;
+}
+
+std::unique_ptr<protocol::DictionaryValue> InspectorIsolatedElementHighlight(
+    Element* element,
+    const InspectorIsolationModeHighlightConfig& config,
+    int highlight_index) {
+  LocalFrameView* frame_view = element->GetDocument().View();
+  if (!frame_view)
+    return nullptr;
+
+  std::unique_ptr<protocol::DictionaryValue> isolated_element_info =
+      BuildIsolatedElementInfo(*element, config,
+                               DeviceScaleFromFrameView(frame_view));
+
+  if (!isolated_element_info)
+    return nullptr;
+
+  isolated_element_info->setInteger("highlightIndex", highlight_index);
+  return isolated_element_info;
 }
 
 // static

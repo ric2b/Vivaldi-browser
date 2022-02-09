@@ -13,6 +13,7 @@
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/browser/layout_shift_normalization.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
+#include "components/page_load_metrics/browser/responsiveness_metrics_normalization.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
 
 namespace blink {
@@ -121,6 +122,9 @@ class PageLoadMetricsUpdateDispatcher {
     virtual void OnSubframeMetadataChanged(
         content::RenderFrameHost* rfh,
         const mojom::FrameMetadata& metadata) = 0;
+    virtual void OnSubFrameInputTimingChanged(
+        content::RenderFrameHost* rfh,
+        const mojom::InputTiming& input_timing_delta) = 0;
     virtual void OnSubFrameRenderDataChanged(
         content::RenderFrameHost* rfh,
         const mojom::FrameRenderDataUpdate& render_data) = 0;
@@ -148,6 +152,12 @@ class PageLoadMetricsUpdateDispatcher {
       Client* client,
       content::NavigationHandle* navigation_handle,
       PageLoadMetricsEmbedderInterface* embedder_interface);
+
+  PageLoadMetricsUpdateDispatcher(const PageLoadMetricsUpdateDispatcher&) =
+      delete;
+  PageLoadMetricsUpdateDispatcher& operator=(
+      const PageLoadMetricsUpdateDispatcher&) = delete;
+
   ~PageLoadMetricsUpdateDispatcher();
 
   void UpdateMetrics(
@@ -198,14 +208,22 @@ class PageLoadMetricsUpdateDispatcher {
                ? layout_shift_normalization_for_bfcache_.normalized_cls_data()
                : layout_shift_normalization_.normalized_cls_data();
   }
+  const NormalizedResponsivenessMetrics& normalized_responsiveness_metrics()
+      const {
+    return responsiveness_metrics_normalization_
+        .GetNormalizedResponsivenessMetrics();
+  }
   const PageRenderData& main_frame_render_data() const {
     return main_frame_render_data_;
   }
   const mojom::InputTiming& page_input_timing() const {
-    return page_input_timing_;
+    return *page_input_timing_;
   }
   const blink::MobileFriendliness& mobile_friendliness() const {
     return mobile_friendliness_;
+  }
+  void UpdateResponsivenessMetricsNormalizationForBfcache() {
+    responsiveness_metrics_normalization_.ClearAllUserInteractionLatencies();
   }
   void UpdateLayoutShiftNormalizationForBfcache() {
     cumulative_layout_shift_score_for_bfcache_ =
@@ -223,6 +241,8 @@ class PageLoadMetricsUpdateDispatcher {
                             mojom::PageLoadTimingPtr new_timing);
   void UpdateFrameCpuTiming(content::RenderFrameHost* render_frame_host,
                             mojom::CpuTimingPtr new_timing);
+  void UpdateSubFrameInputTiming(content::RenderFrameHost* render_frame_host,
+                                 const mojom::InputTiming& input_timing_delta);
 
   void UpdateMainFrameMetadata(content::RenderFrameHost* render_frame_host,
                                mojom::FrameMetadataPtr new_metadata);
@@ -280,7 +300,7 @@ class PageLoadMetricsUpdateDispatcher {
   mojom::FrameMetadataPtr subframe_metadata_;
 
   // InputTiming data accumulated across all frames.
-  mojom::InputTiming page_input_timing_;
+  mojom::InputTimingPtr page_input_timing_;
 
   // MobileFrienddliness data for current view.
   blink::MobileFriendliness mobile_friendliness_;
@@ -325,7 +345,10 @@ class PageLoadMetricsUpdateDispatcher {
   // UpdateHasSeenInputOrScroll.
   bool has_seen_input_or_scroll_ = false;
 
-  DISALLOW_COPY_AND_ASSIGN(PageLoadMetricsUpdateDispatcher);
+  // Where we receive user interaction latencies from all renderer frames and
+  // calculate a few normalized responsiveness metrics. It will be reset every
+  // time the page enters bfcache.
+  ResponsivenessMetricsNormalization responsiveness_metrics_normalization_;
 };
 
 }  // namespace page_load_metrics

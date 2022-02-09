@@ -24,11 +24,11 @@
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_metrics.h"
 #include "chrome/browser/ui/webui/web_app_internals/web_app_internals_source.h"
-#include "chrome/browser/web_applications/components/app_registry_controller.h"
-#include "chrome/browser/web_applications/components/web_app_callback_app_identity.h"
 #include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_callback_app_identity.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
@@ -44,7 +44,9 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/extension_app_utils.h"
+#include "chrome/browser/ui/ash/shelf/app_shortcut_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
+#include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
 #endif
 
 #if defined(OS_WIN)
@@ -87,6 +89,24 @@ void UninstallWebAppWithDialogFromStartupSwitch(const AppId& app_id,
 
 #endif  // defined(OS_WIN)
 
+DisplayMode GetExtensionDisplayMode(Profile* profile,
+                                    const extensions::Extension* extension) {
+  // Platform apps always open in an app window and their user preference is
+  // meaningless.
+  if (extension->is_platform_app())
+    return DisplayMode::kStandalone;
+
+  switch (extensions::GetLaunchContainer(
+      extensions::ExtensionPrefs::Get(profile), extension)) {
+    case extensions::LaunchContainer::kLaunchContainerWindow:
+    case extensions::LaunchContainer::kLaunchContainerPanelDeprecated:
+      return DisplayMode::kStandalone;
+    case extensions::LaunchContainer::kLaunchContainerTab:
+    case extensions::LaunchContainer::kLaunchContainerNone:
+      return DisplayMode::kBrowser;
+  }
+}
+
 }  // namespace
 
 // static
@@ -102,14 +122,18 @@ WebAppUiManagerImpl* WebAppUiManagerImpl::Get(
 
 WebAppUiManagerImpl::WebAppUiManagerImpl(Profile* profile)
     : dialog_manager_(std::make_unique<WebAppDialogManager>(profile)),
-      profile_(profile) {}
+      profile_(profile) {
+  // Register the source for the chrome://web-app-internals page.
+  content::URLDataSource::Add(
+      profile_, std::make_unique<WebAppInternalsSource>(profile_));
+}
 
 WebAppUiManagerImpl::~WebAppUiManagerImpl() = default;
 
 void WebAppUiManagerImpl::SetSubsystems(
-    AppRegistryController* app_registry_controller,
+    WebAppSyncBridge* sync_bridge,
     OsIntegrationManager* os_integration_manager) {
-  app_registry_controller_ = app_registry_controller;
+  sync_bridge_ = sync_bridge;
   os_integration_manager_ = os_integration_manager;
 }
 
@@ -127,10 +151,6 @@ void WebAppUiManagerImpl::Start() {
   extensions::ExtensionSystem::Get(profile_)->ready().Post(
       FROM_HERE, base::BindOnce(&WebAppUiManagerImpl::OnExtensionSystemReady,
                                 weak_ptr_factory_.GetWeakPtr()));
-
-  // Register the source for the chrome://web-app-internals page.
-  content::URLDataSource::Add(
-      profile_, std::make_unique<WebAppInternalsSource>(profile_));
 
   BrowserList::AddObserver(this);
 }
@@ -208,20 +228,10 @@ bool WebAppUiManagerImpl::UninstallAndReplaceIfExists(
         app_sorting->SetPageOrdinal(to_app,
                                     app_sorting->GetPageOrdinal(from_app));
 
-        // User pref for window/tab launch.
-        switch (extensions::GetLaunchContainer(
-            extensions::ExtensionPrefs::Get(profile_), from_extension)) {
-          case extensions::LaunchContainer::kLaunchContainerWindow:
-          case extensions::LaunchContainer::kLaunchContainerPanelDeprecated:
-            app_registry_controller_->SetAppUserDisplayMode(
-                to_app, DisplayMode::kStandalone, /*is_user_action=*/false);
-            break;
-          case extensions::LaunchContainer::kLaunchContainerTab:
-          case extensions::LaunchContainer::kLaunchContainerNone:
-            app_registry_controller_->SetAppUserDisplayMode(
-                to_app, DisplayMode::kBrowser, /*is_user_action=*/false);
-            break;
-        }
+        sync_bridge_->SetAppUserDisplayMode(
+            to_app, GetExtensionDisplayMode(profile_, from_extension),
+            /*is_user_action=*/false);
+
         has_migrated = true;
         auto shortcut_info = web_app::ShortcutInfoForExtensionAndProfile(
             from_extension, profile_);
@@ -325,7 +335,7 @@ void WebAppUiManagerImpl::AddAppToQuickLaunchBar(const AppId& app_id) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // ChromeShelfController does not exist in unit tests.
   if (auto* controller = ChromeShelfController::instance()) {
-    controller->PinAppWithID(app_id);
+    PinAppWithIDToShelf(app_id);
     controller->UpdateV1AppState(app_id);
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

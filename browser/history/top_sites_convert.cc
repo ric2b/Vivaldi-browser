@@ -3,7 +3,7 @@
 #include "browser/history/top_sites_convert.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -28,18 +28,18 @@ void ConvertThumbnailDataOnUIThread(
   ProfileManager* manager = g_browser_process->profile_manager();
   Profile* profile = manager->GetProfile(path);
 
-  VivaldiDataSourcesAPI::AddImageDataForBookmark(
-      profile, bookmark_id, thumbnail,
-      base::BindOnce(&OnBookmarkThumbnailStored, bookmark_id));
+  VivaldiImageStore::ImagePlace place;
+  place.SetBookmarkId(bookmark_id);
+  VivaldiImageStore::StoreImage(
+      profile, std::move(place), VivaldiImageStore::ImageFormat::kPNG,
+      thumbnail, base::BindOnce(&OnBookmarkThumbnailStored, bookmark_id));
 }
 
 }  // namespace
 
-void ConvertThumbnailDataImpl(
-    const base::FilePath& path,
-    int64_t bookmark_id,
-    scoped_refptr<base::RefCountedMemory> thumbnail) {
-
+void ConvertThumbnailDataImpl(const base::FilePath& path,
+                              int64_t bookmark_id,
+                              scoped_refptr<base::RefCountedMemory> thumbnail) {
   // Certain profile calls can't be made on the IO thread, so off load to the UI
   // thread, then bounce to the IO thread from here.
   content::GetUIThreadTaskRunner({})->PostTask(

@@ -37,7 +37,7 @@ void NGSvgTextLayoutAlgorithm::Layout(
   // "CSS_positions", and "resolved" is the number of addressable characters.
 
   // 1. Setup
-  if (!Setup(items.size()))
+  if (!Setup(ifc_text_content.length()))
     return;
 
   // 2. Set flags and assign initial positions
@@ -277,6 +277,9 @@ void NGSvgTextLayoutAlgorithm::ResolveTextLength(
 
   float shift;
   if (length_adjust == kSVGLengthAdjustSpacingAndGlyphs) {
+    // If the target range contains no glyphs, we do nothing.
+    if (min_position >= max_position)
+      return;
     float length_adjust_scale = text_length / (max_position - min_position);
     for (wtf_size_t k = i; k < j_plus_1; ++k) {
       SvgPerCharacterInfo& info = result_[k];
@@ -569,8 +572,9 @@ void NGSvgTextLayoutAlgorithm::PositionOnPath(
         index >= ranges[range_index].start_index &&
         index <= ranges[range_index].end_index) {
       if (!in_path) {
-        path_mapper = To<LayoutSVGTextPath>(ranges[range_index].layout_object)
-                          ->LayoutPath();
+        path_mapper =
+            To<LayoutSVGTextPath>(ranges[range_index].layout_object.Get())
+                ->LayoutPath();
       }
       // 5.1.1. Set "in path" flag to true.
       in_path = true;
@@ -775,7 +779,14 @@ void NGSvgTextLayoutAlgorithm::WriteBackToFragmentItems(
     item.item.ConvertToSvgText(std::move(data),
                                PhysicalRect::EnclosingRect(unscaled_rect),
                                info.hidden);
-    unscaled_visual_rect.Unite(item.item.ObjectBoundingBox());
+
+    FloatRect transformd_rect = scaled_rect;
+    if (item.item.HasSvgTransformForBoundingBox()) {
+      transformd_rect =
+          item.item.BuildSvgTransformForBoundingBox().MapRect(transformd_rect);
+    }
+    transformd_rect.Scale(1 / scaling_factor);
+    unscaled_visual_rect.Unite(transformd_rect);
   }
   if (items[0]->Type() == NGFragmentItem::kLine) {
     items[0].item.SetSvgLineLocalRect(

@@ -43,8 +43,6 @@ class CapturePage : private content::WebContentsObserver {
     SkImageInfo image_info_;
     base::ReadOnlySharedMemoryRegion region_;
     int client_id_;
-
-    DISALLOW_COPY_AND_ASSIGN(Result);
   };
 
   using DoneCallback = base::OnceCallback<void(Result capture_result)>;
@@ -69,6 +67,8 @@ class CapturePage : private content::WebContentsObserver {
  private:
   explicit CapturePage();
   ~CapturePage() override;
+  CapturePage(const CapturePage&) = delete;
+  CapturePage& operator=(const CapturePage&) = delete;
 
   // Start the actual capture of the content.
   void CaptureImpl(content::WebContents* contents,
@@ -94,8 +94,6 @@ class CapturePage : private content::WebContentsObserver {
   gfx::Size target_size_;
 
   base::WeakPtrFactory<CapturePage> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(CapturePage);
 };
 
 }  // namespace vivaldi

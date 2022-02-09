@@ -56,6 +56,9 @@ class VivaldiPrefsApiNotification : public KeyedService {
 
   explicit VivaldiPrefsApiNotification(Profile* profile);
   ~VivaldiPrefsApiNotification() override;
+  VivaldiPrefsApiNotification(const VivaldiPrefsApiNotification&) = delete;
+  VivaldiPrefsApiNotification& operator=(const VivaldiPrefsApiNotification&) =
+      delete;
 
   const ::vivaldi::PrefProperties* GetPrefProperties(const std::string& path);
 
@@ -74,8 +77,6 @@ class VivaldiPrefsApiNotification : public KeyedService {
 
   std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
   base::WeakPtrFactory<VivaldiPrefsApiNotification> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiPrefsApiNotification);
 };
 
 class PrefsGetFunction : public ExtensionFunction {
@@ -86,8 +87,6 @@ class PrefsGetFunction : public ExtensionFunction {
  private:
   ~PrefsGetFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsGetFunction);
 };
 
 class PrefsSetFunction : public ExtensionFunction {
@@ -98,8 +97,6 @@ class PrefsSetFunction : public ExtensionFunction {
  private:
   ~PrefsSetFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsSetFunction);
 };
 
 class PrefsResetFunction : public ExtensionFunction {
@@ -110,8 +107,6 @@ class PrefsResetFunction : public ExtensionFunction {
  private:
   ~PrefsResetFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsResetFunction);
 };
 
 class PrefsGetForCacheFunction : public ExtensionFunction {
@@ -122,13 +117,9 @@ class PrefsGetForCacheFunction : public ExtensionFunction {
  private:
   ~PrefsGetForCacheFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsGetForCacheFunction);
 };
 
-
-class PrefsSetLanguagePairToAlwaysTranslateFunction
-    : public ExtensionFunction {
+class PrefsSetLanguagePairToAlwaysTranslateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.setLanguagePairToAlwaysTranslate",
                              PREFS_SETLANGUAGEPAIRTOALWAYSTRANSLATE)
@@ -137,12 +128,9 @@ class PrefsSetLanguagePairToAlwaysTranslateFunction
  private:
   ~PrefsSetLanguagePairToAlwaysTranslateFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsSetLanguagePairToAlwaysTranslateFunction);
 };
 
-class PrefsSetLanguageToNeverTranslateFunction
-    : public ExtensionFunction {
+class PrefsSetLanguageToNeverTranslateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.setLanguageToNeverTranslate",
                              PREFS_SETLANGUAGETONEVERTRANSLATE)
@@ -151,8 +139,6 @@ class PrefsSetLanguageToNeverTranslateFunction
  private:
   ~PrefsSetLanguageToNeverTranslateFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsSetLanguageToNeverTranslateFunction);
 };
 
 class PrefsGetTranslateSettingsFunction : public ExtensionFunction {
@@ -164,12 +150,9 @@ class PrefsGetTranslateSettingsFunction : public ExtensionFunction {
  private:
   ~PrefsGetTranslateSettingsFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsGetTranslateSettingsFunction);
 };
 
-class PrefsSetSiteToNeverTranslateFunction
-    : public ExtensionFunction {
+class PrefsSetSiteToNeverTranslateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.setSiteToNeverTranslate",
                              PREFS_SETLANGUAGETONEVERTRANSLATE)
@@ -178,8 +161,6 @@ class PrefsSetSiteToNeverTranslateFunction
  private:
   ~PrefsSetSiteToNeverTranslateFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsSetSiteToNeverTranslateFunction);
 };
 
 class PrefsSetTranslationDeclinedFunction : public ExtensionFunction {
@@ -191,8 +172,6 @@ class PrefsSetTranslationDeclinedFunction : public ExtensionFunction {
  private:
   ~PrefsSetTranslationDeclinedFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsSetTranslationDeclinedFunction);
 };
 
 class PrefsResetTranslationPrefsFunction : public ExtensionFunction {
@@ -204,8 +183,6 @@ class PrefsResetTranslationPrefsFunction : public ExtensionFunction {
  private:
   ~PrefsResetTranslationPrefsFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsResetTranslationPrefsFunction);
 };
 
 }  // namespace extensions

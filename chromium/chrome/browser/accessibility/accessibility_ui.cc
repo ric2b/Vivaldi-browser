@@ -252,10 +252,10 @@ void HandleAccessibilityRequestCallback(
   data.SetString(kInternal, show_internal ? kOn : kOff);
 
   std::unique_ptr<base::ListValue> rvh_list(new base::ListValue());
-  std::unique_ptr<content::RenderWidgetHostIterator> widgets(
+  std::unique_ptr<content::RenderWidgetHostIterator> widget_iter(
       content::RenderWidgetHost::GetRenderWidgetHosts());
 
-  while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
+  while (content::RenderWidgetHost* widget = widget_iter->GetNextHost()) {
     // Ignore processes that don't have a connection, such as crashed tabs.
     if (!widget->GetProcess()->IsInitializedAndNotDead())
       continue;
@@ -409,32 +409,32 @@ AccessibilityUIMessageHandler::~AccessibilityUIMessageHandler() {
 void AccessibilityUIMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "toggleAccessibility",
       base::BindRepeating(&AccessibilityUIMessageHandler::ToggleAccessibility,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "setGlobalFlag",
       base::BindRepeating(&AccessibilityUIMessageHandler::SetGlobalFlag,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "requestWebContentsTree",
       base::BindRepeating(
           &AccessibilityUIMessageHandler::RequestWebContentsTree,
           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "requestNativeUITree",
       base::BindRepeating(&AccessibilityUIMessageHandler::RequestNativeUITree,
                           base::Unretained(this)));
 
 #if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "requestWidgetsTree",
       base::BindRepeating(&AccessibilityUIMessageHandler::RequestWidgetsTree,
                           base::Unretained(this)));
 #endif
 
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "requestAccessibilityEvents",
       base::BindRepeating(
           &AccessibilityUIMessageHandler::RequestAccessibilityEvents,

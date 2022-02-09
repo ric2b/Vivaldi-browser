@@ -598,7 +598,7 @@ namespace atk_action {
 
 gboolean DoAction(AtkAction* atk_action, gint index) {
   g_return_val_if_fail(ATK_IS_ACTION(atk_action), FALSE);
-  g_return_val_if_fail(!index, FALSE);
+  g_return_val_if_fail(index >= 0, FALSE);
 
   AtkObject* atk_object = ATK_OBJECT(atk_action);
   AXPlatformNodeAuraLinux* obj =
@@ -606,7 +606,16 @@ gboolean DoAction(AtkAction* atk_action, gint index) {
   if (!obj)
     return FALSE;
 
-  return obj->DoDefaultAction();
+  const std::vector<ax::mojom::Action> actions = obj->GetSupportedActions();
+  g_return_val_if_fail(index < static_cast<gint>(actions.size()), FALSE);
+
+  if (index == 0) {
+    // The action at index 0 is always the default action.
+    return obj->DoDefaultAction();
+  }
+  AXActionData data;
+  data.action = actions[index];
+  return obj->GetDelegate()->AccessibilityPerformAction(data);
 }
 
 gint GetNActions(AtkAction* atk_action) {
@@ -618,7 +627,7 @@ gint GetNActions(AtkAction* atk_action) {
   if (!obj)
     return 0;
 
-  return 1;
+  return static_cast<gint>(obj->GetSupportedActions().size());
 }
 
 const gchar* GetDescription(AtkAction*, gint) {
@@ -629,7 +638,6 @@ const gchar* GetDescription(AtkAction*, gint) {
 
 const gchar* GetName(AtkAction* atk_action, gint index) {
   g_return_val_if_fail(ATK_IS_ACTION(atk_action), nullptr);
-  g_return_val_if_fail(!index, nullptr);
 
   AtkObject* atk_object = ATK_OBJECT(atk_action);
   AXPlatformNodeAuraLinux* obj =
@@ -637,12 +645,18 @@ const gchar* GetName(AtkAction* atk_action, gint index) {
   if (!obj)
     return nullptr;
 
-  return obj->GetDefaultActionName();
+  const std::vector<ax::mojom::Action> actions = obj->GetSupportedActions();
+  g_return_val_if_fail(index < static_cast<gint>(actions.size()), nullptr);
+
+  if (index == 0) {
+    // The action at index 0 is always the default action.
+    return obj->GetDefaultActionName();
+  }
+  return ToString(actions[index]);
 }
 
 const gchar* GetKeybinding(AtkAction* atk_action, gint index) {
   g_return_val_if_fail(ATK_IS_ACTION(atk_action), nullptr);
-  g_return_val_if_fail(!index, nullptr);
 
   AtkObject* atk_object = ATK_OBJECT(atk_action);
   AXPlatformNodeAuraLinux* obj =
@@ -650,8 +664,15 @@ const gchar* GetKeybinding(AtkAction* atk_action, gint index) {
   if (!obj)
     return nullptr;
 
-  return obj->GetStringAttribute(ax::mojom::StringAttribute::kAccessKey)
-      .c_str();
+  const std::vector<ax::mojom::Action> actions = obj->GetSupportedActions();
+  g_return_val_if_fail(index < static_cast<gint>(actions.size()), nullptr);
+
+  if (index == 0) {
+    // The action at index 0 is always the default action.
+    return obj->GetStringAttribute(ax::mojom::StringAttribute::kAccessKey)
+        .c_str();
+  }
+  return nullptr;
 }
 
 void Init(AtkActionIface* iface) {
@@ -2039,7 +2060,7 @@ const gchar* GetName(AtkObject* atk_object) {
   if (!obj->IsNameExposed())
     return nullptr;
 
-  ax::mojom::NameFrom name_from = obj->GetData().GetNameFrom();
+  ax::mojom::NameFrom name_from = obj->GetNameFrom();
   if (obj->GetName().empty() &&
       name_from != ax::mojom::NameFrom::kAttributeExplicitlyEmpty) {
     return nullptr;
@@ -2811,13 +2832,16 @@ AtkRole AXPlatformNodeAuraLinux::GetAtkRole() const {
     case ax::mojom::Role::kListItem:
       return ATK_ROLE_LIST_ITEM;
     case ax::mojom::Role::kListMarker:
-      if (!GetChildCount()) {
-        // There's only a name attribute when using Legacy layout. With Legacy
-        // layout, list markers have no child and are considered as StaticText.
-        // We consider a list marker as a group in LayoutNG since it has
-        // a text child node.
+      // Regular list markers only expose their alternative text, but do not
+      // expose their descendants; and the descendants should be ignored. This
+      // is because the alternative text depends on the counter style and can
+      // be different from the actual (visual) marker text, and hence,
+      // inconsistent with the descendants. We treat a list marker as non-text
+      // only if it still has non-ignored descendants, which happens only when:
+      // - The list marker itself is ignored but the descendants are not
+      // - Or the list marker contains images
+      if (!GetChildCount())
         return kStaticRole;
-      }
       return ATK_ROLE_PANEL;
     case ax::mojom::Role::kLog:
       return ATK_ROLE_LOG;
@@ -2908,20 +2932,14 @@ AtkRole AXPlatformNodeAuraLinux::GetAtkRole() const {
       return ATK_ROLE_SPIN_BUTTON;
     case ax::mojom::Role::kSplitter:
       return ATK_ROLE_SEPARATOR;
-    case ax::mojom::Role::kStaticText: {
-      switch (static_cast<ax::mojom::TextPosition>(
-          GetIntAttribute(ax::mojom::IntAttribute::kTextPosition))) {
-        case ax::mojom::TextPosition::kSubscript:
-          return kSubscriptRole;
-        case ax::mojom::TextPosition::kSuperscript:
-          return kSuperscriptRole;
-        default:
-          break;
-      }
+    case ax::mojom::Role::kStaticText:
       return kStaticRole;
-    }
     case ax::mojom::Role::kStatus:
       return ATK_ROLE_STATUSBAR;
+    case ax::mojom::Role::kSubscript:
+      return kSubscriptRole;
+    case ax::mojom::Role::kSuperscript:
+      return kSuperscriptRole;
     case ax::mojom::Role::kSvgRoot:
       return ATK_ROLE_DOCUMENT_FRAME;
     case ax::mojom::Role::kTab:
@@ -3188,7 +3206,7 @@ void AXPlatformNodeAuraLinux::AddRelationToSet(AtkRelationSet* relation_set,
     max_relation_type = enum_class->maximum;
     g_type_class_unref(enum_class);
   }
-  if (relation > max_relation_type.value())
+  if (relation >= max_relation_type.value())
     return;
 
   atk_relation_set_add_relation_by_type(relation_set, relation,
@@ -3687,9 +3705,9 @@ bool AXPlatformNodeAuraLinux::SelectionAndFocusAreTheSame() {
     }
   }
 
-  // TODO(accessibility): GetSelectionContainer returns nullptr when the current
-  // object is a descendant of a select element with a size of 1. Intentional?
-  // For now, handle that scenario here.
+  // TODO(accessibility): `GetSelectionContainer()` returns nullptr when the
+  // current object is a descendant of a select element with a size of 1.
+  // Intentional? For now, handle that scenario here.
   //
   // If the selection is changing on a collapsed select element, focus remains
   // on the select element and not the newly-selected descendant.
@@ -5113,6 +5131,24 @@ std::pair<int, int> AXPlatformNodeAuraLinux::GetSelectionOffsetsForAtk() {
     GetSelectionOffsets(&selection.first, &selection.second);
   }
   return selection;
+}
+
+std::vector<ax::mojom::Action> AXPlatformNodeAuraLinux::GetSupportedActions()
+    const {
+  static const base::NoDestructor<std::vector<ax::mojom::Action>>
+      kActionsThatCanBeExposedViaAtkAction{
+          {ax::mojom::Action::kDecrement, ax::mojom::Action::kIncrement}};
+
+  // The default action is always included and exposed at the first index.
+  std::vector<ax::mojom::Action> supported_actions = {
+      ax::mojom::Action::kDoDefault};
+
+  for (const auto& item : *kActionsThatCanBeExposedViaAtkAction) {
+    if (HasAction(item))
+      supported_actions.push_back(item);
+  }
+
+  return supported_actions;
 }
 
 }  // namespace ui

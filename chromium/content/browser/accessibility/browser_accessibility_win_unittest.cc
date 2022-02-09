@@ -100,6 +100,11 @@ namespace content {
 class BrowserAccessibilityWinTest : public ::testing::Test {
  public:
   BrowserAccessibilityWinTest();
+
+  BrowserAccessibilityWinTest(const BrowserAccessibilityWinTest&) = delete;
+  BrowserAccessibilityWinTest& operator=(const BrowserAccessibilityWinTest&) =
+      delete;
+
   ~BrowserAccessibilityWinTest() override;
 
  protected:
@@ -110,8 +115,6 @@ class BrowserAccessibilityWinTest : public ::testing::Test {
   void SetUp() override;
 
   content::BrowserTaskEnvironment task_environment_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityWinTest);
 };
 
 BrowserAccessibilityWinTest::BrowserAccessibilityWinTest() {}
@@ -360,7 +363,7 @@ TEST_F(BrowserAccessibilityWinTest, TestTextBoundaries) {
   text_field.AddState(ax::mojom::State::kEditable);
   text_field.AddStringAttribute(ax::mojom::StringAttribute::kHtmlTag, "input");
   text_field.SetValue(text_value);
-  text_field.AddIntListAttribute(ax::mojom::IntListAttribute::kCachedLineStarts,
+  text_field.AddIntListAttribute(ax::mojom::IntListAttribute::kLineStarts,
                                  {15});
   text_field.child_ids = {text_container.id};
 
@@ -485,8 +488,16 @@ TEST_F(BrowserAccessibilityWinTest, TestTextBoundaries) {
                             /*text=*/L"Seven eight nine.");
 
   EXPECT_IA2_TEXT_AT_OFFSET(text_field_obj, 1, IA2_TEXT_BOUNDARY_PARAGRAPH,
-                            /*expected_hr=*/S_OK, /*start=*/0, /*end=*/30,
-                            /*text=*/L"One two three.\nFour five six.\n");
+                            /*expected_hr=*/S_OK, /*start=*/0, /*end=*/15,
+                            /*text=*/L"One two three.\n");
+
+  EXPECT_IA2_TEXT_AT_OFFSET(text_field_obj, 29, IA2_TEXT_BOUNDARY_PARAGRAPH,
+                            /*expected_hr=*/S_OK, /*start=*/15, /*end=*/30,
+                            /*text=*/L"Four five six.\n");
+
+  EXPECT_IA2_TEXT_AT_OFFSET(text_field_obj, 30, IA2_TEXT_BOUNDARY_PARAGRAPH,
+                            /*expected_hr=*/S_OK, /*start=*/30, /*end=*/47,
+                            /*text=*/L"Seven eight nine.");
 
   EXPECT_IA2_TEXT_AT_OFFSET(text_field_obj, text_len - 1,
                             IA2_TEXT_BOUNDARY_PARAGRAPH,
@@ -544,13 +555,21 @@ TEST_F(BrowserAccessibilityWinTest, TestTextBoundaries) {
                                 /*text=*/L"Four five six.\n");
 
   EXPECT_IA2_TEXT_BEFORE_OFFSET(text_field_obj, 18, IA2_TEXT_BOUNDARY_PARAGRAPH,
-                                /*expected_hr=*/S_FALSE, /*start=*/0, /*end=*/0,
-                                /*text=*/nullptr);
+                                /*expected_hr=*/S_OK, /*start=*/0, /*end=*/15,
+                                /*text=*/L"One two three.\n");
+
+  EXPECT_IA2_TEXT_BEFORE_OFFSET(text_field_obj, 29, IA2_TEXT_BOUNDARY_PARAGRAPH,
+                                /*expected_hr=*/S_OK, /*start=*/0, /*end=*/15,
+                                /*text=*/L"One two three.\n");
+
+  EXPECT_IA2_TEXT_BEFORE_OFFSET(text_field_obj, 30, IA2_TEXT_BOUNDARY_PARAGRAPH,
+                                /*expected_hr=*/S_OK, /*start=*/15, /*end=*/30,
+                                /*text=*/L"Four five six.\n");
 
   EXPECT_IA2_TEXT_BEFORE_OFFSET(text_field_obj, text_len - 1,
                                 IA2_TEXT_BOUNDARY_PARAGRAPH,
-                                /*expected_hr=*/S_OK, /*start=*/0, /*end=*/30,
-                                /*text=*/L"One two three.\nFour five six.\n");
+                                /*expected_hr=*/S_OK, /*start=*/15, /*end=*/30,
+                                /*text=*/L"Four five six.\n");
 
   EXPECT_IA2_TEXT_AFTER_OFFSET(text_field_obj, 0, IA2_TEXT_BOUNDARY_CHAR,
                                /*expected_hr=*/S_OK, /*start=*/1, /*end=*/2,
@@ -588,6 +607,10 @@ TEST_F(BrowserAccessibilityWinTest, TestTextBoundaries) {
                                /*text=*/nullptr);
 
   EXPECT_IA2_TEXT_AFTER_OFFSET(text_field_obj, 18, IA2_TEXT_BOUNDARY_PARAGRAPH,
+                               /*expected_hr=*/S_OK, /*start=*/30, /*end=*/47,
+                               /*text=*/L"Seven eight nine.");
+
+  EXPECT_IA2_TEXT_AFTER_OFFSET(text_field_obj, 29, IA2_TEXT_BOUNDARY_PARAGRAPH,
                                /*expected_hr=*/S_OK, /*start=*/30, /*end=*/47,
                                /*text=*/L"Seven eight nine.");
 
@@ -1495,7 +1518,7 @@ TEST_F(BrowserAccessibilityWinTest, TextBoundariesOnlyEmbeddedObjectsNoCrash) {
   BrowserAccessibilityComWin* menu_accessible_com =
       ToBrowserAccessibilityComWin(root_accessible->PlatformGetChild(0));
   ASSERT_NE(nullptr, menu_accessible_com);
-  ASSERT_EQ(ax::mojom::Role::kMenu, menu_accessible_com->GetData().role);
+  ASSERT_EQ(ax::mojom::Role::kMenu, menu_accessible_com->GetRole());
 
   EXPECT_IA2_TEXT_AT_OFFSET(menu_accessible_com, 0, IA2_TEXT_BOUNDARY_CHAR,
                             /*expected_hr=*/S_OK, /*start=*/0, /*end=*/1,
@@ -1631,27 +1654,27 @@ TEST_F(BrowserAccessibilityWinTest,
   BrowserAccessibilityComWin* static_text_1_com =
       ToBrowserAccessibilityWin(body_accessible->PlatformGetChild(0))->GetCOM();
   ASSERT_NE(nullptr, static_text_1_com);
-  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text_1_com->GetData().role);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text_1_com->GetRole());
 
   BrowserAccessibilityComWin* menu_1_accessible_com =
       ToBrowserAccessibilityWin(body_accessible->PlatformGetChild(1))->GetCOM();
   ASSERT_NE(nullptr, menu_1_accessible_com);
-  ASSERT_EQ(ax::mojom::Role::kMenu, menu_1_accessible_com->GetData().role);
+  ASSERT_EQ(ax::mojom::Role::kMenu, menu_1_accessible_com->GetRole());
 
   BrowserAccessibilityComWin* menu_2_accessible_com =
       ToBrowserAccessibilityWin(body_accessible->PlatformGetChild(2))->GetCOM();
   ASSERT_NE(nullptr, menu_2_accessible_com);
-  ASSERT_EQ(ax::mojom::Role::kMenu, menu_2_accessible_com->GetData().role);
+  ASSERT_EQ(ax::mojom::Role::kMenu, menu_2_accessible_com->GetRole());
 
   BrowserAccessibilityComWin* static_text_2_com =
       ToBrowserAccessibilityWin(body_accessible->PlatformGetChild(3))->GetCOM();
   ASSERT_NE(nullptr, static_text_2_com);
-  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text_2_com->GetData().role);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text_2_com->GetRole());
 
   BrowserAccessibilityComWin* static_text_3_com =
       ToBrowserAccessibilityWin(body_accessible->PlatformGetChild(4))->GetCOM();
   ASSERT_NE(nullptr, static_text_3_com);
-  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text_3_com->GetData().role);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text_3_com->GetRole());
 
   // [obj] stands for the embedded object replacement character \xFFFC.
 

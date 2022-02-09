@@ -20,6 +20,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -129,8 +130,6 @@ static const char kDevtoolsExperimentDisabledHistogram[] =
     "DevTools.ExperimentDisabled";
 static const char kDevtoolsExperimentEnabledAtLaunchHistogram[] =
     "DevTools.ExperimentEnabledAtLaunch";
-static const char kDevToolsColorPickerFixedColorHistogram[] =
-    "DevTools.ColorPicker.FixedColor";
 static const char kDevToolsComputedStyleGroupingHistogram[] =
     "DevTools.ComputedStyleGrouping";
 static const char kDevtoolsIssuesPanelIssueExpandedHistogram[] =
@@ -150,6 +149,9 @@ static const char kDevToolsLinearMemoryInspectorRevealedFromHistogram[] =
     "DevTools.LinearMemoryInspector.RevealedFrom";
 static const char kDevToolsLinearMemoryInspectorTargetHistogram[] =
     "DevTools.LinearMemoryInspector.Target";
+static const char kDevToolsLanguageHistogram[] = "DevTools.Language";
+static const char kDevToolsConsoleShowsCorsErrorsHistogram[] =
+    "DevTools.ConsoleShowsCorsErrors";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -169,10 +171,6 @@ static const char kConfigNetworkDiscoveryConfig[] = "networkDiscoveryConfig";
 // kLayoutTestMaxMessageChunkSize in
 // content/shell/browser/layout_test/devtools_protocol_test_bindings.cc.
 const size_t kMaxMessageChunkSize = IPC::Channel::kMaximumMessageSize / 4;
-
-typedef std::vector<DevToolsUIBindings*> DevToolsUIBindingsList;
-base::LazyInstance<DevToolsUIBindingsList>::Leaky
-    g_devtools_ui_bindings_instances = LAZY_INSTANCE_INITIALIZER;
 
 base::DictionaryValue CreateFileSystemValue(
     DevToolsFileHelper::FileSystem file_system) {
@@ -201,6 +199,9 @@ class DefaultBindingsDelegate : public DevToolsUIBindings::Delegate {
   explicit DefaultBindingsDelegate(content::WebContents* web_contents)
       : web_contents_(web_contents) {}
 
+  DefaultBindingsDelegate(const DefaultBindingsDelegate&) = delete;
+  DefaultBindingsDelegate& operator=(const DefaultBindingsDelegate&) = delete;
+
  private:
   ~DefaultBindingsDelegate() override {}
 
@@ -226,7 +227,6 @@ class DefaultBindingsDelegate : public DevToolsUIBindings::Delegate {
   void RenderProcessGone(bool crashed) override {}
   void ShowCertificateViewer(const std::string& cert_chain) override {}
   content::WebContents* web_contents_;
-  DISALLOW_COPY_AND_ASSIGN(DefaultBindingsDelegate);
 };
 
 void DefaultBindingsDelegate::ActivateWindow() {
@@ -375,8 +375,10 @@ std::string SanitizeFrontendQueryParam(
   // Convert boolean flags to true.
   if (key == "can_dock" || key == "debugFrontend" || key == "isSharedWorker" ||
       key == "v8only" || key == "remoteFrontend" || key == "nodeFrontend" ||
-      key == "hasOtherClients" || key == "uiDevTools")
+      key == "hasOtherClients" || key == "uiDevTools" ||
+      key == "browserConnection") {
     return "true";
+  }
 
   // Pass connection endpoints as is.
   if (key == "ws" || key == "service-backend")
@@ -435,9 +437,8 @@ GURL SanitizeFrontendURL(const GURL& url,
   return result;
 }
 
-constexpr base::TimeDelta kInitialBackoffDelay =
-    base::TimeDelta::FromMilliseconds(250);
-constexpr base::TimeDelta kMaxBackoffDelay = base::TimeDelta::FromSeconds(10);
+constexpr base::TimeDelta kInitialBackoffDelay = base::Milliseconds(250);
+constexpr base::TimeDelta kMaxBackoffDelay = base::Seconds(10);
 
 }  // namespace
 
@@ -499,6 +500,9 @@ class DevToolsUIBindings::NetworkResourceLoader
                  base::BindOnce(&NetworkResourceLoader::DownloadAsStream,
                                 base::Unretained(this)));
   }
+
+  NetworkResourceLoader(const NetworkResourceLoader&) = delete;
+  NetworkResourceLoader& operator=(const NetworkResourceLoader&) = delete;
 
  private:
   void DownloadAsStream() {
@@ -569,8 +573,6 @@ class DevToolsUIBindings::NetworkResourceLoader
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
   base::OneShotTimer timer_;
   base::TimeDelta retry_delay_;
-
-  DISALLOW_COPY_AND_ASSIGN(NetworkResourceLoader);
 };
 
 // DevToolsUIBindings::FrontendWebContentsObserver ----------------------------
@@ -579,6 +581,11 @@ class DevToolsUIBindings::FrontendWebContentsObserver
     : public content::WebContentsObserver {
  public:
   explicit FrontendWebContentsObserver(DevToolsUIBindings* ui_bindings);
+
+  FrontendWebContentsObserver(const FrontendWebContentsObserver&) = delete;
+  FrontendWebContentsObserver& operator=(const FrontendWebContentsObserver&) =
+      delete;
+
   ~FrontendWebContentsObserver() override;
 
  private:
@@ -592,7 +599,6 @@ class DevToolsUIBindings::FrontendWebContentsObserver
       content::NavigationHandle* navigation_handle) override;
 
   DevToolsUIBindings* devtools_bindings_;
-  DISALLOW_COPY_AND_ASSIGN(FrontendWebContentsObserver);
 };
 
 DevToolsUIBindings::FrontendWebContentsObserver::FrontendWebContentsObserver(
@@ -683,11 +689,9 @@ void DevToolsUIBindings::FrontendWebContentsObserver::DidFinishNavigation(
 
 DevToolsUIBindings* DevToolsUIBindings::ForWebContents(
      content::WebContents* web_contents) {
-  if (!g_devtools_ui_bindings_instances.IsCreated())
-    return nullptr;
-  DevToolsUIBindingsList* instances =
-      g_devtools_ui_bindings_instances.Pointer();
-  for (DevToolsUIBindings* binding : *instances) {
+  DevToolsUIBindingsList& instances =
+      DevToolsUIBindings::GetDevToolsUIBindings();
+  for (DevToolsUIBindings* binding : instances) {
     if (binding->web_contents() == web_contents)
       return binding;
   }
@@ -700,8 +704,9 @@ DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
       web_contents_(web_contents),
       delegate_(new DefaultBindingsDelegate(web_contents_)),
       devices_updates_enabled_(false),
-      frontend_loaded_(false) {
-  g_devtools_ui_bindings_instances.Get().push_back(this);
+      frontend_loaded_(false),
+      settings_(profile_) {
+  DevToolsUIBindings::GetDevToolsUIBindings().push_back(this);
   frontend_contents_observer_ =
       std::make_unique<FrontendWebContentsObserver>(this);
 
@@ -728,11 +733,11 @@ DevToolsUIBindings::~DevToolsUIBindings() {
   SetDevicesUpdatesEnabled(false);
 
   // Remove self from global list.
-  DevToolsUIBindingsList* instances =
-      g_devtools_ui_bindings_instances.Pointer();
-  auto it(std::find(instances->begin(), instances->end(), this));
-  DCHECK(it != instances->end());
-  instances->erase(it);
+  DevToolsUIBindingsList& instances =
+      DevToolsUIBindings::GetDevToolsUIBindings();
+  auto it(std::find(instances.begin(), instances.end(), this));
+  DCHECK(it != instances.end());
+  instances.erase(it);
 }
 
 // content::DevToolsFrontendHost::Delegate implementation ---------------------
@@ -1248,29 +1253,27 @@ void DevToolsUIBindings::OpenNodeFrontend() {
   delegate_->OpenNodeFrontend();
 }
 
+void DevToolsUIBindings::RegisterPreference(const std::string& name,
+                                            const RegisterOptions& options) {
+  settings_.Register(name, options);
+}
+
 void DevToolsUIBindings::GetPreferences(DispatchCallback callback) {
-  const DictionaryValue* prefs =
-      profile_->GetPrefs()->GetDictionary(prefs::kDevToolsPreferences);
-  std::move(callback).Run(prefs);
+  base::Value settings = settings_.Get();
+  std::move(callback).Run(&settings);
 }
 
 void DevToolsUIBindings::SetPreference(const std::string& name,
-                                   const std::string& value) {
-  DictionaryPrefUpdate update(profile_->GetPrefs(),
-                              prefs::kDevToolsPreferences);
-  update.Get()->SetKey(name, base::Value(value));
+                                       const std::string& value) {
+  settings_.Set(name, value);
 }
 
 void DevToolsUIBindings::RemovePreference(const std::string& name) {
-  DictionaryPrefUpdate update(profile_->GetPrefs(),
-                              prefs::kDevToolsPreferences);
-  update.Get()->RemoveKey(name);
+  settings_.Remove(name);
 }
 
 void DevToolsUIBindings::ClearPreferences() {
-  DictionaryPrefUpdate update(profile_->GetPrefs(),
-                              prefs::kDevToolsPreferences);
-  update.Get()->Clear();
+  settings_.Clear();
 }
 
 void DevToolsUIBindings::Reattach(DispatchCallback callback) {
@@ -1327,7 +1330,6 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
       name == kDevtoolsExperimentEnabledHistogram ||
       name == kDevtoolsExperimentDisabledHistogram ||
       name == kDevtoolsExperimentEnabledAtLaunchHistogram ||
-      name == kDevToolsColorPickerFixedColorHistogram ||
       name == kDevToolsComputedStyleGroupingHistogram ||
       name == kDevtoolsIssuesPanelIssueExpandedHistogram ||
       name == kDevtoolsIssuesPanelResourceOpenedHistogram ||
@@ -1337,7 +1339,9 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
       name == kDevToolsDeveloperResourceLoadedHistogram ||
       name == kDevToolsDeveloperResourceSchemeHistogram ||
       name == kDevToolsLinearMemoryInspectorRevealedFromHistogram ||
-      name == kDevToolsLinearMemoryInspectorTargetHistogram)
+      name == kDevToolsLinearMemoryInspectorTargetHistogram ||
+      name == kDevToolsLanguageHistogram ||
+      name == kDevToolsConsoleShowsCorsErrorsHistogram)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else
     frontend_host_->BadMessageReceived();
@@ -1352,7 +1356,7 @@ void DevToolsUIBindings::RecordPerformanceHistogram(const std::string& name,
   }
   // Use histogram_functions.h instead of macros as the name comes from the
   // DevTools frontend javascript and so will always have the same call site.
-  base::TimeDelta delta = base::TimeDelta::FromMilliseconds(duration);
+  base::TimeDelta delta = base::Milliseconds(duration);
   base::UmaHistogramTimes(name, delta);
 }
 
@@ -1392,9 +1396,8 @@ void DevToolsUIBindings::DeviceCountChanged(int count) {
   CallClientMethod("DevToolsAPI", "deviceCountUpdated", base::Value(count));
 }
 
-void DevToolsUIBindings::DevicesUpdated(
-    const std::string& source,
-    const base::ListValue& targets) {
+void DevToolsUIBindings::DevicesUpdated(const std::string& source,
+                                        const base::Value& targets) {
   CallClientMethod("DevToolsAPI", "devicesUpdated", targets.Clone());
 }
 
@@ -1603,6 +1606,18 @@ void DevToolsUIBindings::AttachTo(
   InnerAttach();
 }
 
+void DevToolsUIBindings::AttachViaBrowserTarget(
+    const scoped_refptr<content::DevToolsAgentHost>& agent_host) {
+  DCHECK(!agent_host_ ||
+         agent_host->GetType() == content::DevToolsAgentHost::kTypeBrowser);
+  if (!agent_host_)
+    agent_host_ = content::DevToolsAgentHost::CreateForBrowser(
+        nullptr /* tethering_task_runner */,
+        content::DevToolsAgentHost::CreateServerSocketCallback());
+  initial_target_id_ = agent_host->GetId();
+  InnerAttach();
+}
+
 void DevToolsUIBindings::Detach() {
   if (agent_host_.get())
     agent_host_->DetachClient(this);
@@ -1610,7 +1625,9 @@ void DevToolsUIBindings::Detach() {
 }
 
 bool DevToolsUIBindings::IsAttachedTo(content::DevToolsAgentHost* agent_host) {
-  return agent_host_.get() == agent_host;
+  // TODO(caseq): find better way to track attached targets.
+  return initial_target_id_.empty() ? agent_host_.get() == agent_host
+                                    : initial_target_id_ == agent_host->GetId();
 }
 
 void DevToolsUIBindings::CallClientMethod(
@@ -1705,5 +1722,15 @@ void DevToolsUIBindings::FrontendLoaded() {
   // Call delegate first - it seeds importants bit of information.
   delegate_->OnLoadCompleted();
 
+  if (!initial_target_id_.empty())
+    CallClientMethod("DevToolsAPI", "setInitialTargetId",
+                     base::Value(initial_target_id_));
   AddDevToolsExtensionsToClient();
+}
+
+DevToolsUIBindings::DevToolsUIBindingsList&
+DevToolsUIBindings::GetDevToolsUIBindings() {
+  static base::NoDestructor<DevToolsUIBindings::DevToolsUIBindingsList>
+      bindings;
+  return *bindings;
 }

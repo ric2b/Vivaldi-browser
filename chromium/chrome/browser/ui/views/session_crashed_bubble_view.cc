@@ -17,6 +17,7 @@
 #include "base/task_runner_util.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/sessions/session_restore.h"
@@ -51,6 +52,12 @@
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/widget.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/browser_process.h"
+#include "components/metrics/structured/neutrino_logging.h"       // nogncheck
+#include "components/metrics/structured/neutrino_logging_util.h"  // nogncheck
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 
@@ -131,6 +138,11 @@ class SessionCrashedBubbleDelegate : public ui::DialogModelDelegate {
     if (dialog_model()
             ->GetCheckboxByUniqueId(kUmaConsentCheckboxId)
             ->is_checked()) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      metrics::structured::NeutrinoDevicesLogWithLocalState(
+          g_browser_process->local_state(),
+          metrics::structured::NeutrinoDevicesLocation::kMaybeEnableUma);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
       ChangeMetricsReportingState(true);
       RecordBubbleHistogramValue(SESSION_CRASHED_BUBBLE_UMA_OPTIN);
     }
@@ -151,6 +163,9 @@ class SessionCrashedBubbleView::BrowserRemovalObserver
     BrowserList::AddObserver(this);
   }
 
+  BrowserRemovalObserver(const BrowserRemovalObserver&) = delete;
+  BrowserRemovalObserver& operator=(const BrowserRemovalObserver&) = delete;
+
   ~BrowserRemovalObserver() override { BrowserList::RemoveObserver(this); }
 
   // Overridden from BrowserListObserver.
@@ -163,8 +178,6 @@ class SessionCrashedBubbleView::BrowserRemovalObserver
 
  private:
   Browser* browser_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserRemovalObserver);
 };
 
 // static

@@ -8,8 +8,8 @@
 #include "base/rand_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
-#include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
+#include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "content/public/test/browser_test.h"
 #include "sync/test/integration/notes_helper.h"
@@ -50,20 +50,19 @@ class TwoClientNotesSyncTest : public NotesSyncTest {
  public:
   TwoClientNotesSyncTest() : NotesSyncTest(TWO_CLIENT) {}
   ~TwoClientNotesSyncTest() override {}
+  TwoClientNotesSyncTest(const TwoClientNotesSyncTest&) = delete;
+  TwoClientNotesSyncTest& operator=(const TwoClientNotesSyncTest&) = delete;
 
   bool UseVerifier() override { return false; }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TwoClientNotesSyncTest);
 };
 
 class LegacyTwoClientNotesSyncTest : public NotesSyncTest {
  public:
   LegacyTwoClientNotesSyncTest() : NotesSyncTest(TWO_CLIENT) {}
   ~LegacyTwoClientNotesSyncTest() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(LegacyTwoClientNotesSyncTest);
+  LegacyTwoClientNotesSyncTest(const LegacyTwoClientNotesSyncTest&) = delete;
+  LegacyTwoClientNotesSyncTest& operator=(const LegacyTwoClientNotesSyncTest&) =
+      delete;
 };
 
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {

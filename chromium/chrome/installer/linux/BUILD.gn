@@ -178,14 +178,15 @@ action("merge_rpm_dependencies") {
   deps = [ ":calculate_rpm_dependencies" ]
   script = "rpm/merge_package_deps.py"
   additional_deps = "rpm/additional_deps"
+  if (current_cpu == "arm") {
+    additional_deps = "//vivaldi/installer/linux/rpm/additional_deps32"
+  }
   inputs = [ additional_deps ]
   outputs = [ "$root_out_dir/rpm_common.deps" ]
   args = [
     "rpm_common.deps",
+    rebase_path(additional_deps, root_build_dir),
   ]
-  if (target_cpu == "x64") {
-    args += [ rebase_path(additional_deps, root_build_dir) ]
-  }
   args += rebase_path(get_target_outputs(":calculate_rpm_dependencies"),
                       root_build_dir)
 }
@@ -319,6 +320,7 @@ if (!is_chromeos_ash) {
     visibility = [ ":*" ]
     sources = [
       "rpm/build.sh",
+      "rpm/chrome.spec.template",
     ]
     outputs = [ "$root_out_dir/installer/rpm/{{source_file_part}}" ]
   }
@@ -458,7 +460,7 @@ template("linux_package") {
     ]
   }
 
-  if (!is_chromeos_ash && !(is_linux && (current_cpu == "arm" || current_cpu == "arm64"))) {
+  if (!is_chromeos_ash) {
     rpm_target_name = "${target_name}_rpm"
     action(rpm_target_name) {
       visibility = [ ":*" ]
@@ -469,7 +471,7 @@ template("linux_package") {
       } else if (current_cpu == "x64") {
         rpm_arch = "x86_64"
       } else if (current_cpu == "arm") {
-        rpm_arch = "armhf"
+        rpm_arch = "armv7hl"
       } else if (current_cpu == "arm64") {
         rpm_arch = "aarch64"
       } else if (current_cpu == "mipsel") {
@@ -547,7 +549,7 @@ template("linux_package") {
 
   group(target_name) {
     deps = [ ":$deb_target_name" ]
-    if (!is_chromeos_ash && !(is_linux && (current_cpu == "arm" || current_cpu == "arm64"))) {
+    if (!is_chromeos_ash) {
       deps += [ ":$rpm_target_name" ]
       if (enable_snap_package) {
         deps += [ ":$snap_target_name" ]

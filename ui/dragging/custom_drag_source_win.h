@@ -22,15 +22,15 @@ class COMPONENT_EXPORT(UI_BASE) CustomDragSourceWin : public ui::DragSourceWin {
  public:
   CustomDragSourceWin() = default;
   explicit CustomDragSourceWin(bool dragging_in_progress);
-  ~CustomDragSourceWin() override {}
+  ~CustomDragSourceWin() override = default;
+  CustomDragSourceWin(const CustomDragSourceWin&) = delete;
+  CustomDragSourceWin& operator=(const CustomDragSourceWin&) = delete;
 
   // IDropSource implementation:
   HRESULT __stdcall GiveFeedback(DWORD effect) override;
 
  private:
   bool custom_tab_dragging_in_progress_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(CustomDragSourceWin);
 };
 
 }  // namespace vivaldi

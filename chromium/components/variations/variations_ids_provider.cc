@@ -17,6 +17,8 @@
 #include "components/variations/variations_client.h"
 #include "components/variations/variations_features.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace variations {
 namespace {
 
@@ -70,6 +72,9 @@ VariationsIdsProvider* VariationsIdsProvider::GetInstance() {
 
 variations::mojom::VariationsHeadersPtr
 VariationsIdsProvider::GetClientDataHeaders(bool is_signed_in) {
+  if (vivaldi::IsVivaldiRunning()) {
+    return nullptr;
+  }
   // Lazily initialize the header, if not already done, before attempting to
   // transmit it.
   InitVariationIDsCacheIfNeeded();

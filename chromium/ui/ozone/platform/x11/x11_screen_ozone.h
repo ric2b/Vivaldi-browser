@@ -25,6 +25,10 @@ class X11ScreenOzone : public PlatformScreen,
                        public XDisplayManager::Delegate {
  public:
   X11ScreenOzone();
+
+  X11ScreenOzone(const X11ScreenOzone&) = delete;
+  X11ScreenOzone& operator=(const X11ScreenOzone&) = delete;
+
   ~X11ScreenOzone() override;
 
   // Fetch display list through Xlib/XRandR
@@ -44,7 +48,7 @@ class X11ScreenOzone : public PlatformScreen,
   display::Display GetDisplayNearestPoint(
       const gfx::Point& point) const override;
   display::Display GetDisplayMatching(
-      const gfx::Rect& match_rect_in_pixels) const override;
+      const gfx::Rect& match_rect) const override;
   void SetScreenSaverSuspended(bool suspend) override;
   bool IsScreenSaverActive() const override;
   base::TimeDelta CalculateIdleTime() const override;
@@ -74,7 +78,8 @@ class X11ScreenOzone : public PlatformScreen,
   // DeviceScaleFactorObserver.
   float device_scale_factor_ = 1.0f;
 
-  DISALLOW_COPY_AND_ASSIGN(X11ScreenOzone);
+  // Indicates that |this| is initialized.
+  bool initialized_ = false;
 };
 
 }  // namespace ui

@@ -68,6 +68,7 @@
     <color name="baseline_secondary_300">#5AB3F0</color>
     <color name="baseline_secondary_300_with_neutral_100_alpha_8">#53A7E1</color>
     <color name="baseline_secondary_300_with_neutral_100_alpha_24">#448FC4</color>
+    <color name="baseline_secondary_900">#001D35</color>
     <color name="baseline_tertiary_200">#6DD58C</color>
     <color name="baseline_tertiary_600">#146C2E</color>
 
@@ -109,7 +110,6 @@
     <color name="google_red_600">@color/baseline_error_600</color>
 
     <!-- No 2021 color palette mapping exists. -->
-    <color name="alpha_100">@android:color/transparent</color>
     <color name="black_alpha_11" tools:ignore="UnusedResources">#1D000000</color>
     <color name="black_alpha_38" tools:ignore="UnusedResources">#61000000</color>
     <color name="black_alpha_65" tools:ignore="UnusedResources">#A6000000</color>

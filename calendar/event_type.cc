@@ -140,8 +140,7 @@ DeleteEventResult::DeleteEventResult() {}
 
 UpdateEventTypeResult::UpdateEventTypeResult() {}
 
-EventType::EventType()
-    : name(u""), color(""), iconindex(0), updateFields(0) {}
+EventType::EventType() : name(u""), color(""), iconindex(0), updateFields(0) {}
 
 EventType::EventType(const EventType& event_type)
     : event_type_id(event_type.event_type_id),

@@ -31,7 +31,7 @@ VivaldiContentBrowserClient::CreateBrowserMainParts(
 
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     ChromeBrowserMainParts* main_parts_actual =
-      static_cast<ChromeBrowserMainParts*>(main_parts.get());
+        static_cast<ChromeBrowserMainParts*>(main_parts.get());
 
     main_parts_actual->AddParts(VivaldiBrowserMainExtraParts::Create());
   }
@@ -83,7 +83,6 @@ bool VivaldiContentBrowserClient::CanCommitURL(
 void VivaldiContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
-
   ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
       render_frame_host, map);
 

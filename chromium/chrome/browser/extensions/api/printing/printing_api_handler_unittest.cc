@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/containers/span.h"
 #include "base/json/json_reader.h"
@@ -52,6 +53,9 @@ class PrintingEventObserver : public TestEventRouter::EventObserver {
     event_router_->AddEventObserver(this);
   }
 
+  PrintingEventObserver(const PrintingEventObserver&) = delete;
+  PrintingEventObserver& operator=(const PrintingEventObserver&) = delete;
+
   ~PrintingEventObserver() override {
     event_router_->RemoveEventObserver(this);
   }
@@ -81,8 +85,6 @@ class PrintingEventObserver : public TestEventRouter::EventObserver {
 
   // The arguments passed for the last observed event.
   base::Value event_args_;
-
-  DISALLOW_COPY_AND_ASSIGN(PrintingEventObserver);
 };
 
 constexpr char kExtensionId[] = "abcdefghijklmnopqrstuvwxyzabcdef";
@@ -172,8 +174,8 @@ std::unique_ptr<api::printing::SubmitJob::Params> ConstructSubmitJobParams(
   request.job.content_type = content_type;
   request.document_blob_uuid = std::move(document_blob_uuid);
 
-  base::ListValue args;
-  args.Set(0, request.ToValue());
+  std::vector<base::Value> args;
+  args.emplace_back(base::Value::FromUniquePtrValue(request.ToValue()));
   return api::printing::SubmitJob::Params::Create(args);
 }
 

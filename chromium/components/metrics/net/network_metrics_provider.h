@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_base.h"
@@ -35,6 +36,11 @@ class NetworkMetricsProvider
   // Class that provides |this| with the network quality estimator.
   class NetworkQualityEstimatorProvider {
    public:
+    NetworkQualityEstimatorProvider(const NetworkQualityEstimatorProvider&) =
+        delete;
+    NetworkQualityEstimatorProvider& operator=(
+        const NetworkQualityEstimatorProvider&) = delete;
+
     virtual ~NetworkQualityEstimatorProvider() {}
 
     // Provides |this| with |callback| that would be invoked by |this| every
@@ -45,9 +51,6 @@ class NetworkMetricsProvider
 
    protected:
     NetworkQualityEstimatorProvider() {}
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(NetworkQualityEstimatorProvider);
   };
 
   // Creates a NetworkMetricsProvider, where
@@ -57,6 +60,10 @@ class NetworkMetricsProvider
                              network_connection_tracker_async_getter,
                          std::unique_ptr<NetworkQualityEstimatorProvider>
                              network_quality_estimator_provider = nullptr);
+
+  NetworkMetricsProvider(const NetworkMetricsProvider&) = delete;
+  NetworkMetricsProvider& operator=(const NetworkMetricsProvider&) = delete;
+
   ~NetworkMetricsProvider() override;
 
  private:
@@ -141,8 +148,6 @@ class NetworkMetricsProvider
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<NetworkMetricsProvider> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NetworkMetricsProvider);
 };
 
 }  // namespace metrics

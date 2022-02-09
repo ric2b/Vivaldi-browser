@@ -814,8 +814,8 @@ void FakeShillManagerClient::SetupDefaultEnvironment() {
     SetInitialDeviceProperty("/device/eth1", shill::kAddressProperty,
                              base::Value("0123456789ab"));
     base::ListValue eth_ip_configs;
-    eth_ip_configs.AppendString("ipconfig_v4_path");
-    eth_ip_configs.AppendString("ipconfig_v6_path");
+    eth_ip_configs.Append("ipconfig_v4_path");
+    eth_ip_configs.Append("ipconfig_v6_path");
     SetInitialDeviceProperty("/device/eth1", shill::kIPConfigsProperty,
                              eth_ip_configs);
     const std::string kFakeEthernetNetworkPath = "/service/eth1";
@@ -838,8 +838,8 @@ void FakeShillManagerClient::SetupDefaultEnvironment() {
     SetInitialDeviceProperty("/device/wifi1", shill::kAddressProperty,
                              base::Value("23456789abcd"));
     base::ListValue wifi_ip_configs;
-    wifi_ip_configs.AppendString("ipconfig_v4_path");
-    wifi_ip_configs.AppendString("ipconfig_v6_path");
+    wifi_ip_configs.Append("ipconfig_v4_path");
+    wifi_ip_configs.Append("ipconfig_v6_path");
     SetInitialDeviceProperty("/device/wifi1", shill::kIPConfigsProperty,
                              wifi_ip_configs);
 
@@ -1209,7 +1209,7 @@ bool FakeShillManagerClient::ParseOption(const std::string& arg0,
     int seconds = 3;
     if (!arg1.empty())
       base::StringToInt(arg1, &seconds);
-    interactive_delay_ = base::TimeDelta::FromSeconds(seconds);
+    interactive_delay_ = base::Seconds(seconds);
     return true;
   } else if (arg0 == "sim_lock") {
     bool locked = (arg1 == "1");

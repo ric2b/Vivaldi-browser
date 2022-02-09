@@ -100,6 +100,9 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
                             base::Unretained(this)));
   }
 
+  IndexedDBDataItemReader(const IndexedDBDataItemReader&) = delete;
+  IndexedDBDataItemReader& operator=(const IndexedDBDataItemReader&) = delete;
+
   ~IndexedDBDataItemReader() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     release_callback_.Run();
@@ -191,8 +194,6 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
   scoped_refptr<base::TaskRunner> io_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(IndexedDBDataItemReader);
 };
 
 IndexedDBDispatcherHost::IndexedDBDispatcherHost(
@@ -453,10 +454,8 @@ void IndexedDBDispatcherHost::CreateAllExternalObjects(
               mojo_token.InitWithNewPipeAndPassReceiver());
         } else {
           DCHECK(!blob_info.file_system_access_token().empty());
-          // TODO(https://crbug.com/1199077): Pass the real StorageKey when
-          // FileSystemAccessContext is converted.
           file_system_access_context()->DeserializeHandle(
-              storage_key.origin(), blob_info.file_system_access_token(),
+              storage_key, blob_info.file_system_access_token(),
               mojo_token.InitWithNewPipeAndPassReceiver());
         }
         mojo_object->get_file_system_access_token() = std::move(mojo_token);

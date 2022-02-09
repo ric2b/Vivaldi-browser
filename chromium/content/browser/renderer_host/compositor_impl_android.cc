@@ -484,6 +484,7 @@ void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
   // before it can be reset.
   display_private_.reset();
   GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
+  display_client_.reset();
 }
 
 void CompositorImpl::RegisterRootFrameSink() {
@@ -691,7 +692,7 @@ void CompositorImpl::DidLoseLayerTreeFrameSink() {
   client_->DidSwapFrame(0);
 }
 
-void CompositorImpl::DidCommit(base::TimeTicks) {
+void CompositorImpl::DidCommit(base::TimeTicks, base::TimeTicks) {
   root_window_->OnCompositingDidCommit();
 }
 

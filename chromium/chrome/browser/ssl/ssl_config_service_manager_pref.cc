@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -57,11 +58,11 @@ const char* kVariationsRestrictionsByPolicy =
 // which cannot be converted will be skipped.
 std::vector<std::string> ListValueToStringVector(const base::ListValue* value) {
   std::vector<std::string> results;
-  results.reserve(value->GetSize());
-  std::string s;
+  results.reserve(value->GetList().size());
   for (const auto& entry : value->GetList()) {
-    if (entry.GetAsString(&s))
-      results.push_back(s);
+    const std::string* s = entry.GetIfString();
+    if (s)
+      results.push_back(*s);
   }
   return results;
 }
@@ -130,6 +131,11 @@ std::vector<std::string> CanonicalizeHostnamePatterns(
 class SSLConfigServiceManagerPref : public SSLConfigServiceManager {
  public:
   explicit SSLConfigServiceManagerPref(PrefService* local_state);
+
+  SSLConfigServiceManagerPref(const SSLConfigServiceManagerPref&) = delete;
+  SSLConfigServiceManagerPref& operator=(const SSLConfigServiceManagerPref&) =
+      delete;
+
   ~SSLConfigServiceManagerPref() override {}
 
   // Register local_state SSL preferences.
@@ -185,8 +191,6 @@ class SSLConfigServiceManagerPref : public SSLConfigServiceManager {
   bool variations_unrestricted_ = true;
 
   mojo::RemoteSet<network::mojom::SSLConfigClient> ssl_config_client_set_;
-
-  DISALLOW_COPY_AND_ASSIGN(SSLConfigServiceManagerPref);
 };
 
 SSLConfigServiceManagerPref::SSLConfigServiceManagerPref(

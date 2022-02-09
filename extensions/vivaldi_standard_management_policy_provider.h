@@ -13,10 +13,11 @@ class Extension;
 class ExtensionManagement;
 
 // Override standard extension management policies for Vivaldi's extension id
-class VivaldiStandardManagementPolicyProvider : public StandardManagementPolicyProvider {
+class VivaldiStandardManagementPolicyProvider
+    : public StandardManagementPolicyProvider {
  public:
   explicit VivaldiStandardManagementPolicyProvider(
-      const ExtensionManagement* settings);
+      ExtensionManagement* settings);
 
   ~VivaldiStandardManagementPolicyProvider() override;
 

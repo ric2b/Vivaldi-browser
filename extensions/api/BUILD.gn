@@ -24,6 +24,12 @@ if (vivaldi_oauth_client_secret != "") {
   ]
 }
 
+if (vivaldi_microsoft_oauth_client_id != "") {
+  defines += [
+    "VIVALDI_MICROSOFT_OAUTH_API_CLIENT_ID=\"$vivaldi_microsoft_oauth_client_id\""
+  ]
+}
+
 static_library("apis") {
   public_deps = [
     "//chrome/common:mojo_bindings",
@@ -171,8 +177,12 @@ static_library("apis") {
     "sync/sync_api.h",
     "tabs/tabs_private_api.cc",
     "tabs/tabs_private_api.h",
+    "theme/theme_private_api.cc",
+    "theme/theme_private_api.h",
     "thumbnails/thumbnails_api.cc",
     "thumbnails/thumbnails_api.h",
+    "translate_history/translate_history_api.cc",
+    "translate_history/translate_history_api.h",
     "vivaldi_account/vivaldi_account_api.cc",
     "vivaldi_account/vivaldi_account_api.h",
     "vivaldi_utilities/vivaldi_utilities_api.cc",

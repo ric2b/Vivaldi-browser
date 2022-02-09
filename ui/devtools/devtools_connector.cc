@@ -27,18 +27,15 @@
 namespace extensions {
 
 DevtoolsConnectorAPI::DevtoolsConnectorAPI(content::BrowserContext* context)
-  : browser_context_(context) {
-}
+    : browser_context_(context) {}
 
-DevtoolsConnectorAPI::~DevtoolsConnectorAPI() {
-}
+DevtoolsConnectorAPI::~DevtoolsConnectorAPI() {}
 
-void DevtoolsConnectorAPI::Shutdown() {
-}
+void DevtoolsConnectorAPI::Shutdown() {}
 
-static base::LazyInstance<
-    ::extensions::BrowserContextKeyedAPIFactory<DevtoolsConnectorAPI>>::
-      DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<::extensions::BrowserContextKeyedAPIFactory<
+    DevtoolsConnectorAPI>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 ::extensions::BrowserContextKeyedAPIFactory<DevtoolsConnectorAPI>*
@@ -47,7 +44,7 @@ DevtoolsConnectorAPI::GetFactoryInstance() {
 }
 
 DevtoolsConnectorItem* DevtoolsConnectorAPI::GetOrCreateDevtoolsConnectorItem(
-  int tab_id) {
+    int tab_id) {
   for (DevtoolsConnectorItem* item : connector_items_) {
     if (item->tab_id() == tab_id) {
       return item;
@@ -121,32 +118,33 @@ void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
 // static
 void DevtoolsConnectorAPI::SendOnUndockedEvent(
     content::BrowserContext* browser_context,
-    int tab_id, bool show_window) {
+    int tab_id,
+    bool show_window) {
   extensions::vivaldi::devtools_private::DevtoolsWindowParams params;
   bool need_defaults = true;
   Profile* profile = Profile::FromBrowserContext(browser_context);
   PrefService* prefs = profile->GetPrefs();
-  if (prefs->GetDictionary(prefs::kAppWindowPlacement)->
-      HasKey(DevToolsWindow::kDevToolsApp)) {
+  if (prefs->GetDictionary(prefs::kAppWindowPlacement)
+          ->HasKey(DevToolsWindow::kDevToolsApp)) {
     const base::DictionaryValue* dict =
         prefs->GetDictionary(prefs::kAppWindowPlacement);
     const base::DictionaryValue* state = nullptr;
     if (dict && dict->GetDictionary(DevToolsWindow::kDevToolsApp, &state)) {
-        state->GetInteger("left", &params.left);
-        state->GetInteger("top", &params.top);
-        state->GetInteger("right", &params.right);
-        state->GetInteger("bottom", &params.bottom);
-        state->GetBoolean("maximized", &params.maximized);
-        state->GetBoolean("always_on_top", &params.always_on_top);
-        need_defaults = false;
+      state->GetInteger("left", &params.left);
+      state->GetInteger("top", &params.top);
+      state->GetInteger("right", &params.right);
+      state->GetInteger("bottom", &params.bottom);
+      state->GetBoolean("maximized", &params.maximized);
+      state->GetBoolean("always_on_top", &params.always_on_top);
+      need_defaults = false;
     }
   }
   if (need_defaults) {
     // Set defaults in prefs, based on DevToolsWindow::CreateDevToolsBrowser
     DictionaryPrefUpdate update(prefs, prefs::kAppWindowPlacement);
     base::DictionaryValue* wp_prefs = update.Get();
-    std::unique_ptr<base::DictionaryValue>
-          dev_tools_defaults(new base::DictionaryValue);
+    std::unique_ptr<base::DictionaryValue> dev_tools_defaults(
+        new base::DictionaryValue);
     dev_tools_defaults->SetInteger("left", 100);
     dev_tools_defaults->SetInteger("top", 100);
     dev_tools_defaults->SetInteger("right", 740);
@@ -179,15 +177,14 @@ void DevtoolsConnectorAPI::SendDockingStateChanged(
 // static
 void DevtoolsConnectorAPI::SendClosed(content::BrowserContext* browser_context,
                                       int tab_id) {
-  ::vivaldi::BroadcastEvent(
-      vivaldi::devtools_private::OnClosed::kEventName,
-      vivaldi::devtools_private::OnClosed::Create(tab_id), browser_context);
+  ::vivaldi::BroadcastEvent(vivaldi::devtools_private::OnClosed::kEventName,
+                            vivaldi::devtools_private::OnClosed::Create(tab_id),
+                            browser_context);
 }
 
 DevtoolsConnectorItem::DevtoolsConnectorItem(int tab_id,
                                              content::BrowserContext* context)
-    : tab_id_(tab_id), browser_context_(context) {
-}
+    : tab_id_(tab_id), browser_context_(context) {}
 
 DevtoolsConnectorItem::~DevtoolsConnectorItem() {
   extensions::DevtoolsConnectorAPI* api =
@@ -244,8 +241,8 @@ void DevtoolsConnectorItem::WebContentsCreated(
   }
   if (guest_delegate_) {
     guest_delegate_->WebContentsCreated(
-      source_contents, opener_render_process_id, opener_render_frame_id,
-      frame_name, target_url, new_contents);
+        source_contents, opener_render_process_id, opener_render_frame_id,
+        frame_name, target_url, new_contents);
   }
 }
 
@@ -387,22 +384,21 @@ UIBindingsDelegate::UIBindingsDelegate(content::BrowserContext* browser_context,
   ui_bindings_delegate_.reset(delegate);
 }
 
-UIBindingsDelegate::~UIBindingsDelegate() {
-}
+UIBindingsDelegate::~UIBindingsDelegate() {}
 
 void UIBindingsDelegate::ActivateWindow() {
   ::vivaldi::BroadcastEvent(
-    vivaldi::devtools_private::OnActivateWindow::kEventName,
-    vivaldi::devtools_private::OnActivateWindow::Create(tab_id()),
-    browser_context_);
+      vivaldi::devtools_private::OnActivateWindow::kEventName,
+      vivaldi::devtools_private::OnActivateWindow::Create(tab_id()),
+      browser_context_);
 }
 
 void UIBindingsDelegate::NotifyUpdateBounds() {
   // Notify the js side to update bounds.
   ::vivaldi::BroadcastEvent(
-    vivaldi::devtools_private::OnDockingSizesChanged::kEventName,
-    vivaldi::devtools_private::OnDockingSizesChanged::Create(tab_id()),
-    browser_context_);
+      vivaldi::devtools_private::OnDockingSizesChanged::kEventName,
+      vivaldi::devtools_private::OnDockingSizesChanged::Create(tab_id()),
+      browser_context_);
 }
 
 void UIBindingsDelegate::CloseWindow() {
@@ -417,8 +413,8 @@ void UIBindingsDelegate::CloseWindow() {
   int tab_index;
 
   if (extensions::ExtensionTabUtil::GetTabById(
-      tab_id(), browser_context_, include_incognito, &browser, NULL,
-      &tabstrip_contents, &tab_index)) {
+          tab_id(), browser_context_, include_incognito, &browser, NULL,
+          &tabstrip_contents, &tab_index)) {
     VivaldiBrowserWindow* window =
         static_cast<VivaldiBrowserWindow*>(browser->window());
     window->ResetDockingState(tab_id());
@@ -437,8 +433,7 @@ void UIBindingsDelegate::Inspect(
   }
 }
 
-void UIBindingsDelegate::SetInspectedPageBounds(
-    const gfx::Rect& rect) {
+void UIBindingsDelegate::SetInspectedPageBounds(const gfx::Rect& rect) {
   if (ui_bindings_delegate_) {
     ui_bindings_delegate_->SetInspectedPageBounds(rect);
   }
@@ -501,8 +496,7 @@ infobars::ContentInfoBarManager* UIBindingsDelegate::GetInfoBarManager() {
   return nullptr;
 }
 
-void UIBindingsDelegate::RenderProcessGone(
-    bool crashed) {
+void UIBindingsDelegate::RenderProcessGone(bool crashed) {
   if (ui_bindings_delegate_) {
     return ui_bindings_delegate_->RenderProcessGone(crashed);
   }

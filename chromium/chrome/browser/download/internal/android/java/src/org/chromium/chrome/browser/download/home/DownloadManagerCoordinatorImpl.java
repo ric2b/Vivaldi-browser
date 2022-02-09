@@ -16,7 +16,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.download.home.filter.Filters;
 import org.chromium.chrome.browser.download.home.filter.Filters.FilterType;
@@ -37,6 +37,7 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import java.io.Closeable;
 
 // Vivaldi
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.build.BuildConfig;
 
 /**
@@ -61,7 +62,7 @@ class DownloadManagerCoordinatorImpl
 
     /** Builds a {@link DownloadManagerCoordinatorImpl} instance. */
     public DownloadManagerCoordinatorImpl(Activity activity, DownloadManagerUiConfig config,
-            ObservableSupplier<Boolean> isPrefetchEnabledSupplier,
+            Supplier<Boolean> exploreOfflineTabVisibilitySupplier,
             Callback<Context> settingsLauncher, SnackbarManager snackbarManager,
             ModalDialogManager modalDialogManager, PrefService prefService, Tracker tracker,
             FaviconProvider faviconProvider, OfflineContentProvider provider,
@@ -72,7 +73,7 @@ class DownloadManagerCoordinatorImpl
         mDeleteCoordinator = new DeleteUndoCoordinator(snackbarManager);
         mSelectionDelegate = new SelectionDelegate<ListItem>();
         mListCoordinator = new DateOrderedListCoordinator(mActivity, config,
-                isPrefetchEnabledSupplier, provider, legacyProvider,
+                exploreOfflineTabVisibilitySupplier, provider, legacyProvider,
                 mDeleteCoordinator::showSnackbar, mSelectionDelegate, this::notifyFilterChanged,
                 createDateOrderedListObserver(), modalDialogManager, prefService, faviconProvider,
                 discardableReferencePool);
@@ -168,6 +169,15 @@ class DownloadManagerCoordinatorImpl
     // ToolbarActionDelegate implementation.
     @Override
     public void close() {
+        if (BuildConfig.IS_VIVALDI) {
+            boolean isTablet = DeviceFormFactor
+                    .isNonMultiDisplayContextOnTablet(mActivity);
+            if (isTablet) {
+                View panelView = mActivity.findViewById(R.id.panels_main);
+                panelView.setVisibility(View.INVISIBLE);
+                return;
+            }
+        }
         mActivity.finish();
     }
 
@@ -213,4 +223,7 @@ class DownloadManagerCoordinatorImpl
     public void showSearchUI() {
         mToolbarCoordinator.showSearchView();
     }
+
+    @Override
+    public void clearSelection() { mSelectionDelegate.clearSelection(); }
 }

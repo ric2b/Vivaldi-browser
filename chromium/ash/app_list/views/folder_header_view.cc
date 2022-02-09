@@ -21,7 +21,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
@@ -79,10 +78,12 @@ class FolderHeaderView::FolderNameView : public views::Textfield,
         ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(2));
     set_placeholder_text_color(
         AppListColorProvider::Get()->GetFolderHintTextColor());
-    SetTextColor(AppListColorProvider::Get()->GetFolderTitleTextColor(
-        gfx::kGoogleGrey700));
+    SetTextColor(AppListColorProvider::Get()->GetFolderTitleTextColor());
     SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
   }
+
+  FolderNameView(const FolderNameView&) = delete;
+  FolderNameView& operator=(const FolderNameView&) = delete;
 
   ~FolderNameView() override = default;
 
@@ -98,8 +99,7 @@ class FolderHeaderView::FolderNameView : public views::Textfield,
         GetFolderBackgroundColor(is_active), kFolderNameBorderRadius));
 
     AppListColorProvider* color_provider = AppListColorProvider::Get();
-    const SkColor text_color =
-        color_provider->GetFolderTitleTextColor(gfx::kGoogleGrey700);
+    const SkColor text_color = color_provider->GetFolderTitleTextColor();
     SetTextColor(text_color);
     SetSelectionTextColor(text_color);
     SetSelectionBackgroundColor(color_provider->GetFolderNameSelectionColor());
@@ -248,8 +248,6 @@ class FolderHeaderView::FolderNameView : public views::Textfield,
   // bool tracks whether the mouse has entered the view, avoiding repainting the
   // background on each mouse move event.
   bool has_mouse_already_entered_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(FolderNameView);
 };
 
 FolderHeaderView::FolderHeaderView(FolderHeaderViewDelegate* delegate)
@@ -292,10 +290,6 @@ void FolderHeaderView::UpdateFolderNameVisibility(bool visible) {
   folder_name_visible_ = visible;
   Update();
   SchedulePaint();
-}
-
-void FolderHeaderView::OnFolderItemRemoved() {
-  folder_item_ = nullptr;
 }
 
 void FolderHeaderView::SetTextFocus() {

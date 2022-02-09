@@ -332,7 +332,6 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
                          .GetLoadFlagsForWebUrlRequest();
   dest->recursive_prefetch_token = src.RecursivePrefetchToken();
   dest->priority = ConvertWebKitPriorityToNetPriority(src.Priority());
-  dest->should_reset_appcache = src.ShouldResetAppCache();
   dest->is_external_request = src.IsExternalRequest();
   dest->cors_preflight_policy = src.CorsPreflightPolicy();
   dest->skip_service_worker = src.GetSkipServiceWorker();
@@ -346,7 +345,8 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
         absl::make_optional(network::ResourceRequest::WebBundleTokenParams(
             src.GetWebBundleTokenParams()->bundle_url,
             src.GetWebBundleTokenParams()->token,
-            src.GetWebBundleTokenParams()->CloneHandle()));
+            ToCrossVariantMojoType(
+                src.GetWebBundleTokenParams()->CloneHandle())));
   }
 
   // TODO(kinuko): Deprecate this.

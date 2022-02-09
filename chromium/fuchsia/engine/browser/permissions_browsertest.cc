@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 #include "base/files/file_util.h"
+#include "base/fuchsia/mem_buffer_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "content/public/test/browser_test.h"
-#include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/base/test/frame_test_util.h"
+#include "fuchsia/base/test/test_navigation_listener.h"
 #include "fuchsia/engine/browser/frame_impl_browser_test_base.h"
+#include "fuchsia/engine/test/frame_for_test.h"
 #include "fuchsia/engine/test/test_data.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -25,7 +27,8 @@ class PermissionsBrowserTest : public FrameImplTestBaseWithServer {
 
   void SetUpOnMainThread() override {
     FrameImplTestBaseWithServer::SetUpOnMainThread();
-    frame_ = CreateFrame();
+    frame_ = cr_fuchsia::FrameForTest::Create(
+        context(), fuchsia::web::CreateFrameParams());
   }
 
   void GrantPermission(fuchsia::web::PermissionType type,
@@ -47,13 +50,12 @@ class PermissionsBrowserTest : public FrameImplTestBaseWithServer {
       const net::test_server::HttpRequest& request);
 
   uint64_t before_load_js_id_ = 1;
-  fuchsia::web::FramePtr frame_;
+  cr_fuchsia::FrameForTest frame_;
 };
 
 void PermissionsBrowserTest::InjectBeforeLoadJs(const std::string& code) {
   frame_->AddBeforeLoadJavaScript(
-      before_load_js_id_++, {"*"},
-      cr_fuchsia::MemBufferFromString(code, "test"),
+      before_load_js_id_++, {"*"}, base::MemBufferFromString(code, "test"),
       [](fuchsia::web::Frame_AddBeforeLoadJavaScript_Result result) {
         CHECK(result.is_response());
       });
@@ -82,7 +84,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest, PermissionInSameOriginIframe) {
 
   ASSERT_NO_FATAL_FAILURE(LoadPageInIframe(iframe_src.spec()));
 
-  navigation_listener_.RunUntilTitleEquals("ended");
+  frame_.navigation_listener().RunUntilTitleEquals("ended");
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest, NoPermissionInSameOriginIframe) {
@@ -93,7 +95,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest, NoPermissionInSameOriginIframe) {
 
   ASSERT_NO_FATAL_FAILURE(LoadPageInIframe(iframe_src.spec()));
 
-  navigation_listener_.RunUntilTitleEquals("ended-NotFoundError");
+  frame_.navigation_listener().RunUntilTitleEquals("ended-NotFoundError");
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest, PermissionInCrossOriginIframe) {
@@ -113,7 +115,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest, PermissionInCrossOriginIframe) {
 
   ASSERT_NO_FATAL_FAILURE(LoadPageInIframe(iframe_src.spec()));
 
-  navigation_listener_.RunUntilTitleEquals("ended-NotAllowedError");
+  frame_.navigation_listener().RunUntilTitleEquals("ended-NotAllowedError");
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest,
@@ -140,5 +142,5 @@ IN_PROC_BROWSER_TEST_F(PermissionsBrowserTest,
 
   ASSERT_NO_FATAL_FAILURE(LoadPageInIframe(iframe_src.spec()));
 
-  navigation_listener_.RunUntilTitleEquals("ended");
+  frame_.navigation_listener().RunUntilTitleEquals("ended");
 }

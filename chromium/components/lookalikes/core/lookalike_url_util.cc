@@ -161,7 +161,9 @@ bool GetSimilarDomainFromTop500(
                 top_domain_skeleton, url_formatter::SkeletonType::kFull)
                 .domain;
         DCHECK(!top_domain.empty());
-        if (!target_allowlisted.Run(top_domain)) {
+        if (!IsLikelyCharacterSwapFalsePositive(navigated_domain,
+                                                GetDomainInfo(top_domain)) &&
+            !target_allowlisted.Run(top_domain)) {
           *matched_domain = top_domain;
           *match_type = LookalikeUrlMatchType::kCharacterSwapTop500;
           return true;
@@ -205,16 +207,37 @@ bool GetSimilarDomainFromEngagedSites(
           return true;
         }
         // Check character swap on skeletons.
-        // TODO(crbug/1109056): Also check character swap on actual hostnames
-        // with diacritics etc removed. This is because some characters have two
-        // character skeletons such as m -> rn, and this prevents us from
-        // detecting character swaps between example.com and exapmle.com.
         if (HasOneCharacterSwap(base::UTF8ToUTF16(navigated_skeleton),
-                                base::UTF8ToUTF16(engaged_skeleton))) {
+                                base::UTF8ToUTF16(engaged_skeleton)) &&
+            !IsLikelyCharacterSwapFalsePositive(navigated_domain,
+                                                engaged_site)) {
           *matched_domain = engaged_site.domain_and_registry;
           *match_type = LookalikeUrlMatchType::kCharacterSwapSiteEngagement;
           return true;
         }
+      }
+    }
+  }
+
+  // Also check character swap on actual hostnames with diacritics etc removed.
+  // This is because some characters have two character skeletons such as m ->
+  // rn, and this prevents us from detecting character swaps between example.com
+  // and exapmle.com.
+  const std::u16string navigated_hostname_without_diacritics =
+      url_formatter::MaybeRemoveDiacritics(navigated_domain.idn_result.result);
+  if (navigated_hostname_without_diacritics !=
+      navigated_domain.idn_result.result) {
+    for (const DomainInfo& engaged_site : engaged_sites) {
+      DCHECK_NE(navigated_domain.domain_and_registry,
+                engaged_site.domain_and_registry);
+      const std::u16string engaged_hostname_without_diacritics =
+          url_formatter::MaybeRemoveDiacritics(engaged_site.idn_result.result);
+
+      if (HasOneCharacterSwap(navigated_hostname_without_diacritics,
+                              engaged_hostname_without_diacritics)) {
+        *matched_domain = engaged_site.domain_and_registry;
+        *match_type = LookalikeUrlMatchType::kCharacterSwapSiteEngagement;
+        return true;
       }
     }
   }
@@ -651,6 +674,19 @@ bool IsLikelyEditDistanceFalsePositive(const DomainInfo& navigated_domain,
   }
 
   return false;
+}
+
+bool IsLikelyCharacterSwapFalsePositive(const DomainInfo& navigated_domain,
+                                        const DomainInfo& matched_domain) {
+  DCHECK(url_formatter::top_domains::IsEditDistanceCandidate(
+      matched_domain.domain_and_registry));
+  DCHECK(url_formatter::top_domains::IsEditDistanceCandidate(
+      navigated_domain.domain_and_registry));
+  // If the only difference between the domains is the registry part, this is
+  // unlikely to be a spoofing attempt and we should ignore this match.  E.g.
+  // exclude matches like google.sr and google.rs.
+  return navigated_domain.domain_without_registry ==
+         matched_domain.domain_without_registry;
 }
 
 bool IsTopDomain(const DomainInfo& domain_info) {

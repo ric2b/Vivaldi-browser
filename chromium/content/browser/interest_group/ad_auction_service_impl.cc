@@ -10,8 +10,12 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
+#include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/interest_group/auction_runner.h"
+#include "content/browser/interest_group/interest_group_manager.h"
+#include "content/browser/renderer_host/page_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -29,6 +33,8 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -36,6 +42,8 @@
 namespace content {
 
 namespace {
+
+constexpr base::TimeDelta kMaxExpiry = base::Days(30);
 
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("auction_report_sender", R"(
@@ -82,10 +90,9 @@ void FetchReport(network::mojom::URLLoaderFactory* url_loader_factory,
   // TODO(qingxin): time out these requests if they take too long.
   simple_url_loader_ptr->DownloadHeadersOnly(
       url_loader_factory,
-      base::BindOnce(
-          base::DoNothing::Once<std::unique_ptr<network::SimpleURLLoader>,
-                                scoped_refptr<net::HttpResponseHeaders>>(),
-          std::move(simple_url_loader)));
+      base::BindOnce([](std::unique_ptr<network::SimpleURLLoader>,
+                        scoped_refptr<net::HttpResponseHeaders>) {},
+                     std::move(simple_url_loader)));
 }
 
 bool IsAuctionValid(const blink::mojom::AuctionAdConfig& config) {
@@ -127,15 +134,18 @@ bool IsAuctionValid(const blink::mojom::AuctionAdConfig& config) {
 AdAuctionServiceImpl::AdAuctionServiceImpl(
     RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<blink::mojom::AdAuctionService> receiver)
-    : DocumentServiceBase(render_frame_host, std::move(receiver)) {}
+    : DocumentService(render_frame_host, std::move(receiver)),
+      main_frame_origin_(
+          render_frame_host->GetMainFrame()->GetLastCommittedOrigin()),
+      main_frame_url_(
+          render_frame_host->GetMainFrame()->GetLastCommittedURL()) {}
 
 AdAuctionServiceImpl::~AdAuctionServiceImpl() {
   while (!auctions_.empty()) {
     // Need to fail all auctions rather than just deleting them, to ensure Mojo
     // callbacks from the renderers are invoked. Uninvoked Mojo callbacks may
-    // not be destroyed before the Mojo pipe is, and the parent
-    // DocumentServiceBase class owns the pipe, so it may still be open at this
-    // point.
+    // not be destroyed before the Mojo pipe is, and the parent DocumentService
+    // class owns the pipe, so it may still be open at this point.
     (*auctions_.begin())->FailAuction(AuctionRunner::AuctionResult::kAborted);
   }
 }
@@ -147,8 +157,59 @@ void AdAuctionServiceImpl::CreateMojoService(
   DCHECK(render_frame_host);
 
   // The object is bound to the lifetime of `render_frame_host` and the mojo
-  // connection. See DocumentServiceBase for details.
+  // connection. See DocumentService for details.
   new AdAuctionServiceImpl(render_frame_host, std::move(receiver));
+}
+
+void AdAuctionServiceImpl::JoinInterestGroup(
+    const blink::InterestGroup& group) {
+  // If the interest group API is not allowed for this origin do nothing.
+  if (!GetContentClient()->browser()->IsInterestGroupAPIAllowed(
+          render_frame_host()->GetBrowserContext(), main_frame_origin_,
+          group.owner.GetURL())) {
+    return;
+  }
+
+  // Disallow setting interest groups for another origin. Eventually, this will
+  // need to perform a fetch to check for cross-origin permissions to add an
+  // interest group.
+  if (origin() != group.owner)
+    return;
+
+  blink::InterestGroup updated_group = group;
+  base::Time max_expiry = base::Time::Now() + kMaxExpiry;
+  if (updated_group.expiry > max_expiry)
+    updated_group.expiry = max_expiry;
+  GetInterestGroupManager().JoinInterestGroup(std::move(updated_group),
+                                              main_frame_url_);
+}
+
+void AdAuctionServiceImpl::LeaveInterestGroup(const url::Origin& owner,
+                                              const std::string& name) {
+  // If the interest group API is not allowed for this origin do nothing.
+  if (!GetContentClient()->browser()->IsInterestGroupAPIAllowed(
+          render_frame_host()->GetBrowserContext(), main_frame_origin_,
+          origin().GetURL())) {
+    return;
+  }
+
+  if (origin().scheme() != url::kHttpsScheme)
+    return;
+
+  if (owner != origin())
+    return;
+
+  GetInterestGroupManager().LeaveInterestGroup(owner, name);
+}
+
+void AdAuctionServiceImpl::UpdateAdInterestGroups() {
+  // If the interest group API is not allowed for this origin do nothing.
+  if (!GetContentClient()->browser()->IsInterestGroupAPIAllowed(
+          render_frame_host()->GetBrowserContext(), main_frame_origin_,
+          origin().GetURL())) {
+    return;
+  }
+  GetInterestGroupManager().UpdateInterestGroupsOfOwner(origin());
 }
 
 void AdAuctionServiceImpl::RunAdAuction(blink::mojom::AuctionAdConfigPtr config,
@@ -196,12 +257,8 @@ void AdAuctionServiceImpl::RunAdAuction(blink::mojom::AuctionAdConfigPtr config,
       std::move(top_frame_origin), config->seller);
 
   std::unique_ptr<AuctionRunner> auction = AuctionRunner::CreateAndStart(
-      this,
-      static_cast<StoragePartitionImpl*>(
-          render_frame_host()->GetStoragePartition())
-          ->GetInterestGroupManager(),
-      std::move(config), std::move(filtered_buyers), std::move(browser_signals),
-      frame_origin,
+      this, &GetInterestGroupManager(), std::move(config),
+      std::move(filtered_buyers), std::move(browser_signals), frame_origin,
       base::BindOnce(&AdAuctionServiceImpl::OnAuctionComplete,
                      base::Unretained(this), std::move(callback)));
   auctions_.insert(std::move(auction));
@@ -255,6 +312,7 @@ void AdAuctionServiceImpl::OnAuctionComplete(
     RunAdAuctionCallback callback,
     AuctionRunner* auction,
     absl::optional<GURL> render_url,
+    absl::optional<std::vector<GURL>> ad_component_urls,
     absl::optional<GURL> bidder_report_url,
     absl::optional<GURL> seller_report_url,
     std::vector<std::string> errors) {
@@ -270,19 +328,38 @@ void AdAuctionServiceImpl::OnAuctionComplete(
         static_cast<RenderFrameHostImpl*>(render_frame_host()), error);
   }
 
-  std::move(callback).Run(render_url);
-
   if (!render_url) {
     DCHECK(!bidder_report_url);
     DCHECK(!seller_report_url);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
+
+  // If fenced frames are enabled, create and return a URN URL instead of the
+  // real URL.
+  //
+  // TODO(https://crbug.com/1253118): Consider removing the non-fenced frame
+  // path, and just disabling FLEDGE when fenced frames are disabled.
+  if (blink::features::IsFencedFramesEnabled()) {
+    render_url =
+        GetFrame()->GetPage().fenced_frame_urls_map().AddFencedFrameURL(
+            *render_url);
+    DCHECK(render_url->is_valid());
+  }
+
+  std::move(callback).Run(render_url);
 
   network::mojom::URLLoaderFactory* factory = GetTrustedURLLoaderFactory();
   if (bidder_report_url)
     FetchReport(factory, *bidder_report_url, origin());
   if (seller_report_url)
     FetchReport(factory, *seller_report_url, origin());
+}
+
+InterestGroupManager& AdAuctionServiceImpl::GetInterestGroupManager() const {
+  return *static_cast<StoragePartitionImpl*>(
+              render_frame_host()->GetStoragePartition())
+              ->GetInterestGroupManager();
 }
 
 }  // namespace content

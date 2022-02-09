@@ -9,7 +9,6 @@
 <translation id="1375198122581997741">Despre versiune</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nu a trimis date.</translation>
 <translation id="1559528461873125649">Nu există un astfel de fișier sau director</translation>
-<translation id="1620510694547887537">Cameră</translation>
 <translation id="1640244768702815859">Încercați <ph name="BEGIN_LINK" />vizitarea paginii inițiale a site-ului<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocol nesuportat</translation>
 <translation id="1710259589646384581">Sistem de operare</translation>
@@ -18,20 +17,16 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticele de rețea Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Acest site web conține programe dăunătoare</translation>
 <translation id="1916770123977586577">Pentru a aplica setările actualizate de la acest site web, reîncărcați această pagină</translation>
-<translation id="1919345977826869612">Publicitate</translation>
 <translation id="1974060860693918893">Avansate</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificarea proxy-ul și firewall-ul<ph name="END_LINK" /></translation>
-<translation id="2147827593068025794">Sincronizare în fundal</translation>
 <translation id="2166378884831602661">Acest site web nu poate oferi o conexiune securizată</translation>
 <translation id="2230458221926704099">Remediați conexiunea folosind <ph name="BEGIN_LINK" />aplicația de diagnosticare<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Accesul la internet este blocat</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
-<translation id="2344028582131185878">Descărcări automate</translation>
 <translation id="2355395290879513365">Este posibil ca atacatorii să poată vedea imaginile la care vă uitați pe acest site web și să vă păcălească prin modificarea lor.</translation>
 <translation id="2356070529366658676">Întreabă</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Rulare diagnostice de rețea<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a trimis un răspuns nevalid.</translation>
-<translation id="2586657967955657006">Clipboard</translation>
 <translation id="2609632851001447353">Variații</translation>
 <translation id="2634124572758952069">Nu s-a putut găsi adresa IP pentru serverul <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -115,7 +110,6 @@
 <translation id="6165508094623778733">Aflați mai multe</translation>
 <translation id="6177128806592000436">Conexiunea la acest site web nu este securizată</translation>
 <translation id="6203231073485539293">Verificați conexiunea la internet</translation>
-<translation id="625755898061068298">Ați ales să dezactivați avertismentele de securitate pentru acest site web.</translation>
 <translation id="6264485186158353794">Înapoi la zona sigură</translation>
 <translation id="6305205051461490394"><ph name="URL" />  nu poate fi accesat.</translation>
 <translation id="6321917430147971392">Verificați setările DNS</translation>

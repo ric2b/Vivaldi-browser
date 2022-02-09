@@ -45,8 +45,7 @@ namespace media_history {
 
 namespace {
 
-constexpr base::TimeDelta kTestClipDuration =
-    base::TimeDelta::FromMilliseconds(26771);
+constexpr base::TimeDelta kTestClipDuration = base::Milliseconds(26771);
 
 enum class TestState {
   kNormal,
@@ -78,7 +77,7 @@ class MediaHistoryBrowserTest : public InProcessBrowserTest,
   }
 
   static bool SetupPageAndStartPlaying(Browser* browser, const GURL& url) {
-    ui_test_utils::NavigateToURL(browser, url);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser, url));
 
     bool played = false;
     EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
@@ -89,7 +88,7 @@ class MediaHistoryBrowserTest : public InProcessBrowserTest,
 
   static bool SetupPageAndStartPlayingAudioOnly(Browser* browser,
                                                 const GURL& url) {
-    ui_test_utils::NavigateToURL(browser, url);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser, url));
 
     bool played = false;
     EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
@@ -100,7 +99,7 @@ class MediaHistoryBrowserTest : public InProcessBrowserTest,
 
   static bool SetupPageAndStartPlayingVideoOnly(Browser* browser,
                                                 const GURL& url) {
-    ui_test_utils::NavigateToURL(browser, url);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser, url));
 
     bool played = false;
     EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
@@ -290,8 +289,8 @@ class MediaHistoryBrowserTest : public InProcessBrowserTest,
 
   void SimulateNavigationToCommit(Browser* browser) {
     // Navigate to trigger the session to be saved.
-    ui_test_utils::NavigateToURL(browser,
-                                 embedded_test_server()->GetURL("/empty.html"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser, embedded_test_server()->GetURL("/empty.html")));
 
     // Wait until the session has finished saving.
     WaitForDB(GetMediaHistoryService(browser));
@@ -528,7 +527,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest,
 IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest, DoNotRecordSessionIfNotActive) {
   auto* browser = CreateBrowserFromParam();
 
-  ui_test_utils::NavigateToURL(browser, GetTestURL());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, GetTestURL()));
   EXPECT_TRUE(SetMediaMetadata(browser));
 
   media_session::MediaMetadata expected_metadata = GetExpectedDefaultMetadata();
@@ -851,7 +850,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest,
       EXPECT_TRUE(playbacks[0]->has_audio);
       EXPECT_TRUE(playbacks[0]->has_video);
       EXPECT_EQ(GetTestURL(), playbacks[0]->url);
-      EXPECT_GE(base::TimeDelta::FromSeconds(7), playbacks[0]->watchtime);
+      EXPECT_GE(base::Seconds(7), playbacks[0]->watchtime);
 
       EXPECT_EQ(1u, origins.size());
       EXPECT_EQ(url::Origin::Create(GetTestURL()), origins[0]->origin);
@@ -929,7 +928,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest, RecordWatchtime_AudioOnly) {
       EXPECT_TRUE(playbacks[0]->has_audio);
       EXPECT_FALSE(playbacks[0]->has_video);
       EXPECT_EQ(GetTestURL(), playbacks[0]->url);
-      EXPECT_GE(base::TimeDelta::FromSeconds(7), playbacks[0]->watchtime);
+      EXPECT_GE(base::Seconds(7), playbacks[0]->watchtime);
 
       EXPECT_EQ(1u, origins.size());
       EXPECT_EQ(url::Origin::Create(GetTestURL()), origins[0]->origin);
@@ -999,7 +998,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest, RecordWatchtime_VideoOnly) {
       EXPECT_FALSE(playbacks[0]->has_audio);
       EXPECT_TRUE(playbacks[0]->has_video);
       EXPECT_EQ(GetTestURL(), playbacks[0]->url);
-      EXPECT_GE(base::TimeDelta::FromSeconds(7), playbacks[0]->watchtime);
+      EXPECT_GE(base::Seconds(7), playbacks[0]->watchtime);
 
       EXPECT_EQ(1u, origins.size());
       EXPECT_EQ(url::Origin::Create(GetTestURL()), origins[0]->origin);
@@ -1136,7 +1135,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest,
   auto playbacks = GetPlaybacksSync(service);
   if (!playbacks.empty()) {
     ASSERT_EQ(1u, playbacks.size());
-    EXPECT_GE(base::TimeDelta::FromSeconds(2), playbacks[0]->watchtime);
+    EXPECT_GE(base::Seconds(2), playbacks[0]->watchtime);
   }
 }
 
@@ -1146,7 +1145,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest, DoNotRecordWatchtime_Muted) {
 
   // Setup the test page and mute the player.
   auto* web_contents = browser->tab_strip_model()->GetActiveWebContents();
-  ui_test_utils::NavigateToURL(browser, GetTestURL());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, GetTestURL()));
   ASSERT_TRUE(content::ExecuteScript(web_contents, "mute();"));
 
   // Start playing the video.

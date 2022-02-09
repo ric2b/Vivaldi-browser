@@ -20,8 +20,7 @@ will proxy itself to the web ui side.
 */
 class ConfirmInfoBarWebProxy : public infobars::InfoBar {
  public:
-  ConfirmInfoBarWebProxy(
-      std::unique_ptr<ConfirmInfoBarDelegate> delegate);
+  ConfirmInfoBarWebProxy(std::unique_ptr<ConfirmInfoBarDelegate> delegate);
   ~ConfirmInfoBarWebProxy() override;
 
   ConfirmInfoBarDelegate* GetDelegate();
@@ -34,7 +33,7 @@ class ConfirmInfoBarWebProxy : public infobars::InfoBar {
   void PlatformSpecificHide(bool animate) override;
   void PlatformSpecificOnCloseSoon() override;
 
-private:
+ private:
   Profile* profile_ = nullptr;
   int tab_id_ = 0;
 };
@@ -46,6 +45,8 @@ class InfoBarContainerWebProxy : public infobars::InfoBarContainer {
  public:
   explicit InfoBarContainerWebProxy(Delegate* delegate);
   ~InfoBarContainerWebProxy() override;
+  InfoBarContainerWebProxy(const InfoBarContainerWebProxy&) = delete;
+  InfoBarContainerWebProxy& operator=(const InfoBarContainerWebProxy&) = delete;
 
  protected:
   // InfobarContainer:
@@ -56,8 +57,6 @@ class InfoBarContainerWebProxy : public infobars::InfoBarContainer {
   }
   void PlatformSpecificRemoveInfoBar(infobars::InfoBar* infobar) override;
   void PlatformSpecificInfoBarStateChanged(bool is_animating) override {}
-
-  DISALLOW_COPY_AND_ASSIGN(InfoBarContainerWebProxy);
 };
 
 }  // namespace vivaldi

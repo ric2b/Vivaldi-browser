@@ -31,10 +31,11 @@ VideoDecoderConfig CreateFakeVideoConfig() {
   gfx::Size coded_size(320, 240);
   gfx::Rect visible_rect(0, 0, 320, 240);
   gfx::Size natural_size(320, 240);
-  return VideoDecoderConfig(
-      kCodecH264, H264PROFILE_MAIN, VideoDecoderConfig::AlphaMode::kIsOpaque,
-      VideoColorSpace(), kNoTransformation, coded_size, visible_rect,
-      natural_size, EmptyExtraData(), EncryptionScheme::kUnencrypted);
+  return VideoDecoderConfig(VideoCodec::kH264, H264PROFILE_MAIN,
+                            VideoDecoderConfig::AlphaMode::kIsOpaque,
+                            VideoColorSpace(), kNoTransformation, coded_size,
+                            visible_rect, natural_size, EmptyExtraData(),
+                            EncryptionScheme::kUnencrypted);
 }
 
 BufferQueue GenerateFakeBuffers(const int* frame_pts_ms,
@@ -50,8 +51,7 @@ BufferQueue GenerateFakeBuffers(const int* frame_pts_ms,
     if (frame_pts_ms[k] < 0) {
       buffers[k]->set_timestamp(kNoTimestamp);
     } else {
-      buffers[k]->set_timestamp(
-          base::TimeDelta::FromMilliseconds(frame_pts_ms[k]));
+      buffers[k]->set_timestamp(base::Milliseconds(frame_pts_ms[k]));
     }
   }
   return buffers;

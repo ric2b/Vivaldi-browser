@@ -172,7 +172,7 @@ class VideoFrameSubmitterTest : public testing::Test {
     resource_provider_ = new StrictMock<MockVideoFrameResourceProvider>(
         context_provider_.get(), nullptr);
     submitter_ = std::make_unique<VideoFrameSubmitter>(
-        base::DoNothing(), reporting_cb, viz::FrameSinkId(1, 1),
+        base::DoNothing(), reporting_cb,
         base::WrapUnique<MockVideoFrameResourceProvider>(resource_provider_));
 
     submitter_->Initialize(video_frame_provider_.get(), false);
@@ -931,7 +931,7 @@ TEST_F(VideoFrameSubmitterTest, PageVisibilityControlsSubmission) {
 }
 
 TEST_F(VideoFrameSubmitterTest, PreferredInterval) {
-  video_frame_provider_->preferred_interval = base::TimeDelta::FromSeconds(1);
+  video_frame_provider_->preferred_interval = base::Seconds(1);
 
   EXPECT_CALL(*sink_, SetNeedsBeginFrame(true));
 
@@ -1022,7 +1022,7 @@ TEST_F(VideoFrameSubmitterTest, ZeroSizedFramesAreNotSubmitted) {
 TEST_F(VideoFrameSubmitterTest, ProcessTimingDetails) {
   int fps = 24;
   int reports = 0;
-  base::TimeDelta frame_duration = base::TimeDelta::FromSecondsD(1.0 / fps);
+  base::TimeDelta frame_duration = base::Seconds(1.0 / fps);
   int frames_to_run =
       fps * (cc::VideoPlaybackRoughnessReporter::kMinWindowsBeforeSubmit + 1);
   WTF::HashMap<uint32_t, viz::FrameTimingDetails> timing_details;

@@ -22,13 +22,15 @@ namespace onc {
 namespace {
 
 // Returns true if the field is the identifier of a configuration, i.e. the GUID
-// of a network or a certificate.
+// of a network or a certificate, the ICCID of a cellular.
 bool IsIdentifierField(const OncValueSignature& value_signature,
                        const std::string& field_name) {
   if (&value_signature == &kNetworkConfigurationSignature)
     return field_name == ::onc::network_config::kGUID;
   if (&value_signature == &kCertificateSignature)
     return field_name == ::onc::certificate::kGUID;
+  if (&value_signature == &kCellularSignature)
+    return field_name == ::onc::cellular::kICCID;
   return false;
 }
 
@@ -79,6 +81,9 @@ class MergeListOfDictionaries {
   using ValuePtrs = std::vector<const base::Value*>;
 
   MergeListOfDictionaries() = default;
+
+  MergeListOfDictionaries(const MergeListOfDictionaries&) = delete;
+  MergeListOfDictionaries& operator=(const MergeListOfDictionaries&) = delete;
 
   virtual ~MergeListOfDictionaries() = default;
 
@@ -133,9 +138,6 @@ class MergeListOfDictionaries {
                                               const ValuePtrs& dicts) {
     return MergeDictionaries(dicts);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MergeListOfDictionaries);
 };
 
 // This is the base class for merging policies and user settings.

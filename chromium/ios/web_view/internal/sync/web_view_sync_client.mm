@@ -61,10 +61,10 @@ std::unique_ptr<WebViewSyncClient> WebViewSyncClient::Create(
       WebViewWebDataServiceWrapperFactory::GetAutofillWebDataForAccount(
           browser_state, ServiceAccessType::IMPLICIT_ACCESS)
           .get(),
-      WebViewPasswordStoreFactory::GetInterfaceForBrowserState(
+      WebViewPasswordStoreFactory::GetForBrowserState(
           browser_state, ServiceAccessType::IMPLICIT_ACCESS)
           .get(),
-      WebViewAccountPasswordStoreFactory::GetInterfaceForBrowserState(
+      WebViewAccountPasswordStoreFactory::GetForBrowserState(
           browser_state, ServiceAccessType::IMPLICIT_ACCESS)
           .get(),
       browser_state->GetPrefs(),
@@ -157,10 +157,6 @@ sync_sessions::SessionSyncService* WebViewSyncClient::GetSessionSyncService() {
 send_tab_to_self::SendTabToSelfSyncService*
 WebViewSyncClient::GetSendTabToSelfSyncService() {
   return nullptr;
-}
-
-base::RepeatingClosure WebViewSyncClient::GetPasswordStateChangedCallback() {
-  return base::DoNothing();
 }
 
 syncer::DataTypeController::TypeVector

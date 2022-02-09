@@ -140,11 +140,12 @@ void RemoveEntryByID(
     SessionID id,
     std::vector<std::unique_ptr<TabRestoreService::Entry>>* entries) {
   // Look for the entry in the top-level collection.
-  for (auto it = entries->begin(); it != entries->end(); ++it) {
-    TabRestoreService::Entry& entry = **it;
+  for (auto entry_it = entries->begin(); entry_it != entries->end();
+       ++entry_it) {
+    TabRestoreService::Entry& entry = **entry_it;
     // Erase it if it's our target.
     if (entry.id == id) {
-      entries->erase(it);
+      entries->erase(entry_it);
       return;
     }
     // If this entry is a window, look through its tabs.
@@ -353,7 +354,7 @@ CreateWindowEntryFromCommand(const SessionCommand* command,
       std::make_unique<sessions::TabRestoreService::Window>();
   window->selected_tab_index = fields.selected_tab_index;
   window->timestamp = base::Time::FromDeltaSinceWindowsEpoch(
-      base::TimeDelta::FromMicroseconds(fields.timestamp));
+      base::Microseconds(fields.timestamp));
   *window_id = SessionID::FromSerializedValue(fields.window_id);
   *num_tabs = fields.num_tabs;
 
@@ -440,6 +441,9 @@ class TabRestoreServiceImpl::PersistenceDelegate
       public TabRestoreServiceHelper::Observer {
  public:
   explicit PersistenceDelegate(TabRestoreServiceClient* client);
+
+  PersistenceDelegate(const PersistenceDelegate&) = delete;
+  PersistenceDelegate& operator=(const PersistenceDelegate&) = delete;
 
   ~PersistenceDelegate() override;
 
@@ -579,8 +583,6 @@ class TabRestoreServiceImpl::PersistenceDelegate
 
   // Used when loading previous tabs/session and open tabs/session.
   base::WeakPtrFactory<PersistenceDelegate> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PersistenceDelegate);
 };
 
 // Vivaldi functions. have to placed here due to the delegate function
@@ -1139,7 +1141,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
           entries.push_back(std::make_unique<Tab>());
           current_tab = static_cast<Tab*>(entries.back().get());
           current_tab->timestamp = base::Time::FromDeltaSinceWindowsEpoch(
-              base::TimeDelta::FromMicroseconds(payload.timestamp));
+              base::Microseconds(payload.timestamp));
         }
         current_tab->current_navigation_index = payload.index;
         break;

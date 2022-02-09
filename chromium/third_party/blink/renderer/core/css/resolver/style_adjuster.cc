@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_combine.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/core/style/style_intrinsic_length.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
@@ -124,6 +125,20 @@ bool HostIsInputFile(const Element* element) {
       return input->type() == input_type_names::kFile;
   }
   return false;
+}
+
+void AdjustStyleForSvgElement(const SVGElement& element, ComputedStyle& style) {
+  // Disable some of text decoration properties.
+  //
+  // Note that SetFooBar() is more efficient than ResetFooBar() if the current
+  // value is same as the reset value.
+  style.SetTextDecorationSkipInk(ETextDecorationSkipInk::kAuto);
+  style.SetTextDecorationStyle(
+      ETextDecorationStyle::kSolid);  // crbug.com/1246719
+  style.SetTextDecorationThickness(TextDecorationThickness(Length::Auto()));
+  style.SetTextEmphasisMark(TextEmphasisMark::kNone);
+  style.SetTextUnderlineOffset(Length());  // crbug.com/1247912
+  style.SetTextUnderlinePosition(kTextUnderlinePositionAuto);
 }
 
 }  // namespace
@@ -248,7 +263,8 @@ void StyleAdjuster::AdjustStyleForTextCombine(ComputedStyle& style) {
   const auto line_height = style.GetFontHeight().LineHeight();
   const auto size =
       LengthSize(Length::Fixed(line_height), Length::Fixed(one_em));
-  style.SetContainIntrinsicSize(size);
+  style.SetContainIntrinsicWidth(StyleIntrinsicLength(false, size.Width()));
+  style.SetContainIntrinsicHeight(StyleIntrinsicLength(false, size.Height()));
   style.SetHeight(size.Height());
   style.SetLineHeight(size.Height());
   style.SetMaxHeight(size.Height());
@@ -271,6 +287,7 @@ void StyleAdjuster::AdjustStyleForCombinedText(ComputedStyle& style) {
   style.SetWritingMode(WritingMode::kHorizontalTb);
 
   style.ClearAppliedTextDecorations();
+  style.ResetTextIndent();
   style.UpdateFontOrientation();
 
   DCHECK_EQ(style.GetFont().GetFontDescription().Orientation(),
@@ -686,17 +703,32 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
                        element->LayoutObjectIsNeeded(style))) {
     AdjustStyleForHTMLElement(style, *html_element);
   }
+
+  auto* svg_element = DynamicTo<SVGElement>(element);
   if (style.Display() != EDisplay::kNone) {
+    if (svg_element)
+      AdjustStyleForSvgElement(*svg_element, style);
+
     bool is_document_element =
         element && element->GetDocument().documentElement() == element;
     // Per the spec, position 'static' and 'relative' in the top layer compute
     // to 'absolute'. Root elements that are in the top layer should just
     // be left alone because the fullscreen.css doesn't apply any style to
     // them.
-    if (IsInTopLayer(element, style) && !is_document_element &&
-        (style.GetPosition() == EPosition::kStatic ||
-         style.GetPosition() == EPosition::kRelative))
-      style.SetPosition(EPosition::kAbsolute);
+    if (IsInTopLayer(element, style) && !is_document_element) {
+      if (style.GetPosition() == EPosition::kStatic ||
+          style.GetPosition() == EPosition::kRelative) {
+        style.SetPosition(EPosition::kAbsolute);
+      }
+      if (style.Display() == EDisplay::kContents &&
+          (IsA<HTMLDialogElement>(element) ||
+           style.StyleType() == kPseudoIdBackdrop)) {
+        // See crbug.com/1240701 for more details.
+        // https://fullscreen.spec.whatwg.org/#new-stacking-layer
+        // If its specified display property is contents, it computes to block.
+        style.SetDisplay(EDisplay::kBlock);
+      }
+    }
 
     // Absolute/fixed positioned elements, floating elements and the document
     // element need block-like outside display.
@@ -769,7 +801,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   if (StopPropagateTextDecorations(style, element))
     style.ClearAppliedTextDecorations();
   else
-    style.RestoreParentTextDecorations(parent_style);
+    style.RestoreParentTextDecorations(layout_parent_style);
   style.ApplyTextDecorations(
       parent_style.VisitedDependentColor(GetCSSPropertyTextDecorationColor()),
       OverridesTextDecorationColors(element));
@@ -789,7 +821,6 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   AdjustStyleForEditing(style);
 
   bool is_svg_root = false;
-  auto* svg_element = DynamicTo<SVGElement>(element);
 
   if (svg_element) {
     is_svg_root = svg_element->IsOutermostSVGSVGElement();
@@ -834,6 +865,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
       baseline = layout_parent_style.CssDominantBaseline();
     }
     style.SetCssDominantBaseline(baseline);
+
   } else if (element && element->IsMathMLElement()) {
     if (style.Display() == EDisplay::kContents) {
       // https://drafts.csswg.org/css-display/#unbox-mathml

@@ -46,6 +46,10 @@ class Node;
 class MODULES_EXPORT AXNodeObject : public AXObject {
  public:
   AXNodeObject(Node*, AXObjectCacheImpl&);
+
+  AXNodeObject(const AXNodeObject&) = delete;
+  AXNodeObject& operator=(const AXNodeObject&) = delete;
+
   ~AXNodeObject() override;
 
   static absl::optional<String> GetCSSAltText(const Node*);
@@ -315,15 +319,13 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void CheckValidChild(AXObject* child);
 #endif
 
-  ax::mojom::blink::TextPosition GetTextPositionFromAria() const;
+  ax::mojom::blink::TextPosition GetTextPositionFromRole() const;
   ax::mojom::blink::Dropeffect ParseDropeffect(String& dropeffect) const;
 
   static bool IsNameFromLabelElement(HTMLElement* control);
   static bool IsRedundantLabel(HTMLLabelElement* label);
 
   Member<Node> node_;
-
-  DISALLOW_COPY_AND_ASSIGN(AXNodeObject);
 };
 
 }  // namespace blink

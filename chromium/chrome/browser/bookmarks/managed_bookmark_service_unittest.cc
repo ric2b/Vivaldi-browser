@@ -65,6 +65,11 @@ TEST(ManagedBookmarkServiceNoPolicyTest, EmptyManagedNode) {
 class ManagedBookmarkServiceTest : public testing::Test {
  public:
   ManagedBookmarkServiceTest() : managed_(nullptr), model_(nullptr) {}
+
+  ManagedBookmarkServiceTest(const ManagedBookmarkServiceTest&) = delete;
+  ManagedBookmarkServiceTest& operator=(const ManagedBookmarkServiceTest&) =
+      delete;
+
   ~ManagedBookmarkServiceTest() override {}
 
   void SetUp() override {
@@ -149,7 +154,7 @@ class ManagedBookmarkServiceTest : public testing::Test {
     if (node->is_folder()) {
       const base::ListValue* children = nullptr;
       if (!dict->GetList("children", &children) ||
-          node->children().size() != children->GetSize()) {
+          node->children().size() != children->GetList().size()) {
         return false;
       }
       size_t i = 0;
@@ -172,8 +177,6 @@ class ManagedBookmarkServiceTest : public testing::Test {
   bookmarks::MockBookmarkModelObserver observer_;
   ManagedBookmarkService* managed_;
   BookmarkModel* model_;
-
-  DISALLOW_COPY_AND_ASSIGN(ManagedBookmarkServiceTest);
 };
 
 TEST_F(ManagedBookmarkServiceTest, LoadInitial) {

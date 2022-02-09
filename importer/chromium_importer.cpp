@@ -15,7 +15,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
-#include "base/strings/string_tokenizer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -83,7 +82,7 @@ void ChromiumImporter::StartImport(
 
 #if defined(OS_WIN)
 std::string import_encryption_key;
-#endif // OS_WIN
+#endif  // OS_WIN
 void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
   // Initializes Chrome decryptor
 
@@ -134,7 +133,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
     if (!base::StartsWith(encrypted_key_with_header, kDPAPIKeyPrefix,
                           base::CompareCase::SENSITIVE)) {
       LOG(ERROR) << "Key is not DPAPI key, unable to decrypt.";
-      return ;
+      return;
     }
 
     std::string dpapi_encrypted_key =
@@ -147,7 +146,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
       return;
     }
   }
-#endif // OS_WIN
+#endif  // OS_WIN
 
   base::FilePath file = source_path.AppendASCII("Login Data");
   if (base::PathExists(file)) {
@@ -232,11 +231,11 @@ bool ChromiumImporter::ReadAndParseSignons(
     chrome::GetDefaultUserDataDirectory(&config->user_data_path);
     OSCrypt::SetConfig(std::move(config));
     OSCrypt::DecryptString16(cipher_text, &plain_text);
-#endif // OS_LINUX
+#endif  // OS_LINUX
 #if defined(OS_WIN)
     OSCrypt::DecryptImportedString16(cipher_text, &plain_text,
                                      import_encryption_key);
-#endif // OS_WIN
+#endif  // OS_WIN
 #endif
 
     form.password_value = plain_text;

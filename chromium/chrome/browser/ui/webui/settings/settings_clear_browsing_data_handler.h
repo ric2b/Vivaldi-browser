@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
@@ -36,6 +37,10 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
                                  public TemplateURLServiceObserver {
  public:
   ClearBrowsingDataHandler(content::WebUI* webui, Profile* profile);
+
+  ClearBrowsingDataHandler(const ClearBrowsingDataHandler&) = delete;
+  ClearBrowsingDataHandler& operator=(const ClearBrowsingDataHandler&) = delete;
+
   ~ClearBrowsingDataHandler() override;
 
   // WebUIMessageHandler implementation.
@@ -145,8 +150,6 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   // The weak pointers are invalidated in |OnJavascriptDisallowed()| and
   // |HandleInitialize()| to cancel previously initiated tasks.
   base::WeakPtrFactory<ClearBrowsingDataHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ClearBrowsingDataHandler);
 };
 
 }  // namespace settings

@@ -27,6 +27,10 @@ class LocalFileSyncContext;
 class SyncFileSystemBackend : public storage::FileSystemBackend {
  public:
   explicit SyncFileSystemBackend(Profile* profile);
+
+  SyncFileSystemBackend(const SyncFileSystemBackend&) = delete;
+  SyncFileSystemBackend& operator=(const SyncFileSystemBackend&) = delete;
+
   ~SyncFileSystemBackend() override;
 
   static std::unique_ptr<SyncFileSystemBackend> CreateForTesting();
@@ -44,7 +48,7 @@ class SyncFileSystemBackend : public storage::FileSystemBackend {
   storage::CopyOrMoveFileValidatorFactory* GetCopyOrMoveFileValidatorFactory(
       storage::FileSystemType type,
       base::File::Error* error_code) override;
-  storage::FileSystemOperation* CreateFileSystemOperation(
+  std::unique_ptr<storage::FileSystemOperation> CreateFileSystemOperation(
       const storage::FileSystemURL& url,
       storage::FileSystemContext* context,
       base::File::Error* error_code) const override;
@@ -104,8 +108,6 @@ class SyncFileSystemBackend : public storage::FileSystemBackend {
                                           storage::OpenFileSystemMode mode,
                                           OpenFileSystemCallback callback,
                                           SyncStatusCode status);
-
-  DISALLOW_COPY_AND_ASSIGN(SyncFileSystemBackend);
 };
 
 }  // namespace sync_file_system

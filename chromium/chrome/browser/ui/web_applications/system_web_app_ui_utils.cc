@@ -24,9 +24,9 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_launch/web_launch_files_helper.h"
@@ -203,7 +203,7 @@ void LaunchSystemWebAppAsync(Profile* profile,
 Browser* LaunchSystemWebAppImpl(Profile* profile,
                                 SystemAppType app_type,
                                 const GURL& url,
-                                apps::AppLaunchParams& params) {
+                                const apps::AppLaunchParams& params) {
   // Exit early if we can't create browser windows (e.g. when browser is
   // shutting down, or a wrong profile is given).
   if (Browser::GetCreationStatusForProfile(profile) !=
@@ -218,23 +218,15 @@ Browser* LaunchSystemWebAppImpl(Profile* profile,
   DCHECK(url.GetOrigin() ==
          provider->registrar().GetAppLaunchUrl(params.app_id).GetOrigin());
 
-  // Make sure we have a browser for app.  Always reuse an existing browser for
-  // popups, otherwise check app type whether we should use a single window.
-  // TODO(crbug.com/1060423): Allow apps to control whether popups are single.
   Browser* browser = nullptr;
   Browser::Type browser_type = Browser::TYPE_APP;
   if (params.disposition == WindowOpenDisposition::NEW_POPUP)
     browser_type = Browser::TYPE_APP_POPUP;
-  if (browser_type == Browser::TYPE_APP_POPUP ||
-      provider->system_web_app_manager().IsSingleWindow(app_type)) {
-    browser = FindSystemWebAppBrowser(profile, app_type, browser_type);
-  }
+  auto* system_app = provider->system_web_app_manager().GetSystemApp(app_type);
+  browser = FindSystemWebAppBrowser(profile, app_type, browser_type);
 
-  bool can_resize =
-      provider->system_web_app_manager().IsResizeableWindow(app_type);
-
-  bool can_maximize =
-      provider->system_web_app_manager().IsMaximizableWindow(app_type);
+  bool can_resize = system_app && system_app->ShouldAllowResize();
+  bool can_maximize = system_app && system_app->ShouldAllowMaximize();
 
   // System Web App windows can't be properly restored without storing the app
   // type. Until that is implemented, skip them for session restore.
@@ -242,10 +234,23 @@ Browser* LaunchSystemWebAppImpl(Profile* profile,
   // passing through the underlying value of params.omit_from_session_restore.
   const bool omit_from_session_restore = true;
 
+  // Always reuse an existing browser for popups, otherwise check app type
+  // whether we should use a single window.
+  // TODO(crbug.com/1060423): Allow apps to control whether popups are single.
+  const bool reuse_existing_window =
+      browser_type == Browser::TYPE_APP_POPUP ||
+      (system_app && system_app->ShouldBeSingleWindow());
+
   if (!browser) {
     browser = CreateWebApplicationWindow(
         profile, params.app_id, params.disposition, params.restore_id,
         omit_from_session_restore, can_resize, can_maximize);
+  } else if (!reuse_existing_window) {
+    gfx::Rect initial_bounds = browser->window()->GetRestoredBounds();
+    initial_bounds.Offset(20, 20);
+    browser = CreateWebApplicationWindow(
+        profile, params.app_id, params.disposition, params.restore_id,
+        omit_from_session_restore, can_resize, can_maximize, initial_bounds);
   }
 
   // Navigate application window to application's |url| if necessary.
@@ -262,8 +267,7 @@ Browser* LaunchSystemWebAppImpl(Profile* profile,
   // Send launch files.
   if (provider->os_integration_manager().IsFileHandlingAPIAvailable(
           params.app_id)) {
-    if (provider->system_web_app_manager().AppShouldReceiveLaunchDirectory(
-            app_type)) {
+    if (system_app && system_app->ShouldIncludeLaunchDirectory()) {
       web_launch::WebLaunchFilesHelper::SetLaunchDirectoryAndLaunchPaths(
           web_contents, web_contents->GetURL(),
           GetLaunchDirectory(params.launch_files), params.launch_files);
@@ -313,27 +317,35 @@ Browser* FindSystemWebAppBrowser(Profile* profile,
   if (!provider->registrar().IsInstalled(app_id.value()))
     return nullptr;
 
+  Browser* browser_to_return = nullptr;
+  // Look through all the windows, find a browser for this app. Prefer the app
+  // window that's currently active if there is one.
   for (auto* browser : *BrowserList::GetInstance()) {
     if (browser->profile() != profile || browser->type() != browser_type)
       continue;
 
-    if (GetAppIdFromApplicationName(browser->app_name()) == app_id.value())
+    if (GetAppIdFromApplicationName(browser->app_name()) != app_id.value())
+      continue;
+
+    if (browser->window()->IsActive()) {
       return browser;
+    }
+
+    browser_to_return = browser;
   }
 
-  return nullptr;
+  return browser_to_return;
 }
 
 bool IsSystemWebApp(Browser* browser) {
   DCHECK(browser);
-  return browser->app_controller() &&
-         browser->app_controller()->is_for_system_web_app();
+  return browser->app_controller() && browser->app_controller()->system_app();
 }
 
 bool IsBrowserForSystemWebApp(Browser* browser, SystemAppType type) {
   DCHECK(browser);
-  return browser->app_controller() &&
-         browser->app_controller()->system_app_type() == type;
+  return browser->app_controller() && browser->app_controller()->system_app() &&
+         browser->app_controller()->system_app()->GetType() == type;
 }
 
 absl::optional<SystemAppType> GetCapturingSystemAppForURL(Profile* profile,
@@ -348,16 +360,10 @@ absl::optional<SystemAppType> GetCapturingSystemAppForURL(Profile* profile,
 
 gfx::Size GetSystemWebAppMinimumWindowSize(Browser* browser) {
   DCHECK(browser);
-  auto* app_controller = browser->app_controller();
-  if (!app_controller)
-    return gfx::Size();  // Not an app.
+  if (browser->app_controller() && browser->app_controller()->system_app())
+    return browser->app_controller()->system_app()->GetMinimumWindowSize();
 
-  auto* provider = WebAppProvider::GetForSystemWebApps(browser->profile());
-  if (!provider)
-    return gfx::Size();
-
-  return provider->system_web_app_manager().GetMinimumWindowSize(
-      app_controller->app_id());
+  return gfx::Size();
 }
 
 }  // namespace web_app

@@ -5,12 +5,31 @@
 #include "chrome/browser/password_manager/android/password_store_android_backend_bridge_impl.h"
 
 #include <jni.h>
+#include <cstdint>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
 #include "chrome/browser/password_manager/android/jni_headers/PasswordStoreAndroidBackendBridgeImpl_jni.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/sync/password_proto_utils.h"
+#include "components/sync/protocol/list_passwords_result.pb.h"
 
-using TaskId = PasswordStoreAndroidBackendBridgeImpl::TaskId;
+using JobId = PasswordStoreAndroidBackendBridgeImpl::JobId;
+
+namespace {
+
+std::vector<password_manager::PasswordForm> CreateFormsVector(
+    const base::android::JavaRef<jbyteArray>& passwords) {
+  std::vector<uint8_t> serializedResult;
+  base::android::JavaByteArrayToByteVector(base::android::AttachCurrentThread(),
+                                           passwords, &serializedResult);
+  sync_pb::ListPasswordsResult list_passwords_result;
+  list_passwords_result.ParseFromArray(serializedResult.data(),
+                                       serializedResult.size());
+  return password_manager::PasswordVectorFromListResult(list_passwords_result);
+}
+
+}  // namespace
 
 namespace password_manager {
 
@@ -31,27 +50,37 @@ PasswordStoreAndroidBackendBridgeImpl::
   Java_PasswordStoreAndroidBackendBridgeImpl_destroy(
       base::android::AttachCurrentThread(), java_object_);
 }
-void PasswordStoreAndroidBackendBridgeImpl::SetConsumer(Consumer* consumer) {
+void PasswordStoreAndroidBackendBridgeImpl::SetConsumer(
+    base::WeakPtr<Consumer> consumer) {
   consumer_ = consumer;
 }
 
 void PasswordStoreAndroidBackendBridgeImpl::OnCompleteWithLogins(
     JNIEnv* env,
-    jint task_id,
-    const base::android::JavaParamRef<jobject>& passwords) {
+    jint job_id,
+    const base::android::JavaParamRef<jbyteArray>& passwords) {
   DCHECK(consumer_);
-  // TODO(crbug.com/1229650): Convert passwords to forms.
-  consumer_->OnCompleteWithLogins(TaskId(task_id), {});
+  consumer_->OnCompleteWithLogins(JobId(job_id), CreateFormsVector(passwords));
 }
 
-TaskId PasswordStoreAndroidBackendBridgeImpl::GetAllLogins() {
-  TaskId task_id = GetNextTaskId();
+void PasswordStoreAndroidBackendBridgeImpl::OnError(JNIEnv* env, jint job_id) {
+  DCHECK(consumer_);
+  // Posting the tasks to the same sequence prevents that synchronous responses
+  // try to finish tasks before their registration was completed.
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PasswordStoreAndroidBackendBridge::Consumer::OnError,
+                     consumer_, JobId(job_id)));
+}
+
+JobId PasswordStoreAndroidBackendBridgeImpl::GetAllLogins() {
+  JobId job_id = GetNextJobId();
   Java_PasswordStoreAndroidBackendBridgeImpl_getAllLogins(
-      base::android::AttachCurrentThread(), java_object_, task_id.value());
-  return task_id;
+      base::android::AttachCurrentThread(), java_object_, job_id.value());
+  return job_id;
 }
 
-TaskId PasswordStoreAndroidBackendBridgeImpl::GetNextTaskId() {
-  last_task_id_ = TaskId(last_task_id_.value() + 1);
-  return last_task_id_;
+JobId PasswordStoreAndroidBackendBridgeImpl::GetNextJobId() {
+  last_job_id_ = JobId(last_job_id_.value() + 1);
+  return last_job_id_;
 }

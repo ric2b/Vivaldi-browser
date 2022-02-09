@@ -119,19 +119,17 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     BOOL editingWithToolbarButtons;
 // Whether the table view is being edited by the swipe-to-delete button.
 @property(nonatomic, readonly, getter=isEditingWithSwipe) BOOL editingWithSwipe;
-// Whether to remove empty sections after editing is reset to NO.
-@property(nonatomic, assign) BOOL needsSectionCleanupAfterEditing;
 // Handler for URL drag interactions.
 @property(nonatomic, strong) TableViewURLDragDropHandler* dragDropHandler;
+// The toggle setting of showing the Reading List Messages prompt.
+@property(nonatomic, strong) SyncSwitchItem* messagesPromptToggleSwitchItem;
 @end
 
 @implementation ReadingListTableViewController
 @dynamic tableViewModel;
 
 - (instancetype)init {
-  UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
-                               ? ChromeTableViewStyle()
-                               : UITableViewStylePlain;
+  UITableViewStyle style = ChromeTableViewStyle();
   self = [super initWithStyle:style];
   if (self) {
     _toolbarManager = [[ReadingListToolbarButtonManager alloc] init];
@@ -165,14 +163,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   [super setEditing:editing animated:animated];
   self.selectedUnreadItemCount = 0;
   self.selectedReadItemCount = 0;
-  [self updateToolbarItems];
   if (!editing) {
+    self.markConfirmationSheet = nil;
     self.editingWithToolbarButtons = NO;
-    if (self.needsSectionCleanupAfterEditing) {
-      [self removeEmptySections];
-      self.needsSectionCleanupAfterEditing = NO;
-    }
+    [self removeEmptySections];
   }
+  [self updateToolbarItems];
 }
 
 - (void)setSelectedUnreadItemCount:(NSUInteger)selectedUnreadItemCount {
@@ -285,15 +281,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     DCHECK(IsReadingListMessagesEnabled());
     SettingsSwitchCell* switchCell =
         base::mac::ObjCCastStrict<SettingsSwitchCell>(cell);
-    PrefService* user_prefs = self.browser->GetBrowserState()->GetPrefs();
-    BOOL neverShowPrefSet =
-        user_prefs->GetBoolean(kPrefReadingListMessagesNeverShow);
-    switchCell.switchView.on = !neverShowPrefSet;
     [switchCell.switchView addTarget:self
                               action:@selector(switchAction:)
                     forControlEvents:UIControlEventValueChanged];
-    TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
-    switchCell.switchView.tag = item.type;
   }
   return cell;
 }
@@ -317,11 +307,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   DCHECK_EQ(editingStyle, UITableViewCellEditingStyleDelete);
   base::RecordAction(base::UserMetricsAction("MobileReadingListDeleteEntry"));
 
-  // On IOS 12, the UIKit animation for the swipe-to-delete gesture throws an
-  // exception if the section of the deleted item is removed before the
-  // animation is finished. This is still needed on IOS 13 to prevent displaying
-  // Cancel and Mark all buttons, see crbug.com/1022763.
-  self.needsSectionCleanupAfterEditing = YES;
   [self deleteItemsAtIndexPaths:@[ indexPath ]
                      endEditing:NO
             removeEmptySections:NO];
@@ -347,6 +332,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
   DCHECK(IsReadingListMessagesEnabled());
   if (preferenceName == kPrefReadingListMessagesNeverShow) {
+    PrefService* user_prefs = self.browser->GetBrowserState()->GetPrefs();
+    self.messagesPromptToggleSwitchItem.on =
+        !user_prefs->GetBoolean(kPrefReadingListMessagesNeverShow);
     NSIndexPath* indexPath = [self.tableViewModel
         indexPathForItemType:SwitchItemType
            sectionIdentifier:SectionIdentifierMessagesSwitch];
@@ -406,10 +394,14 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     // Don't show the context menu when currently in editing mode.
     return nil;
   }
+  TableViewItem<ReadingListListItem>* item =
+      [self.tableViewModel itemAtIndexPath:indexPath];
+  if (item.type != ItemTypeItem) {
+    return nil;
+  }
 
   return [self.menuProvider
-      contextMenuConfigurationForItem:[self.tableViewModel
-                                          itemAtIndexPath:indexPath]
+      contextMenuConfigurationForItem:item
                              withView:[self.tableView
                                           cellForRowAtIndexPath:indexPath]];
 }
@@ -420,8 +412,11 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     URLInfoAtIndexPath:(NSIndexPath*)indexPath {
   if (self.tableView.editing)
     return nil;
-  id<ReadingListListItem> item =
+  TableViewItem<ReadingListListItem>* item =
       [self.tableViewModel itemAtIndexPath:indexPath];
+  if (item.type != ItemTypeItem) {
+    return nil;
+  }
   return [[URLInfo alloc] initWithURL:item.entryURL title:item.title];
 }
 
@@ -570,8 +565,13 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 #pragma mark - ReadingListToolbarButtonCommands
 
 - (void)enterReadingListEditMode {
-  if (self.editing)
+  if (self.editing && !self.editingWithToolbarButtons) {
+    // Reset swipe editing to trigger button editing
+    [self setEditing:NO animated:NO];
+  }
+  if (self.editing) {
     return;
+  }
   self.editingWithToolbarButtons = YES;
   [self setEditing:YES animated:YES];
 }
@@ -730,12 +730,15 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 - (void)addPromptToggleItemAndSection {
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierMessagesSwitch];
-  SyncSwitchItem* switchItem =
+  self.messagesPromptToggleSwitchItem =
       [[SyncSwitchItem alloc] initWithType:SwitchItemType];
-  switchItem.text =
+  self.messagesPromptToggleSwitchItem.text =
       l10n_util::GetNSString(IDS_IOS_READING_LIST_MESSAGES_SETTING_TITLE);
-  switchItem.enabled = YES;
-  [model addItem:switchItem
+  self.messagesPromptToggleSwitchItem.enabled = YES;
+  PrefService* user_prefs = self.browser->GetBrowserState()->GetPrefs();
+  self.messagesPromptToggleSwitchItem.on =
+      !user_prefs->GetBoolean(kPrefReadingListMessagesNeverShow);
+  [model addItem:self.messagesPromptToggleSwitchItem
       toSectionWithIdentifier:SectionIdentifierMessagesSwitch];
   TableViewLinkHeaderFooterItem* footerItem =
       [[TableViewLinkHeaderFooterItem alloc] initWithType:SwitchItemFooterType];
@@ -786,7 +789,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 // Updates buttons displayed in the bottom toolbar.
 - (void)updateToolbarItems {
-  self.toolbarManager.editing = self.tableView.editing;
+  self.toolbarManager.editing = self.editingWithToolbarButtons;
   self.toolbarManager.hasReadItems =
       self.dataSource.hasElements && self.dataSource.hasReadElements;
   self.toolbarManager.selectionState = GetSelectionStateForSelectedCounts(
@@ -941,6 +944,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   BOOL hasUnreadItems = [self hasItemInSection:SectionIdentifierUnread];
   BOOL creatingReadSection = (sectionID == SectionIdentifierRead);
   NSInteger sectionIndex = (hasUnreadItems && creatingReadSection) ? 1 : 0;
+  if (IsReadingListMessagesEnabled()) {
+    sectionIndex++;
+  }
 
   void (^updates)(void) = ^{
     [model insertSectionWithIdentifier:sectionID atIndex:sectionIndex];
@@ -1144,8 +1150,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
   TableViewItem<ReadingListListItem>* item =
       [self.tableViewModel itemAtIndexPath:indexPath];
-  if (item.type != ItemTypeItem)
+  if (item.type != ItemTypeItem) {
     return;
+  }
 
   [self.delegate readingListListViewController:self
                      displayContextMenuForItem:item

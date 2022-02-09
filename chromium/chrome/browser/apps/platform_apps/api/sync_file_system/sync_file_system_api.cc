@@ -96,8 +96,9 @@ const char* QuotaStatusCodeToString(blink::mojom::QuotaStatusCode status) {
 
 ExtensionFunction::ResponseAction
 SyncFileSystemDeleteFileSystemFunction::Run() {
-  std::string url;
-  EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &url));
+  EXTENSION_FUNCTION_VALIDATE(args().size() >= 1);
+  EXTENSION_FUNCTION_VALIDATE(args()[0].is_string());
+  const std::string& url = args()[0].GetString();
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
       browser_context()
@@ -110,7 +111,8 @@ SyncFileSystemDeleteFileSystemFunction::Run() {
       FROM_HERE,
       BindOnce(
           &storage::FileSystemContext::DeleteFileSystem, file_system_context,
-          url::Origin::Create(source_url().GetOrigin()), file_system_url.type(),
+          blink::StorageKey(url::Origin::Create(source_url())),
+          file_system_url.type(),
           BindOnce(&SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem,
                    this)));
   return RespondLater();
@@ -132,7 +134,7 @@ void SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem(
   if (error != base::File::FILE_OK) {
     std::unique_ptr<base::ListValue> error_result =
         std::make_unique<base::ListValue>();
-    error_result->AppendBoolean(false);
+    error_result->Append(false);
     Respond(ErrorWithArguments(
         std::move(error_result),
         ErrorToString(::sync_file_system::FileErrorToSyncStatusCode(error))));
@@ -198,8 +200,9 @@ void SyncFileSystemRequestFileSystemFunction::DidOpenFileSystem(
 }
 
 ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusFunction::Run() {
-  std::string url;
-  EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &url));
+  EXTENSION_FUNCTION_VALIDATE(args().size() >= 1);
+  EXTENSION_FUNCTION_VALIDATE(args()[0].is_string());
+  const std::string& url = args()[0].GetString();
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
       browser_context()
@@ -240,10 +243,10 @@ SyncFileSystemGetFileStatusesFunction::
     ~SyncFileSystemGetFileStatusesFunction() {}
 
 ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusesFunction::Run() {
-  base::Value::ConstListView args_list = args_->GetList();
   // All FileEntries converted into array of URL Strings in JS custom bindings.
-  EXTENSION_FUNCTION_VALIDATE(!args_list.empty() && args_list[0].is_list());
-  base::Value::ConstListView file_entry_urls = args_list[0].GetList();
+  EXTENSION_FUNCTION_VALIDATE(args().size() >= 1);
+  EXTENSION_FUNCTION_VALIDATE(args()[0].is_list());
+  base::Value::ConstListView file_entry_urls = args()[0].GetList();
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
       browser_context()
@@ -325,8 +328,9 @@ void SyncFileSystemGetFileStatusesFunction::DidGetFileStatus(
 
 ExtensionFunction::ResponseAction
 SyncFileSystemGetUsageAndQuotaFunction::Run() {
-  std::string url;
-  EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &url));
+  EXTENSION_FUNCTION_VALIDATE(args().size() >= 1);
+  EXTENSION_FUNCTION_VALIDATE(args()[0].is_string());
+  const std::string& url = args()[0].GetString();
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
       browser_context()
@@ -381,8 +385,9 @@ void SyncFileSystemGetUsageAndQuotaFunction::DidGetUsageAndQuota(
 
 ExtensionFunction::ResponseAction
 SyncFileSystemSetConflictResolutionPolicyFunction::Run() {
-  std::string policy_string;
-  EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &policy_string));
+  EXTENSION_FUNCTION_VALIDATE(args().size() >= 1);
+  EXTENSION_FUNCTION_VALIDATE(args()[0].is_string());
+  const std::string& policy_string = args()[0].GetString();
   ConflictResolutionPolicy policy = ExtensionEnumToConflictResolutionPolicy(
       sync_file_system::ParseConflictResolutionPolicy(policy_string));
   if (policy != ::sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN) {

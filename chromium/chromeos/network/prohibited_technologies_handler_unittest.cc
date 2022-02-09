@@ -49,8 +49,9 @@ class ProhibitedTechnologiesHandlerTest : public testing::Test {
     prohibited_technologies_handler_.reset(new ProhibitedTechnologiesHandler());
 
     managed_config_handler_->Init(
-        helper_.network_state_handler(), network_profile_handler_.get(),
-        network_config_handler_.get(), nullptr /* network_device_handler */,
+        /*cellular_policy_handler=*/nullptr, helper_.network_state_handler(),
+        network_profile_handler_.get(), network_config_handler_.get(),
+        nullptr /* network_device_handler */,
         prohibited_technologies_handler_.get());
 
     prohibited_technologies_handler_->Init(managed_config_handler_.get(),
@@ -64,13 +65,13 @@ class ProhibitedTechnologiesHandlerTest : public testing::Test {
   void PreparePolicies() {
     {
       base::ListValue val;
-      val.AppendString("WiFi");
+      val.Append("WiFi");
       global_config_disable_wifi.SetKey("DisableNetworkTypes", std::move(val));
     }
     {
       base::ListValue val;
-      val.AppendString("WiFi");
-      val.AppendString("Cellular");
+      val.Append("WiFi");
+      val.Append("Cellular");
       global_config_disable_wifi_and_cell.SetKey("DisableNetworkTypes",
                                                  std::move(val));
     }

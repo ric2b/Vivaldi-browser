@@ -23,12 +23,12 @@ class LazyLoadServiceFactory : public BrowserContextKeyedServiceFactory {
 
   LazyLoadServiceFactory();
   ~LazyLoadServiceFactory() override;
+  LazyLoadServiceFactory(const LazyLoadServiceFactory&) = delete;
+  LazyLoadServiceFactory& operator=(const LazyLoadServiceFactory&) = delete;
 
   // BrowserContextKeyedBaseFactory methods:
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(LazyLoadServiceFactory);
 };
 
 }  // namespace vivaldi

@@ -24,10 +24,9 @@ namespace Show = vivaldi::bookmark_context_menu::Show;
 
 using content::BrowserContext;
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<
-    BookmarkContextMenuAPI>>::DestructorAtExit g_bookmark_context_menu =
-        LAZY_INSTANCE_INITIALIZER;
-
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<BookmarkContextMenuAPI>>::DestructorAtExit
+    g_bookmark_context_menu = LAZY_INSTANCE_INITIALIZER;
 
 BookmarkContextMenuAPI::BookmarkContextMenuAPI(BrowserContext* context) {}
 
@@ -35,13 +34,13 @@ BookmarkContextMenuAPI::~BookmarkContextMenuAPI() {}
 
 // static
 BrowserContextKeyedAPIFactory<BookmarkContextMenuAPI>*
-    BookmarkContextMenuAPI::GetFactoryInstance() {
+BookmarkContextMenuAPI::GetFactoryInstance() {
   return g_bookmark_context_menu.Pointer();
 }
 
 // static
-void BookmarkContextMenuAPI::SendOpen(
-    content::BrowserContext* browser_context, int64_t id) {
+void BookmarkContextMenuAPI::SendOpen(content::BrowserContext* browser_context,
+                                      int64_t id) {
   ::vivaldi::BroadcastEvent(
       vivaldi::bookmark_context_menu::OnOpen::kEventName,
       vivaldi::bookmark_context_menu::OnOpen::Create(std::to_string(id)),
@@ -63,7 +62,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   using vivaldi::bookmark_context_menu::Show::Params;
   namespace Results = vivaldi::bookmark_context_menu::Show::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   VivaldiBrowserWindow* window =
@@ -124,7 +123,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   bookmark_menu_container_->sort_order = sortOrder;
   bookmark_menu_container_->siblings.reserve(
       params->properties.siblings.size());
-  for (const vivaldi::bookmark_context_menu::FolderEntry& e:
+  for (const vivaldi::bookmark_context_menu::FolderEntry& e :
        params->properties.siblings) {
     bookmark_menu_container_->siblings.emplace_back();
     ::vivaldi::BookmarkMenuContainerEntry* sibling =
@@ -160,9 +159,9 @@ std::string BookmarkContextMenuShowFunction::Open(
   }
 
   const ::vivaldi::BookmarkMenuContainerEntry* entry = nullptr;
-  for (const ::vivaldi::BookmarkMenuContainerEntry& e:
+  for (const ::vivaldi::BookmarkMenuContainerEntry& e :
        bookmark_menu_container_->siblings) {
-     if (node_id == e.id) {
+    if (node_id == e.id) {
       entry = &e;
       break;
     }
@@ -181,9 +180,9 @@ std::string BookmarkContextMenuShowFunction::Open(
     return "Node with id " + id + "does not exist";
   }
 
-  ::vivaldi::VivaldiBookmarkMenu* menu =
-      ::vivaldi::CreateVivaldiBookmarkMenu(web_contents,
-          bookmark_menu_container_.get(), node, entry->offset, entry->rect);
+  ::vivaldi::VivaldiBookmarkMenu* menu = ::vivaldi::CreateVivaldiBookmarkMenu(
+      web_contents, bookmark_menu_container_.get(), node, entry->offset,
+      entry->rect);
   if (!menu->CanShow()) {
     return "Can not show menu";
   }
@@ -210,7 +209,7 @@ void BookmarkContextMenuShowFunction::OnBookmarkAction(int64_t bookmark_id,
 }
 
 void BookmarkContextMenuShowFunction::OnOpenMenu(int64_t bookmark_id) {
-   BookmarkContextMenuAPI::SendOpen(browser_context(), bookmark_id);
+  BookmarkContextMenuAPI::SendOpen(browser_context(), bookmark_id);
 }
 
 void BookmarkContextMenuShowFunction::BookmarkMenuClosed(

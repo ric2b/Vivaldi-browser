@@ -98,6 +98,9 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
  public:
   VivaldiAutofillBubbleHandler();
   ~VivaldiAutofillBubbleHandler() override;
+  VivaldiAutofillBubbleHandler(const VivaldiAutofillBubbleHandler&) = delete;
+  VivaldiAutofillBubbleHandler& operator=(const VivaldiAutofillBubbleHandler&) =
+      delete;
 
   autofill::AutofillBubbleBase* ShowSaveCreditCardBubble(
       content::WebContents* web_contents,
@@ -138,9 +141,6 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
       bool is_user_gesture) override;
 
   void OnPasswordSaved() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAutofillBubbleHandler);
 };
 
 // An implementation of BrowserWindow used for Vivaldi.
@@ -155,6 +155,8 @@ class VivaldiBrowserWindow final
  public:
   VivaldiBrowserWindow();
   ~VivaldiBrowserWindow() override;
+  VivaldiBrowserWindow(const VivaldiBrowserWindow&) = delete;
+  VivaldiBrowserWindow& operator=(const VivaldiBrowserWindow&) = delete;
 
   enum WindowType {
     NORMAL,
@@ -258,6 +260,7 @@ class VivaldiBrowserWindow final
   void FocusInactivePopupForAccessibility() override {}
   void FocusHelpBubble() override {}
   void RotatePaneFocus(bool forwards) override {}
+  void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
@@ -282,7 +285,8 @@ class VivaldiBrowserWindow final
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
       qrcode_generator::QRCodeGeneratorBubbleController* controller,
-      const GURL& url) override;
+      const GURL& url,
+      bool show_back_button) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
@@ -323,7 +327,6 @@ class VivaldiBrowserWindow final
   void TabDraggingStatusChanged(bool is_dragging) override {}
   void LinkOpeningFromGesture(WindowOpenDisposition disposition) override {}
   // Shows in-product help for the given feature.
-  void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
   void UpdateFrameColor() override {}
 #if !defined(OS_ANDROID)
   void ShowIntentPickerBubble(
@@ -389,6 +392,7 @@ class VivaldiBrowserWindow final
       ExclusiveAccessBubbleType bubble_type,
       ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
       bool force_update) override;
+  bool IsExclusiveAccessBubbleDisplayed() const override;
   void OnExclusiveAccessUserInput() override;
   content::WebContents* GetActiveWebContents() override;
 
@@ -450,16 +454,17 @@ class VivaldiBrowserWindow final
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
    public:
     VivaldiManagePasswordsIconView(VivaldiBrowserWindow& window);
-
     virtual ~VivaldiManagePasswordsIconView() = default;
+    VivaldiManagePasswordsIconView(const VivaldiManagePasswordsIconView&) =
+        delete;
+    VivaldiManagePasswordsIconView& operator=(
+        const VivaldiManagePasswordsIconView&) = delete;
 
     void SetState(password_manager::ui::State state) override;
     bool Update();
 
    private:
     VivaldiBrowserWindow& window_;
-
-    DISALLOW_COPY_AND_ASSIGN(VivaldiManagePasswordsIconView);
   };
 
   struct WindowStateData {
@@ -551,7 +556,6 @@ class VivaldiBrowserWindow final
   DidFinishNavigationCallback did_finish_navigation_callback_;
 
   base::WeakPtrFactory<VivaldiBrowserWindow> weak_ptr_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };
 
 #endif  // UI_VIVALDI_BROWSER_WINDOW_H_

@@ -17,6 +17,7 @@
 #include "components/variations/client_filterable_state.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/variations_seed_store.h"
+#include "components/variations/variations_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace variations {
@@ -29,7 +30,7 @@ const char kTestPermanentConsistencyCountry[] = "US";
 const char kTestSessionConsistencyCountry[] = "CA";
 
 base::Time GetTestFetchTime() {
-  return base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromDays(123));
+  return base::Time::FromDeltaSinceWindowsEpoch(base::Days(123));
 }
 
 // A simple fake data store.
@@ -37,6 +38,10 @@ class FakeSeedStore : public VariationsSeedStore {
  public:
   explicit FakeSeedStore(PrefService* local_state)
       : VariationsSeedStore(local_state) {}
+
+  FakeSeedStore(const FakeSeedStore&) = delete;
+  FakeSeedStore& operator=(const FakeSeedStore&) = delete;
+
   ~FakeSeedStore() override = default;
 
   bool StoreSafeSeed(const std::string& seed_data,
@@ -74,15 +79,14 @@ class FakeSeedStore : public VariationsSeedStore {
   std::string permanent_consistency_country_;
   std::string session_consistency_country_;
   base::Time fetch_time_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeSeedStore);
 };
 
 // Passes the default test values as the active state into the
 // |safe_seed_manager|.
 void SetDefaultActiveState(SafeSeedManager* safe_seed_manager) {
   std::unique_ptr<ClientFilterableState> client_state =
-      std::make_unique<ClientFilterableState>(base::OnceCallback<bool()>());
+      std::make_unique<ClientFilterableState>(
+          base::BindOnce([] { return false; }));
   client_state->locale = kTestLocale;
   client_state->permanent_consistency_country =
       kTestPermanentConsistencyCountry;
@@ -188,8 +192,8 @@ TEST_F(SafeSeedManagerTest, ShouldRunInSafeMode_OverriddenByCommandlineFlag) {
   // So many failures.
   prefs_.SetInteger(prefs::kVariationsCrashStreak, 100);
   prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 100);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      ::switches::kForceFieldTrials, "SomeFieldTrial");
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableVariationsSafeMode);
 
   SafeSeedManager safe_seed_manager(&prefs_);
   EXPECT_FALSE(safe_seed_manager.ShouldRunInSafeMode());

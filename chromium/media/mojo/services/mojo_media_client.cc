@@ -24,9 +24,9 @@ std::unique_ptr<AudioDecoder> MojoMediaClient::CreateAudioDecoder(
   return nullptr;
 }
 
-SupportedVideoDecoderConfigs
-MojoMediaClient::GetSupportedVideoDecoderConfigs() {
-  return {};
+void MojoMediaClient::GetSupportedVideoDecoderConfigs(
+    MojoMediaClient::SupportedVideoDecoderConfigsCallback callback) {
+  std::move(callback).Run({});
 }
 
 VideoDecoderType MojoMediaClient::GetDecoderImplementationType() {
@@ -64,6 +64,7 @@ std::unique_ptr<Renderer> MojoMediaClient::CreateCastRenderer(
 std::unique_ptr<Renderer> MojoMediaClient::CreateMediaFoundationRenderer(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     mojom::FrameInterfaceFactory* frame_interfaces,
+    mojo::PendingRemote<mojom::MediaLog> media_log_remote,
     mojo::PendingReceiver<mojom::MediaFoundationRendererExtension>
         renderer_extension_receiver) {
   return nullptr;

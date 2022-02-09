@@ -47,13 +47,13 @@
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
-#include "base/util/memory_pressure/multi_source_memory_pressure_monitor.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/base/histograms.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
+#include "components/memory_pressure/multi_source_memory_pressure_monitor.h"
 #include "components/services/storage/dom_storage/storage_area_impl.h"
 #include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/tracing_switches.h"
@@ -360,11 +360,12 @@ std::unique_ptr<base::MemoryPressureMonitor> CreateMemoryPressureMonitor(
   if (command_line.HasSwitch(switches::kBrowserTest))
     return nullptr;
 
-  std::unique_ptr<util::MultiSourceMemoryPressureMonitor> monitor;
+  std::unique_ptr<memory_pressure::MultiSourceMemoryPressureMonitor> monitor;
 
 #if defined(OS_MAC) || defined(OS_WIN) || defined(OS_FUCHSIA) || \
-    defined(OS_CHROMEOS)
-  monitor = std::make_unique<util::MultiSourceMemoryPressureMonitor>();
+    defined(OS_LINUX) || defined(OS_CHROMEOS)
+  monitor =
+      std::make_unique<memory_pressure::MultiSourceMemoryPressureMonitor>();
 #endif
   // No memory monitor on other platforms...
 
@@ -396,6 +397,10 @@ const base::Feature kBrowserDynamicCodeDisabled{
 class OopDataDecoder : public data_decoder::ServiceProvider {
  public:
   OopDataDecoder() { data_decoder::ServiceProvider::Set(this); }
+
+  OopDataDecoder(const OopDataDecoder&) = delete;
+  OopDataDecoder& operator=(const OopDataDecoder&) = delete;
+
   ~OopDataDecoder() override { data_decoder::ServiceProvider::Set(nullptr); }
 
   // data_decoder::ServiceProvider implementation:
@@ -408,9 +413,6 @@ class OopDataDecoder : public data_decoder::ServiceProvider {
             .WithDisplayName("Data Decoder Service")
             .Pass());
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(OopDataDecoder);
 };
 
 void BindHidManager(mojo::PendingReceiver<device::mojom::HidManager> receiver) {
@@ -1001,22 +1003,21 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 
   // Teardown may start in PostMainMessageLoopRun, and during teardown we
   // need to be able to perform IO.
-  base::ThreadRestrictions::SetIOAllowed(true);
+  base::PermanentThreadAllowance::AllowBlocking();
   GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          base::IgnoreResult(&base::ThreadRestrictions::SetIOAllowed), true));
+      FROM_HERE, base::BindOnce(base::IgnoreResult(
+                     &base::PermanentThreadAllowance::AllowBlocking)));
 
   // Also allow waiting to join threads.
-  // TODO(https://crbug.com/800808): Ideally this (and the above SetIOAllowed()
-  // would be scoped allowances). That would be one of the first step to ensure
-  // no persistent work is being done after ThreadPoolInstance::Shutdown() in
-  // order to move towards atomic shutdown.
-  base::ThreadRestrictions::SetWaitAllowed(true);
+  // TODO(crbug.com/800808): Ideally this (and the above AllowBlocking() would
+  // be scoped allowances). That would be one of the first step to ensure no
+  // persistent work is being done after ThreadPoolInstance::Shutdown() in order
+  // to move towards atomic shutdown.
+  base::PermanentThreadAllowance::AllowBaseSyncPrimitives();
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          base::IgnoreResult(&base::ThreadRestrictions::SetWaitAllowed), true));
+      base::BindOnce(base::IgnoreResult(
+          &base::PermanentThreadAllowance::AllowBaseSyncPrimitives)));
 
   if (RenderProcessHost::run_renderer_in_process())
     RenderProcessHostImpl::ShutDownInProcessRenderer();
@@ -1046,8 +1047,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 
   ShutDownNetworkService();
 
-  if (base::FeatureList::IsEnabled(features::kProcessHostOnUI))
-    BrowserProcessIOThread::ProcessHostCleanUp();
+  BrowserProcessIOThread::ProcessHostCleanUp();
 
 #if defined(OS_MAC)
   BrowserCompositorMac::DisableRecyclingForShutdown();
@@ -1182,23 +1182,12 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
   // Initialize the GPU shader cache. This needs to be initialized before
   // BrowserGpuChannelHostFactory below, since that depends on an initialized
   // ShaderCacheFactory.
-  auto process_task_runner =
-      base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-          ? GetUIThreadTaskRunner({})
-          : GetIOThreadTaskRunner({});
-  InitShaderCacheFactorySingleton(process_task_runner);
+  InitShaderCacheFactorySingleton();
 
-  // Initialize the FontRenderParams on IO thread. This needs to be initialized
-  // before gpu process initialization below.
-  if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
-    viz::GpuHostImpl::InitFontRenderParams(
-        gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr));
-  } else {
-    GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&viz::GpuHostImpl::InitFontRenderParams,
-                                  gfx::GetFontRenderParams(
-                                      gfx::FontRenderParamsQuery(), nullptr)));
-  }
+  // Initialize the FontRenderParams. This needs to be initialized before gpu
+  // process initialization below.
+  viz::GpuHostImpl::InitFontRenderParams(
+      gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr));
 
   bool always_uses_gpu = true;
   bool established_gpu_channel = false;
@@ -1333,10 +1322,7 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
   if (!established_gpu_channel && always_uses_gpu) {
     TRACE_EVENT_INSTANT0("gpu", "Post task to launch GPU process",
                          TRACE_EVENT_SCOPE_THREAD);
-    process_task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(base::IgnoreResult(&GpuProcessHost::Get),
-                       GPU_PROCESS_KIND_SANDBOXED, true /* force_create */));
+    GpuProcessHost::Get(GPU_PROCESS_KIND_SANDBOXED, true /* force_create */);
   }
 
 #if defined(OS_WIN)

@@ -128,11 +128,11 @@ ResourceRequest::TrustedParams& ResourceRequest::TrustedParams::operator=(
 }
 
 bool ResourceRequest::TrustedParams::EqualsForTesting(
-    const TrustedParams& trusted_params) const {
-  return isolation_info.IsEqualForTesting(trusted_params.isolation_info) &&
-         disable_secure_dns == trusted_params.disable_secure_dns &&
-         has_user_activation == trusted_params.has_user_activation &&
-         client_security_state == trusted_params.client_security_state;
+    const TrustedParams& other) const {
+  return isolation_info.IsEqualForTesting(other.isolation_info) &&
+         disable_secure_dns == other.disable_secure_dns &&
+         has_user_activation == other.has_user_activation &&
+         client_security_state == other.client_security_state;
 }
 
 ResourceRequest::WebBundleTokenParams::WebBundleTokenParams() = default;
@@ -188,9 +188,13 @@ ResourceRequest::WebBundleTokenParams::CloneHandle() const {
   return new_remote;
 }
 
-ResourceRequest::ResourceRequest() {}
+ResourceRequest::NetLogParams::NetLogParams() = default;
+ResourceRequest::NetLogParams::NetLogParams(uint32_t id) : source_id(id) {}
+ResourceRequest::NetLogParams::~NetLogParams() = default;
+
+ResourceRequest::ResourceRequest() = default;
 ResourceRequest::ResourceRequest(const ResourceRequest& request) = default;
-ResourceRequest::~ResourceRequest() {}
+ResourceRequest::~ResourceRequest() = default;
 
 bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
   return method == request.method && url == request.url &&
@@ -249,7 +253,8 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
              request.devtools_accepted_stream_types &&
          trust_token_params == request.trust_token_params &&
          OptionalWebBundleTokenParamsEqualsForTesting(  // IN-TEST
-             web_bundle_token_params, request.web_bundle_token_params);
+             web_bundle_token_params, request.web_bundle_token_params) &&
+         target_ip_address_space == request.target_ip_address_space;
 }
 
 bool ResourceRequest::SendsCookies() const {

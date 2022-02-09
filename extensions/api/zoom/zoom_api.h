@@ -9,8 +9,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "components/zoom/zoom_observer.h"
-#include "extensions/browser/event_router.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
 
 namespace extensions {
@@ -38,7 +38,7 @@ class ZoomAPI : public BrowserContextKeyedAPI,
 
   // ZoomObserver implementation.
   void OnZoomChanged(
-    const zoom::ZoomController::ZoomChangedEventData& data) override;
+      const zoom::ZoomController::ZoomChangedEventData& data) override;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ZoomAPI"; }
@@ -61,8 +61,6 @@ class ZoomSetVivaldiUIZoomFunction : public ExtensionFunction {
   ~ZoomSetVivaldiUIZoomFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ZoomSetVivaldiUIZoomFunction);
 };
 
 class ZoomGetVivaldiUIZoomFunction : public ExtensionFunction {
@@ -74,8 +72,6 @@ class ZoomGetVivaldiUIZoomFunction : public ExtensionFunction {
   ~ZoomGetVivaldiUIZoomFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ZoomGetVivaldiUIZoomFunction);
 };
 
 class ZoomSetDefaultZoomFunction : public ExtensionFunction {
@@ -87,8 +83,6 @@ class ZoomSetDefaultZoomFunction : public ExtensionFunction {
   ~ZoomSetDefaultZoomFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ZoomSetDefaultZoomFunction);
 };
 
 class ZoomGetDefaultZoomFunction : public ExtensionFunction {
@@ -100,8 +94,6 @@ class ZoomGetDefaultZoomFunction : public ExtensionFunction {
   ~ZoomGetDefaultZoomFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(ZoomGetDefaultZoomFunction);
 };
 
 }  // namespace extensions

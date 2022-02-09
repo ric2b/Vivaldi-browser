@@ -11,10 +11,10 @@
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -23,8 +23,7 @@ namespace vivaldi {
 PWALinkMenuController::PWALinkMenuController(
     VivaldiRenderViewContextMenu* rv_context_menu,
     Profile* profile)
-  :rv_context_menu_(rv_context_menu),
-   profile_(profile) {}
+    : rv_context_menu_(rv_context_menu), profile_(profile) {}
 
 PWALinkMenuController::~PWALinkMenuController() = default;
 
@@ -50,7 +49,7 @@ void PWALinkMenuController::Populate(Browser* browser,
     open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP;
   }
 
-  auto* const provider = web_app::WebAppProvider::Get(profile_);
+  auto* const provider = web_app::WebAppProvider::GetForWebApps(profile_);
   menu_model->AddItem(
       IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
       l10n_util::GetStringFUTF16(

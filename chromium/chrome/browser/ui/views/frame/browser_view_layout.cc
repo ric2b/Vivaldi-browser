@@ -75,6 +75,11 @@ class BrowserViewLayout::WebContentsModalDialogHostViews
           : browser_view_layout_(browser_view_layout) {
   }
 
+  WebContentsModalDialogHostViews(const WebContentsModalDialogHostViews&) =
+      delete;
+  WebContentsModalDialogHostViews& operator=(
+      const WebContentsModalDialogHostViews&) = delete;
+
   ~WebContentsModalDialogHostViews() override {
     for (ModalDialogHostObserver& observer : observer_list_)
       observer.OnHostDestroying();
@@ -124,8 +129,6 @@ class BrowserViewLayout::WebContentsModalDialogHostViews
   BrowserViewLayout* const browser_view_layout_;
 
   base::ObserverList<ModalDialogHostObserver>::Unchecked observer_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsModalDialogHostViews);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,6 +148,7 @@ BrowserViewLayout::BrowserViewLayout(
     views::View* left_aligned_side_panel_separator,
     views::View* right_aligned_side_panel,
     views::View* right_aligned_side_panel_separator,
+    views::View* lens_side_panel,
     ImmersiveModeController* immersive_mode_controller,
     views::View* contents_separator)
     : delegate_(std::move(delegate)),
@@ -159,6 +163,7 @@ BrowserViewLayout::BrowserViewLayout(
       left_aligned_side_panel_separator_(left_aligned_side_panel_separator),
       right_aligned_side_panel_(right_aligned_side_panel),
       right_aligned_side_panel_separator_(right_aligned_side_panel_separator),
+      lens_side_panel_(lens_side_panel),
       immersive_mode_controller_(immersive_mode_controller),
       contents_separator_(contents_separator),
       tab_strip_(tab_strip),
@@ -289,7 +294,7 @@ int BrowserViewLayout::NonClientHitTest(const gfx::Point& point) {
   // app defined draggable region so we can return htcaption.
   web_app::AppBrowserController* controller =
       browser_view_->browser()->app_controller();
-  if (controller && controller->IsWindowControlsOverlayEnabled() &&
+  if (browser_view_->IsWindowControlsOverlayEnabled() && controller &&
       controller->draggable_region().has_value() &&
       controller->draggable_region()->contains(
           point_in_browser_view_coords.x(), point_in_browser_view_coords.y())) {
@@ -538,6 +543,7 @@ void BrowserViewLayout::LayoutContentsContainerView(int top, int bottom) {
 
   LayoutSidePanelView(right_aligned_side_panel_, contents_container_bounds);
   LayoutSidePanelView(left_aligned_side_panel_, contents_container_bounds);
+  LayoutSidePanelView(lens_side_panel_, contents_container_bounds);
 
   contents_container_->SetBoundsRect(contents_container_bounds);
 }
@@ -549,8 +555,10 @@ void BrowserViewLayout::LayoutSidePanelView(
     return;
 
   DCHECK(side_panel == right_aligned_side_panel_ ||
-         side_panel == left_aligned_side_panel_);
-  const bool is_right_aligned = side_panel == right_aligned_side_panel_;
+         side_panel == left_aligned_side_panel_ ||
+         side_panel == lens_side_panel_);
+  const bool is_right_aligned =
+      side_panel == right_aligned_side_panel_ || side_panel == lens_side_panel_;
   views::View* side_panel_separator = is_right_aligned
                                           ? right_aligned_side_panel_separator_
                                           : left_aligned_side_panel_separator_;
@@ -559,13 +567,11 @@ void BrowserViewLayout::LayoutSidePanelView(
   if (!side_panel->GetVisible())
     return;
 
-  // Side panels should not exceed 1/3 the browser window's width.
-  const int side_panel_max_width = browser_view_->GetLocalBounds().width() / 3;
-
-  // Side panel occupies some of the container's space.
+  // Side panel occupies some of the container's space. The side panel should
+  // never occupy more space than is available in the content window.
   gfx::Rect side_panel_bounds = contents_container_bounds;
-  side_panel_bounds.set_width(
-      std::min(side_panel->GetPreferredSize().width(), side_panel_max_width));
+  side_panel_bounds.set_width(std::min(side_panel->GetPreferredSize().width(),
+                                       contents_container_bounds.width()));
 
   constexpr int kSidePanelSeparatorWidth = 1;
 

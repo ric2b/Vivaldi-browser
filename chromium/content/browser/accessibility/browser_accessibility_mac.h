@@ -11,6 +11,12 @@
 
 @class BrowserAccessibilityCocoa;
 
+namespace ui {
+
+class AXPlatformNodeMac;
+
+}  // namespace ui
+
 namespace content {
 
 #if __OBJC__
@@ -22,6 +28,9 @@ CONTENT_EXPORT BrowserAccessibilityCocoa* ToBrowserAccessibilityCocoa(
 
 class BrowserAccessibilityMac : public BrowserAccessibility {
  public:
+  BrowserAccessibilityMac(const BrowserAccessibilityMac&) = delete;
+  BrowserAccessibilityMac& operator=(const BrowserAccessibilityMac&) = delete;
+
   // BrowserAccessibility overrides.
   ~BrowserAccessibilityMac() override;
   void OnDataChanged() override;
@@ -34,9 +43,7 @@ class BrowserAccessibilityMac : public BrowserAccessibility {
   BrowserAccessibility* PlatformGetPreviousSibling() const override;
 
   // The BrowserAccessibilityCocoa associated with us.
-  BrowserAccessibilityCocoa* native_view() const {
-    return browser_accessibility_cocoa_;
-  }
+  BrowserAccessibilityCocoa* GetNativeWrapper() const;
 
   // Refresh the native object associated with this.
   // Useful for re-announcing the current focus when properties have changed.
@@ -48,12 +55,14 @@ class BrowserAccessibilityMac : public BrowserAccessibility {
 
   BrowserAccessibilityMac();
 
-  // Allows access to the BrowserAccessibilityCocoa which wraps this.
-  // BrowserAccessibility.
-  // We own this object until our manager calls ReleaseReference;
-  // thereafter, the cocoa object owns us.
-  BrowserAccessibilityCocoa* browser_accessibility_cocoa_;
-  DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityMac);
+  // Creates platform and cocoa node if not yet created.
+  void CreatePlatformNodes();
+
+  // Creates a new cocoa node. Returns an old node in the swap_node.
+  BrowserAccessibilityCocoa* CreateNativeWrapper();
+
+  // Manager of the native cocoa node. We own this object.
+  ui::AXPlatformNodeMac* platform_node_;
 };
 
 }  // namespace content

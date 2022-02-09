@@ -1234,6 +1234,7 @@ void SyncServiceImpl::UpdateDataTypesForInvalidations() {
   }
 
   // No need to register invalidations for non-protocol or commit-only types.
+  // TODO(crbug.com/1232372): This could break with dynamic proxy types.
   ModelTypeSet types = Intersection(GetDataTypesToConfigure(), ProtocolTypes());
   types.RemoveAll(CommitOnlyTypes());
   if (!sessions_invalidations_enabled_) {
@@ -1477,6 +1478,9 @@ class GetAllNodesRequestHelper
       ModelTypeSet requested_types,
       base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback);
 
+  GetAllNodesRequestHelper(const GetAllNodesRequestHelper&) = delete;
+  GetAllNodesRequestHelper& operator=(const GetAllNodesRequestHelper&) = delete;
+
   void OnReceivedNodesForType(const ModelType type,
                               std::unique_ptr<base::ListValue> node_list);
 
@@ -1488,8 +1492,6 @@ class GetAllNodesRequestHelper
   ModelTypeSet awaiting_types_;
   base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback_;
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(GetAllNodesRequestHelper);
 };
 
 GetAllNodesRequestHelper::GetAllNodesRequestHelper(

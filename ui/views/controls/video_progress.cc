@@ -37,11 +37,10 @@ VideoProgress::VideoProgress() {
   gfx::Font default_font;
   int font_size_delta = kProgressTimeFontSize - default_font.GetFontSize();
   gfx::Font font = default_font.Derive(font_size_delta, gfx::Font::NORMAL,
-    gfx::Font::Weight::NORMAL);
+                                       gfx::Font::Weight::NORMAL);
   gfx::FontList font_list(font);
 
-  auto progress_time =
-      std::make_unique<views::Label>(u"0:00:00");
+  auto progress_time = std::make_unique<views::Label>(u"0:00:00");
   progress_time->SetFontList(font_list);
   progress_time->SetEnabledColor(kTimeColor);
   progress_time->SetAutoColorReadabilityEnabled(false);
@@ -50,21 +49,21 @@ VideoProgress::VideoProgress() {
       SkColorSetA(gfx::kGoogleBlue300, 0x00));  // fully transparent
   progress_time->layer()->SetName("VideoProgressTimeView");
   progress_time->layer()->SetFillsBoundsOpaquely(false);
-  progress_time->SetProperty(views::kFlexBehaviorKey,
-    views::FlexSpecification(
-      views::MinimumFlexSizeRule::kScaleToMinimum,
-      views::MaximumFlexSizeRule::kPreferred));
+  progress_time->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
+                               views::MaximumFlexSizeRule::kPreferred));
   progress_time_ = AddChildView(std::move(progress_time));
 
   auto progress_bar =
-    std::make_unique<views::ProgressBar>(kProgressBarHeight, true);
+      std::make_unique<views::ProgressBar>(kProgressBarHeight, true);
   progress_bar->SetPaintToLayer(ui::LAYER_TEXTURED);
   progress_bar->layer()->SetName("VideoProgressControlsView");
   progress_bar->layer()->SetFillsBoundsOpaquely(false);
-  progress_bar->SetProperty(views::kFlexBehaviorKey,
-                             views::FlexSpecification(
-                                 views::MinimumFlexSizeRule::kScaleToMinimum,
-                                 views::MaximumFlexSizeRule::kUnbounded));
+  progress_bar->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
+                               views::MaximumFlexSizeRule::kUnbounded));
   progress_bar->SetProperty(views::kMarginsKey, gfx::Insets(0, 4, 0, 4));
   progress_bar_ = AddChildView(std::move(progress_bar));
 
@@ -77,10 +76,10 @@ VideoProgress::VideoProgress() {
       SkColorSetA(gfx::kGoogleBlue300, 0x00));  // fully transparent
   duration->layer()->SetName("VideoProgressTimeDurationView");
   duration->layer()->SetFillsBoundsOpaquely(false);
-  duration->SetProperty(views::kFlexBehaviorKey,
-                        views::FlexSpecification(
-                            views::MinimumFlexSizeRule::kScaleToMinimum,
-                            views::MaximumFlexSizeRule::kPreferred));
+  duration->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
+                               views::MaximumFlexSizeRule::kPreferred));
   duration_ = AddChildView(std::move(duration));
 }
 
@@ -95,21 +94,20 @@ void VideoProgress::ToggleVisibility(bool is_visible) {
 bool VideoProgress::GetStringFromPosition(base::DurationFormatWidth time_format,
                                           base::TimeDelta position,
                                           std::u16string& time) const {
-  bool time_received = base::TimeDurationFormatWithSeconds(
-    position, time_format, &time);
+  bool time_received =
+      base::TimeDurationFormatWithSeconds(position, time_format, &time);
 
   return time_received;
 }
 
 std::u16string VideoProgress::StripHour(std::u16string& time) const {
-  base::ReplaceFirstSubstringAfterOffset(
-    &time, 0, u"0:", u"");
+  base::ReplaceFirstSubstringAfterOffset(&time, 0, u"0:", u"");
 
   return time;
 }
 
 void VideoProgress::UpdateProgress(
-  const media_session::MediaPosition& media_position) {
+    const media_session::MediaPosition& media_position) {
   // If the media is paused and |update_progress_timer_| is still running, stop
   // the timer.
   if (media_position.playback_rate() == 0 && update_progress_timer_.IsRunning())
@@ -147,8 +145,8 @@ void VideoProgress::UpdateProgress(
     }
     allows_click_ = true;
 
-    // A duration higher than a day is likely a fake number given to undetermined
-    // durations on eg. twitch.tv, so ignore it.
+    // A duration higher than a day is likely a fake number given to
+    // undetermined durations on eg. twitch.tv, so ignore it.
     if (duration_delta_ < base::TimeDelta::FromDays(1)) {
       SetProgressTime(elapsed_time);
       SetDuration(total_time);
@@ -159,7 +157,7 @@ void VideoProgress::UpdateProgress(
 
   if (media_position.playback_rate() != 0) {
     base::TimeDelta update_frequency = base::TimeDelta::FromSecondsD(
-      std::abs(1 / media_position.playback_rate()));
+        std::abs(1 / media_position.playback_rate()));
     update_progress_timer_.Start(
         FROM_HERE, update_frequency,
         base::BindRepeating(&VideoProgress::UpdateProgress,
@@ -213,10 +211,10 @@ std::u16string VideoProgress::GetTooltipText(const gfx::Point& p) const {
     ConvertPointToTarget(this, progress_bar_, &location_in_bar);
 
     double progress =
-      static_cast<double>(location_in_bar.x()) / progress_bar_->width();
+        static_cast<double>(location_in_bar.x()) / progress_bar_->width();
 
     base::TimeDelta delta =
-      base::TimeDelta::FromSecondsD(duration_delta_.InSecondsF() * progress);
+        base::TimeDelta::FromSecondsD(duration_delta_.InSecondsF() * progress);
     bool has_time = GetStringFromPosition(time_format, delta, time);
     if (has_time && duration_delta_ < base::TimeDelta::FromHours(1)) {
       time = StripHour(time);
@@ -248,7 +246,7 @@ void VideoProgress::HandleSeeking(const gfx::Point& location) {
 
   double current_position = progress_bar_->GetValue();
   double seek_to_progress =
-    static_cast<double>(location_in_bar.x()) / progress_bar_->width();
+      static_cast<double>(location_in_bar.x()) / progress_bar_->width();
   seek_callback_.Run(current_position, seek_to_progress);
 }
 

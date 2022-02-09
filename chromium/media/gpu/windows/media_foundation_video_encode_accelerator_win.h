@@ -94,9 +94,15 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // Populates input sample buffer with contents of a video frame
   HRESULT PopulateInputSampleBuffer(scoped_refptr<VideoFrame> frame);
 
+  int AssignTemporalId(bool keyframe);
+  bool temporalScalableCoding() { return num_temporal_layers_ > 1; }
+
   // Checks for and copies encoded output on |encoder_thread_|.
   void ProcessOutputAsync();
   void ProcessOutputSync();
+
+  // Drains pending output samples on |encoder_thread_|.
+  void DrainPendingOutputs();
 
   // Tries to deliver the input frame to the encoder.
   bool TryToDeliverInputFrame(scoped_refptr<VideoFrame> frame,
@@ -140,11 +146,16 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // EncodeOutput needs to be copied into a BitstreamBufferRef as a FIFO.
   base::circular_deque<std::unique_ptr<EncodeOutput>> encoder_output_queue_;
 
+  // Counter of outputs which is used to assign temporal layer indexes
+  // according to the corresponding layer pattern. Reset for every key frame.
+  uint32_t outputs_since_keyframe_count_ = 0;
+
   gfx::Size input_visible_size_;
   size_t bitstream_buffer_size_;
   uint32_t frame_rate_;
   Bitrate bitrate_;
   bool low_latency_mode_;
+  int num_temporal_layers_ = 1;
 
   // Group of picture length for encoded output stream, indicates the
   // distance between two key frames.

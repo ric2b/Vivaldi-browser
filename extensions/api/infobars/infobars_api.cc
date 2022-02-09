@@ -7,15 +7,15 @@
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "vivaldi/extensions/schema/infobars.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "vivaldi/extensions/schema/infobars.h"
 
 namespace extensions {
 
 ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
   using vivaldi::infobars::SendButtonAction::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int identifier = params->identifier;
@@ -33,32 +33,29 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
   for (size_t i = 0; i < service->infobar_count(); i++) {
     infobars::InfoBar* infobar = service->infobar_at(i);
     if (infobar->delegate()->GetIdentifier() ==
-        static_cast<infobars::InfoBarDelegate::InfoBarIdentifier>(
-            identifier)) {
+        static_cast<infobars::InfoBarDelegate::InfoBarIdentifier>(identifier)) {
       ConfirmInfoBarDelegate* delegate =
           infobar->delegate()->AsConfirmInfoBarDelegate();
       DCHECK(delegate);
       if (delegate) {
-
-
         std::vector<base::Value> args(
-          extensions::vivaldi::infobars::OnInfobarRemoved::Create(
-            tab_id, delegate->GetIdentifier()));
+            extensions::vivaldi::infobars::OnInfobarRemoved::Create(
+                tab_id, delegate->GetIdentifier()));
         ::vivaldi::BroadcastEvent(
-          extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
-          std::move(args), browser_context());
+            extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
+            std::move(args), browser_context());
 
         if (action == extensions::vivaldi::infobars::ToString(
                           extensions::vivaldi::infobars::ButtonAction::
                               BUTTON_ACTION_ACCEPT)) {
           delegate->Accept();
         } else if (action == extensions::vivaldi::infobars::ToString(
-                                  extensions::vivaldi::infobars::ButtonAction::
-                                      BUTTON_ACTION_CANCEL)) {
+                                 extensions::vivaldi::infobars::ButtonAction::
+                                     BUTTON_ACTION_CANCEL)) {
           delegate->Cancel();
         } else if (action == extensions::vivaldi::infobars::ToString(
-                                  extensions::vivaldi::infobars::ButtonAction::
-                                      BUTTON_ACTION_DISMISS)) {
+                                 extensions::vivaldi::infobars::ButtonAction::
+                                     BUTTON_ACTION_DISMISS)) {
           delegate->InfoBarDismissed();
         }
         infobar->RemoveSelf();

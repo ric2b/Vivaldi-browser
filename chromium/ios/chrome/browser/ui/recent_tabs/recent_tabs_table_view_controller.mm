@@ -14,7 +14,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#import "components/signin/public/base/account_consistency_method.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "components/sync_sessions/session_sync_service.h"
@@ -36,6 +35,7 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
+#import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
@@ -47,7 +47,6 @@
 #include "ios/chrome/browser/ui/recent_tabs/synced_sessions.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
-#import "ios/chrome/browser/ui/signin/signin_presenter.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_activity_indicator_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_disclosure_header_footer_item.h"
@@ -159,9 +158,7 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 #pragma mark - Public Interface
 
 - (instancetype)init {
-  UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
-                               ? ChromeTableViewStyle()
-                               : UITableViewStylePlain;
+  UITableViewStyle style = ChromeTableViewStyle();
   self = [super initWithStyle:style];
   if (self) {
     _sessionState = SessionsSyncUserState::USER_SIGNED_OUT;
@@ -173,7 +170,8 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 }
 
 - (void)dealloc {
-  [_signinPromoViewMediator signinPromoViewIsRemoved];
+  [self.signinPromoViewMediator disconnect];
+  self.signinPromoViewMediator = nil;
 }
 
 - (void)viewDidLoad {
@@ -277,13 +275,11 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 - (void)loadModel {
   [super loadModel];
 
-  if (@available(iOS 13, *)) {
-    if (self.session) {
-      // Replace mediator to store collapsed keys in scene session.
-      self.tableViewModel.collapsableMediator =
-          [[ListModelCollapsedSceneSessionMediator alloc]
-              initWithSession:self.session];
-    }
+  if (self.session) {
+    // Replace mediator to store collapsed keys in scene session.
+    self.tableViewModel.collapsableMediator =
+        [[ListModelCollapsedSceneSessionMediator alloc]
+            initWithSession:self.session];
   }
 
   [self addRecentlyClosedSection];
@@ -503,8 +499,7 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   // section. However, if sign-in is disabled by policy Chrome will
   // continue to show the Other Devices section with a specialized message.
   const PrefService* prefs = self.browserState->GetPrefs();
-  if (!signin::IsSigninAllowed(prefs) &&
-      signin::IsSigninAllowedByPolicy(prefs)) {
+  if (!signin::IsSigninAllowed(prefs) && signin::IsSigninAllowedByPolicy()) {
     return;
   }
 
@@ -776,8 +771,7 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   self.sessionState = newSessionState;
 
   if (self.sessionState != SessionsSyncUserState::USER_SIGNED_OUT) {
-    [self.signinPromoViewMediator signinPromoViewIsRemoved];
-    self.signinPromoViewMediator.consumer = nil;
+    [self.signinPromoViewMediator disconnect];
     self.signinPromoViewMediator = nil;
   }
 }
@@ -798,6 +792,8 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 
 - (void)dismissModals {
   [self.contextMenuCoordinator stop];
+  [self.signinPromoViewMediator disconnect];
+  self.signinPromoViewMediator = nil;
   ios::provider::DismissModalsForTableView(self.tableView);
 }
 
@@ -870,13 +866,11 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   // If SigninPromo will be shown, |self.signinPromoViewMediator| must know.
   if (itemTypeSelected == ItemTypeOtherDevicesSigninPromo) {
     [self.signinPromoViewMediator signinPromoViewIsVisible];
-      TableViewSigninPromoCell* signinPromoCell =
-          base::mac::ObjCCastStrict<TableViewSigninPromoCell>(cell);
-      signinPromoCell.signinPromoView.imageView.hidden = YES;
-      signinPromoCell.signinPromoView.textLabel.hidden = YES;
-      if (base::FeatureList::IsEnabled(kSettingsRefresh)) {
-        signinPromoCell.backgroundColor = nil;
-      }
+    TableViewSigninPromoCell* signinPromoCell =
+        base::mac::ObjCCastStrict<TableViewSigninPromoCell>(cell);
+    signinPromoCell.signinPromoView.imageView.hidden = YES;
+    signinPromoCell.signinPromoView.textLabel.hidden = YES;
+    signinPromoCell.backgroundColor = nil;
   }
   // Retrieve favicons for closed tabs and remote sessions.
   if (itemTypeSelected == ItemTypeRecentlyClosed ||
@@ -1356,8 +1350,7 @@ const int kRecentlyClosedTabsSectionIndex = 0;
     // exist anymore. The mediator should not be removed each time the section
     // is removed since the section is replaced at each reload.
     // Metrics would be recorded too often.
-    [self.signinPromoViewMediator signinPromoViewIsRemoved];
-    self.signinPromoViewMediator.consumer = nil;
+    [self.signinPromoViewMediator disconnect];
     self.signinPromoViewMediator = nil;
     return;
   }
@@ -1454,11 +1447,7 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   if (syncState == SyncSetupService::kSyncServiceSignInNeedsUpdate) {
     [self showReauthenticateSignin];
   } else if (ShouldShowSyncSettings(syncState)) {
-    if (base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency)) {
-      [self showSyncManagerSettings];
-    } else {
-      [self showGoogleServicesSettings];
-    }
+    [self showSyncManagerSettings];
   } else if (syncState == SyncSetupService::kSyncServiceNeedsPassphrase) {
     [self showSyncPassphraseSettings];
   }

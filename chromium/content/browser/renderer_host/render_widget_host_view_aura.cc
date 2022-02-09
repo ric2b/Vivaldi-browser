@@ -91,7 +91,7 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
@@ -122,8 +122,12 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ui/base/ime/chromeos/extension_ime_util.h"
-#include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/ash/extension_ime_util.h"
+#include "ui/base/ime/ash/input_method_manager.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "ui/base/ime/mojom/virtual_keyboard_types.mojom.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -150,6 +154,10 @@ class RenderWidgetHostViewAura::EventObserverForPopupExit
                           {ui::ET_MOUSE_PRESSED, ui::ET_TOUCH_PRESSED});
   }
 
+  EventObserverForPopupExit(const EventObserverForPopupExit&) = delete;
+  EventObserverForPopupExit& operator=(const EventObserverForPopupExit&) =
+      delete;
+
   ~EventObserverForPopupExit() override {
     aura::Env::GetInstance()->RemoveEventObserver(this);
   }
@@ -161,8 +169,6 @@ class RenderWidgetHostViewAura::EventObserverForPopupExit
 
  private:
   RenderWidgetHostViewAura* rwhva_;
-
-  DISALLOW_COPY_AND_ASSIGN(EventObserverForPopupExit);
 };
 
 void RenderWidgetHostViewAura::ApplyEventObserverForPopupExit(
@@ -205,6 +211,9 @@ class RenderWidgetHostViewAura::WindowObserver : public aura::WindowObserver {
     view_->window_->AddObserver(this);
   }
 
+  WindowObserver(const WindowObserver&) = delete;
+  WindowObserver& operator=(const WindowObserver&) = delete;
+
   ~WindowObserver() override { view_->window_->RemoveObserver(this); }
 
   // Overridden from aura::WindowObserver:
@@ -230,8 +239,6 @@ class RenderWidgetHostViewAura::WindowObserver : public aura::WindowObserver {
 
  private:
   RenderWidgetHostViewAura* view_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowObserver);
 };
 
 // This class provides functionality to observe the ancestors of the RWHVA for
@@ -257,6 +264,9 @@ class RenderWidgetHostViewAura::WindowAncestorObserver
     }
   }
 
+  WindowAncestorObserver(const WindowAncestorObserver&) = delete;
+  WindowAncestorObserver& operator=(const WindowAncestorObserver&) = delete;
+
   ~WindowAncestorObserver() override {
     RemoveAncestorObservers();
   }
@@ -279,8 +289,6 @@ class RenderWidgetHostViewAura::WindowAncestorObserver
 
   RenderWidgetHostViewAura* view_;
   std::set<aura::Window*> ancestors_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowAncestorObserver);
 };
 
 
@@ -360,7 +368,8 @@ void RenderWidgetHostViewAura::InitAsChild(gfx::NativeView parent_view) {
 
 void RenderWidgetHostViewAura::InitAsPopup(
     RenderWidgetHostView* parent_host_view,
-    const gfx::Rect& bounds_in_screen) {
+    const gfx::Rect& bounds_in_screen,
+    const gfx::Rect& anchor_rect) {
   DCHECK_EQ(widget_type_, WidgetType::kPopup);
   DCHECK(!static_cast<RenderWidgetHostViewBase*>(parent_host_view)
               ->IsRenderWidgetHostViewChildFrame());
@@ -398,6 +407,12 @@ void RenderWidgetHostViewAura::InitAsPopup(
     transient_window_client->AddTransientChild(
         popup_parent_host_view_->window_, window_);
   }
+
+  ui::OwnedWindowAnchor owned_window_anchor = {
+      anchor_rect, ui::OwnedWindowAnchorPosition::kBottomLeft,
+      ui::OwnedWindowAnchorGravity::kBottomRight,
+      ui::OwnedWindowConstraintAdjustment::kAdjustmentFlipY};
+  window_->SetProperty(aura::client::kOwnedWindowAnchor, owned_window_anchor);
 
   aura::Window* root = popup_parent_host_view_->window_->GetRootWindow();
   aura::client::ParentWindowWithContext(window_, root, bounds_in_screen);
@@ -507,6 +522,8 @@ void RenderWidgetHostViewAura::HandleParentBoundsChanged() {
     else
       host_->SendScreenRects();
   }
+
+  UpdateInsetsWithVirtualKeyboardEnabled();
 }
 
 void RenderWidgetHostViewAura::ParentHierarchyChanged() {
@@ -792,6 +809,19 @@ void RenderWidgetHostViewAura::UpdateTooltipFromKeyboard(
     tooltip_client->SetHideTooltipTimeout(window_, {});
     tooltip_client->UpdateTooltipFromKeyboard(bounds, window_);
   }
+}
+
+void RenderWidgetHostViewAura::ClearKeyboardTriggeredTooltip() {
+  if (!window_ || !window_->GetHost())
+    return;
+
+  wm::TooltipClient* tooltip_client =
+      wm::GetTooltipClient(window_->GetRootWindow());
+  if (!tooltip_client || !tooltip_client->IsTooltipSetFromKeyboard(window_))
+    return;
+
+  SetTooltipText(std::u16string());
+  tooltip_client->UpdateTooltipFromKeyboard(gfx::Rect(), window_);
 }
 
 uint32_t RenderWidgetHostViewAura::GetCaptureSequenceNumber() const {
@@ -1463,14 +1493,21 @@ void RenderWidgetHostViewAura::ExtendSelectionAndDelete(
 
 void RenderWidgetHostViewAura::EnsureCaretNotInRect(
     const gfx::Rect& rect_in_screen) {
+  keyboard_occluded_bounds_ = rect_in_screen;
+
+  // If keyboard is disabled, reset the insets_.
+  if (keyboard_occluded_bounds_.IsEmpty())
+    insets_ = gfx::Insets();
+
   aura::Window* top_level_window = window_->GetToplevelWindow();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  wm::EnsureWindowNotInRect(top_level_window, rect_in_screen);
+  wm::EnsureWindowNotInRect(top_level_window, keyboard_occluded_bounds_);
 #endif
 
   // Perform overscroll if the caret is still hidden by the keyboard.
   const gfx::Rect hidden_window_bounds_in_screen = gfx::IntersectRects(
-      rect_in_screen, top_level_window->GetBoundsInScreen());
+      keyboard_occluded_bounds_, top_level_window->GetBoundsInScreen());
+
   if (hidden_window_bounds_in_screen.IsEmpty())
     return;
 
@@ -1501,7 +1538,7 @@ bool RenderWidgetHostViewAura::ShouldDoLearning() {
   return GetTextInputManager() && GetTextInputManager()->should_do_learning();
 }
 
-#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 bool RenderWidgetHostViewAura::SetCompositionFromExistingText(
     const gfx::Range& range,
     const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
@@ -1551,10 +1588,9 @@ bool RenderWidgetHostViewAura::SetAutocorrectRange(
         TextInputClient::SubClass::kRenderWidgetHostViewAura);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    auto* input_method_manager =
-        chromeos::input_method::InputMethodManager::Get();
+    auto* input_method_manager = ash::input_method::InputMethodManager::Get();
     if (input_method_manager &&
-        chromeos::extension_ime_util::IsExperimentalMultilingual(
+        ash::extension_ime_util::IsExperimentalMultilingual(
             input_method_manager->GetActiveIMEState()
                 ->GetCurrentInputMethod()
                 .id())) {
@@ -1613,10 +1649,18 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
   if (!input_handler || fragments.empty())
     return false;
 
+  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
+    return false;
+
   unsigned max_fragment_end = 0;
   std::vector<::ui::ImeTextSpan> ime_text_spans;
   ime_text_spans.reserve(fragments.size());
+  bool conflict_with_spellcheck = false;
   for (auto& fragment : fragments) {
+    if (text_input_manager_->OverlapsWithSpellCheckMarker(fragment.range)) {
+      conflict_with_spellcheck = true;
+      break;
+    }
     ui::ImeTextSpan ui_ime_text_span;
     ui_ime_text_span.type = ui::ImeTextSpan::Type::kGrammarSuggestion;
     ui_ime_text_span.start_offset = fragment.range.start();
@@ -1631,6 +1675,10 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
       max_fragment_end = fragment.range.end();
     }
   }
+
+  if (conflict_with_spellcheck)
+    return false;
+
   input_handler->AddImeTextSpansToExistingText(0, max_fragment_end,
                                                ime_text_spans);
 
@@ -1639,7 +1687,7 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
 
 #endif
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
 void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     absl::optional<gfx::Rect>* control_bounds,
     absl::optional<gfx::Rect>* selection_bounds) {
@@ -1664,7 +1712,9 @@ void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     }
   }
 }
+#endif
 
+#if defined(OS_WIN)
 void RenderWidgetHostViewAura::SetActiveCompositionForAccessibility(
     const gfx::Range& range,
     const std::u16string& active_composition_text,
@@ -1728,8 +1778,10 @@ void RenderWidgetHostViewAura::OnBoundsChanged(const gfx::Rect& old_bounds,
   // harmless.
   SetSize(new_bounds.size());
 
-  if (GetInputMethod())
+  if (GetInputMethod()) {
     GetInputMethod()->OnCaretBoundsChanged(this);
+    UpdateInsetsWithVirtualKeyboardEnabled();
+  }
 }
 
 gfx::NativeCursor RenderWidgetHostViewAura::GetCursor(const gfx::Point& point) {
@@ -2267,11 +2319,30 @@ void RenderWidgetHostViewAura::NotifyVirtualKeyboardOverlayRect(
   // geometrychange event can only be fired on main frame and not focused frame
   // which could be an iframe.
   RenderFrameHostImpl* frame = host()->frame_tree()->GetMainFrame();
-  if (!frame)
+  if (!frame || !frame->ShouldVirtualKeyboardOverlayContent())
     return;
-  if (ShouldVirtualKeyboardOverlayContent()) {
-    frame->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
+  gfx::Rect keyboard_root_relative_rect = keyboard_rect;
+  if (!keyboard_root_relative_rect.IsEmpty()) {
+    // If the rect is non-empty, we need to transform it to be widget-relative
+    // window (DIP coordinates). The input is client coordinates for the root
+    // window.
+    // Transform the widget rect origin to root relative coords.
+    gfx::PointF root_widget_origin(0.f, 0.f);
+    TransformPointToRootSurface(&root_widget_origin);
+    gfx::Rect root_widget_rect =
+        gfx::Rect(root_widget_origin.x(), root_widget_origin.y(),
+                  GetViewBounds().width(), GetViewBounds().height());
+    // Intersect the keyboard rect with the root widget bounds and transform
+    // back to widget-relative coordinates, which will be sent to the renderer.
+    keyboard_root_relative_rect.Intersect(root_widget_rect);
+    keyboard_root_relative_rect.Offset(-root_widget_origin.x(),
+                                       -root_widget_origin.y());
   }
+  frame->NotifyVirtualKeyboardOverlayRect(keyboard_root_relative_rect);
+}
+
+bool RenderWidgetHostViewAura::IsHTMLFormPopup() const {
+  return !!popup_parent_host_view_;
 }
 
 bool RenderWidgetHostViewAura::FocusedFrameHasStickyActivation() const {
@@ -2352,6 +2423,17 @@ void RenderWidgetHostViewAura::InternalSetBounds(const gfx::Rect& rect) {
   if (IsMouseLocked())
     UpdateMouseLockRegion();
 #endif
+}
+
+void RenderWidgetHostViewAura::UpdateInsetsWithVirtualKeyboardEnabled() {
+  // Update insets if the keyboard is shown.
+  if (!keyboard_occluded_bounds_.IsEmpty()) {
+    insets_ = gfx::Insets(
+        0, 0,
+        gfx::IntersectRects(GetViewBounds(), keyboard_occluded_bounds_)
+            .height(),
+        0);
+  }
 }
 
 #if defined(OS_WIN)
@@ -2489,7 +2571,7 @@ void RenderWidgetHostViewAura::ForwardKeyboardEventWithLatencyInfo(
 
 void RenderWidgetHostViewAura::CreateSelectionController() {
   ui::TouchSelectionController::Config tsc_config;
-  tsc_config.max_tap_duration = base::TimeDelta::FromMilliseconds(
+  tsc_config.max_tap_duration = base::Milliseconds(
       ui::GestureConfiguration::GetInstance()->long_press_time_in_ms());
   tsc_config.tap_slop = ui::GestureConfiguration::GetInstance()
                             ->max_touch_move_in_pixels_for_click();
@@ -2529,6 +2611,18 @@ void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
 
   const ui::mojom::TextInputState* state =
       text_input_manager_->GetTextInputState();
+
+#if defined(OS_CHROMEOS)
+  if (state) {
+    if (state->last_vk_visibility_request ==
+        ui::mojom::VirtualKeyboardVisibilityRequest::SHOW) {
+      GetInputMethod()->SetVirtualKeyboardVisibilityIfEnabled(true);
+    } else if (state->last_vk_visibility_request ==
+               ui::mojom::VirtualKeyboardVisibilityRequest::HIDE) {
+      GetInputMethod()->SetVirtualKeyboardVisibilityIfEnabled(false);
+    }
+  }
+#endif
 
   // Show the virtual keyboard if needed.
   if (state && state->type != ui::TEXT_INPUT_TYPE_NONE &&

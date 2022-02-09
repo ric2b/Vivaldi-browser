@@ -84,28 +84,15 @@ class NavigationControllerImpl::NavigationThrottleImpl
   ~NavigationThrottleImpl() override = default;
 
   void ScheduleCancel() { should_cancel_ = true; }
-  void ScheduleNavigate(
-      std::unique_ptr<content::NavigationController::LoadURLParams> params) {
-    load_params_ = std::move(params);
-  }
 
   // content::NavigationThrottle:
   ThrottleCheckResult WillStartRequest() override {
-    const bool should_cancel = should_cancel_;
-    if (load_params_)
-      controller_->DoNavigate(std::move(load_params_));
-    // WARNING: this may have been deleted.
-    return should_cancel ? CANCEL : PROCEED;
+    return should_cancel_ ? CANCEL : PROCEED;
   }
 
   ThrottleCheckResult WillRedirectRequest() override {
     controller_->WillRedirectRequest(this, navigation_handle());
-
-    const bool should_cancel = should_cancel_;
-    if (load_params_)
-      controller_->DoNavigate(std::move(load_params_));
-    // WARNING: this may have been deleted.
-    return should_cancel ? CANCEL : PROCEED;
+    return should_cancel_ ? CANCEL : PROCEED;
   }
 
   const char* GetNameForLogging() override {
@@ -115,7 +102,6 @@ class NavigationControllerImpl::NavigationThrottleImpl
  private:
   NavigationControllerImpl* controller_;
   bool should_cancel_ = false;
-  std::unique_ptr<content::NavigationController::LoadURLParams> load_params_;
 };
 
 NavigationControllerImpl::NavigationControllerImpl(TabImpl* tab)
@@ -134,9 +120,6 @@ NavigationControllerImpl::CreateNavigationThrottle(
   auto* navigation = navigation_map_[handle].get();
   if (navigation->should_stop_when_throttle_created())
     throttle->ScheduleCancel();
-  auto load_params = navigation->TakeParamsToLoadWhenSafe();
-  if (load_params)
-    throttle->ScheduleNavigate(std::move(load_params));
   return throttle;
 }
 
@@ -358,6 +341,8 @@ void NavigationControllerImpl::Reload() {
 }
 
 void NavigationControllerImpl::Stop() {
+  CancelDelayedLoad();
+
   NavigationImpl* navigation = nullptr;
   if (navigation_starting_) {
     navigation_starting_->set_should_stop_when_throttle_created();
@@ -503,9 +488,9 @@ void NavigationControllerImpl::DidFinishNavigation(
   DCHECK(navigation_map_.find(navigation_handle) != navigation_map_.end());
   auto* navigation = navigation_map_[navigation_handle].get();
 
-  if (navigation_handle->HasCommitted()) {
-    navigation->set_safe_to_get_page();
+  navigation->set_finished();
 
+  if (navigation_handle->HasCommitted()) {
     // Set state on NavigationEntry user data if a per-navigation user agent was
     // specified. This can't be done earlier because a NavigationEntry might not
     // have existed at the time that SetUserAgentString was called.
@@ -519,11 +504,15 @@ void NavigationControllerImpl::DidFinishNavigation(
     }
 
     auto* rfh = navigation_handle->GetRenderFrameHost();
-    if (rfh)
-      PageImpl::GetOrCreateForPage(rfh->GetPage());
+    PageImpl::GetOrCreateForPage(rfh->GetPage());
+    navigation->set_safe_to_get_page();
   }
 
-  if (navigation_handle->GetNetErrorCode() == net::OK &&
+  // In some corner cases (e.g., a tab closing with an ongoing navigation)
+  // navigations finish without committing but without any other error state.
+  // Such navigations are regarded as failed by WebLayer.
+  if (navigation_handle->HasCommitted() &&
+      navigation_handle->GetNetErrorCode() == net::OK &&
       !navigation_handle->IsErrorPage()) {
 #if defined(OS_ANDROID)
     if (java_controller_) {
@@ -635,6 +624,8 @@ void NavigationControllerImpl::NotifyLoadStateChanged() {
 
 void NavigationControllerImpl::DoNavigate(
     std::unique_ptr<content::NavigationController::LoadURLParams> params) {
+  CancelDelayedLoad();
+
   // Navigations should use the default user-agent (which may be overridden if
   // desktop mode is turned on). If the embedder wants a custom user-agent, the
   // embedder will call Navigation::SetUserAgentString() in DidStartNavigation.
@@ -647,19 +638,11 @@ void NavigationControllerImpl::DoNavigate(
 #endif
     params->override_user_agent =
         content::NavigationController::UA_OVERRIDE_FALSE;
-  if (navigation_starting_) {
+  if (navigation_starting_ || active_throttle_) {
     // DoNavigate() is being called reentrantly. Delay processing until it's
     // safe.
     Stop();
-    navigation_starting_->SetParamsToLoadWhenSafe(std::move(params));
-    return;
-  }
-
-  if (active_throttle_) {
-    // DoNavigate() is being called reentrantly. Delay processing until it's
-    // safe.
-    Stop();
-    active_throttle_->ScheduleNavigate(std::move(params));
+    ScheduleDelayedLoad(std::move(params));
     return;
   }
 
@@ -668,6 +651,23 @@ void NavigationControllerImpl::DoNavigate(
   // So that if the user had entered the UI in a bar it stops flashing the
   // caret.
   web_contents()->Focus();
+}
+
+void NavigationControllerImpl::ScheduleDelayedLoad(
+    std::unique_ptr<content::NavigationController::LoadURLParams> params) {
+  delayed_load_params_ = std::move(params);
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&NavigationControllerImpl::ProcessDelayedLoad,
+                                weak_ptr_factory_.GetWeakPtr()));
+}
+
+void NavigationControllerImpl::CancelDelayedLoad() {
+  delayed_load_params_.reset();
+}
+
+void NavigationControllerImpl::ProcessDelayedLoad() {
+  if (delayed_load_params_)
+    DoNavigate(std::move(delayed_load_params_));
 }
 
 #if defined(OS_ANDROID)

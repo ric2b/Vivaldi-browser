@@ -44,9 +44,11 @@ class NoteModelLoader : public base::RefCountedThreadSafe<NoteModelLoader> {
   // Returns null until the model has loaded. Use BlockTillLoaded() to ensure
   // this returns non-null.
  private:
-  friend class base::RefCountedThreadSafe<NoteModelLoader>;
+  friend base::RefCountedThreadSafe<NoteModelLoader>;
   NoteModelLoader();
   ~NoteModelLoader();
+  NoteModelLoader(const NoteModelLoader&) = delete;
+  NoteModelLoader& operator=(const NoteModelLoader&) = delete;
 
   // Performs the load on a background thread.
   std::unique_ptr<NoteLoadDetails> DoLoadOnBackgroundThread(
@@ -57,8 +59,6 @@ class NoteModelLoader : public base::RefCountedThreadSafe<NoteModelLoader> {
 
   // Signaled once loading completes.
   base::WaitableEvent loaded_signal_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteModelLoader);
 };
 
 }  // namespace vivaldi

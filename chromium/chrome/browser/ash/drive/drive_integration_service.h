@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 
+#include "ash/components/drivefs/drivefs_host.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
@@ -16,7 +17,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "chromeos/components/drivefs/drivefs_host.h"
 #include "components/drive/drive_notification_observer.h"
 #include "components/drive/file_errors.h"
 #include "components/drive/file_system_core_util.h"
@@ -78,6 +78,9 @@ class DriveIntegrationServiceObserver : public base::CheckedObserver {
   // Triggered when mounting the filesystem has failed in a fashion that will
   // not be automatically retried.
   virtual void OnFileSystemMountFailed() {}
+
+  // Triggered when the `DriveIntegrationService` is being destroyed.
+  virtual void OnDriveIntegrationServiceDestroyed() {}
 };
 
 // DriveIntegrationService is used to integrate Drive to Chrome. This class
@@ -109,6 +112,10 @@ class DriveIntegrationService : public KeyedService,
       const std::string& test_mount_point_name,
       const base::FilePath& test_cache_root,
       DriveFsMojoListenerFactory test_drivefs_mojo_listener_factory = {});
+
+  DriveIntegrationService(const DriveIntegrationService&) = delete;
+  DriveIntegrationService& operator=(const DriveIntegrationService&) = delete;
+
   ~DriveIntegrationService() override;
 
   // KeyedService override:
@@ -255,9 +262,15 @@ class DriveIntegrationService : public KeyedService,
                               bool failed_to_mount);
 
   // Helper function for ClearCacheAndRemountFileSystem() that deletes the cache
-  // folder and remounts Drive.
-  void ClearCacheAndRemountFileSystemAfterUnmount(
+  // folder.
+  void ClearCacheAndRemountFileSystemAfterDelay(
       base::OnceCallback<void(bool)> callback);
+
+  // Helper function for ClearCacheAndRemountFileSystem() that remounts Drive if
+  // necessary.
+  void MaybeRemountFileSystemAfterClearCache(
+      base::OnceCallback<void(bool)> callback,
+      bool success);
 
   // Initializes the object. This function should be called before any
   // other functions.
@@ -318,7 +331,6 @@ class DriveIntegrationService : public KeyedService,
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.
   base::WeakPtrFactory<DriveIntegrationService> weak_ptr_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(DriveIntegrationService);
 };
 
 // Singleton that owns all instances of DriveIntegrationService and

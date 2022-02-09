@@ -67,10 +67,14 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   PaymentRequest(content::RenderFrameHost* render_frame_host,
                  std::unique_ptr<ContentPaymentRequestDelegate> delegate,
-                 PaymentRequestWebContentsManager* manager,
-                 PaymentRequestDisplayManager* display_manager,
+                 base::WeakPtr<PaymentRequestWebContentsManager> manager,
+                 base::WeakPtr<PaymentRequestDisplayManager> display_manager,
                  mojo::PendingReceiver<mojom::PaymentRequest> receiver,
                  base::WeakPtr<ObserverForTest> observer_for_testing);
+
+  PaymentRequest(const PaymentRequest&) = delete;
+  PaymentRequest& operator=(const PaymentRequest&) = delete;
+
   ~PaymentRequest() override;
 
   // mojom::PaymentRequest
@@ -216,8 +220,8 @@ class PaymentRequest : public mojom::PaymentRequest,
   DeveloperConsoleLogger log_;
   std::unique_ptr<ContentPaymentRequestDelegate> delegate_;
   // |manager_| owns this PaymentRequest.
-  PaymentRequestWebContentsManager* manager_;
-  PaymentRequestDisplayManager* display_manager_;
+  base::WeakPtr<PaymentRequestWebContentsManager> manager_;
+  base::WeakPtr<PaymentRequestDisplayManager> display_manager_;
   std::unique_ptr<PaymentRequestDisplayManager::DisplayHandle> display_handle_;
   mojo::Receiver<mojom::PaymentRequest> receiver_{this};
   mojo::Remote<mojom::PaymentRequestClient> client_;
@@ -266,12 +270,16 @@ class PaymentRequest : public mojom::PaymentRequest,
   // Whether PaymentRequest.show() has been called.
   bool is_show_called_ = false;
 
-  // If not empty, use this error message for rejecting PaymentRequest.show().
+  // Whether PaymentRequestState::AreRequestedMethodsSupported callback has been
+  // invoked. This is distinct from state_->IsInitialized(), because the
+  // callback is asynchronous.
+  bool is_requested_methods_supported_invoked_ = false;
+
+  // If not empty, use this error message for rejecting
+  // PaymentRequest.show().
   std::string reject_show_error_message_;
 
   base::WeakPtrFactory<PaymentRequest> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PaymentRequest);
 };
 
 }  // namespace payments

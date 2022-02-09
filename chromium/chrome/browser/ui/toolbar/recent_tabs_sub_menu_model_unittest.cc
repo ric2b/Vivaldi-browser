@@ -20,6 +20,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/sessions/chrome_tab_restore_service_client.h"
+#include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -60,6 +61,10 @@ class TestRecentTabsSubMenuModel : public RecentTabsSubMenuModel {
         execute_count_(0),
         enable_count_(0) {}
 
+  TestRecentTabsSubMenuModel(const TestRecentTabsSubMenuModel&) = delete;
+  TestRecentTabsSubMenuModel& operator=(const TestRecentTabsSubMenuModel&) =
+      delete;
+
   // Testing overrides to ui::SimpleMenuModel::Delegate:
   bool IsCommandIdEnabled(int command_id) const override {
     bool val = RecentTabsSubMenuModel::IsCommandIdEnabled(command_id);
@@ -78,8 +83,6 @@ class TestRecentTabsSubMenuModel : public RecentTabsSubMenuModel {
  private:
   int execute_count_;
   int mutable enable_count_;  // Mutable because IsCommandIdEnabledAt is const.
-
-  DISALLOW_COPY_AND_ASSIGN(TestRecentTabsSubMenuModel);
 };
 
 class TestRecentTabsMenuModelDelegate : public ui::MenuModelDelegate {
@@ -89,6 +92,11 @@ class TestRecentTabsMenuModelDelegate : public ui::MenuModelDelegate {
         got_changes_(false) {
     model_->SetMenuModelDelegate(this);
   }
+
+  TestRecentTabsMenuModelDelegate(const TestRecentTabsMenuModelDelegate&) =
+      delete;
+  TestRecentTabsMenuModelDelegate& operator=(
+      const TestRecentTabsMenuModelDelegate&) = delete;
 
   ~TestRecentTabsMenuModelDelegate() override {
     model_->SetMenuModelDelegate(nullptr);
@@ -105,8 +113,6 @@ class TestRecentTabsMenuModelDelegate : public ui::MenuModelDelegate {
  private:
   ui::MenuModel* model_;
   bool got_changes_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestRecentTabsMenuModelDelegate);
 };
 
 }  // namespace
@@ -115,6 +121,10 @@ class RecentTabsSubMenuModelTest
     : public BrowserWithTestWindowTest {
  public:
   RecentTabsSubMenuModelTest() {}
+
+  RecentTabsSubMenuModelTest(const RecentTabsSubMenuModelTest&) = delete;
+  RecentTabsSubMenuModelTest& operator=(const RecentTabsSubMenuModelTest&) =
+      delete;
 
   void WaitForLoadFromLastSession() { content::RunAllTasksUntilIdle(); }
 
@@ -171,8 +181,6 @@ class RecentTabsSubMenuModelTest
  private:
   sync_sessions::SessionSyncService* session_sync_service_;
   std::unique_ptr<syncer::ModelTypeProcessor> sync_processor_;
-
-  DISALLOW_COPY_AND_ASSIGN(RecentTabsSubMenuModelTest);
 };
 
 // Test disabled "Recently closed" header with no foreign tabs.
@@ -266,11 +274,20 @@ TEST_F(RecentTabsSubMenuModelTest, RecentlyClosedTabsFromCurrentSession) {
   EXPECT_FALSE(model.GetURLAndTitleForItemAtIndex(6, &url, &title));
 }
 
+class RecentTabsSubMenuModelTabRestoreTest : public RecentTabsSubMenuModelTest {
+ public:
+  RecentTabsSubMenuModelTabRestoreTest() {
+    scoped_features_.InitAndEnableFeature(features::kTabRestoreSubMenus);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_features_;
+};
+
 // Test recently closed groups with no foreign tabs.
-TEST_F(RecentTabsSubMenuModelTest, RecentlyClosedGroupsFromCurrentSession) {
+TEST_F(RecentTabsSubMenuModelTabRestoreTest,
+       RecentlyClosedGroupsFromCurrentSession) {
   DisableSync();
-  base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(features::kTabRestoreSubMenus);
 
   TabRestoreServiceFactory::GetInstance()->SetTestingFactory(
       profile(),
@@ -335,10 +352,8 @@ TEST_F(RecentTabsSubMenuModelTest, RecentlyClosedGroupsFromCurrentSession) {
   EXPECT_FALSE(model.GetURLAndTitleForItemAtIndex(6, &url, &title));
 }
 
-TEST_F(RecentTabsSubMenuModelTest,
+TEST_F(RecentTabsSubMenuModelTabRestoreTest,
        RecentlyClosedTabsAndWindowsFromLastSession) {
-  base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(features::kTabRestoreSubMenus);
   DisableSync();
 
   TabRestoreServiceFactory::GetInstance()->SetTestingFactory(
@@ -377,7 +392,8 @@ TEST_F(RecentTabsSubMenuModelTest,
       sessions::ContentTestHelper::CreateNavigation("http://wnd1/tab1",
                                                     "title"));
   // Set this, otherwise previous session won't be loaded.
-  profile()->set_last_session_exited_cleanly(false);
+  ExitTypeService::GetInstanceForProfile(profile())
+      ->SetLastSessionExitTypeForTest(ExitType::kCrashed);
   // Move this session to the last so that TabRestoreService will load it as the
   // last session.
   SessionServiceFactory::GetForProfile(profile())->
@@ -482,7 +498,7 @@ TEST_F(RecentTabsSubMenuModelTest,
 TEST_F(RecentTabsSubMenuModelTest, OtherDevices) {
   // Tabs are populated in decreasing timestamp.
   base::Time timestamp = base::Time::Now();
-  const base::TimeDelta time_delta = base::TimeDelta::FromMinutes(10);
+  const base::TimeDelta time_delta = base::Minutes(10);
 
   RecentTabsBuilderTestHelper recent_tabs_builder;
 
@@ -585,8 +601,7 @@ TEST_F(RecentTabsSubMenuModelTest, OtherDevicesDynamicUpdate) {
   DisableSync();
 
   // Before creating menu fill foreign sessions.
-  base::Time update_timestamp =
-      base::Time::Now() - base::TimeDelta::FromMinutes(10);
+  base::Time update_timestamp = base::Time::Now() - base::Minutes(10);
 
   RecentTabsBuilderTestHelper recent_tabs_builder;
 
@@ -657,7 +672,7 @@ TEST_F(RecentTabsSubMenuModelTest, OtherDevicesDynamicUpdate) {
   previous_enable_count = model.enable_count();
   previous_execute_count = model.execute_count();
 
-  update_timestamp = base::Time::Now() - base::TimeDelta::FromMinutes(5);
+  update_timestamp = base::Time::Now() - base::Minutes(5);
 
   // Add tab to the only window.
   recent_tabs_builder.AddTabWithInfo(0, 0, update_timestamp, std::u16string());

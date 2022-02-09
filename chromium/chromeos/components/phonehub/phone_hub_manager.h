@@ -10,6 +10,8 @@
 namespace chromeos {
 namespace phonehub {
 
+class BrowserTabsModelProvider;
+class CameraRollManager;
 class ConnectionScheduler;
 class DoNotDisturbController;
 class FeatureStatusProvider;
@@ -20,9 +22,9 @@ class NotificationInteractionHandler;
 class OnboardingUiTracker;
 class PhoneModel;
 class RecentAppsInteractionHandler;
+class ScreenLockManager;
 class TetherController;
 class UserActionRecorder;
-class BrowserTabsModelProvider;
 
 // Responsible for the core logic of the Phone Hub feature and exposes
 // interfaces via its public API. This class is intended to be a singleton.
@@ -35,6 +37,7 @@ class PhoneHubManager {
 
   // Getters for sub-elements.
   virtual BrowserTabsModelProvider* GetBrowserTabsModelProvider() = 0;
+  virtual CameraRollManager* GetCameraRollManager() = 0;
   virtual ConnectionScheduler* GetConnectionScheduler() = 0;
   virtual DoNotDisturbController* GetDoNotDisturbController() = 0;
   virtual FeatureStatusProvider* GetFeatureStatusProvider() = 0;
@@ -46,6 +49,7 @@ class PhoneHubManager {
   virtual OnboardingUiTracker* GetOnboardingUiTracker() = 0;
   virtual PhoneModel* GetPhoneModel() = 0;
   virtual RecentAppsInteractionHandler* GetRecentAppsInteractionHandler() = 0;
+  virtual ScreenLockManager* GetScreenLockManager() = 0;
   virtual TetherController* GetTetherController() = 0;
   virtual UserActionRecorder* GetUserActionRecorder() = 0;
 
@@ -55,5 +59,12 @@ class PhoneHubManager {
 
 }  // namespace phonehub
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove after the migration is finished.
+namespace ash {
+namespace phonehub {
+using ::chromeos::phonehub::PhoneHubManager;
+}
+}  // namespace ash
 
 #endif  // CHROMEOS_COMPONENTS_PHONEHUB_PHONE_HUB_MANAGER_H_

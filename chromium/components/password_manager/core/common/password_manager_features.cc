@@ -29,17 +29,13 @@ const base::Feature kDetectFormSubmissionOnFormClear = {
 
 // Enables the editing of passwords in Chrome settings.
 const base::Feature kEditPasswordsInSettings = {
-#if defined(OS_ANDROID)
-    "EditPasswordsInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
-#else
     "EditPasswordsInSettings", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
 
 // Enables UI that allows the user to create a strong password even if the field
 // wasn't parsed as a new password field.
 // TODO(crbug/1181254): Remove once it's launched.
 const base::Feature kEnableManualPasswordGeneration = {
-    "EnableManualPasswordGeneration", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableManualPasswordGeneration", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables UI in settings that allows the user to move multiple passwords to the
 // account storage.
@@ -72,12 +68,6 @@ const base::Feature KEnablePasswordGenerationForClearTextFields = {
 const base::Feature kFillingAcrossAffiliatedWebsites{
     "FillingAcrossAffiliatedWebsites", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables showing UI button in password fallback sheet.
-// The button opens a different sheet that allows filling a password from any
-// origin.
-const base::Feature kFillingPasswordsFromAnyOrigin{
-    "FillingPasswordsFromAnyOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
@@ -88,10 +78,6 @@ const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
 // TODO(crbug.com/1164861): Remove once confirmed to be safe (around M92 or so).
 const base::Feature kInferConfirmationPasswordField = {
     "InferConfirmationPasswordField", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables respecting of insecure credential muting state.
-const base::Feature kMutingCompromisedCredentials{
-    "MutingCompromisedCredentials", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables password change flow from leaked password dialog.
 const base::Feature kPasswordChange = {"PasswordChange",
@@ -147,6 +133,12 @@ const base::Feature kTreatNewPasswordHeuristicsAsReliable = {
 // database will be unused but kept in sync for local passwords.
 const base::Feature kUnifiedPasswordManagerAndroid{
     "UnifiedPasswordManagerAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Sends shadow traffic to Google Mobile Services for password storage. This
+// allows to check stability without switching away from the local storage as
+// source of truth.
+const base::Feature kUnifiedPasswordManagerShadowAndroid{
+    "UnifiedPasswordManagerShadowAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables support of sending votes on username first flow. The votes are sent
 // on single username forms and are based on user interaction with the save

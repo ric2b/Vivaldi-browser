@@ -36,6 +36,8 @@ class CustomMetaInfo {
  public:
   CustomMetaInfo();
   ~CustomMetaInfo();
+  CustomMetaInfo(const CustomMetaInfo&) = delete;
+  CustomMetaInfo& operator=(const CustomMetaInfo&) = delete;
 
   const BookmarkNode::MetaInfoMap* map() const { return &map_; }
   void SetMap(const BookmarkNode::MetaInfoMap& map);
@@ -51,7 +53,6 @@ class CustomMetaInfo {
 
  private:
   BookmarkNode::MetaInfoMap map_;
-  DISALLOW_COPY_AND_ASSIGN(CustomMetaInfo);
 };
 
 bool GetSpeeddial(const BookmarkNode* node);

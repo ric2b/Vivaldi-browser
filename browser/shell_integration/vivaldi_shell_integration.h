@@ -10,4 +10,4 @@ bool IsChromeDefaultBrowser();
 // user. This method is very fast so it can be invoked in the UI thread.
 bool IsOperaDefaultBrowser();
 
-} //  namespace vivaldi
+}  //  namespace vivaldi

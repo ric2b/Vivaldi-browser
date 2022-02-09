@@ -6,8 +6,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
-#include "mojo/public/cpp/bindings/receiver.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
 namespace content {
 class RenderFrameHost;
@@ -31,12 +31,12 @@ class CosmeticFilter : public mojom::CosmeticFilter {
 
  private:
   CosmeticFilter(int process_id, int frame_id);
+  CosmeticFilter(const CosmeticFilter&) = delete;
+  CosmeticFilter& operator=(const CosmeticFilter&) = delete;
 
   int process_id_;
   int frame_id_;
   std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount> index_managers_;
-
-  DISALLOW_COPY_AND_ASSIGN(CosmeticFilter);
 };
 
 }  // namespace adblock_filter

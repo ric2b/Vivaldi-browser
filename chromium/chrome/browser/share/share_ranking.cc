@@ -4,24 +4,27 @@
 
 #include "chrome/browser/share/share_ranking.h"
 
-#include "base/android/callback_android.h"
-#include "base/android/jni_array.h"
-#include "base/android/jni_string.h"
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/share/default_ranking.h"
 #include "chrome/browser/share/share_history.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "content/public/browser/storage_partition.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/callback_android.h"
+#include "base/android/jni_array.h"
+#include "base/android/jni_string.h"
+#include "chrome/browser/profiles/profile_android.h"
+
 #include "chrome/browser/share/jni_headers/ShareRankingBridge_jni.h"
 
 using base::android::JavaParamRef;
+#endif
 
 namespace sharing {
 
@@ -41,7 +44,7 @@ std::unique_ptr<ShareRanking::BackingDb> MakeDefaultDbForProfile(
       ->GetProtoDatabaseProvider()
       ->GetDB<proto::ShareRanking>(
           leveldb_proto::ProtoDbType::SHARE_RANKING_DATABASE,
-          profile->GetPath().Append(kShareRankingFolder),
+          profile->GetPath().AppendASCII(kShareRankingFolder),
           base::ThreadPool::CreateSequencedTaskRunner(
               {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
 }
@@ -108,14 +111,28 @@ std::vector<std::string> ReplaceUnavailableEntries(
 void FillGaps(std::vector<std::string>& ranking,
               const std::vector<std::string>& available,
               unsigned int length) {
-  std::vector<std::string> unused_available = available;
+  // Take the tail of the ranking (the part that won't be shown on the screen),
+  // remove items that aren't available on the system. These will be the first
+  // apps used for empty slots.
+  std::vector<std::string> unused_available(ranking.begin() + length,
+                                            ranking.end());
 
   unused_available.erase(
-      std::remove_if(unused_available.begin(), unused_available.end(),
-                     [&](const std::string& e) {
-                       return RankingContains(ranking, e, length);
-                     }),
+      std::remove_if(
+          unused_available.begin(), unused_available.end(),
+          [&](const std::string& e) { return !RankingContains(available, e); }),
       unused_available.end());
+
+  // Now, append the rest of the system apps (those not already included) to
+  // unused_available. These will be the apps that can handle the share type and
+  // that are available on the system but not included in the old ranking at
+  // all, so these are the lowest priority targets, because they are likely to
+  // be things like "Bluetooth" which users almost never share to.
+  for (const auto& app : available) {
+    if (!RankingContains(unused_available, app))
+      unused_available.push_back(app);
+  }
+
   auto next_unused = unused_available.begin();
 
   DCHECK_GE(ranking.size(), length);
@@ -168,12 +185,14 @@ std::vector<std::string> MaybeUpdateRankingFromHistory(
   return new_ranking;
 }
 
+#if defined(OS_ANDROID)
 void RunJniRankCallback(base::android::ScopedJavaGlobalRef<jobject> callback,
                         JNIEnv* env,
                         absl::optional<ShareRanking::Ranking> ranking) {
   auto result = base::android::ToJavaArrayOfStrings(env, ranking.value());
   base::android::RunObjectCallbackAndroid(callback, result);
 }
+#endif
 
 #if DCHECK_IS_ON()
 bool EveryElementInList(const std::vector<std::string>& ranking,
@@ -439,7 +458,8 @@ void ShareRanking::OnRankGetAllDone(std::unique_ptr<PendingRankCall> pending,
                                     std::vector<ShareHistory::Target> history) {
   pending->all_history = history;
   if (pending->history_db) {
-    pending->history_db->GetFlatShareHistory(
+    auto history_db = pending->history_db;
+    history_db->GetFlatShareHistory(
         base::BindOnce(&ShareRanking::OnRankGetRecentDone,
                        weak_factory_.GetWeakPtr(), std::move(pending)),
         kRecentWindowDays);
@@ -451,7 +471,9 @@ void ShareRanking::OnRankGetRecentDone(
     std::unique_ptr<PendingRankCall> pending,
     std::vector<ShareHistory::Target> history) {
   pending->recent_history = history;
-  GetRanking(pending->type,
+  // Grab the type out of pending before std::move()ing from it.
+  std::string type = pending->type;
+  GetRanking(type,
              base::BindOnce(&ShareRanking::OnRankGetOldRankingDone,
                             weak_factory_.GetWeakPtr(), std::move(pending)));
 }
@@ -481,6 +503,8 @@ ShareRanking::Ranking ShareRanking::GetDefaultInitialRankingForType(
 }
 
 }  // namespace sharing
+
+#if defined(OS_ANDROID)
 
 void JNI_ShareRankingBridge_Rank(JNIEnv* env,
                                  const JavaParamRef<jobject>& jprofile,
@@ -519,3 +543,5 @@ void JNI_ShareRankingBridge_Rank(JNIEnv* env,
                      // TODO(ellyjones): Is it safe to unretained env here?
                      base::Unretained(env)));
 }
+
+#endif  // OS_ANDROID

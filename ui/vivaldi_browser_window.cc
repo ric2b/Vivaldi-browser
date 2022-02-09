@@ -97,6 +97,9 @@
 #include "chrome/browser/win/jumplist_factory.h"
 #endif
 
+// The document loaded in the browser-window content.
+#define VIVALDI_BROWSER_DOCUMENT "browser.html"
+
 VivaldiAutofillBubbleHandler::VivaldiAutofillBubbleHandler() {}
 VivaldiAutofillBubbleHandler::~VivaldiAutofillBubbleHandler() {}
 
@@ -168,7 +171,9 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
     Browser* browser,
     content::RenderFrameHost* creator_frame,
     const GURL& app_url) {
-  Profile* profile = browser->profile();
+  // NOTE(andre@vivaldi.com) : We cannot use incognito profiles for the
+  // webcontents in the ui if we are doing portals.
+  Profile* profile = browser->profile()->GetOriginalProfile();
   scoped_refptr<content::SiteInstance> site_instance =
       content::SiteInstance::CreateForURL(profile, app_url);
 
@@ -257,7 +262,8 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::FromBrowser(
   return static_cast<VivaldiBrowserWindow*>(browser->window());
 }
 
-VivaldiBrowserWindow* VivaldiBrowserWindow::FromId(SessionID::id_type window_id) {
+VivaldiBrowserWindow* VivaldiBrowserWindow::FromId(
+    SessionID::id_type window_id) {
   Browser* browser = vivaldi::FindBrowserByWindowId(window_id);
   VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
   if (window && !window->web_contents()) {
@@ -278,7 +284,7 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
       vivaldiprefs::kWindowsUseNativeDecoration);
   chrome::GetSavedWindowBoundsAndShowState(
       browser.get(), &params.content_bounds, &params.state);
-  params.resource_relative_url = "browser.html";
+  params.resource_relative_url = VIVALDI_BROWSER_DOCUMENT;
 
   VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
   window->CreateWebContents(std::move(browser), params);
@@ -367,7 +373,7 @@ void VivaldiBrowserWindow::CreateWebContents(
     if (!resource.empty()) {
       info_list.push_back(extensions::ImageLoader::ImageRepresentation(
           resource, extensions::ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
-          gfx::Size(iter.first, iter.first), ui::SCALE_FACTOR_100P));
+          gfx::Size(iter.first, iter.first), ui::k100Percent));
     }
   }
   extensions::ImageLoader* loader = extensions::ImageLoader::Get(GetProfile());
@@ -762,7 +768,7 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
   }
 #endif  // defined(OS_MAC)
 
-  extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(browser_->profile(),
+  extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(id(), browser_->profile(),
                                                          event, is_auto_repeat);
 
   return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
@@ -816,7 +822,7 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
   gfx::Rect anchor_rect = gfx::Rect(pos, gfx::Size());
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
-          nullptr, anchor_rect, GetNativeWindow(), profile, web_contents, url,
+          nullptr, anchor_rect, GetNativeWindow(), web_contents, url,
           // Use a simple lambda for the callback. We do not do anything there.
           base::BindOnce([](views::Widget::ClosedReason closed_reason,
                             bool reload_prompt) {}));
@@ -869,6 +875,10 @@ void VivaldiBrowserWindow::UpdateExclusiveAccessExitBubbleContent(
     ExclusiveAccessBubbleType bubble_type,
     ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
     bool force_update) {}
+
+bool VivaldiBrowserWindow::IsExclusiveAccessBubbleDisplayed() const {
+  return false;
+}
 
 void VivaldiBrowserWindow::OnExclusiveAccessUserInput() {}
 
@@ -1031,7 +1041,7 @@ void VivaldiBrowserWindow::OnNativeClose() {
   // TODO(all): There is missing cleanup in chromium code. See VB-34358.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
-                                     base::Unretained(this)));
+                                base::Unretained(this)));
 }
 
 void VivaldiBrowserWindow::DeleteThis() {
@@ -1159,7 +1169,8 @@ void VivaldiBrowserWindow::OnStateChanged(ui::WindowShowState state) {
   WindowState window_state = ConvertFromWindowShowState(state);
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnStateChanged::kEventName,
-      extensions::vivaldi::window_private::OnStateChanged::Create(id(), window_state),
+      extensions::vivaldi::window_private::OnStateChanged::Create(id(),
+                                                                  window_state),
       browser_->profile());
 }
 
@@ -1301,7 +1312,8 @@ qrcode_generator::QRCodeGeneratorBubbleView*
 VivaldiBrowserWindow::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
     qrcode_generator::QRCodeGeneratorBubbleController* controller,
-    const GURL& url) {
+    const GURL& url,
+    bool show_back_button) {
   sessions::SessionTabHelper* const session_tab_helper =
       sessions::SessionTabHelper::FromWebContents(contents);
 

@@ -18,8 +18,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
@@ -184,16 +184,6 @@ AppsNavigationThrottle::CaptureWebAppScopeNavigations(
       provider->registrar().IsTabbedWindowModeEnabled(*app_id);
   bool tabbed_link_capturing =
       base::FeatureList::IsEnabled(features::kDesktopPWAsTabStripLinkCapturing);
-  bool web_apps_integrated_into_intent_handling =
-      base::FeatureList::IsEnabled(features::kIntentPickerPWAPersistence);
-
-  // This particular link capturing code path only applies to tabbed web app
-  // link capturing and the version of declarative link capturing that has not
-  // yet integrated with app service's intent handling system.
-  if ((!app_in_tabbed_mode || !tabbed_link_capturing) &&
-      web_apps_integrated_into_intent_handling) {
-    return absl::nullopt;
-  }
 
   auto* tab_helper = web_app::WebAppTabHelper::FromWebContents(web_contents);
   if (tab_helper && tab_helper->GetAppId() == *app_id) {
@@ -257,7 +247,7 @@ AppsNavigationThrottle::CaptureWebAppScopeNavigations(
 
       apps::AppLaunchParams launch_params(
           *app_id, apps::mojom::LaunchContainer::kLaunchContainerWindow,
-          WindowOpenDisposition::CURRENT_TAB,
+          WindowOpenDisposition::NEW_FOREGROUND_TAB,
           apps::mojom::AppLaunchSource::kSourceUrlHandler);
       launch_params.override_url = handle->GetURL();
       apps::AppServiceProxyFactory::GetForProfile(profile)

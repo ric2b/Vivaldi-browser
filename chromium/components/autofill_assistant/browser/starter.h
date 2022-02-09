@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_STARTER_H_
 
 #include <memory>
+#include <set>
 
 #include "base/containers/mru_cache.h"
 #include "base/memory/ref_counted.h"
@@ -55,8 +56,7 @@ class Starter : public content::WebContentsObserver {
   void Start(std::unique_ptr<TriggerContext> trigger_context);
 
   // content::WebContentsObserver:
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void PrimaryPageChanged(content::Page& page) override;
 
   // Invoked when the tab interactability has changed.
   void OnTabInteractabilityChanged(bool is_interactable);
@@ -119,7 +119,7 @@ class Starter : public content::WebContentsObserver {
   // Called when the heuristic result for |url| is available.
   void OnHeuristicMatch(const GURL& url,
                         const ukm::SourceId source_id,
-                        absl::optional<std::string> intent);
+                        const std::set<std::string>& intents);
 
   // Returns whether there is a currently pending call to |Start| or not.
   bool IsStartupPending() const;

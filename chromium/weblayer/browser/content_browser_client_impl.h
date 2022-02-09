@@ -24,6 +24,14 @@ namespace blink {
 class StorageKey;
 }  // namespace blink
 
+namespace net {
+class SiteForCookies;
+}  // namespace net
+
+namespace permissions {
+class BluetoothDelegateImpl;
+}
+
 namespace weblayer {
 
 class FeatureListCreator;
@@ -45,17 +53,17 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
   bool AllowAppCache(const GURL& manifest_url,
-                     const GURL& site_for_cookies,
+                     const net::SiteForCookies& site_for_cookies,
                      const absl::optional<url::Origin>& top_frame_origin,
                      content::BrowserContext* context) override;
   content::AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
       content::BrowserContext* context) override;
   bool AllowSharedWorker(const GURL& worker_url,
-                         const GURL& site_for_cookies,
+                         const net::SiteForCookies& site_for_cookies,
                          const absl::optional<url::Origin>& top_frame_origin,
                          const std::string& name,
                          const blink::StorageKey& storage_key,
@@ -115,7 +123,8 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   void OverridePageVisibilityState(
       content::RenderFrameHost* render_frame_host,
       content::PageVisibilityState* visibility_state) override;
-  bool ShouldDisableSiteIsolation() override;
+  bool ShouldDisableSiteIsolation(
+      content::SiteIsolationMode site_isolation_mode) override;
   std::vector<std::string> GetAdditionalSiteIsolationModes() override;
   void PersistIsolatedOrigin(
       content::BrowserContext* context,
@@ -209,6 +218,7 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   std::unique_ptr<content::TtsEnvironmentAndroid> CreateTtsEnvironmentAndroid()
       override;
   bool ShouldObserveContainerViewLocationForDialogOverlays() override;
+  content::BluetoothDelegate* GetBluetoothDelegate() override;
 #endif  // OS_ANDROID
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
@@ -227,6 +237,8 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
 
 #if defined(OS_ANDROID)
   SafeBrowsingService* GetSafeBrowsingService();
+
+  std::unique_ptr<permissions::BluetoothDelegateImpl> bluetooth_delegate_;
 #endif
 
   MainParams* params_;

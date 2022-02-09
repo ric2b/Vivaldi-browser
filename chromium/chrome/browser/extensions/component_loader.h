@@ -34,6 +34,10 @@ class ExtensionSystem;
 class ComponentLoader {
  public:
   ComponentLoader(ExtensionSystem* extension_system, Profile* browser_context);
+
+  ComponentLoader(const ComponentLoader&) = delete;
+  ComponentLoader& operator=(const ComponentLoader&) = delete;
+
   virtual ~ComponentLoader();
 
   size_t registered_extensions_count() const {
@@ -134,6 +138,10 @@ class ComponentLoader {
     ComponentExtensionInfo(
         std::unique_ptr<base::DictionaryValue> manifest_param,
         const base::FilePath& root_directory);
+
+    ComponentExtensionInfo(const ComponentExtensionInfo&) = delete;
+    ComponentExtensionInfo& operator=(const ComponentExtensionInfo&) = delete;
+
     ~ComponentExtensionInfo();
 
     ComponentExtensionInfo(ComponentExtensionInfo&& other);
@@ -147,9 +155,6 @@ class ComponentLoader {
 
     // The component extension's ID.
     std::string extension_id;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(ComponentExtensionInfo);
   };
 
   // Parses the given JSON manifest. Returns nullptr if it cannot be parsed or
@@ -179,6 +184,7 @@ class ComponentLoader {
 
   void AddVivaldiApp(const base::FilePath* path);
   void AddVivaldiPIP();
+  void AddVivaldiThemeStore();
 
   void AddWithNameAndDescription(int manifest_resource_id,
                                  const base::FilePath& root_directory,
@@ -196,7 +202,6 @@ class ComponentLoader {
   void AddGuestModeTestExtension(const base::FilePath& path);
   void AddKeyboardApp();
   void AddChromeCameraApp();
-  void AddZipArchiverExtension();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   scoped_refptr<const Extension> CreateExtension(
@@ -234,8 +239,6 @@ class ComponentLoader {
   base::WeakPtrFactory<ComponentLoader> weak_factory_{this};
 
   friend class TtsApiTest;
-
-  DISALLOW_COPY_AND_ASSIGN(ComponentLoader);
 };
 
 }  // namespace extensions

@@ -11,4 +11,6 @@ declare_args() {
   vivaldi_oauth_client_id = ""
   # Google OAuth API client secret
   vivaldi_oauth_client_secret = ""
+  # Microsoft OAuth Application (client) ID
+  vivaldi_microsoft_oauth_client_id = ""
 }

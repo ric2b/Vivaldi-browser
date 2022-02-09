@@ -26,6 +26,7 @@ class SyncService;
 
 class AuthenticationServiceDelegate;
 class AuthenticationServiceFake;
+class AuthenticationServiceObserver;
 @class ChromeIdentity;
 class PrefService;
 class SyncSetupService;
@@ -34,14 +35,20 @@ class SyncSetupService;
 // authentication library.
 class AuthenticationService : public KeyedService,
                               public signin::IdentityManager::Observer,
+                              public ios::ChromeBrowserProvider::Observer,
                               public ios::ChromeIdentityService::Observer,
                               public ChromeAccountManagerService::Observer {
  public:
+  // Initializes the service.
   AuthenticationService(PrefService* pref_service,
                         SyncSetupService* sync_setup_service,
                         ChromeAccountManagerService* account_manager_service,
                         signin::IdentityManager* identity_manager,
                         syncer::SyncService* sync_service);
+
+  AuthenticationService(const AuthenticationService&) = delete;
+  AuthenticationService& operator=(const AuthenticationService&) = delete;
+
   ~AuthenticationService() override;
 
   // Registers the preferences used by AuthenticationService;
@@ -57,6 +64,10 @@ class AuthenticationService : public KeyedService,
 
   // KeyedService
   void Shutdown() override;
+
+  // Adds and removes observers.
+  void AddObserver(AuthenticationServiceObserver* observer);
+  void RemoveObserver(AuthenticationServiceObserver* observer);
 
   // Reminds user to Sign in and sync to Chrome when a new tab is opened.
   void SetReauthPromptForSignInAndSync();
@@ -127,11 +138,6 @@ class AuthenticationService : public KeyedService,
   // error. Returns true if |identity| had an associated error, false otherwise.
   bool ShowMDMErrorDialogForIdentity(ChromeIdentity* identity);
 
-  // Resets the ChromeIdentityService observer to the one available in the
-  // ChromeBrowserProvider. Used for testing when changing the
-  // ChromeIdentityService to or from a fake one.
-  void ResetChromeIdentityServiceObserverForTesting();
-
   // Returns a weak pointer of this.
   base::WeakPtr<AuthenticationService> GetWeakPtr();
 
@@ -139,9 +145,14 @@ class AuthenticationService : public KeyedService,
   // sync the accounts between the IdentityManager and the SSO library.
   void OnApplicationWillEnterForeground();
 
+  // ChromeBrowserProvider implementation.
+  void OnChromeIdentityServiceDidChange(
+      ios::ChromeIdentityService* new_service) override;
+  void OnChromeBrowserProviderWillBeDestroyed() override;
+
  private:
-  friend class AuthenticationServiceTest;
   friend class AuthenticationServiceFake;
+  friend class AuthenticationServiceTest;
 
   // Migrates the token service accounts stored in prefs from emails to account
   // ids.
@@ -189,6 +200,9 @@ class AuthenticationService : public KeyedService,
   // ChromeAccountManagerServiceObserver implementation.
   void OnIdentityListChanged(bool need_user_approval) override;
 
+  // Fires |OnPrimaryAccountRestricted| on all observers.
+  void FirePrimaryAccountRestricted();
+
   // The delegate for this AuthenticationService. It is invalid to call any
   // method on this object except Initialize() or Shutdown() if this pointer
   // is null.
@@ -200,7 +214,7 @@ class AuthenticationService : public KeyedService,
   ChromeAccountManagerService* account_manager_service_ = nullptr;
   signin::IdentityManager* identity_manager_ = nullptr;
   syncer::SyncService* sync_service_ = nullptr;
-
+  base::ObserverList<AuthenticationServiceObserver, true> observer_list_;
   // Whether Initialized has been called.
   bool initialized_ = false;
 
@@ -210,6 +224,10 @@ class AuthenticationService : public KeyedService,
   // Whether the AuthenticationService is currently reloading credentials, used
   // to avoid an infinite reloading loop.
   bool is_reloading_credentials_ = false;
+
+  // Whether the primary account was logged out because it became restricted.
+  // It is used to respond to late observers.
+  bool primary_account_was_restricted_ = false;
 
   // Map between account IDs and their associated MDM error.
   mutable std::map<CoreAccountId, NSDictionary*> cached_mdm_infos_;
@@ -227,8 +245,6 @@ class AuthenticationService : public KeyedService,
       account_manager_service_observation_{this};
 
   base::WeakPtrFactory<AuthenticationService> weak_pointer_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(AuthenticationService);
 };
 
 #endif  // IOS_CHROME_BROWSER_SIGNIN_AUTHENTICATION_SERVICE_H_

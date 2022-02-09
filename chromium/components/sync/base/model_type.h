@@ -16,7 +16,7 @@
 namespace base {
 class ListValue;
 class Value;
-}
+}  // namespace base
 
 namespace sync_pb {
 class EntitySpecifics;
@@ -139,16 +139,13 @@ enum ModelType {
   // Notes items
   NOTES,
 
-  // ---- Proxy types ----
   // Proxy types are excluded from the sync protocol, but are still considered
   // real user types. By convention, we prefix them with 'PROXY_' to distinguish
   // them from normal protocol types.
-
+  //
   // Tab sync. This is a placeholder type, so that Sessions can be implicitly
   // enabled for history sync and tabs sync.
   PROXY_TABS,
-  FIRST_PROXY_TYPE = PROXY_TABS,
-  LAST_PROXY_TYPE = PROXY_TABS,
   LAST_USER_MODEL_TYPE = PROXY_TABS,
 
   // ---- Control Types ----
@@ -311,13 +308,6 @@ constexpr ModelTypeSet PriorityUserTypes() {
       THEMES);
 }
 
-// Proxy types are placeholder types for handling implicitly enabling real
-// types. They do not exist at the server, and are simply used for
-// UI/Configuration logic.
-constexpr ModelTypeSet ProxyTypes() {
-  return ModelTypeSet::FromRange(FIRST_PROXY_TYPE, LAST_PROXY_TYPE);
-}
-
 // Returns a list of all control types.
 //
 // The control types are intended to contain metadata nodes that are essential
@@ -437,9 +427,6 @@ bool NotificationTypeToRealModelType(const std::string& notification_type,
 
 // Returns true if |model_type| is a real datatype
 bool IsRealDataType(ModelType model_type);
-
-// Returns true if |model_type| is a proxy type
-bool IsProxyType(ModelType model_type);
 
 // Returns true if |model_type| is an act-once type. Act once types drop
 // entities after applying them. Drops are deletes that are not synced to other

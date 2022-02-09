@@ -15,27 +15,29 @@ class VideoDecoder;
 class MockGpuVideoAcceleratorFactories;
 
 class PlatformPipelineTestBase {
-public:
- PlatformPipelineTestBase();
- virtual ~PlatformPipelineTestBase();
-protected:
+ public:
+  PlatformPipelineTestBase();
+  virtual ~PlatformPipelineTestBase();
 
-  Demuxer * CreatePlatformDemuxer(std::unique_ptr<DataSource> & data_source,
-                                  base::test::TaskEnvironment & task_environment_,
-                                  MediaLog* media_log);
+ protected:
+  Demuxer* CreatePlatformDemuxer(std::unique_ptr<DataSource>& data_source,
+                                 base::test::TaskEnvironment& task_environment_,
+                                 MediaLog* media_log);
 
-  void AppendPlatformAudioDecoders(std::vector<std::unique_ptr<AudioDecoder>> & audio_decoders,
-          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
+  void AppendPlatformAudioDecoders(
+      std::vector<std::unique_ptr<AudioDecoder>>& audio_decoders,
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
 
-  void AppendPlatformVideoDecoders(std::vector<std::unique_ptr<VideoDecoder>> & video_decoders,
-          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-          MediaLog* media_log);
+  void AppendPlatformVideoDecoders(
+      std::vector<std::unique_ptr<VideoDecoder>>& video_decoders,
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      MediaLog* media_log);
 
   std::unique_ptr<MockGpuVideoAcceleratorFactories>
       mock_video_accelerator_factories_;
   base::FilePath filepath_;
 };
 
-}
+}  // namespace media
 
-#endif // PLATFORM_MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H_
+#endif  // PLATFORM_MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H_

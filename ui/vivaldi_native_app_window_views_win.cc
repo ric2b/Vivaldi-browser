@@ -8,18 +8,18 @@
 
 #include <shobjidl.h>
 #include <wrl/client.h>
-#include "base/win/windows_version.h"
 #include "apps/ui/views/app_window_frame_view.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/windows_version.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/extension.h"
@@ -109,17 +109,17 @@ bool VivaldiNativeAppWindowViewsWin::IsOnCurrentWorkspace() const {
 
   Microsoft::WRL::ComPtr<IVirtualDesktopManager> virtual_desktop_manager;
   if (!SUCCEEDED(::CoCreateInstance(__uuidof(VirtualDesktopManager), nullptr,
-    CLSCTX_ALL,
-    IID_PPV_ARGS(&virtual_desktop_manager)))) {
+                                    CLSCTX_ALL,
+                                    IID_PPV_ARGS(&virtual_desktop_manager)))) {
     return true;
   }
 
   BOOL on_current_desktop;
   if (!native_win ||
-    FAILED(virtual_desktop_manager->IsWindowOnCurrentVirtualDesktop(
-      native_win->GetHost()->GetAcceleratedWidget(),
-      &on_current_desktop)) ||
-    on_current_desktop) {
+      FAILED(virtual_desktop_manager->IsWindowOnCurrentVirtualDesktop(
+          native_win->GetHost()->GetAcceleratedWidget(),
+          &on_current_desktop)) ||
+      on_current_desktop) {
     return true;
   }
 
@@ -129,8 +129,8 @@ bool VivaldiNativeAppWindowViewsWin::IsOnCurrentWorkspace() const {
   // it also returns GUID_NULL for the desktop id.
   GUID workspace_guid;
   return SUCCEEDED(virtual_desktop_manager->GetWindowDesktopId(
-    native_win->GetHost()->GetAcceleratedWidget(), &workspace_guid)) &&
-    workspace_guid != GUID_NULL;
+             native_win->GetHost()->GetAcceleratedWidget(), &workspace_guid)) &&
+         workspace_guid != GUID_NULL;
 }
 
 bool VivaldiNativeAppWindowViewsWin::CanMinimize() const {
@@ -147,36 +147,53 @@ void VivaldiNativeAppWindowViewsWin::UpdateEventTargeterWithInset() {
 ui::MenuModel* VivaldiNativeAppWindowViewsWin::GetSystemMenuModel() {
   if (!menu_model_builder_.get()) {
     menu_model_builder_.reset(
-      new VivaldiSystemMenuModelBuilder(window(), window()->browser()));
+        new VivaldiSystemMenuModelBuilder(window(), window()->browser()));
     menu_model_builder_->Init();
   }
   return menu_model_builder_->menu_model();
 }
 
-int VivaldiNativeAppWindowViewsWin::GetCommandIDForAppCommandID(int app_command_id) const {
+int VivaldiNativeAppWindowViewsWin::GetCommandIDForAppCommandID(
+    int app_command_id) const {
   switch (app_command_id) {
-    // NOTE: The order here matches the APPCOMMAND declaration order in the
-    // Windows headers.
-  case APPCOMMAND_BROWSER_BACKWARD: return IDC_BACK;
-  case APPCOMMAND_BROWSER_FORWARD:  return IDC_FORWARD;
-  case APPCOMMAND_BROWSER_REFRESH:  return IDC_RELOAD;
-  case APPCOMMAND_BROWSER_HOME:     return IDC_HOME;
-  case APPCOMMAND_BROWSER_STOP:     return IDC_STOP;
-  case APPCOMMAND_BROWSER_SEARCH:   return IDC_FOCUS_SEARCH;
-  case APPCOMMAND_HELP:             return IDC_HELP_PAGE_VIA_KEYBOARD;
-  case APPCOMMAND_NEW:              return IDC_NEW_TAB;
-  case APPCOMMAND_OPEN:             return IDC_OPEN_FILE;
-  case APPCOMMAND_CLOSE:            return IDC_CLOSE_TAB;
-  case APPCOMMAND_SAVE:             return IDC_SAVE_PAGE;
-  case APPCOMMAND_PRINT:            return IDC_PRINT;
-  case APPCOMMAND_COPY:             return IDC_COPY;
-  case APPCOMMAND_CUT:              return IDC_CUT;
-  case APPCOMMAND_PASTE:            return IDC_PASTE;
-    // TODO(pkasting): http://b/1113069 Handle these.
-  case APPCOMMAND_UNDO:
-  case APPCOMMAND_REDO:
-  case APPCOMMAND_SPELL_CHECK:
-  default:                          return -1;
+      // NOTE: The order here matches the APPCOMMAND declaration order in the
+      // Windows headers.
+    case APPCOMMAND_BROWSER_BACKWARD:
+      return IDC_BACK;
+    case APPCOMMAND_BROWSER_FORWARD:
+      return IDC_FORWARD;
+    case APPCOMMAND_BROWSER_REFRESH:
+      return IDC_RELOAD;
+    case APPCOMMAND_BROWSER_HOME:
+      return IDC_HOME;
+    case APPCOMMAND_BROWSER_STOP:
+      return IDC_STOP;
+    case APPCOMMAND_BROWSER_SEARCH:
+      return IDC_FOCUS_SEARCH;
+    case APPCOMMAND_HELP:
+      return IDC_HELP_PAGE_VIA_KEYBOARD;
+    case APPCOMMAND_NEW:
+      return IDC_NEW_TAB;
+    case APPCOMMAND_OPEN:
+      return IDC_OPEN_FILE;
+    case APPCOMMAND_CLOSE:
+      return IDC_CLOSE_TAB;
+    case APPCOMMAND_SAVE:
+      return IDC_SAVE_PAGE;
+    case APPCOMMAND_PRINT:
+      return IDC_PRINT;
+    case APPCOMMAND_COPY:
+      return IDC_COPY;
+    case APPCOMMAND_CUT:
+      return IDC_CUT;
+    case APPCOMMAND_PASTE:
+      return IDC_PASTE;
+      // TODO(pkasting): http://b/1113069 Handle these.
+    case APPCOMMAND_UNDO:
+    case APPCOMMAND_REDO:
+    case APPCOMMAND_SPELL_CHECK:
+    default:
+      return -1;
   }
 }
 

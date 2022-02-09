@@ -148,7 +148,9 @@ component("accessibility") {
     "ax_tree_serializer.cc",
     "ax_tree_serializer.h",
     "ax_tree_source.h",
+    "ax_tree_source_annotator.h",
     "ax_tree_source_checker.h",
+    "ax_tree_source_observer.h",
     "null_ax_action_target.cc",
     "null_ax_action_target.h",
   ]
@@ -227,6 +229,7 @@ static_library("test_support") {
 test("accessibility_unittests") {
   testonly = true
   sources = [
+    "ax_computed_node_data_unittest.cc",
     "ax_enum_util_unittest.cc",
     "ax_event_generator_unittest.cc",
     "ax_generated_tree_unittest.cc",

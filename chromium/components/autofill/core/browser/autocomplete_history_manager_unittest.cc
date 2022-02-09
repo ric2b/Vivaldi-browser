@@ -47,6 +47,10 @@ namespace {
 class MockAutofillClient : public TestAutofillClient {
  public:
   MockAutofillClient() : prefs_(test::PrefServiceForTesting()) {}
+
+  MockAutofillClient(const MockAutofillClient&) = delete;
+  MockAutofillClient& operator=(const MockAutofillClient&) = delete;
+
   ~MockAutofillClient() override = default;
   PrefService* GetPrefs() override {
     return const_cast<PrefService*>(base::as_const(*this).GetPrefs());
@@ -55,14 +59,15 @@ class MockAutofillClient : public TestAutofillClient {
 
  private:
   std::unique_ptr<PrefService> prefs_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockAutofillClient);
 };
 
 class MockSuggestionsHandler
     : public AutocompleteHistoryManager::SuggestionsHandler {
  public:
   MockSuggestionsHandler() {}
+
+  MockSuggestionsHandler(const MockSuggestionsHandler&) = delete;
+  MockSuggestionsHandler& operator=(const MockSuggestionsHandler&) = delete;
 
   MOCK_METHOD(void,
               OnSuggestionsReturned,
@@ -77,8 +82,6 @@ class MockSuggestionsHandler
 
  private:
   base::WeakPtrFactory<MockSuggestionsHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(MockSuggestionsHandler);
 };
 }  // namespace
 
@@ -463,7 +466,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id));
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -484,10 +487,6 @@ TEST_F(AutocompleteHistoryManagerTest,
 // it has a meaningless name.
 TEST_F(AutocompleteHistoryManagerTest,
        DoQuerySuggestionsForMeaninglessFieldNames_FilterName) {
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      features::kAutocompleteFilterForMeaningfulNames);
-
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
   int test_query_id = 2;
   std::u16string test_name = u"input_123";
@@ -500,7 +499,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .Times(0);
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -517,10 +516,6 @@ TEST_F(AutocompleteHistoryManagerTest,
 // because the field's name is meaningful.
 TEST_F(AutocompleteHistoryManagerTest,
        DoQuerySuggestionsForMeaninglessFieldNames_PassName) {
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      features::kAutocompleteFilterForMeaningfulNames);
-
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
   int test_query_id = 2;
   std::u16string test_name = u"addressline_1";
@@ -539,7 +534,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id));
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -574,7 +569,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id));
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -614,7 +609,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id));
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/true, test_name, test_prefix, "Some Type",
       suggestions_handler->GetWeakPtr());
@@ -654,7 +649,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id));
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -693,7 +688,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id));
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -711,7 +706,7 @@ TEST_F(AutocompleteHistoryManagerTest,
 }
 
 TEST_F(AutocompleteHistoryManagerTest,
-       OnAutocompleteEntrySelected_Found_ShouldLogDays) {
+       OnSingleFieldSuggestionSelected_Found_ShouldLogDays) {
   // Setting up by simulating that there was a query for autocomplete
   // suggestions, and that two values were found.
   int mocked_db_query_id = 100;
@@ -726,13 +721,11 @@ TEST_F(AutocompleteHistoryManagerTest,
 
   std::vector<AutofillEntry> expected_values = {
       GetAutofillEntry(test_name, test_value,
-                       AutofillClock::Now() - base::TimeDelta::FromDays(30),
-                       AutofillClock::Now() -
-                           base::TimeDelta::FromDays(days_since_last_use)),
+                       AutofillClock::Now() - base::Days(30),
+                       AutofillClock::Now() - base::Days(days_since_last_use)),
       GetAutofillEntry(test_name, other_test_value,
-                       AutofillClock::Now() - base::TimeDelta::FromDays(30),
-                       AutofillClock::Now() -
-                           base::TimeDelta::FromDays(days_since_last_use))};
+                       AutofillClock::Now() - base::Days(30),
+                       AutofillClock::Now() - base::Days(days_since_last_use))};
 
   std::unique_ptr<WDTypedResult> mocked_results =
       GetMockedDbResults(expected_values);
@@ -745,7 +738,7 @@ TEST_F(AutocompleteHistoryManagerTest,
   EXPECT_CALL(*suggestions_handler.get(), OnSuggestionsReturned);
 
   // Simulate request for suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -758,7 +751,7 @@ TEST_F(AutocompleteHistoryManagerTest,
 
   // Now simulate one autocomplete entry being selected, and expect a metric
   // being logged for that value alone.
-  autocomplete_manager_->OnAutocompleteEntrySelected(test_value);
+  autocomplete_manager_->OnSingleFieldSuggestionSelected(test_value);
 
   histogram_tester.ExpectBucketCount("Autocomplete.DaysSinceLastUse",
                                      days_since_last_use, 1);
@@ -794,7 +787,7 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id_second));
 
   // Simulate request for the first suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_first, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -803,7 +796,7 @@ TEST_F(AutocompleteHistoryManagerTest,
   // one).
   EXPECT_CALL(*web_data_service_, CancelRequest(mocked_db_query_id_first))
       .Times(1);
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_second, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler->GetWeakPtr());
@@ -863,13 +856,13 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id_second));
 
   // Simulate request for the first suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_first, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler_first->GetWeakPtr());
 
   // Simulate request for the second suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_second, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler_second->GetWeakPtr());
@@ -930,13 +923,13 @@ TEST_F(AutocompleteHistoryManagerTest,
       .WillOnce(Return(mocked_db_query_id_one))
       .WillOnce(Return(mocked_db_query_id_two));
 
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_one, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler_one->GetWeakPtr());
 
   // Simlate second handler request for autocomplete suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_two, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler_two->GetWeakPtr());
@@ -983,7 +976,7 @@ TEST_F(AutocompleteHistoryManagerTest, NoAutocompleteSuggestionsForTextarea) {
 
   base::HistogramTester histogram_tester;
 
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       0, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, field.name, field.value,
       field.form_control_type, suggestions_handler->GetWeakPtr());
@@ -1012,7 +1005,7 @@ TEST_F(AutocompleteHistoryManagerTest, AutocompleteUMAQueryCreated) {
   EXPECT_CALL(*suggestions_handler.get(),
               OnSuggestionsReturned(0, /*autoselect_first_suggestion=*/false,
                                     testing::Truly(IsEmptySuggestionVector)));
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       0, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, field.name, field.value,
       field.form_control_type, suggestions_handler->GetWeakPtr());
@@ -1042,7 +1035,7 @@ TEST_F(AutocompleteHistoryManagerTest, AutocompleteUMAQueryCreated) {
   EXPECT_CALL(*suggestions_handler.get(),
               OnSuggestionsReturned(0, /*autoselect_first_suggestion=*/false,
                                     testing::Truly(NonEmptySuggestionVector)));
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       0, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, field.name, field.value,
       field.form_control_type, suggestions_handler->GetWeakPtr());
@@ -1078,13 +1071,13 @@ TEST_F(AutocompleteHistoryManagerTest, DestructorCancelsRequests) {
       .WillOnce(Return(mocked_db_query_id_second));
 
   // Simulate request for the first suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_first, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler_first->GetWeakPtr());
 
   // Simulate request for the second suggestions.
-  autocomplete_manager_->OnGetAutocompleteSuggestions(
+  autocomplete_manager_->OnGetSingleFieldSuggestions(
       test_query_id_second, /*is_autocomplete_enabled=*/true,
       /*autoselect_first_suggestion=*/false, test_name, test_prefix,
       "Some Type", suggestions_handler_second->GetWeakPtr());

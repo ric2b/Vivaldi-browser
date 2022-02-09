@@ -99,13 +99,15 @@ class HarfBuzzShaperTest : public testing::Test {
   void SelectDevanagariFont() {
     FontFamily devanagari_family;
     // Windows 10
-    devanagari_family.SetFamily("Nirmala UI");
+    devanagari_family.SetFamily("Nirmala UI", FontFamily::Type::kFamilyName);
     // Windows 7
-    devanagari_family.AppendFamily("Mangal");
+    devanagari_family.AppendFamily("Mangal", FontFamily::Type::kFamilyName);
     // Linux
-    devanagari_family.AppendFamily("Lohit Devanagari");
+    devanagari_family.AppendFamily("Lohit Devanagari",
+                                   FontFamily::Type::kFamilyName);
     // Mac
-    devanagari_family.AppendFamily("ITF Devanagari");
+    devanagari_family.AppendFamily("ITF Devanagari",
+                                   FontFamily::Type::kFamilyName);
 
     font_description.SetFamily(devanagari_family);
     font = Font(font_description);
@@ -867,9 +869,10 @@ TEST_P(OffsetForPositionTest, Data) {
   scoped_refptr<ShapeResult> result =
       SplitRun(shaper.Shape(&ahem, TextDirection::kLtr), 2);
   EXPECT_EQ(data.offset_ltr,
-            result->OffsetForPosition(data.position, DontBreakGlyphs));
-  EXPECT_EQ(data.hit_test_ltr, result->CaretOffsetForHitTest(
-                                   data.position, string, DontBreakGlyphs));
+            result->OffsetForPosition(data.position, BreakGlyphsOption(false)));
+  EXPECT_EQ(data.hit_test_ltr,
+            result->CaretOffsetForHitTest(data.position, string,
+                                          BreakGlyphsOption(false)));
   EXPECT_EQ(data.fit_ltr_ltr,
             result->OffsetToFit(data.position, TextDirection::kLtr));
   EXPECT_EQ(data.fit_ltr_rtl,
@@ -877,9 +880,10 @@ TEST_P(OffsetForPositionTest, Data) {
 
   result = SplitRun(shaper.Shape(&ahem, TextDirection::kRtl), 3);
   EXPECT_EQ(data.offset_rtl,
-            result->OffsetForPosition(data.position, DontBreakGlyphs));
-  EXPECT_EQ(data.hit_test_rtl, result->CaretOffsetForHitTest(
-                                   data.position, string, DontBreakGlyphs));
+            result->OffsetForPosition(data.position, BreakGlyphsOption(false)));
+  EXPECT_EQ(data.hit_test_rtl,
+            result->CaretOffsetForHitTest(data.position, string,
+                                          BreakGlyphsOption(false)));
   EXPECT_EQ(data.fit_rtl_ltr,
             result->OffsetToFit(data.position, TextDirection::kLtr));
   EXPECT_EQ(data.fit_rtl_rtl,
@@ -934,8 +938,8 @@ class IncludePartialGlyphsTest
 INSTANTIATE_TEST_SUITE_P(
     HarfBuzzShaperTest,
     IncludePartialGlyphsTest,
-    ::testing::Values(IncludePartialGlyphsOption::OnlyFullGlyphs,
-                      IncludePartialGlyphsOption::IncludePartialGlyphs));
+    ::testing::Values(IncludePartialGlyphsOption::kOnlyFullGlyphs,
+                      IncludePartialGlyphsOption::kIncludePartialGlyphs));
 
 TEST_P(IncludePartialGlyphsTest,
        OffsetForPositionMatchesPositionForOffsetLatin) {
@@ -947,31 +951,34 @@ TEST_P(IncludePartialGlyphsTest,
 
   IncludePartialGlyphsOption partial = GetParam();
   EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(4u, result->OffsetForPosition(result->PositionForOffset(4), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(5u, result->OffsetForPosition(result->PositionForOffset(5), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(6u, result->OffsetForPosition(result->PositionForOffset(6), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(7u, result->OffsetForPosition(result->PositionForOffset(7), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(8u, result->OffsetForPosition(result->PositionForOffset(8), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(9u, result->OffsetForPosition(result->PositionForOffset(9), string,
-                                          partial, DontBreakGlyphs));
-  EXPECT_EQ(10u, result->OffsetForPosition(result->PositionForOffset(10),
-                                           string, partial, DontBreakGlyphs));
-  EXPECT_EQ(11u, result->OffsetForPosition(result->PositionForOffset(11),
-                                           string, partial, DontBreakGlyphs));
-  EXPECT_EQ(12u, result->OffsetForPosition(result->PositionForOffset(12),
-                                           string, partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
+  EXPECT_EQ(10u,
+            result->OffsetForPosition(result->PositionForOffset(10), string,
+                                      partial, BreakGlyphsOption(false)));
+  EXPECT_EQ(11u,
+            result->OffsetForPosition(result->PositionForOffset(11), string,
+                                      partial, BreakGlyphsOption(false)));
+  EXPECT_EQ(12u,
+            result->OffsetForPosition(result->PositionForOffset(12), string,
+                                      partial, BreakGlyphsOption(false)));
 }
 
 TEST_P(IncludePartialGlyphsTest,
@@ -985,13 +992,13 @@ TEST_P(IncludePartialGlyphsTest,
 
   IncludePartialGlyphsOption partial = GetParam();
   EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
 }
 
 TEST_P(IncludePartialGlyphsTest,
@@ -1003,19 +1010,19 @@ TEST_P(IncludePartialGlyphsTest,
 
   IncludePartialGlyphsOption partial = GetParam();
   EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(4u, result->OffsetForPosition(result->PositionForOffset(4), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(5u, result->OffsetForPosition(result->PositionForOffset(5), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
   EXPECT_EQ(6u, result->OffsetForPosition(result->PositionForOffset(6), string,
-                                          partial, DontBreakGlyphs));
+                                          partial, BreakGlyphsOption(false)));
 }
 
 TEST_F(HarfBuzzShaperTest, CachedOffsetPositionMappingForOffsetLatin) {
@@ -1653,10 +1660,10 @@ TEST_P(ShapeParameterTest, CopyRangeNoRuns) {
   result->CopyRanges(ranges.data(), ranges.size());
   for (unsigned i = 0; i < ranges.size(); i++) {
     const ShapeResult::ShapeRange& range = ranges[i];
-    const ShapeResult& result = *range_results[i];
-    EXPECT_EQ(result.StartIndex(), range.start);
-    EXPECT_EQ(result.EndIndex(), range.end);
-    EXPECT_EQ(result.NumCharacters(), range.end - range.start);
+    const ShapeResult& range_result = *range_results[i];
+    EXPECT_EQ(range_result.StartIndex(), range.start);
+    EXPECT_EQ(range_result.EndIndex(), range.end);
+    EXPECT_EQ(range_result.NumCharacters(), range.end - range.start);
   }
 }
 
@@ -1782,8 +1789,15 @@ TEST_F(HarfBuzzShaperTest,
   }
 }
 
+#if defined(OS_ANDROID)
+#define MAYBE_ShapeHorizontalWithSubpixelPositionWithKerningIsNotRounded \
+  DISABLED_ShapeHorizontalWithSubpixelPositionWithKerningIsNotRounded
+#else
+#define MAYBE_ShapeHorizontalWithSubpixelPositionWithKerningIsNotRounded \
+  ShapeHorizontalWithSubpixelPositionWithKerningIsNotRounded
+#endif
 TEST_F(HarfBuzzShaperTest,
-       ShapeHorizontalWithSubpixelPositionWithKerningIsNotRounded) {
+       MAYBE_ShapeHorizontalWithSubpixelPositionWithKerningIsNotRounded) {
   ScopedSubpixelOverride subpixel_override(true);
 
   String string(u"AVOID");

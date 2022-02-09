@@ -30,6 +30,8 @@ class VIEWS_EXPORT MuteButton : public views::ImageButton {
 
   MuteButton(PressedCallback callback);
   ~MuteButton() override;
+  MuteButton(const MuteButton&) = delete;
+  MuteButton& operator=(const MuteButton&) = delete;
 
   // Set a specified button state.
   void ChangeMode(Mode mode, bool force);
@@ -38,8 +40,6 @@ class VIEWS_EXPORT MuteButton : public views::ImageButton {
 
  private:
   Mode muted_mode_ = Mode::kAudible;
-
-  DISALLOW_COPY_AND_ASSIGN(MuteButton);
 };
 
 }  // namespace vivaldi

@@ -23,6 +23,10 @@ namespace ash {
 class MockLoginDisplayHost : public LoginDisplayHost {
  public:
   MockLoginDisplayHost();
+
+  MockLoginDisplayHost(const MockLoginDisplayHost&) = delete;
+  MockLoginDisplayHost& operator=(const MockLoginDisplayHost&) = delete;
+
   virtual ~MockLoginDisplayHost();
 
   MOCK_METHOD(LoginDisplay*, GetLoginDisplay, (), (override));
@@ -61,6 +65,7 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   MOCK_METHOD(void, AttemptShowEnableConsumerKioskScreen, (), (override));
   MOCK_METHOD(void, ShowGaiaDialog, (const AccountId&), (override));
   MOCK_METHOD(void, ShowOsInstallScreen, (), (override));
+  MOCK_METHOD(void, ShowGuestTosScreen, (), (override));
   MOCK_METHOD(void, HideOobeDialog, (), (override));
   MOCK_METHOD(void, SetShelfButtonsEnabled, (bool), (override));
   MOCK_METHOD(void, UpdateOobeDialogState, (OobeDialogState state), (override));
@@ -93,9 +98,17 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   MOCK_METHOD(void, AddObserver, (LoginDisplayHost::Observer*), (override));
   MOCK_METHOD(void, RemoveObserver, (LoginDisplayHost::Observer*), (override));
   MOCK_METHOD(SigninUI*, GetSigninUI, (), (override));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockLoginDisplayHost);
+  MOCK_METHOD(bool, IsWizardControllerCreated, (), (const, final));
+  MOCK_METHOD(bool,
+              GetKeyboardRemappedPrefValue,
+              (const std::string& pref_name, int* value),
+              (const, final));
+  MOCK_METHOD(void,
+              AddWizardCreatedObserverForTests,
+              (base::RepeatingClosure on_created),
+              (final));
+  MOCK_METHOD(WizardContext*, GetWizardContextForTesting, (), (final));
+  MOCK_METHOD(WizardContext*, GetWizardContext, (), (override));
 };
 
 }  // namespace ash

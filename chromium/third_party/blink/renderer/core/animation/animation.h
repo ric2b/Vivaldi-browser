@@ -33,6 +33,7 @@
 
 #include <memory>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -366,9 +367,12 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   void AttachCompositedLayers();
   void DetachCompositedLayers();
   // CompositorAnimationDelegate implementation.
-  void NotifyAnimationStarted(double monotonic_time, int group) override;
-  void NotifyAnimationFinished(double monotonic_time, int group) override {}
-  void NotifyAnimationAborted(double monotonic_time, int group) override {}
+  void NotifyAnimationStarted(base::TimeDelta monotonic_time,
+                              int group) override;
+  void NotifyAnimationFinished(base::TimeDelta monotonic_time,
+                               int group) override {}
+  void NotifyAnimationAborted(base::TimeDelta monotonic_time,
+                              int group) override {}
 
   using AnimationPromise = ScriptPromiseProperty<Member<Animation>,
                                                  Member<DOMException>>;

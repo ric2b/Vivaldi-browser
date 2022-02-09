@@ -12,4 +12,4 @@ void OverrideMenuConfig(views::MenuConfig* config) {
   config->item_bottom_margin = 1;
 }
 
-} // vivaldi
+}  // namespace vivaldi

@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -17,6 +19,10 @@
 namespace syncer {
 class ModelTypeControllerDelegate;
 }  // namespace syncer
+
+namespace base {
+class SequencedTaskRunner;
+}  // namespace base
 
 namespace password_manager {
 
@@ -27,7 +33,6 @@ struct FieldInfo;
 // Simple password store implementation that delegates everything to
 // the LoginDatabase.
 class PasswordStoreImpl : protected PasswordStoreSync,
-                          public PasswordStore,
                           public PasswordStoreBackend,
                           public SmartBubbleStatsStore,
                           protected FieldInfoStore {
@@ -38,17 +43,16 @@ class PasswordStoreImpl : protected PasswordStoreSync,
 
   PasswordStoreImpl(
       std::unique_ptr<LoginDatabase> login_db,
-      std::unique_ptr<UnsyncedCredentialsDeletionNotifier> notifier);
+      std::unique_ptr<PasswordStore::UnsyncedCredentialsDeletionNotifier>
+          notifier);
 
-  void ShutdownOnUIThread() override;
+  PasswordStoreImpl(const PasswordStoreImpl&) = delete;
+  PasswordStoreImpl& operator=(const PasswordStoreImpl&) = delete;
 
- protected:
   ~PasswordStoreImpl() override;
 
+ protected:
   // Implements PasswordStore interface.
-  void ReportMetricsImpl(const std::string& sync_username,
-                         bool custom_passphrase_sync_enabled,
-                         BulkCheckDone bulk_check_done) override;
   PasswordStoreChangeList DisableAutoSignInForOriginsImpl(
       const base::RepeatingCallback<bool(const GURL&)>& origin_filter);
   DatabaseCleanupResult DeleteUndecryptableLogins() override;
@@ -81,6 +85,7 @@ class PasswordStoreImpl : protected PasswordStoreSync,
   void InitBackend(RemoteChangesReceived remote_form_changes_received,
                    base::RepeatingClosure sync_enabled_or_disabled_cb,
                    base::OnceCallback<void(bool)> completion) override;
+  void Shutdown(base::OnceClosure shutdown_completed) override;
   void GetAllLoginsAsync(LoginsReply callback) override;
   void GetAutofillableLoginsAsync(LoginsReply callback) override;
   void FillMatchingLoginsAsync(
@@ -134,7 +139,9 @@ class PasswordStoreImpl : protected PasswordStoreSync,
       RemoteChangesReceived remote_form_changes_received,
       base::RepeatingClosure sync_enabled_or_disabled_cb);
 
-  // Resets |login_db_| and |sync_bridge_| on the background sequence.
+  // Resets all members on the background sequence but ensures that the
+  // backend deletion is happening on the given `main_task_runner` after the
+  // backend work is concluded.
   void DestroyOnBackgroundSequence();
 
   // Synchronous implementation of GetAllLoginsAsync.
@@ -179,6 +186,14 @@ class PasswordStoreImpl : protected PasswordStoreSync,
   base::WeakPtr<syncer::ModelTypeControllerDelegate>
   GetSyncControllerDelegateOnBackgroundSequence();
 
+  // Reports password store metrics that aren't reported by the
+  // StoreMetricsReporter. Namely, metrics related to inaccessible passwords,
+  // and bubble statistics.
+  void ReportMetrics();
+
+  // Used to trigger DCHECKs if tasks are posted after shut down.
+  bool was_shutdown_{false};
+
   // The login SQL database. The LoginDatabase instance is received via the
   // in an uninitialized state, so as to allow injecting mocks, then Init() is
   // called on the background sequence in a deferred manner. If opening the DB
@@ -192,7 +207,8 @@ class PasswordStoreImpl : protected PasswordStoreSync,
   // the 'NotifyLoginsChanged'.
   RemoteChangesReceived remote_forms_changes_received_callback_;
 
-  std::unique_ptr<UnsyncedCredentialsDeletionNotifier> deletion_notifier_;
+  std::unique_ptr<PasswordStore::UnsyncedCredentialsDeletionNotifier>
+      deletion_notifier_;
 
   // A list of callbacks that should be run once all pending deletions have been
   // sent to the Sync server. Note that the vector itself lives on the
@@ -201,7 +217,13 @@ class PasswordStoreImpl : protected PasswordStoreSync,
   // Timeout closure that runs if sync takes too long to propagate deletions.
   base::CancelableOnceClosure deletions_have_synced_timeout_;
 
-  DISALLOW_COPY_AND_ASSIGN(PasswordStoreImpl);
+  // TaskRunner for tasks that run on the main sequence (usually the UI thread).
+  scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
+
+  // TaskRunner for all the background operations.
+  scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
+
+  base::WeakPtrFactory<PasswordStoreImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace password_manager

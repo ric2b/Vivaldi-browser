@@ -29,10 +29,11 @@ extern const char kOptimizationGuideServiceAPIKey[];
 extern const char kPurgeHintsStore[];
 extern const char kPurgeModelAndFeaturesStore[];
 extern const char kDisableFetchingHintsAtNavigationStartForTesting[];
-extern const char kDisableFetchHintsForActiveTabsOnDeferredStartup[];
 extern const char kDisableCheckingUserPermissionsForTesting[];
 extern const char kDisableModelDownloadVerificationForTesting[];
 extern const char kModelOverride[];
+extern const char kDebugLoggingEnabled[];
+extern const char kModelValidate[];
 
 // Returns whether the hint component should be processed.
 // Available hint components are only processed if a proto override isn't being
@@ -56,9 +57,6 @@ ParseHintsFetchOverrideFromCommandLine();
 
 // Whether the hints fetcher timer should be overridden.
 bool ShouldOverrideFetchHintsTimer();
-
-// Disables fetching hints for active tabs on deferred startup.
-bool DisableFetchHintsForActiveTabsOnDeferredStartup();
 
 // Whether the prediction model and host model features fetcher timer should be
 // overridden.
@@ -85,12 +83,14 @@ bool ShouldSkipModelDownloadVerificationForTesting();
 // Returns whether at least one model was provided via command-line.
 bool IsModelOverridePresent();
 
-// Returns the file path string and metadata for the model provided via
-// command-line for |optimization_target|, if applicable.
-absl::optional<
-    std::pair<std::string, absl::optional<optimization_guide::proto::Any>>>
-GetModelOverrideForOptimizationTarget(
-    optimization_guide::proto::OptimizationTarget optimization_target);
+// Returns whether the model validation should happen.
+bool ShouldValidateModel();
+
+// Returns the model override command line switch.
+absl::optional<std::string> GetModelOverride();
+
+// Returns true if debug logs are enabled for the optimization guide.
+bool IsDebugLogsEnabled();
 
 }  // namespace switches
 }  // namespace optimization_guide

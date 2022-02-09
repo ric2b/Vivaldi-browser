@@ -147,6 +147,8 @@ class EventQueryResults {
 
   EventQueryResults();
   ~EventQueryResults();
+  EventQueryResults(const EventQueryResults&) = delete;
+  EventQueryResults& operator=(const EventQueryResults&) = delete;
 
   size_t size() const { return results_.size(); }
   bool empty() const { return results_.empty(); }
@@ -179,38 +181,36 @@ class EventQueryResults {
   // The ordered list of results. The pointers inside this are owned by this
   // QueryResults object.
   EventResultVector results_;
-
-  DISALLOW_COPY_AND_ASSIGN(EventQueryResults);
 };
 
 class EventResultCB {
  public:
   EventResultCB() = default;
+  EventResultCB(const EventResultCB&) = delete;
+  EventResultCB& operator=(const EventResultCB&) = delete;
+
   bool success;
   std::string message;
   EventResult event;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(EventResultCB);
 };
 
 class CreateEventsResult {
  public:
   CreateEventsResult() = default;
+  CreateEventsResult(const CreateEventsResult&) = delete;
+  CreateEventsResult& operator=(const CreateEventsResult&) = delete;
+
   int number_failed;
   int number_success;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CreateEventsResult);
 };
 
 class DeleteEventResult {
  public:
   DeleteEventResult();
-  bool success;
+  DeleteEventResult(const DeleteEventResult&) = delete;
+  DeleteEventResult& operator=(const DeleteEventResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteEventResult);
+  bool success;
 };
 
 class EventTypeRow {
@@ -236,19 +236,19 @@ class EventTypeRow {
 class CreateEventTypeResult {
  public:
   CreateEventTypeResult() = default;
-  bool success;
+  CreateEventTypeResult(const CreateEventTypeResult&) = delete;
+  CreateEventTypeResult& operator=(const CreateEventTypeResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(CreateEventTypeResult);
+  bool success;
 };
 
 class UpdateEventTypeResult {
  public:
   UpdateEventTypeResult();
-  bool success;
+  UpdateEventTypeResult(const UpdateEventTypeResult&) = delete;
+  UpdateEventTypeResult& operator=(const UpdateEventTypeResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(UpdateEventTypeResult);
+  bool success;
 };
 
 typedef std::vector<calendar::EventTypeRow> EventTypeRows;
@@ -277,10 +277,10 @@ enum UpdateEventTypeFields {
 class DeleteEventTypeResult {
  public:
   DeleteEventTypeResult() = default;
-  bool success;
+  DeleteEventTypeResult(const DeleteEventTypeResult&) = delete;
+  DeleteEventTypeResult& operator=(const DeleteEventTypeResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteEventTypeResult);
+  bool success;
 };
 
 }  // namespace calendar

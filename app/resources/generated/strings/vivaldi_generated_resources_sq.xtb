@@ -10,11 +10,11 @@
 <translation id="1056898198331236512">Vërejtje</translation>
 <translation id="1084824384139382525">Kopjoj adr&amp;esën e lidhjes</translation>
 <translation id="1128109161498068552">Nuk autorizoj asnjë faqe për aksesin në aparatet MIDI nëpërmjet mesazheve ekskluzive të sistemit</translation>
-<translation id="1163931534039071049">&amp;Shoh burimin e kuadrit</translation>
+<translation id="1163931534039071049">&amp;Shikoj burimin e kuadrit</translation>
 <translation id="1165039591588034296">Gabim</translation>
 <translation id="1175364870820465910">&amp;Printoj...</translation>
 <translation id="1181037720776840403">Heq</translation>
-<translation id="1187722533808055681">Daljet nga gjendja joaktive</translation>
+<translation id="1187722533808055681">Daljet nga pasiviteti</translation>
 <translation id="119944043368869598">Pastroj të gjitha</translation>
 <translation id="1221825588892235038">Vetëm përzgjedhjen</translation>
 <translation id="1244303850296295656">Gabim me shtesën</translation>
@@ -31,16 +31,13 @@
 <translation id="15662109988763471">Printeri i përzgjedhur nuk është i disponueshëm ose nuk është instaluar në rregull. Kontrollojeni ose provoni një printer tjetër.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Hap lidhjen me...</translation>
-<translation id="159359590073980872">Cache i imazheve</translation>
+<translation id="159359590073980872">Kashi i imazheve</translation>
 <translation id="1601560923496285236">Zbatoj</translation>
 <translation id="1603914832182249871">(Private)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Përshkruesit e skedarëve</translation>
 <translation id="1682548588986054654">Dritare private të re</translation>
-<translation id="1706625117072057435">Nivelet e zmadhimit</translation>
 <translation id="1708338024780164500">(Joaktiv)</translation>
 <translation id="1723824996674794290">Dritare të &amp;re</translation>
-<translation id="1725149567830788547">Tregoj &amp;butonat interaktivë</translation>
 <translation id="1729533290416704613">Kontrollon edhe faqen që hapet kur kërkoni nga Omnibox-i.</translation>
 <translation id="174123615272205933">Të personalizuara</translation>
 <translation id="1744108098763830590">faqe në sfond</translation>
@@ -53,7 +50,7 @@
 <translation id="1886996562706621347">Autorizoj faqet të pyesin a mund të bëhen agjentë standardë të protokolleve (rekomandohet)</translation>
 <translation id="1901303067676059328">Përzgjedh të &amp;gjitha</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1936931585862840749">Përdorni numra për të treguar kopjet që duhen printuar (nga 1 në <ph name="MAX_COPIES" />).</translation>
+<translation id="1936931585862840749">Tregoni me numra sa kopje duhen printuar (nga 1 në <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Heq të gjitha</translation>
 <translation id="1994173015038366702">Adresa e faqes</translation>
 <translation id="2019718679933488176">&amp;Hap materialin zanor në skedë të re</translation>
@@ -73,7 +70,7 @@
 <translation id="2277255602909579701">Të gjitha cookies dhe të dhënat mbi faqet</translation>
 <translation id="2280486287150724112">Ana e djathtë</translation>
 <translation id="2282146716419988068">Procesi GPU</translation>
-<translation id="2301382460326681002">Është i pasaktë katalogu kryesor i shtesës.</translation>
+<translation id="2301382460326681002">Katalogu kryesor i shtesës është i pasaktë.</translation>
 <translation id="2318143611928805047">Përmasat e faqes</translation>
 <translation id="2322193970951063277">Koka dhe fundi i faqeve</translation>
 <translation id="2326931316514688470">&amp;Freskoj aplikacionin</translation>
@@ -89,18 +86,16 @@
 <translation id="2445081178310039857">Duhet katalogu kryesor i shtesës.</translation>
 <translation id="2470702053775288986">Janë çaktivizuar shtesat jofunksionale</translation>
 <translation id="2476578072172137802">Parametrat e faqes</translation>
-<translation id="2482878487686419369">Njoftimet</translation>
 <translation id="2498539833203011245">Minimizoj</translation>
 <translation id="2509495747794740764">Vlera duhet të jetë një numër midis 10 dhe 200.</translation>
 <translation id="253557089021624350">Kërkesat Keep-Alive</translation>
-<translation id="2546283357679194313">Cookies dhe të dhënat e faqes</translation>
 <translation id="2550212893339833758">Memoria virtuale</translation>
 <translation id="2553440850688409052">Fsheh fishën</translation>
 <translation id="26224892172169984">Nuk autorizoj asnjë faqe për menaxhimin e protokolleve</translation>
 <translation id="2662876636500006917">Dyqani i dedikuar i Chrome</translation>
 <translation id="2678063897982469759">Riaktivizoj</translation>
 <translation id="2721037002783622288">&amp;Kërkoj për imazhin në <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2783321960289401138">Krijoni kombinimin...</translation>
+<translation id="2783321960289401138">Krijoj shkurtoren…</translation>
 <translation id="2785873697295365461">Përshkruesit e skedarëve</translation>
 <translation id="2809586584051668049">dhe <ph name="NUMBER_ADDITIONAL_DISABLED" /> të tjera</translation>
 <translation id="2812989263793994277">Nuk shfaq asnjë imazh</translation>
@@ -116,11 +111,10 @@
 <translation id="2932883381142163287">Sinjalizoj abuzimet</translation>
 <translation id="2941112035454246133">Ulët</translation>
 <translation id="2972581237482394796">&amp;Përsërit</translation>
-<translation id="3003623123441819449">Cache CSS</translation>
+<translation id="3003623123441819449">Kashi i CSS-ve</translation>
 <translation id="3008272652534848354">Rikthej autorizimet</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">Aparatet MIDI</translation>
-<translation id="3021678814754966447">&amp;Shoh burimin e kuadrit</translation>
+<translation id="3021678814754966447">&amp;Shikoj burimin e kuadrit</translation>
 <translation id="3036546437875325427">Aktivizoj Flash-in</translation>
 <translation id="3046910703532196514">Faqe interneti, e plotë</translation>
 <translation id="3067198360141518313">Ekzekutoj fishën</translation>
@@ -128,12 +122,11 @@
 <translation id="3084548735795614657">Hidheni këtu për ta instaluar</translation>
 <translation id="3122464029669770682">Procesori</translation>
 <translation id="3124111068741548686">Objektet USER</translation>
-<translation id="3127156390846601284">Po fshini të gjitha të dhënat e faqeve të depozituara në aparat. Të vijohet?</translation>
+<translation id="3127156390846601284">Po fshini të gjitha të dhënat e faqeve të depozituara në aparat. Doni të vijoni?</translation>
 <translation id="3129173833825111527">Ana e majtë</translation>
 <translation id="3144647712221361880">Hap lidhjen si</translation>
 <translation id="3154429428035006212">Është shkëputur prej më shumë se një muaji</translation>
 <translation id="3222066309010235055">Parainterpretimi vizual: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3241680850019875542">Përzgjidhni katalogun kryesor të shtesës që do të paketohet. Për ta përditësuar, zgjidhni edhe një çelës privat që ta përdorni sërish.</translation>
 <translation id="3280237271814976245">Regjistroj &amp;në...</translation>
 <translation id="3285322247471302225">&amp;Skedë të re</translation>
@@ -163,8 +156,7 @@
 <translation id="3683524264665795342">Kërkesë për ndarje ekrani nga <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Nuk autorizoj faqet e mbyllura të internetit që të vazhdojnë dërgimin ose marrjen e të dhënave</translation>
 <translation id="3711931198657368127">Ngj&amp;it dhe shkoj te <ph name="URL" /></translation>
-<translation id="3727187387656390258">Inspektoj faqen automatike</translation>
-<translation id="3744111561329211289">Sinkronizimi në sfond</translation>
+<translation id="3727187387656390258">Inspektoj faqen modale</translation>
 <translation id="3760460896538743390">Inspektoj faqen në &amp;sfond</translation>
 <translation id="3797900183766075808">&amp;Kërkoj në <ph name="SEARCH_ENGINE" /> për “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3800806661949714323">Tregoj të gjitha (rekomandohet)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Është shkëputur prej më shumë se një viti</translation>
 <translation id="3905761538810670789">Riparoj aplikacionin</translation>
 <translation id="3908501907586732282">Aktivizoj shtesën</translation>
+<translation id="3909701002594999354">Tregoj &amp;butonat interaktivë</translation>
 <translation id="3909791450649380159">Pre&amp;s</translation>
 <translation id="3927932062596804919">Refuzoj</translation>
 <translation id="3936390757709632190">&amp;Hap materialin zanor në skedë të re</translation>
@@ -199,7 +192,7 @@
 <translation id="4225397296022057997">Në të gjitha faqet e internetit</translation>
 <translation id="4256316378292851214">Regji&amp;stroj materialin filmik në...</translation>
 <translation id="4278390842282768270">Autorizohet</translation>
-<translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K efektivë)</translation>
+<translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K efektivë)</translation>
 <translation id="4345587454538109430">Konfiguroj...</translation>
 <translation id="4348766275249686434">Nxjerr gabimet</translation>
 <translation id="4363771538994847871">Mungon destinacioni për transmetim. Doni ndihmë?</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Çaktivizoj</translation>
 <translation id="4409697491990005945">Anët e faqes</translation>
 <translation id="4423376891418188461">Rikthej parametrat</translation>
-<translation id="4434045419905280838">Faqet automatike dhe riorientuese</translation>
 <translation id="4478664379124702289">Regjistroj lidh&amp;jen në...</translation>
 <translation id="4579581181964204535">Nuk transmetohet <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Shkoj te <ph name="URL" /></translation>
@@ -223,7 +215,7 @@
 <translation id="4840096453115567876">Gjithsesi, do e mbyllni këndin privat?</translation>
 <translation id="488785315393301722">Tregoj detajet</translation>
 <translation id="4907306957610201395">Kategoria e autorizimit</translation>
-<translation id="4912643508233590958">Daljet nga gjendja joaktive</translation>
+<translation id="4912643508233590958">Daljet nga pasiviteti</translation>
 <translation id="4927753642311223124">Vazhdoni, nuk ka gjë me rëndësi.</translation>
 <translation id="4930714375720679147">Aktivizoj</translation>
 <translation id="4988526792673242964">Faqet</translation>
@@ -251,9 +243,9 @@
 <translation id="52912272896845572">Është i pavlefshëm çelësi privat.</translation>
 <translation id="5301954838959518834">OK, e kuptova</translation>
 <translation id="5317780077021120954">Regjistroj</translation>
-<translation id="5334142896108694079">Cache i skripteve</translation>
+<translation id="5334142896108694079">Kashi i skripteve</translation>
 <translation id="5355926466126177564">Shtesa "<ph name="EXTENSION_NAME" />" ka ndryshuar faqen që hapet kur kërkoni nga Omnibox-i.</translation>
-<translation id="5360150013186312835">Shfaq në brezin e instrumenteve</translation>
+<translation id="5360150013186312835">Shfaq te brezi i instrumenteve</translation>
 <translation id="5362741141255528695">Përzgjidhni çelësin privat.</translation>
 <translation id="536638840841140142">Asnjë</translation>
 <translation id="5370819323174483825">&amp;Freskoj</translation>
@@ -270,13 +262,11 @@
 <translation id="5542132724887566711">Profili</translation>
 <translation id="5556459405103347317">Freskoj</translation>
 <translation id="5575473780076478375">Shtesa private: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5614553682702429503">Të regjistrohet fjalëkalimi?</translation>
+<translation id="5614553682702429503">Do regjistroni fjalëkalimin?</translation>
 <translation id="5623842676595125836">Protokolli</translation>
 <translation id="5627086634964711283">Kontrollon edhe faqen që hapet kur klikoni butonin e Shtëpisë.</translation>
 <translation id="563535393368633106">Pyes para aksesit (rekomandohet)</translation>
-<translation id="5649053991847567735">Shkarkimet automatike</translation>
 <translation id="5677928146339483299">Është bllokuar</translation>
-<translation id="5689516760719285838">Vendndodhja</translation>
 <translation id="5707185214361380026">E pamundur të hapej shtesa nga:</translation>
 <translation id="5715711091495208045">Konsulenti i fishës: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Regjistroj si PDF</translation>
@@ -298,14 +288,13 @@
 <translation id="5979421442488174909">&amp;Përkthej në <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Pastroj të dhënat e faqeve</translation>
 <translation id="6042308850641462728">Më shumë</translation>
-<translation id="6059925163896151826">Aparatet USB</translation>
 <translation id="6086846494333236931">Është instaluar nga administratori</translation>
 <translation id="6101226222197207147">U shtua një aplikacion i ri (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Linja e internetit po kontrollohet</translation>
 <translation id="6147020289383635445">E pamundur të parashikohej printimi.</translation>
-<translation id="6156863943908443225">Cache i skripteve</translation>
+<translation id="6156863943908443225">Kashi i skripteve</translation>
 <translation id="6169666352732958425">Nuk transmetohet tryeza e punës.</translation>
-<translation id="6196854373336333322">Shtesa <ph name="EXTENSION_NAME" /> ka marrë nën kontroll vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në linjë. Nëse nuk e dini arsyen e ndryshimit, ka shumë mundësi që nuk ju duhet.</translation>
+<translation id="6196854373336333322">Shtesa <ph name="EXTENSION_NAME" /> ka marrë nën kontroll vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në internet. Nëse nuk e dini arsyen e ndryshimit, ka shumë mundësi që nuk ju duhet.</translation>
 <translation id="6206311232642889873">Kopj&amp;oj imazhin</translation>
 <translation id="6239558157302047471">Freskoj &amp;kuadrin</translation>
 <translation id="6247802389331535091">Sistemi: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">Aplikacioni: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kopj&amp;oj imazhin</translation>
 <translation id="6550675742724504774">Opsionet</translation>
-<translation id="6612358246767739896">Material i mbrojtur</translation>
+<translation id="6579369886355986318">Tregoj të gjithë &amp;butonat interaktivë</translation>
 <translation id="6639554308659482635">Memoria SQLite</translation>
 <translation id="6686817083349815241">Regjistroni fjalëkalimin</translation>
 <translation id="6691936601825168937">&amp;Përpara</translation>
@@ -346,10 +335,10 @@
 <translation id="6904344821472985372">Revokoj aksesin te skedari</translation>
 <translation id="6916590542764765824">Administroj shtesat</translation>
 <translation id="6945221475159498467">Përzgjedh</translation>
-<translation id="6955446738988643816">Inspektoj faqen automatike</translation>
+<translation id="6955446738988643816">Inspektoj faqen modale</translation>
 <translation id="6970856801391541997">Printoj faqe specifike</translation>
 <translation id="6991665348624301627">Përzgjidhni destinacionin</translation>
-<translation id="7005848115657603926">Është i pasaktë intervali i faqeve; përdorni <ph name="EXAMPLE_PAGE_RANGE" /></translation>
+<translation id="7005848115657603926">Intervali i faqeve është i pasaktë; përdorni <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Ana e poshtme</translation>
 <translation id="7053983685419859001">Bllokoj</translation>
 <translation id="7070484045139057854">Mund të lexojë dhe ndryshojë të dhënat e faqes</translation>
@@ -359,16 +348,13 @@
 <translation id="7270858098575133036">Pyes kur faqja do të përdorë mesazhe ekskluzive të sistemit operativ për aksesin në aparatet MIDI</translation>
 <translation id="7287143125007575591">U refuzua aksesi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">Tregoj &amp;butonat interaktivë</translation>
-<translation id="7374461526650987610">Agjentët e protokollit</translation>
 <translation id="7385854874724088939">Diçka nuk funksionoi gjatë printimit. Lutemi të kontrolloni printerin dhe provojeni prapë.</translation>
 <translation id="7412226954991670867">Memoria e procesorit grafik</translation>
-<translation id="7421925624202799674">&amp;Shoh burimin e faqes</translation>
+<translation id="7421925624202799674">&amp;Shikoj burimin e faqes</translation>
 <translation id="7423098979219808738">Pyes në fillim</translation>
 <translation id="7427348830195639090">Faqja në sfond: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Me këtë përzgjedhje, po e autorizoni shtesën që të ketë akses te printeri:</translation>
 <translation id="749028671485790643">Personi <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Përfundoj procesin</translation>
 <translation id="7576690715254076113">Bashkërendoj</translation>
 <translation id="7629827748548208700">Skeda: <ph name="TAB_NAME" /></translation>
@@ -414,15 +400,14 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8018313076035239964">Kontrolloni cilat informacione mund të përdorin faqet ose materialet që ju shfaqen</translation>
 <translation id="8032244173881942855">Nuk transmetohet skeda.</translation>
 <translation id="8071432093239591881">Printoj si imazh</translation>
-<translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
+<translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Administroj shtesat</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Shkarkimi vijon} other {Shkarkimet vijojnë}}</translation>
-<translation id="8230134520748321204">Të regjistrohet fjalëkalimi për <ph name="ORIGIN" />?</translation>
+<translation id="8230134520748321204">Do regjistroni fjalëkalimin për <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Shtesa nuk gjendet në listën e <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dhe mund të jetë shtuar pa dijeninë tuaj.</translation>
-<translation id="8270242299912238708">Dokumentet PDF</translation>
 <translation id="8339059274628563283">Të dhënat e depozituara për <ph name="SITE" /></translation>
-<translation id="8351419472474436977">Shtesa po kontrollon vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në linjë. Nëse nuk e dini arsyen e ndryshimit, ka shumë mundësi që nuk ju duhet.</translation>
+<translation id="8351419472474436977">Shtesa po kontrollon vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në internet. Nëse nuk e dini arsyen e ndryshimit, ka shumë mundësi që nuk ju duhet.</translation>
 <translation id="8382913212082956454">Kopjoj adresën e &amp;imejlit</translation>
 <translation id="8413385045638830869">Pyes në fillim (rekomandohet)</translation>
 <translation id="8434480141477525001">Porti i NaCl Debug</translation>
@@ -430,15 +415,15 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8496717697661868878">Ekzekutoj fishën</translation>
 <translation id="8512476990829870887">Përfundoj procesin</translation>
 <translation id="8523493869875972733">Ruaj ndryshimet</translation>
-<translation id="8546306075665861288">Cache i imazheve</translation>
+<translation id="8546306075665861288">Kashi i imazheve</translation>
 <translation id="8569682776816196752">Nuk u gjet destinacioni</translation>
 <translation id="857943718398505171">Autorizohet (rekomandohet)</translation>
 <translation id="8584280235376696778">&amp;Hap materialin filmik në skedë të re</translation>
 <translation id="8605428685123651449">Memoria SQLite</translation>
 <translation id="8615618338313291042">Aplikacioni privat: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">Cache CSS</translation>
+<translation id="862750493060684461">Kashi i CSS-ve</translation>
 <translation id="8661290697478713397">Hap lidhjen në dritare priv&amp;ate</translation>
-<translation id="8664389313780386848">&amp;Shoh burimin e faqes</translation>
+<translation id="8664389313780386848">&amp;Shikoj burimin e faqes</translation>
 <translation id="8708000541097332489">Pastroj gjatë daljes</translation>
 <translation id="8714838604780058252">Grafika në sfond</translation>
 <translation id="8725066075913043281">Provoj prapë</translation>
@@ -463,13 +448,13 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="9027459031423301635">Hap lidhjen në &amp;skedë të re</translation>
 <translation id="9056810968620647706">Nuk korrespondon.</translation>
 <translation id="9137916601698928395">Hap lidhjen si <ph name="USER" /></translation>
-<translation id="91568222606626347">Krijoni kombinimin...</translation>
+<translation id="91568222606626347">Krijoj shkurtoren…</translation>
 <translation id="916607977885256133">Figurë-më-figurë</translation>
 <translation id="9170848237812810038">&amp;Kthej</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" u shtua</translation>
 <translation id="9218430445555521422">Caktoj si standard</translation>
-<translation id="9219103736887031265">Imazhet</translation>
 <translation id="93766956588638423">Riparoj shtesën</translation>
+<translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Horizontalisht</translation>
 <translation id="994289308992179865">&amp;Përsërit</translation>
 <translation id="998747458861718449">I&amp;nspektoj</translation>

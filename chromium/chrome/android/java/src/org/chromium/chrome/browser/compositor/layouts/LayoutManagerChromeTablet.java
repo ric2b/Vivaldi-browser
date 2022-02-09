@@ -23,6 +23,8 @@ import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
+// Vivaldi
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,7 +33,8 @@ import java.util.List;
  */
 public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
-    private StripLayoutHelperManager mTabStripLayoutHelperManager;
+    // Vivaldi
+    private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
@@ -51,9 +54,14 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                 layerTitleCacheSupplier, overviewModeBehaviorSupplier, topUiThemeColorProvider,
                 jankTracker);
 
-        mTabStripLayoutHelperManager = new StripLayoutHelperManager(host.getContext(), this,
-                mHost.getLayoutRenderHost(), () -> mTitleCache, layerTitleCacheSupplier);
-        addSceneOverlay(mTabStripLayoutHelperManager);
+        // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
+        // The second one is the stack strip.
+        for (int i = 0; i < 2; i++) {
+            mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), this,
+                    mHost.getLayoutRenderHost(), () -> mTitleCache, layerTitleCacheSupplier));
+            mTabStrips.get(i).setIsStackStrip(i != 0);
+            addSceneOverlay(mTabStrips.get(i));
+        }
 
         setNextLayout(null);
     }
@@ -61,11 +69,9 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     @Override
     public void destroy() {
         super.destroy();
-
-        if (mTabStripLayoutHelperManager != null) {
-            mTabStripLayoutHelperManager.destroy();
-            mTabStripLayoutHelperManager = null;
-        }
+        // Vivaldi
+        for (int i = 0; i < 2; i++) mTabStrips.get(i).destroy();
+        mTabStrips.clear();
     }
 
     @Override
@@ -94,9 +100,9 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             ControlContainer controlContainer,
             DynamicResourceLoader dynamicResourceLoader,
             TopUiThemeColorProvider topUiColorProvider) {
-        if (mTabStripLayoutHelperManager != null) {
-            mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
-        }
+
+        // Vivaldi
+        for (int i = 0; i < 2; i++) mTabStrips.get(i).setTabModelSelector(selector, creator);
 
         super.init(selector, creator, controlContainer, dynamicResourceLoader, topUiColorProvider);
 
@@ -112,10 +118,5 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                 }
             }
         }
-    }
-
-    @Override
-    public StripLayoutHelperManager getStripLayoutHelperManager() {
-        return mTabStripLayoutHelperManager;
     }
 }

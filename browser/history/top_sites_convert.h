@@ -13,10 +13,9 @@ using ConvertThumbnailDataCallback = base::RepeatingCallback<void(
     scoped_refptr<base::RefCountedMemory> thumbnail)>;
 
 namespace vivaldi {
-void ConvertThumbnailDataImpl(
-  const base::FilePath& path,
-  int64_t bookmark_id,
-  scoped_refptr<base::RefCountedMemory> thumbnail);
+void ConvertThumbnailDataImpl(const base::FilePath& path,
+                              int64_t bookmark_id,
+                              scoped_refptr<base::RefCountedMemory> thumbnail);
 }
 
 #endif  // BROWSER_HISTORY_TOP_SITES_CONVERT_H_

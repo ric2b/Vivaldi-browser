@@ -20,7 +20,6 @@
 #include "ash/app_list/paged_view_structure.h"
 #include "ash/app_list/views/app_list_item_view.h"
 #include "ash/ash_export.h"
-#include "ash/public/cpp/pagination/pagination_model.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -46,11 +45,13 @@ class AppDragIconProxy;
 class AppListA11yAnnouncer;
 class ApplicationDragAndDropHost;
 class AppListConfig;
+class AppListFolderController;
 class AppListItem;
 class AppListItemList;
 class AppListItemView;
 class AppListModel;
 class AppListViewDelegate;
+class AppsGridViewFocusDelegate;
 class AppsGridViewFolderDelegate;
 class ContentsView;
 class PulsingBlockView;
@@ -98,27 +99,33 @@ class ASH_EXPORT AppsGridView : public views::View,
   AppsGridView(ContentsView* contents_view,
                AppListA11yAnnouncer* a11y_announcer,
                AppListViewDelegate* app_list_view_delegate,
-               AppsGridViewFolderDelegate* folder_delegate);
+               AppsGridViewFolderDelegate* folder_delegate,
+               AppListFolderController* folder_controller,
+               AppsGridViewFocusDelegate* focus_delegate);
   AppsGridView(const AppsGridView&) = delete;
   AppsGridView& operator=(const AppsGridView&) = delete;
   ~AppsGridView() override;
 
   // Initializes the class. Calls virtual methods, so its code cannot be in the
   // constructor.
-  virtual void Init();
+  void Init();
 
-  // Sets fixed layout parameters. After setting this, CalculateLayout below
-  // is no longer called to dynamically choosing those layout params.
-  void SetLayout(int cols, int rows_per_page);
+  // Sets the `AppListConfig` that should be used to configure app list item
+  // size within the grid. This will cause all items views to be updated to
+  // adhere to new tile and icon dimensions, so it should be used sparingly.
+  void UpdateAppListConfig(const AppListConfig* app_list_config);
 
   int cols() const { return cols_; }
-  int rows_per_page() const { return rows_per_page_; }
+
+  // Sets padding for apps grid items to use during layout if fixed padding
+  // should be used. Otherwise, for paged apps grid, the padding will be
+  // calculated to evenly space the items within the current apps grid view
+  // bounds.
+  void SetFixedTilePadding(int horizontal_tile_padding,
+                           int vertical_tile_padding);
 
   // Returns the size of a tile view including its padding.
   gfx::Size GetTotalTileSize() const;
-
-  // Returns the size of the entire tile grid with padding between tiles.
-  gfx::Size GetTileGridSizeWithPadding() const;
 
   // Returns the minimum size of the entire tile grid.
   gfx::Size GetMinimumTileGridSize(int cols, int rows_per_page) const;
@@ -154,6 +161,8 @@ class ASH_EXPORT AppsGridView : public views::View,
   bool UpdateDragFromItem(bool is_touch,
                           const ui::LocatedEvent& event) override;
   void EndDrag(bool cancel) override;
+  void OnAppListItemViewActivated(AppListItemView* pressed_item_view,
+                                  const ui::Event& event) override;
 
   bool IsDragging() const;
   bool IsDraggedView(const AppListItemView* view) const;
@@ -167,6 +176,8 @@ class ASH_EXPORT AppsGridView : public views::View,
   // Return true if the |bounds_animator_| is animating |view|.
   bool IsAnimatingView(AppListItemView* view);
 
+  const AppListConfig* app_list_config() const { return app_list_config_; }
+
   bool has_selected_view() const { return selected_view_ != nullptr; }
   AppListItemView* selected_view() const { return selected_view_; }
 
@@ -174,9 +185,6 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   bool has_dragged_item() const { return drag_item_ != nullptr; }
   const AppListItem* drag_item() const { return drag_item_; }
-
-  // Gets the PaginationModel used for the grid view.
-  PaginationModel* pagination_model() { return &pagination_model_; }
 
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -219,6 +227,8 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Handles EndDrag event dispatched from the hidden folder grid view in the
   // root level grid view to end reparenting a folder item.
+  // |original_parent_item_view|: The folder AppListView for the folder from
+  // which drag item is being dragged.
   // |events_forwarded_to_drag_drop_host|: True if the dragged item is dropped
   // to the drag_drop_host, eg. dropped on shelf.
   // |cancel_drag|: True if the drag is ending because it has been canceled.
@@ -226,6 +236,7 @@ class ASH_EXPORT AppsGridView : public views::View,
   // folder grid view for the drag. It's passed on the the root apps grid so the
   // root apps grid can set up the icon drop animation.
   void EndDragFromReparentItemInRootLevel(
+      AppListItemView* original_parent_item_view,
       bool events_forwarded_to_drag_drop_host,
       bool cancel_drag,
       std::unique_ptr<AppDragIconProxy> drag_icon_proxy);
@@ -234,20 +245,13 @@ class ASH_EXPORT AppsGridView : public views::View,
   // a folder item.
   void EndDragForReparentInHiddenFolderGridView();
 
-  // Called when the folder item associated with the grid view is removed.
-  // The grid view must be inside a folder view.
-  void OnFolderItemRemoved();
-
-  // Moves |reparented_item| from its folder to the root AppsGridView in the
+  // Moves |reparented_view| from its folder to the root AppsGridView in the
   // direction of |key_code|.
+  // |original_parent_item_view|: The folder AppListView for the folder from
+  // which drag item is being dragged.
   void HandleKeyboardReparent(AppListItemView* reparented_view,
+                              AppListItemView* original_parent_item_view,
                               ui::KeyboardCode key_code);
-
-  // Returns the first app list item view in the selected page in the folder.
-  AppListItemView* GetCurrentPageFirstItemViewInFolder();
-
-  // Returns the last app list item view in the selected page in the folder.
-  AppListItemView* GetCurrentPageLastItemViewInFolder();
 
   // Updates paged view structure and save it to meta data.
   void UpdatePagedViewStructure();
@@ -257,20 +261,16 @@ class ASH_EXPORT AppsGridView : public views::View,
   // AshTestBase.
   bool IsTabletMode() const;
 
-  // Should be called by AppListView if the app list config it uses changes.
-  // This will update all app list items (as the icon sizes and bounds might
-  // need updating), so it should be used sparingly.
-  void OnAppListConfigUpdated();
-
   // Returns the expected bounds rect in grid coordinates for the item with the
   // provided id, if the item is in the first page.
   // If the item is not in the current page (or cannot be found), this will
   // return 1x1 rectangle in the apps grid center.
   gfx::Rect GetExpectedItemBoundsInFirstPage(const std::string& id) const;
 
-  // Helper for getting current app list config from the parents in the app list
-  // view hierarchy.
-  const AppListConfig& GetAppListConfig() const override;
+  // Passes scroll information from AppListView, so that subclasses may scroll
+  // or switch pages.
+  virtual void HandleScrollFromAppListView(const gfx::Vector2d& offset,
+                                           ui::EventType type) = 0;
 
   // Return the view model.
   views::ViewModelT<AppListItemView>* view_model() { return &view_model_; }
@@ -289,14 +289,6 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   void set_folder_delegate(AppsGridViewFolderDelegate* folder_delegate) {
     folder_delegate_ = folder_delegate;
-  }
-
-  AppListItemView* activated_folder_item_view() const {
-    return activated_folder_item_view_;
-  }
-
-  void set_activated_folder_item_view(AppListItemView* item_view) {
-    activated_folder_item_view_ = item_view;
   }
 
   const AppListModel* model() const { return model_; }
@@ -336,9 +328,21 @@ class ASH_EXPORT AppsGridView : public views::View,
   // Returns the size of the entire tile grid.
   virtual gfx::Size GetTileGridSize() const = 0;
 
+  // Returns the max number of rows the grid can have on a page.
+  virtual int GetMaxRowsInPage(int page) const = 0;
+
+  // Calculates the offset distance to center the grid in the container.
+  virtual gfx::Vector2d GetGridCenteringOffset(int page) const = 0;
+
   // Returns the padding between each page of the apps grid, or zero if the grid
   // does not use pages.
   virtual int GetPaddingBetweenPages() const = 0;
+
+  // Returns number of total pages, or one if the grid does not use pages.
+  virtual int GetTotalPages() const = 0;
+
+  // Returns the current selected page, or zero if the grid does not use pages.
+  virtual int GetSelectedPage() const = 0;
 
   // Returns true if scrolling is vertical (the common case). Folders may scroll
   // horizontally.
@@ -377,10 +381,19 @@ class ASH_EXPORT AppsGridView : public views::View,
   virtual void SetFocusAfterEndDrag() = 0;
 
   // Calculates the item views' bounds for non-folder.
-  virtual void CalculateIdealBounds();
+  virtual void CalculateIdealBoundsForNonFolder() = 0;
 
-  // Calculates the item views' bounds for folder.
-  void CalculateIdealBoundsForFolder();
+  // Sets the max number of columns that the grid can have.
+  // For root apps grid view, the grid size depends on the space available to
+  // apps grid view only, and `cols()` will match `max_columns`. I.e. if the
+  // grid doesn't have enough items to fill out all columns, it will leave empty
+  // spaces in the UI.
+  // For folder item grid, the grid size also depends on the number of items in
+  // the grid, so number of actual columns may be smaller than `max_columns`.
+  void SetMaxColumnsInternal(int max_columns);
+
+  // Calculates the item views' bounds for both folder and non-folder.
+  void CalculateIdealBounds();
 
   // Whether the provided view is hidden to facilitate drag operation (for
   // example, the drag view for which a drag icon proxy has been created).
@@ -390,16 +403,20 @@ class ASH_EXPORT AppsGridView : public views::View,
   // page/slot info.
   gfx::Rect GetExpectedTileBounds(const GridIndex& index) const;
 
+  // Returns the number of app tiles per page. Takes a page number as an
+  // argument as the first page might have less apps shown. Folder grids may
+  // have different numbers of tiles from the main grid.
+  int TilesPerPage(int page) const;
+
   GridIndex GetIndexOfView(const AppListItemView* view) const;
   AppListItemView* GetViewAtIndex(const GridIndex& index) const;
 
-  // Returns the number of apps tiles per page. Folder grids may have different
-  // numbers of tiles from the main grid.
-  int TilesPerPage() const;
+  // Returns true if an item view exists in the visual index.
+  bool IsValidIndex(const GridIndex& index) const;
 
   // Returns the number of existing items in specified page. Returns 0 if |page|
   // is out of range.
-  int GetItemsNumOfPage(int page) const;
+  int GetNumberOfItemsOnPage(int page) const;
 
   // Updates |drop_target_| and |drop_target_region_| based on |drag_view_|'s
   // position.
@@ -417,10 +434,10 @@ class ASH_EXPORT AppsGridView : public views::View,
   bool ignore_layout() const { return ignore_layout_; }
   views::BoundsAnimator* bounds_animator() { return bounds_animator_.get(); }
   views::View* items_container() { return items_container_; }
-  const views::ViewModelT<PulsingBlockView>& pulsing_blocks_model() {
+  views::ViewModelT<PulsingBlockView>& pulsing_blocks_model() {
     return pulsing_blocks_model_;
   }
-  int reorder_placeholder_slot() const { return reorder_placeholder_.slot; }
+  GridIndex reorder_placeholder() const { return reorder_placeholder_; }
   const gfx::Point& last_drag_point() const { return last_drag_point_; }
   void set_last_drag_point(const gfx::Point& p) { last_drag_point_ = p; }
   bool handling_keyboard_move() const { return handling_keyboard_move_; }
@@ -429,9 +446,6 @@ class ASH_EXPORT AppsGridView : public views::View,
     return app_list_view_delegate_;
   }
   const AppListItemList* item_list() const { return item_list_; }
-
-  // TODO(crbug.com/1211608): Move these member variables to PagedAppsGridView.
-  PaginationModel pagination_model_{this};
 
   // View structure used only for non-folder.
   PagedViewStructure view_structure_{this};
@@ -479,6 +493,9 @@ class ASH_EXPORT AppsGridView : public views::View,
   int horizontal_tile_padding_ = 0;
   int vertical_tile_padding_ = 0;
 
+  // Whether tile padding within the apps grid is fixed.
+  bool has_fixed_tile_padding_ = false;
+
   // True if an extra page is opened after the user drags an app to the bottom
   // of last page with intention to put it in a new page. This is only used for
   // non-folder.
@@ -503,7 +520,17 @@ class ASH_EXPORT AppsGridView : public views::View,
   void Update();
 
   // Updates page splits for item views.
-  void UpdatePaging();
+  virtual void UpdatePaging() {}
+
+  // On a grid with pages, records the total number of pages, and the number of
+  // pages with empty slots for UMA histograms.
+  virtual void RecordPageMetrics() {}
+
+  // Calculates the offset for |page_of_view| based on current page and
+  // transition target page. Returns an empty vector if the grid does not use
+  // pages.
+  virtual const gfx::Vector2d CalculateTransitionOffset(
+      int page_of_view) const = 0;
 
   // Updates the number of pulsing block views based on AppListModel status and
   // number of apps.
@@ -513,13 +540,9 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Ensures the view is visible. Note that if there is a running page
   // transition, this does nothing.
-  void EnsureViewVisible(const GridIndex& index);
+  virtual void EnsureViewVisible(const GridIndex& index) = 0;
 
   void SetSelectedItemByIndex(const GridIndex& index);
-
-  // Calculates the offset for |page_of_view| based on current page and
-  // transition target page.
-  const gfx::Vector2d CalculateTransitionOffset(int page_of_view) const;
 
   // Calculates ideal bounds for app list item views within the apps grid, and
   // animates their bounds (using `bounds_animator_`) to their ideal position.
@@ -642,9 +665,6 @@ class ASH_EXPORT AppsGridView : public views::View,
   // slot if |point| is outside the page's bounds.
   GridIndex GetNearestTileIndexForPoint(const gfx::Point& point) const;
 
-  // Calculates the offset distance to center the grid in the container.
-  gfx::Vector2d GetGridCenteringOffset() const;
-
   // Gets the item view currently displayed at |slot| on the current page. If
   // there is no item displayed at |slot|, returns nullptr. Note that this finds
   // an item *displayed* at a slot, which may differ from the item's location in
@@ -702,9 +722,6 @@ class ASH_EXPORT AppsGridView : public views::View,
   // Update number of columns and rows for apps within a folder.
   void UpdateColsAndRowsForFolder();
 
-  // Returns true if an item view exists in the visual index.
-  bool IsValidIndex(const GridIndex& index) const;
-
   // Returns true if the visual index is valid position to which an item view
   // can be moved.
   bool IsValidReorderTargetIndex(const GridIndex& index) const;
@@ -722,16 +739,15 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Returns the target GridIndex to move an item from a folder to the root
   // AppsGridView.
+  // `folder_index` - the grid index of the folder from which an item is
+  // reparented.
   GridIndex GetTargetGridIndexForKeyboardReparent(
+      const GridIndex& folder_index,
       ui::KeyboardCode key_code) const;
 
   // Swaps |selected_view_| with the item in relative position specified by
   // |key_code|.
   void HandleKeyboardMove(ui::KeyboardCode key_code);
-
-  // Records the total number of pages, and the number of pages with empty slots
-  // for UMA histograms.
-  void RecordPageMetrics();
 
   // During an app drag, creates an a11y event to verbalize dropping onto a
   // folder or creating a folder with two apps.
@@ -759,6 +775,12 @@ class ASH_EXPORT AppsGridView : public views::View,
   // This can be nullptr. Only grid views inside folders have a folder delegate.
   AppsGridViewFolderDelegate* folder_delegate_ = nullptr;
 
+  // Used to request showing a folder UI for a folder item view.
+  // May be nullptr if the AppsGridView is never expected to request a folder to
+  // be shown. For example, it will be nullptr for folder items grids (which do
+  // not support nested folder items).
+  AppListFolderController* const folder_controller_;
+
   // Created by AppListMainView, owned by views hierarchy.
   // TODO(crbug.com/1211608): Remove this member.
   ContentsView* contents_view_ = nullptr;
@@ -766,11 +788,20 @@ class ASH_EXPORT AppsGridView : public views::View,
   AppListA11yAnnouncer* const a11y_announcer_;
   AppListViewDelegate* const app_list_view_delegate_;
 
+  // May be nullptr if this apps grid doesn't have custom focus handling.
+  AppsGridViewFocusDelegate* const focus_delegate_;
+
   // Keeps the individual AppListItemView. Owned by views hierarchy.
   views::View* items_container_ = nullptr;
 
+  // The `AppListConfig` currently used for sizing app list item views within
+  // the grid.
+  const AppListConfig* app_list_config_ = nullptr;
+
+  // The max number of columns the grid can have.
+  int max_cols_ = 0;
+
   int cols_ = 0;
-  int rows_per_page_ = 0;
 
   // List of app item views. There is a view per item in |model_|.
   views::ViewModelT<AppListItemView> view_model_;
@@ -841,9 +872,6 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Used to animate individual icon positions.
   std::unique_ptr<views::BoundsAnimator> bounds_animator_;
-
-  // The most recent activated folder item view.
-  AppListItemView* activated_folder_item_view_ = nullptr;
 
   // Tracks if drag_view_ is dragged out of the folder container bubble
   // when dragging a item inside a folder.

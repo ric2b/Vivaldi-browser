@@ -6,9 +6,13 @@
 
 #include <memory>
 
+#include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
+#include "ash/capture_mode/recording_overlay_controller.h"
+#include "ash/constants/ash_features.h"
+#include "ash/projector/projector_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/wm/desks/desks_util.h"
@@ -43,14 +47,13 @@ namespace {
 // events that are too frequent will be throttled. We use the frame duration as
 // the minimum delay between any two successive such events that we use to
 // update the cursor overlay.
-constexpr base::TimeDelta kCursorEventsThrottleDelay =
-    base::TimeDelta::FromHz(30);
+constexpr base::TimeDelta kCursorEventsThrottleDelay = base::Hertz(30);
 
 // Window resizes can be done on many intermediate steps. This delay is used to
 // throttle these resize events so that we send the final size of the window to
 // the recording service when it stabilizes.
 constexpr base::TimeDelta kWindowSizeChangeThrottleDelay =
-    base::TimeDelta::FromMilliseconds(250);
+    base::Milliseconds(250);
 
 // Returns true if |window_1| and |window_2| are both windows that belong to
 // the same Desk. Note that it will return false for windows that don't belong
@@ -163,17 +166,19 @@ VideoRecordingWatcher::VideoRecordingWatcher(
     CaptureModeController* controller,
     aura::Window* window_being_recorded,
     mojo::PendingRemote<viz::mojom::FrameSinkVideoCaptureOverlay>
-        cursor_capture_overlay)
+        cursor_capture_overlay,
+    bool projector_mode)
     : controller_(controller),
       cursor_manager_(Shell::Get()->cursor_manager()),
       window_being_recorded_(window_being_recorded),
       current_root_(window_being_recorded->GetRootWindow()),
       recording_source_(controller_->source()),
-      cursor_capture_overlay_remote_(std::move(cursor_capture_overlay)) {
+      cursor_capture_overlay_remote_(std::move(cursor_capture_overlay)),
+      is_in_projector_mode_(projector_mode) {
   DCHECK(controller_);
   DCHECK(window_being_recorded_);
   DCHECK(current_root_);
-  DCHECK(controller_->is_recording_in_progress());
+  DCHECK(!is_in_projector_mode_ || features::IsProjectorEnabled());
 
   if (!window_being_recorded_->IsRootWindow()) {
     DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
@@ -217,10 +222,20 @@ VideoRecordingWatcher::VideoRecordingWatcher(
   //    capture mode session to take a screenshot while recording a video).
   window_being_recorded_->AddPreTargetHandler(
       this, ui::EventTarget::Priority::kAccessibility);
+
+  if (is_in_projector_mode_) {
+    recording_overlay_controller_ =
+        std::make_unique<RecordingOverlayController>(window_being_recorded_,
+                                                     GetOverlayWidgetBounds());
+    ProjectorControllerImpl::Get()->OnRecordingStarted();
+  }
 }
 
 VideoRecordingWatcher::~VideoRecordingWatcher() {
   DCHECK(window_being_recorded_);
+
+  if (is_in_projector_mode_)
+    ProjectorControllerImpl::Get()->OnRecordingEnded();
 
   window_being_recorded_->RemovePreTargetHandler(this);
   TabletModeController::Get()->RemoveObserver(this);
@@ -235,10 +250,15 @@ VideoRecordingWatcher::~VideoRecordingWatcher() {
   window_being_recorded_->RemoveObserver(this);
 }
 
+void VideoRecordingWatcher::ToggleRecordingOverlayEnabled() {
+  DCHECK(is_in_projector_mode_);
+
+  recording_overlay_controller_->Toggle();
+}
+
 void VideoRecordingWatcher::OnWindowParentChanged(aura::Window* window,
                                                   aura::Window* parent) {
   DCHECK_EQ(window, window_being_recorded_);
-  DCHECK(controller_->is_recording_in_progress());
   DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
 
   UpdateLayerStackingAndDimmers();
@@ -255,7 +275,8 @@ void VideoRecordingWatcher::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     ui::PropertyChangeReason reason) {
-  DCHECK(controller_->is_recording_in_progress());
+  if (is_in_projector_mode_)
+    recording_overlay_controller_->SetBounds(GetOverlayWidgetBounds());
 
   if (recording_source_ != CaptureModeSource::kWindow)
     return;
@@ -280,7 +301,6 @@ void VideoRecordingWatcher::OnWindowOpacitySet(
 
 void VideoRecordingWatcher::OnWindowStackingChanged(aura::Window* window) {
   DCHECK_EQ(window, window_being_recorded_);
-  DCHECK(controller_->is_recording_in_progress());
   DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
 
   UpdateLayerStackingAndDimmers();
@@ -288,7 +308,6 @@ void VideoRecordingWatcher::OnWindowStackingChanged(aura::Window* window) {
 
 void VideoRecordingWatcher::OnWindowDestroying(aura::Window* window) {
   DCHECK_EQ(window, window_being_recorded_);
-  DCHECK(controller_->is_recording_in_progress());
 
   // EndVideoRecording() destroys |this|. No need to remove observer here, since
   // it will be done in the destructor.
@@ -307,7 +326,6 @@ void VideoRecordingWatcher::OnWindowRemovingFromRootWindow(
     aura::Window* window,
     aura::Window* new_root) {
   DCHECK_EQ(window, window_being_recorded_);
-  DCHECK(controller_->is_recording_in_progress());
   DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
 
   root_observer_.reset();
@@ -368,6 +386,11 @@ void VideoRecordingWatcher::OnWindowActivated(ActivationReason reason,
 void VideoRecordingWatcher::OnDisplayMetricsChanged(
     const display::Display& display,
     uint32_t metrics) {
+  // A change in the work area, could mean that the docked magnifier state has
+  // changed, therefore we must update the overlay widget's bounds if any.
+  if (is_in_projector_mode_ && (metrics & DISPLAY_METRIC_WORK_AREA))
+    recording_overlay_controller_->SetBounds(GetOverlayWidgetBounds());
+
   if (!(metrics & (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_ROTATION |
                    DISPLAY_METRIC_DEVICE_SCALE_FACTOR))) {
     return;
@@ -471,7 +494,6 @@ void VideoRecordingWatcher::SetLayer(std::unique_ptr<ui::Layer> layer) {
 }
 
 void VideoRecordingWatcher::OnRootHierarchyChanged(aura::Window* target) {
-  DCHECK(controller_->is_recording_in_progress());
   DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
 
   if (target != window_being_recorded_ && !dimmers_.contains(target) &&
@@ -693,11 +715,21 @@ void VideoRecordingWatcher::OnCursorThrottleTimerFiring() {
 }
 
 void VideoRecordingWatcher::OnWindowSizeChangeThrottleTimerFiring() {
-  DCHECK(controller_->is_recording_in_progress());
   DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
 
   controller_->OnRecordedWindowSizeChanged(
       window_being_recorded_->bounds().size());
+}
+
+gfx::Rect VideoRecordingWatcher::GetOverlayWidgetBounds() const {
+  gfx::Rect bounds = recording_source_ == CaptureModeSource::kRegion
+                         ? partial_region_bounds_
+                         : gfx::Rect(window_being_recorded_->bounds().size());
+  bounds.Subtract(Shell::Get()
+                      ->docked_magnifier_controller()
+                      ->GetTotalMagnifierBoundsForRoot(
+                          window_being_recorded_->GetRootWindow()));
+  return bounds;
 }
 
 }  // namespace ash

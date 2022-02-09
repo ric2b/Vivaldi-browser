@@ -85,6 +85,7 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #include "sandbox/policy/win/sandbox_win.h"
+#include "sandbox/win/src/restricted_token_utils.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #include "sandbox/win/src/window.h"
 #include "ui/gfx/win/rendering_window_manager.h"
@@ -256,6 +257,7 @@ static const char* const kSwitchNames[] = {
     switches::kEnableLogging,
     switches::kEnableDeJelly,
     switches::kDeJellyScreenWidth,
+    switches::kDocumentTransitionSlowdownFactor,
     switches::kDoubleBufferCompositing,
     switches::kHeadless,
     switches::kLoggingLevel,
@@ -318,6 +320,7 @@ static const char* const kSwitchNames[] = {
     switches::kLacrosEnablePlatformEncryptedHevc,
     switches::kLacrosEnablePlatformHevc,
     switches::kLacrosUseChromeosProtectedMedia,
+    switches::kLacrosUseChromeosProtectedAv1,
 #endif
 };
 
@@ -483,16 +486,37 @@ class GpuSandboxedProcessLauncherDelegate
 
  private:
 #if defined(OS_WIN)
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ProcessIntegrityResult{
+      kLowIl = 0,
+      kOpenGlMediumIl = 1,
+      kDesktopAccessMediumIl = 2,
+      kMaxValue = kDesktopAccessMediumIl,
+  };
+
   bool UseOpenGLRenderer() {
     return cmd_line_.GetSwitchValueASCII(switches::kUseGL) ==
            gl::kGLImplementationDesktopName;
   }
 
   bool ShouldSetDelayedIntegrity() {
-    if (UseOpenGLRenderer())
+    if (UseOpenGLRenderer()) {
+      UMA_HISTOGRAM_ENUMERATION("GPU.ProcessIntegrityResult",
+                                ProcessIntegrityResult::kOpenGlMediumIl);
       return true;
+    }
 
-    return base::win::IsRunningUnderDesktopName(L"winlogon");
+    // Desktop access is needed to load user32.dll, we can lower token in child
+    // process after that's done.
+    if (sandbox::CanLowIntegrityAccessDesktop()) {
+      UMA_HISTOGRAM_ENUMERATION("GPU.ProcessIntegrityResult",
+                                ProcessIntegrityResult::kLowIl);
+      return false;
+    }
+    UMA_HISTOGRAM_ENUMERATION("GPU.ProcessIntegrityResult",
+                              ProcessIntegrityResult::kDesktopAccessMediumIl);
+    return true;
   }
 
   bool enable_appcontainer_;
@@ -554,9 +578,7 @@ bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
 
 // static
 GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
-  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                          ? BrowserThread::UI
-                          : BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Do not launch the unsandboxed GPU info collection process if GPU is
   // disabled
@@ -599,12 +621,8 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
 
 // static
 void GpuProcessHost::GetHasGpuProcess(base::OnceCallback<void(bool)> callback) {
-  auto task_runner = base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                         ? GetUIThreadTaskRunner({})
-                         : GetIOThreadTaskRunner({});
-
-  if (!task_runner->BelongsToCurrentThread()) {
-    task_runner->PostTask(
+  if (!GetUIThreadTaskRunner({})->BelongsToCurrentThread()) {
+    GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&GpuProcessHost::GetHasGpuProcess, std::move(callback)));
     return;
@@ -628,12 +646,9 @@ void GpuProcessHost::CallOnIO(
 #if !defined(OS_WIN)
   DCHECK_NE(kind, GPU_PROCESS_KIND_INFO_COLLECTION);
 #endif
-  auto task_runner = base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                         ? GetUIThreadTaskRunner({})
-                         : GetIOThreadTaskRunner({});
-  task_runner->PostTask(FROM_HERE,
-                        base::BindOnce(&RunCallbackOnIO, kind, force_create,
-                                       std::move(callback)));
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&RunCallbackOnIO, kind, force_create,
+                                std::move(callback)));
 }
 
 void GpuProcessHost::BindInterface(
@@ -663,9 +678,7 @@ void GpuProcessHost::TerminateGpuProcess(const std::string& message) {
 
 // static
 GpuProcessHost* GpuProcessHost::FromID(int host_id) {
-  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                          ? BrowserThread::UI
-                          : BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   for (int i = 0; i < GPU_PROCESS_KIND_COUNT; ++i) {
     GpuProcessHost* host = g_gpu_process_hosts[i];
@@ -873,9 +886,7 @@ bool GpuProcessHost::Init() {
   mode_ = GpuDataManagerImpl::GetInstance()->GetGpuMode();
 
   if (in_process_) {
-    DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                            ? BrowserThread::UI
-                            : BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(GetGpuMainThreadFactory());
     gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
     GpuDataManagerImpl::GetInstance()->UpdateGpuPreferences(
@@ -1082,14 +1093,7 @@ void GpuProcessHost::RecordLogMessage(int32_t severity,
 void GpuProcessHost::BindDiscardableMemoryReceiver(
     mojo::PendingReceiver<
         discardable_memory::mojom::DiscardableSharedMemoryManager> receiver) {
-  if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
     BindDiscardableMemoryReceiverOnUI(std::move(receiver));
-    return;
-  }
-
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&BindDiscardableMemoryReceiverOnUI, std::move(receiver)));
 }
 
 GpuProcessKind GpuProcessHost::kind() {
@@ -1114,7 +1118,7 @@ void GpuProcessHost::DumpProcessStack() {
 #endif
 }
 
-void GpuProcessHost::RunService(mojo::GenericPendingReceiver receiver) {
+void GpuProcessHost::RunServiceImpl(mojo::GenericPendingReceiver receiver) {
   process_->child_process()->BindServiceInterface(std::move(receiver));
 }
 

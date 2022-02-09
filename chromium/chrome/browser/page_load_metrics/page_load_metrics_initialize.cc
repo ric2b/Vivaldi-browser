@@ -21,6 +21,7 @@
 #include "chrome/browser/page_load_metrics/observers/data_use_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/foreground_duration_ukm_observer.h"
+#include "chrome/browser/page_load_metrics/observers/formfill_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/javascript_frameworks_ukm_observer.h"
@@ -80,6 +81,10 @@ class PageLoadMetricsEmbedder
     : public page_load_metrics::PageLoadMetricsEmbedderBase {
  public:
   explicit PageLoadMetricsEmbedder(content::WebContents* web_contents);
+
+  PageLoadMetricsEmbedder(const PageLoadMetricsEmbedder&) = delete;
+  PageLoadMetricsEmbedder& operator=(const PageLoadMetricsEmbedder&) = delete;
+
   ~PageLoadMetricsEmbedder() override;
 
   // page_load_metrics::PageLoadMetricsEmbedderBase:
@@ -94,9 +99,6 @@ class PageLoadMetricsEmbedder
   // page_load_metrics::PageLoadMetricsEmbedderBase:
   void RegisterEmbedderObservers(
       page_load_metrics::PageLoadTracker* tracker) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PageLoadMetricsEmbedder);
 };
 
 PageLoadMetricsEmbedder::PageLoadMetricsEmbedder(
@@ -149,6 +151,7 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
 
     tracker->AddObserver(std::make_unique<FlocPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<ThirdPartyMetricsObserver>());
+    tracker->AddObserver(std::make_unique<FormfillPageLoadMetricsObserver>());
 
     std::unique_ptr<page_load_metrics::PageLoadMetricsObserver> ukm_observer =
         UkmPageLoadMetricsObserver::CreateIfNeeded();

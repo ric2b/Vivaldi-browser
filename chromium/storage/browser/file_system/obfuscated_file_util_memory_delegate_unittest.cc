@@ -228,10 +228,8 @@ TEST_F(ObfuscatedFileUtilMemoryDelegateTest, TouchFileAndGetFileInfo) {
   ASSERT_EQ(false, info.is_directory);
   ASSERT_EQ(false, info.is_symbolic_link);
 
-  const base::Time new_accessed =
-      info.last_accessed + base::TimeDelta::FromHours(10);
-  const base::Time new_modified =
-      info.last_modified + base::TimeDelta::FromHours(5);
+  const base::Time new_accessed = info.last_accessed + base::Hours(10);
+  const base::Time new_modified = info.last_modified + base::Hours(5);
 
   EXPECT_EQ(base::File::FILE_OK,
             file_util()->Touch(file_name, new_accessed, new_modified));
@@ -616,9 +614,9 @@ TEST_F(ObfuscatedFileUtilMemoryDelegateTest, PreserveLastModified_NoSync) {
             file_util()->CopyOrMoveFile(
                 from_file, to_file,
                 FileSystemOperation::OPTION_PRESERVE_LAST_MODIFIED, nosync));
+  ASSERT_TRUE(FileExists(to_file));
 
   base::File::Info file_info2;
-  ASSERT_TRUE(FileExists(to_file));
   ASSERT_EQ(base::File::FILE_OK,
             file_util()->GetFileInfo(to_file, &file_info2));
   EXPECT_EQ(file_info1.last_modified, file_info2.last_modified);

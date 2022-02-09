@@ -60,9 +60,8 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   content::BrowserContext* browser_context_ = nullptr;
 };
 
-class DevtoolsConnectorItem
-    : public content::WebContentsDelegate,
-      public base::RefCounted<DevtoolsConnectorItem> {
+class DevtoolsConnectorItem : public content::WebContentsDelegate,
+                              public base::RefCounted<DevtoolsConnectorItem> {
  public:
   DevtoolsConnectorItem() = default;
   DevtoolsConnectorItem(int tab_id, content::BrowserContext* context);
@@ -94,9 +93,7 @@ class DevtoolsConnectorItem
     return connector_bindings_delegate_;
   }
 
-  int tab_id() {
-    return tab_id_;
-  }
+  int tab_id() { return tab_id_; }
 
   void ResetDockingState();
 
@@ -106,9 +103,7 @@ class DevtoolsConnectorItem
   }
 
   bool device_mode_enabled() { return device_mode_enabled_; }
-  void set_device_mode_enabled(bool enabled) {
-    device_mode_enabled_ = enabled;
-  }
+  void set_device_mode_enabled(bool enabled) { device_mode_enabled_ = enabled; }
 
  private:
   friend class base::RefCounted<DevtoolsConnectorItem>;
@@ -124,27 +119,25 @@ class DevtoolsConnectorItem
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
                       bool* was_blocked) override;
-  void WebContentsCreated(
-      content::WebContents* source_contents,
-      int opener_render_process_id,
-      int opener_render_frame_id,
-      const std::string& frame_name,
-      const GURL& target_url,
-      content::WebContents* new_contents
-    ) override;
+  void WebContentsCreated(content::WebContents* source_contents,
+                          int opener_render_process_id,
+                          int opener_render_frame_id,
+                          const std::string& frame_name,
+                          const GURL& target_url,
+                          content::WebContents* new_contents) override;
   void CloseContents(content::WebContents* source) override;
   void ContentsZoomChange(bool zoom_in) override;
   void BeforeUnloadFired(content::WebContents* tab,
                          bool proceed,
                          bool* proceed_to_fire_unload) override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
-                         content::WebContents* source,
-                         const content::NativeWebKeyboardEvent& event) override;
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
   bool HandleKeyboardEvent(
-    content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) override;
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
-    content::WebContents* source) override;
+      content::WebContents* source) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
@@ -190,7 +183,7 @@ class DevtoolsConnectorAPI : public BrowserContextKeyedAPI {
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<DevtoolsConnectorAPI>*
-    GetFactoryInstance();
+  GetFactoryInstance();
 
   DevtoolsConnectorItem* GetOrCreateDevtoolsConnectorItem(int tab_id);
 
@@ -220,9 +213,7 @@ class DevtoolsConnectorAPI : public BrowserContextKeyedAPI {
   std::vector<DevtoolsConnectorItem*> connector_items_;
 
   // BrowserContextKeyedAPI implementation.
-  static const char* service_name() {
-    return "DevtoolsConnectorAPI";
-  }
+  static const char* service_name() { return "DevtoolsConnectorAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
 };

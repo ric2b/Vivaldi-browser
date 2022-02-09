@@ -24,6 +24,8 @@ class RuleParser {
 
   explicit RuleParser(ParseResult* parse_result, bool allow_abp_snippets);
   ~RuleParser();
+  RuleParser(const RuleParser&) = delete;
+  RuleParser& operator=(const RuleParser&) = delete;
 
   Result Parse(base::StringPiece rule_string);
 
@@ -48,8 +50,6 @@ class RuleParser {
 
   ParseResult* parse_result_;
   bool allow_abp_snippets_;
-
-  DISALLOW_COPY_AND_ASSIGN(RuleParser);
 };
 
 }  // namespace adblock_filter

@@ -6,13 +6,13 @@
 #ifndef SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 #define SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 
-#include "notes/notes_model.h"
 #include "notes/note_node.h"
+#include "notes/notes_model.h"
 #include "notes/tests/notes_contenthelper.h"
 
 class GURL;
-using vivaldi::NotesModel;
 using vivaldi::NoteNode;
+using vivaldi::NotesModel;
 
 namespace notes_helper {
 
@@ -28,66 +28,66 @@ NotesModel* GetVerifierNotesModel() WARN_UNUSED_RESULT;
 // Adds a URL with address |url| and content |content| to the notes of
 // profile |profile|. Returns a pointer to the node that was added.
 const NoteNode* AddNote(int profile,
-                          const std::string& content,
-                          const GURL& url) WARN_UNUSED_RESULT;
+                        const std::string& content,
+                        const GURL& url) WARN_UNUSED_RESULT;
 
 // Adds a URL with address |url|, title |title| and content |content| to the
 // notes of profile |profile|. Returns a pointer to the node that was added.
 const NoteNode* AddNote(int profile,
-                          const std::string& title,
-                          const std::string& content,
-                          const GURL& url) WARN_UNUSED_RESULT;
+                        const std::string& title,
+                        const std::string& content,
+                        const GURL& url) WARN_UNUSED_RESULT;
 
 // Adds a URL with address |url| and content |content| to the notes of
 // profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 const NoteNode* AddNote(int profile,
-                          int index,
-                          const std::string& content,
-                          const GURL& url) WARN_UNUSED_RESULT;
+                        int index,
+                        const std::string& content,
+                        const GURL& url) WARN_UNUSED_RESULT;
 
 // Adds a URL with address |url|, title |title| and content |content| to the
 // notes of profile |profile| at position |index|. Returns a pointer to the node
 // that was added.
 const NoteNode* AddNote(int profile,
-                          int index,
-                          const std::string& content,
-                          const std::string& title,
-                          const GURL& url) WARN_UNUSED_RESULT;
+                        int index,
+                        const std::string& content,
+                        const std::string& title,
+                        const GURL& url) WARN_UNUSED_RESULT;
 
 // Adds a URL with address |url| and content |content| under the node |parent|
 // of profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 const NoteNode* AddNote(int profile,
-                          const NoteNode* parent,
-                          int index,
-                          const std::string& content,
-                          const std::string& title,
-                          const GURL& url) WARN_UNUSED_RESULT;
+                        const NoteNode* parent,
+                        int index,
+                        const std::string& content,
+                        const std::string& title,
+                        const GURL& url) WARN_UNUSED_RESULT;
 const NoteNode* AddNote(int profile,
-                          const NoteNode* parent,
-                          int index,
-                          const std::string& content,
-                          const GURL& url) WARN_UNUSED_RESULT;
+                        const NoteNode* parent,
+                        int index,
+                        const std::string& content,
+                        const GURL& url) WARN_UNUSED_RESULT;
 
 // Adds a folder named |title| to the notes profile |profile|.
 // Returns a pointer to the folder that was added.
 const NoteNode* AddFolder(int profile,
-                            const std::string& title) WARN_UNUSED_RESULT;
+                          const std::string& title) WARN_UNUSED_RESULT;
 
 // Adds a folder named |title| to the notes of profile |profile| at
 // position |index|. Returns a pointer to the folder that was added.
 const NoteNode* AddFolder(int profile,
-                            int index,
-                            const std::string& title) WARN_UNUSED_RESULT;
+                          int index,
+                          const std::string& title) WARN_UNUSED_RESULT;
 
 // Adds a folder named |title| to the node |parent| in the notes model of
 // profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 const NoteNode* AddFolder(int profile,
-                            const NoteNode* parent,
-                            int index,
-                            const std::string& title) WARN_UNUSED_RESULT;
+                          const NoteNode* parent,
+                          int index,
+                          const std::string& title) WARN_UNUSED_RESULT;
 
 // Changes the title of the node |node| in the notes model of profile
 // |profile| to |new_content|.
@@ -97,15 +97,13 @@ void SetContent(int profile,
 
 // Changes the title of the node |node| in the notes model of profile
 // |profile| to |new_title|.
-void SetTitle(int profile,
-              const NoteNode* node,
-              const std::string& new_title);
+void SetTitle(int profile, const NoteNode* node, const std::string& new_title);
 
 // Changes the url of the node |node| in the notes model of profile
 // |profile| to |new_url|. Returns a pointer to the node with the changed url.
 const NoteNode* SetURL(int profile,
-                         const NoteNode* node,
-                         const GURL& new_url) WARN_UNUSED_RESULT;
+                       const NoteNode* node,
+                       const GURL& new_url) WARN_UNUSED_RESULT;
 
 // Moves the node |node| in the notes model of profile |profile| so it ends
 // up under the node |new_parent| at position |index|.
@@ -133,7 +131,6 @@ void ReverseChildOrder(int profile, const NoteNode* parent);
 // notes model. Returns true if they match.
 bool ModelMatchesVerifier(int profile) WARN_UNUSED_RESULT;
 
-
 // Checks if the notes models of |profile_a| and |profile_b| match each
 // other. Returns true if they match.
 bool ModelsMatch(int profile_a, int profile_b) WARN_UNUSED_RESULT;
@@ -159,7 +156,7 @@ bool HasNodeWithURL(int profile, const GURL& url);
 // Gets the node in the notes model of profile |profile| that has the url
 // |url|. Note: Only one instance of |url| is assumed to be present.
 const NoteNode* GetUniqueNodeByURL(int profile,
-                                     const GURL& url) WARN_UNUSED_RESULT;
+                                   const GURL& url) WARN_UNUSED_RESULT;
 
 // Returns the number of notes in notes model of profile |profile|
 // whose content match the string |content|.

@@ -60,6 +60,10 @@
 sandbox::TargetServices* g_utility_target_services = nullptr;
 #endif
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#include "platform_media/common/win/platform_media_init.h"
+#endif
+
 namespace content {
 
 // Mainline routine for running as the utility process.
@@ -124,11 +128,11 @@ int UtilityMain(const MainFunctionParams& parameters) {
     case sandbox::policy::SandboxType::kNetwork:
       pre_sandbox_hook = base::BindOnce(&network::NetworkPreSandboxHook);
       break;
-#if BUILDFLAG(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
     case sandbox::policy::SandboxType::kPrintBackend:
       pre_sandbox_hook = base::BindOnce(&printing::PrintBackendPreSandboxHook);
       break;
-#endif  // BUILDFLAG(ENABLE_PRINTING)
+#endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
     case sandbox::policy::SandboxType::kAudio:
       pre_sandbox_hook = base::BindOnce(&audio::AudioPreSandboxHook);
       break;
@@ -204,6 +208,10 @@ int UtilityMain(const MainFunctionParams& parameters) {
   // shell32 caused process to crash during process shutdown.
   HMODULE shell32_pin = ::LoadLibrary(L"shell32.dll");
   UNREFERENCED_PARAMETER(shell32_pin);
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  platform_media_init::InitForUtilityProcess(parameters.command_line);
+#endif
 
   if (!sandbox::policy::IsUnsandboxedSandboxType(sandbox_type) &&
       sandbox_type != sandbox::policy::SandboxType::kCdm &&

@@ -33,6 +33,9 @@ class VivaldiAccountPasswordHandler
 
   explicit VivaldiAccountPasswordHandler(Profile* profile, Delegate* delegate);
   ~VivaldiAccountPasswordHandler() override;
+  VivaldiAccountPasswordHandler(const VivaldiAccountPasswordHandler&) = delete;
+  VivaldiAccountPasswordHandler& operator=(
+      const VivaldiAccountPasswordHandler&) = delete;
 
   std::string password() const { return password_; }
 
@@ -51,13 +54,13 @@ class VivaldiAccountPasswordHandler
   void OnLoginsChanged(
       password_manager::PasswordStoreInterface* store,
       const password_manager::PasswordStoreChangeList& changes) override;
-  void OnLoginsRetained(
-      password_manager::PasswordStoreInterface* store,
-      const std::vector<password_manager::PasswordForm>& retained_passwords) override;
+  void OnLoginsRetained(password_manager::PasswordStoreInterface* store,
+                        const std::vector<password_manager::PasswordForm>&
+                            retained_passwords) override;
 
  private:
   Delegate* delegate_;
-  scoped_refptr<password_manager::PasswordStore> password_store_;
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store_;
 
   base::ObserverList<Observer> observers_;
 
@@ -65,8 +68,6 @@ class VivaldiAccountPasswordHandler
 
   void PasswordReceived(const std::string& password);
   void UpdatePassword();
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountPasswordHandler);
 };
 
 }  // namespace vivaldi

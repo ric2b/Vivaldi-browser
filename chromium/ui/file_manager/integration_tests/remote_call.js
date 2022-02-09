@@ -122,7 +122,8 @@ export class RemoteCall {
   /**
    * Waits until a window having the given ID prefix appears.
    * @param {string} windowIdPrefix ID prefix of the requested window.
-   * @return {Promise} promise Promise to be fulfilled with a found window's ID.
+   * @return {!Promise<string>} promise Promise to be fulfilled with a found
+   *     window's ID.
    */
   waitForWindow(windowIdPrefix) {
     const caller = getCaller();
@@ -222,7 +223,7 @@ export class RemoteCall {
     return repeatUntil(async () => {
       const elements = await this.callRemoteTestUtil(
           'deepQueryAllElements', appId, [query, styleNames]);
-      if (elements.length > 0) {
+      if (elements && elements.length > 0) {
         return /** @type {ElementObject} */ (elements[0]);
       }
       return pending(caller, 'Element %s is not found.', query);
@@ -435,7 +436,8 @@ export class RemoteCall {
     const y =
         Math.floor(element['renderedTop'] + (element['renderedHeight'] / 2));
 
-    return sendTestMessage({name: 'simulateClick', 'clickX': x, 'clickY': y});
+    return sendTestMessage(
+        {appId, name: 'simulateClick', 'clickX': x, 'clickY': y});
   }
 }
 
@@ -472,10 +474,50 @@ export class RemoteCallFilesApp extends RemoteCall {
         if (response === '"@undefined@"') {
           fulfill(undefined);
         } else {
-          fulfill(JSON.parse(response));
+          try {
+            fulfill(response == '' ? true : JSON.parse(response));
+          } catch (e) {
+            console.error(`Failed to parse "${response}" due to ${e}`);
+            fulfill(false);
+          }
         }
       });
     });
+  }
+
+  /** @override */
+  async waitForWindow(windowIdPrefix) {
+    if (!this.isSwaMode()) {
+      return super.waitForWindow(windowIdPrefix);
+    }
+
+    return this.waitForSwaWindow();
+  }
+
+  async getWindows() {
+    if (!this.isSwaMode()) {
+      return this.callRemoteTestUtil('getWindows', null, []);
+    }
+
+    return JSON.parse(
+        await sendTestMessage({name: 'getWindowsSWA', isSWA: true}));
+  }
+
+  /**
+   * Wait for a SWA window to be open.
+   * @return {!Promise<string>}
+   */
+  async waitForSwaWindow() {
+    const caller = getCaller();
+    const appId = await repeatUntil(async () => {
+      const ret = await sendTestMessage({name: 'findSwaWindow'});
+      if (ret === 'none') {
+        return pending(caller, 'Wait for SWA window');
+      }
+      return ret;
+    });
+
+    return appId;
   }
 
   /**
@@ -748,5 +790,27 @@ export class RemoteCallFilesApp extends RemoteCall {
           '. Actual: ' + volumesCount;
       return pending(caller, msg);
     });
+  }
+
+  /**
+   * Isolates the specified banner to test. The banner is still checked against
+   * it's filters, but is now the top priority banner.
+   * @param {string} appId App window Id
+   * @param {string} bannerTagName Banner tag name in lowercase to isolate.
+   */
+  async isolateBannerForTesting(appId, bannerTagName) {
+    await this.waitFor('isFileManagerLoaded', appId, true);
+    chrome.test.assertTrue(await this.callRemoteTestUtil(
+        'isolateBannerForTesting', appId, [bannerTagName]));
+  }
+
+  /**
+   * Disables banners from attaching to the DOM.
+   * @param {string} appId App window Id
+   */
+  async disableBannersForTesting(appId) {
+    await this.waitFor('isFileManagerLoaded', appId, true);
+    chrome.test.assertTrue(
+        await this.callRemoteTestUtil('disableBannersForTesting', appId, []));
   }
 }

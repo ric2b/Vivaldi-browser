@@ -44,7 +44,6 @@
 #include "storage/browser/file_system/external_mount_points.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
-#include "url/origin.h"
 
 using base::FilePath;
 using storage::FileSystemURL;
@@ -56,6 +55,10 @@ namespace {
 class FileManagerPathUtilTest : public testing::Test {
  public:
   FileManagerPathUtilTest() = default;
+
+  FileManagerPathUtilTest(const FileManagerPathUtilTest&) = delete;
+  FileManagerPathUtilTest& operator=(const FileManagerPathUtilTest&) = delete;
+
   ~FileManagerPathUtilTest() override = default;
 
   void SetUp() override {
@@ -71,9 +74,6 @@ class FileManagerPathUtilTest : public testing::Test {
  protected:
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FileManagerPathUtilTest);
 };
 
 TEST_F(FileManagerPathUtilTest, GetDownloadsFolderForProfile) {
@@ -448,7 +448,8 @@ TEST_F(FileManagerPathUtilTest, ConvertBetweenFileSystemURLAndPathInsideVM) {
     EXPECT_TRUE(ConvertFileSystemURLToPathInsideVM(
         profile_.get(),
         mount_points->CreateExternalFileSystemURL(
-            url::Origin(), test.mount_name, base::FilePath(test.relative_path)),
+            blink::StorageKey(), test.mount_name,
+            base::FilePath(test.relative_path)),
         vm_mount, /*map_crostini_home=*/false, &inside));
     EXPECT_EQ(test.inside, inside.value());
 
@@ -468,14 +469,14 @@ TEST_F(FileManagerPathUtilTest, ConvertBetweenFileSystemURLAndPathInsideVM) {
   EXPECT_TRUE(ConvertFileSystemURLToPathInsideVM(
       profile_.get(),
       mount_points->CreateExternalFileSystemURL(
-          url::Origin(), "crostini_0123456789abcdef_termina_penguin",
+          blink::StorageKey(), "crostini_0123456789abcdef_termina_penguin",
           base::FilePath("path/in/crostini")),
       vm_mount, /*map_crostini_home=*/true, &inside));
   EXPECT_EQ("/home/testuser/path/in/crostini", inside.value());
   EXPECT_TRUE(ConvertFileSystemURLToPathInsideCrostini(
       profile_.get(),
       mount_points->CreateExternalFileSystemURL(
-          url::Origin(), "crostini_0123456789abcdef_termina_penguin",
+          blink::StorageKey(), "crostini_0123456789abcdef_termina_penguin",
           base::FilePath("path/in/crostini")),
       &inside));
   EXPECT_EQ("/home/testuser/path/in/crostini", inside.value());
@@ -483,7 +484,7 @@ TEST_F(FileManagerPathUtilTest, ConvertBetweenFileSystemURLAndPathInsideVM) {
   EXPECT_FALSE(ConvertFileSystemURLToPathInsideVM(
       profile_.get(),
       mount_points->CreateExternalFileSystemURL(
-          url::Origin(), "unknown", base::FilePath("path/in/unknown")),
+          blink::StorageKey(), "unknown", base::FilePath("path/in/unknown")),
       vm_mount, /*map_crostini_home=*/false, &inside));
 
   // Special case for Crostini $HOME ConvertPathInsideVMToFileSystemURL.
@@ -604,6 +605,12 @@ std::unique_ptr<KeyedService> CreateFileSystemOperationRunnerForTesting(
 class FileManagerPathUtilConvertUrlTest : public testing::Test {
  public:
   FileManagerPathUtilConvertUrlTest() = default;
+
+  FileManagerPathUtilConvertUrlTest(const FileManagerPathUtilConvertUrlTest&) =
+      delete;
+  FileManagerPathUtilConvertUrlTest& operator=(
+      const FileManagerPathUtilConvertUrlTest&) = delete;
+
   ~FileManagerPathUtilConvertUrlTest() override = default;
 
   void SetUp() override {
@@ -702,9 +709,6 @@ class FileManagerPathUtilConvertUrlTest : public testing::Test {
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
   base::FilePath drive_mount_point_;
   base::FilePath crostini_mount_point_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FileManagerPathUtilConvertUrlTest);
 };
 
 FileSystemURL CreateExternalURL(const base::FilePath& path) {

@@ -27,6 +27,10 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
  public:
   VivaldiNativeAppWindowViewsWin();
   ~VivaldiNativeAppWindowViewsWin() override;
+  VivaldiNativeAppWindowViewsWin(const VivaldiNativeAppWindowViewsWin&) =
+      delete;
+  VivaldiNativeAppWindowViewsWin& operator=(
+      const VivaldiNativeAppWindowViewsWin&) = delete;
 
   ui::MenuModel* GetSystemMenuModel();
 
@@ -35,11 +39,10 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   ui::ImageModel GetWindowAppIcon() override;
 
  protected:
-   gfx::Insets GetFrameInsets() const override;
+  gfx::Insets GetFrameInsets() const override;
 
  private:
-  void OnShortcutInfoLoaded(
-      const web_app::ShortcutInfo& shortcut_info);
+  void OnShortcutInfoLoaded(const web_app::ShortcutInfo& shortcut_info);
 
   HWND GetNativeAppWindowHWND() const;
   void EnsureCaptionStyleSet();
@@ -67,8 +70,6 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   std::unique_ptr<VivaldiSystemMenuModelBuilder> menu_model_builder_;
 
   base::WeakPtrFactory<VivaldiNativeAppWindowViewsWin> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowViewsWin);
 };
 
 #endif  // UI_VIVALDI_NATIVE_APP_WINDOW_VIEWS_WIN_H_

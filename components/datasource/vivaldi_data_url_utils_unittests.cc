@@ -11,11 +11,9 @@ namespace vivaldi_data_url_utils {
 namespace {
 
 const PathType kTypeList[PathTypeCount] = {
-   PathType::kLocalPath,
-   PathType::kThumbnail,
-   PathType::kCSSMod,
-   PathType::kNotesAttachment,
-   PathType::kDesktopWallpaper,
+    PathType::kLocalPath,        PathType::kImage,
+    PathType::kCSSMod,           PathType::kNotesAttachment,
+    PathType::kDesktopWallpaper,
 };
 
 }  // namespace
@@ -69,7 +67,7 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath_BadFormat) {
   // In the invalid format checks use the name of one of top directories to
   // ensure that the url is rejected due to bad format, not an unknwon
   // directory.
-  EXPECT_EQ(base::StringPiece(top_dir(PathType::kThumbnail)), "thumbnail");
+  EXPECT_EQ(base::StringPiece(top_dir(PathType::kImage)), "thumbnail");
 
   // The path cannot be empty.
   type = ParsePath("");
@@ -99,24 +97,24 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath_OldFormats) {
 
   // thumbnail and local-image specific checks to ensure that we still support
   // the older forms.
-  EXPECT_EQ(base::StringPiece(top_dir(PathType::kThumbnail)), "thumbnail");
+  EXPECT_EQ(base::StringPiece(top_dir(PathType::kImage)), "thumbnail");
   EXPECT_EQ(base::StringPiece(top_dir(PathType::kLocalPath)), "local-image");
 
   // Check that parsing of the old thumbnail url format works.
   type = ParsePath("/http://bookmark_thumbnail/id?query", &data);
-  EXPECT_EQ(type, PathType::kThumbnail);
+  EXPECT_EQ(type, PathType::kImage);
   EXPECT_EQ(data, "id");
 
   // Check the parsing of old thumbnail path stored as local-image with data
   // that must be positive int63. The data should be converted into an actual
   // file name by appending the .png suffix.
   type = ParsePath("/local-image/1", &data);
-  EXPECT_EQ(type, PathType::kThumbnail);
+  EXPECT_EQ(type, PathType::kImage);
   EXPECT_EQ(data, "1.png");
 
   // Check max int64.
   type = ParsePath("/local-image/9223372036854775807?something", &data);
-  EXPECT_EQ(type, PathType::kThumbnail);
+  EXPECT_EQ(type, PathType::kImage);
   EXPECT_EQ(data, "9223372036854775807.png");
 
   // Non-positive integers outside int63 range are data for local-image.
@@ -173,7 +171,7 @@ TEST_F(VivaldiDataUrlUtilsTest, UrlParse) {
 
   // Check that ? is ignored.
   type = ParseUrl("chrome://vivaldi-data/thumbnail/data.png?query", &data);
-  EXPECT_EQ(type, PathType::kThumbnail);
+  EXPECT_EQ(type, PathType::kImage);
   EXPECT_EQ("data.png", data);
 }
 
@@ -219,5 +217,4 @@ TEST_F(VivaldiDataUrlUtilsTest, MakeUrl) {
   }
 }
 
-
-}  // vivaldi_data_url_utils
+}  // namespace vivaldi_data_url_utils

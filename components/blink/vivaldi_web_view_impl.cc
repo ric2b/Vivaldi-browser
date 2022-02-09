@@ -9,10 +9,10 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
+#include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
-#include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace blink {
@@ -47,7 +47,7 @@ void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
 
         if (images_enabled) {
           imageElement->setAttribute(html_names::kSrcAttr,
-                                    element->ImageSourceURL());
+                                     element->ImageSourceURL());
         } else {
           int width = 10, height = 10;
           SkBitmap bitmap;
@@ -84,8 +84,7 @@ void WebViewImpl::LoadImageAt(const gfx::Point& point) {
   if (!node || !IsA<HTMLImageElement>(*node))
     return;
 
-  auto* imageElement =
-      DynamicTo<HTMLImageElement>(blink::To<Element>(*node));
+  auto* imageElement = DynamicTo<HTMLImageElement>(blink::To<Element>(*node));
   imageElement->ForceReload();
 }
 

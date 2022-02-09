@@ -33,8 +33,8 @@ namespace {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 
-// By default, JavaScript and images are enabled, and blockable mixed content is
-// blocked in guest content
+// By default, JavaScript, images and auto dark are allowed, and blockable mixed
+// content is blocked in guest content
 void GetGuestViewDefaultContentSettingRules(
     bool incognito,
     RendererContentSettingRules* rules) {
@@ -43,7 +43,11 @@ void GetGuestViewDefaultContentSettingRules(
       base::Value::FromUniquePtrValue(
           content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
       std::string(), incognito));
-
+  rules->auto_dark_content_rules.push_back(ContentSettingPatternSource(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
+      std::string(), incognito));
   rules->script_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
       base::Value::FromUniquePtrValue(
@@ -149,6 +153,20 @@ void RendererUpdater::InitializeRenderer(
   } else {
     content_settings::GetRendererContentSettingRules(
         HostContentSettingsMapFactory::GetForProfile(profile), &rules);
+
+    // Always allow scripting in PDF renderers to retain the functionality of
+    // the scripted messaging proxy in between the plugins in the PDF renderers
+    // and the PDF extension UI. Content settings for JavaScript embedded in
+    // PDFs are enforced by the PDF plugin.
+    if (render_process_host->IsPdf()) {
+      rules.script_rules.clear();
+      rules.script_rules.emplace_back(
+          ContentSettingsPattern::Wildcard(),
+          ContentSettingsPattern::Wildcard(),
+          base::Value::FromUniquePtrValue(
+              content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
+          std::string(), is_incognito_process);
+    }
   }
   renderer_configuration->SetContentSettingRules(rules);
 }

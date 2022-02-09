@@ -8,11 +8,11 @@
 
 #include "base/check.h"
 #include "base/notreached.h"
+#import "ios/chrome/browser/commerce/price_alert_util.h"
 #import "ios/chrome/browser/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -106,13 +106,18 @@ void PositionView(UIView* view, CGPoint point) {
                    forControlEvents:UIControlEventTouchUpInside];
     closeTapTargetButton.accessibilityIdentifier =
         kGridCellCloseButtonIdentifier;
-
     [contentView addSubview:topBar];
     [contentView addSubview:snapshotView];
+    PriceCardView* priceCardView;
+    if (IsPriceAlertsEnabled()) {
+      priceCardView = [[PriceCardView alloc] init];
+      [snapshotView addSubview:priceCardView];
+    }
     [contentView addSubview:closeTapTargetButton];
     _topBar = topBar;
     _snapshotView = snapshotView;
     _closeTapTargetButton = closeTapTargetButton;
+    _priceCardView = priceCardView;
 
     self.contentView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
     self.snapshotView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
@@ -125,8 +130,8 @@ void PositionView(UIView* view, CGPoint point) {
     self.layer.shadowRadius = 4.0f;
     self.layer.shadowOpacity = 0.5f;
     self.layer.masksToBounds = NO;
-
-    NSArray* constraints = @[
+    NSMutableArray* constraints = [[NSMutableArray alloc] init];
+    [constraints addObjectsFromArray:@[
       [topBar.topAnchor constraintEqualToAnchor:contentView.topAnchor],
       [topBar.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
       [topBar.trailingAnchor
@@ -146,7 +151,17 @@ void PositionView(UIView* view, CGPoint point) {
           constraintEqualToConstant:kGridCellCloseTapTargetWidthHeight],
       [closeTapTargetButton.heightAnchor
           constraintEqualToConstant:kGridCellCloseTapTargetWidthHeight],
-    ];
+    ]];
+    if (IsPriceAlertsEnabled()) {
+      [constraints addObjectsFromArray:@[
+        [priceCardView.topAnchor
+            constraintEqualToAnchor:snapshotView.topAnchor
+                           constant:kGridCellPriceDropTopSpacing],
+        [priceCardView.leadingAnchor
+            constraintEqualToAnchor:snapshotView.leadingAnchor
+                           constant:kGridCellPriceDropLeadingSpacing]
+      ]];
+    }
     [NSLayoutConstraint activateConstraints:constraints];
   }
   return self;
@@ -181,6 +196,7 @@ void PositionView(UIView* view, CGPoint point) {
   self.icon = nil;
   self.snapshot = nil;
   self.selected = NO;
+  self.priceCardView.hidden = YES;
 }
 
 #pragma mark - UIAccessibility
@@ -245,6 +261,10 @@ void PositionView(UIView* view, CGPoint point) {
 - (void)setSnapshot:(UIImage*)snapshot {
   self.snapshotView.image = snapshot;
   _snapshot = snapshot;
+}
+
+- (void)setPriceDrop:(NSString*)price previousPrice:(NSString*)previousPrice {
+  [self.priceCardView setPriceDrop:price previousPrice:previousPrice];
 }
 
 - (void)setTitle:(NSString*)title {
@@ -394,14 +414,12 @@ void PositionView(UIView* view, CGPoint point) {
 }
 
 - (UIImage*)selectIconImageForCurrentState {
-  if (@available(iOS 13, *)) {
-    if (_state == GridCellStateEditingUnselected) {
-      return [[UIImage systemImageNamed:@"circle"]
-          imageWithTintColor:[UIColor cr_systemGray3Color]
-               renderingMode:UIImageRenderingModeAlwaysOriginal];
-    }
-    return [UIImage systemImageNamed:@"checkmark.circle.fill"];
+  if (_state == GridCellStateEditingUnselected) {
+    return [[UIImage systemImageNamed:@"circle"]
+        imageWithTintColor:UIColor.systemGray3Color
+             renderingMode:UIImageRenderingModeAlwaysOriginal];
   }
+  return [UIImage systemImageNamed:@"checkmark.circle.fill"];
   NOTREACHED();
   return nil;
 }
@@ -547,6 +565,7 @@ void PositionView(UIView* view, CGPoint point) {
   proxy.snapshot = cell.snapshot;
   proxy.title = cell.title;
   proxy.titleHidden = cell.titleHidden;
+  proxy.priceCardView = cell.priceCardView;
   return proxy;
 }
 #pragma mark - GridToTabTransitionView properties.

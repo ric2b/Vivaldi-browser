@@ -11,7 +11,7 @@
 // #import {assertEquals, assertDeepEquals} from '../../chai_assert.js';
 // #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
-// #import {waitAfterNextRender} from 'chrome://test/test_util.m.js';
+// #import {waitAfterNextRender} from 'chrome://test/test_util.js';
 // clang-format on
 
 /**
@@ -232,12 +232,11 @@ suite('ManageAccessibilityPageTests', function() {
                           .$$('#switchAccessActionAssignmentPane')
                           .$$('#error')
                           .textContent.trim();
-    assertEquals('Keys do not match. Press any key to exit.', errorText);
+    assertEquals('Keys don’t match. Press any key to exit.', errorText);
   });
 
   test('Deep link to auto-scan keyboards', async () => {
     loadTimeData.overrideValues({
-      isDeepLinkingEnabled: true,
       showExperimentalAccessibilitySwitchAccessImprovedTextInput: true,
     });
     const prefs = getDefaultPrefs();
@@ -251,7 +250,8 @@ suite('ManageAccessibilityPageTests', function() {
     settings.Router.getInstance().navigateTo(
         settings.routes.MANAGE_SWITCH_ACCESS_SETTINGS, params);
 
-    const deepLinkElement = page.$$('#keyboardScanSpeedSlider').$$('cr-slider');
+    const deepLinkElement = page.$$('#keyboardScanSpeedSlider')
+                                .shadowRoot.querySelector('cr-slider');
     await test_util.waitAfterNextRender(deepLinkElement);
 
     assertEquals(

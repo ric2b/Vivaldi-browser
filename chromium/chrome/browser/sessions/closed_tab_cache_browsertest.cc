@@ -8,7 +8,6 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
-#include "base/util/memory_pressure/fake_memory_pressure_monitor.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/sessions/closed_tab_cache_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/memory_pressure/fake_memory_pressure_monitor.h"
 #include "components/sessions/core/session_id.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
@@ -71,7 +71,7 @@ class ClosedTabCacheBrowserTest : public InProcessBrowserTest {
         ->closed_tab_cache();
   }
 
-  util::test::FakeMemoryPressureMonitor fake_memory_pressure_monitor_;
+  memory_pressure::test::FakeMemoryPressureMonitor fake_memory_pressure_monitor_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -129,6 +129,38 @@ IN_PROC_BROWSER_TEST_F(ClosedTabCacheBrowserTest, StoreEntryWhenFull) {
 
   // Expect the cache size to still be 1.
   EXPECT_EQ(closed_tab_cache().EntriesCount(), 1U);
+}
+
+// Only add an entry to the cache when no beforeunload listeners are running.
+IN_PROC_BROWSER_TEST_F(ClosedTabCacheBrowserTest,
+                       StoreEntryWithoutBeforeunloadListener) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EXPECT_TRUE(closed_tab_cache().IsEmpty())
+      << "Expected cache to be empty at the start of the test.";
+
+  // Don't cache WebContents when beforeunload listeners are run.
+  NavigateToURL(browser(), "a.com");
+  content::WebContents* a = browser()->tab_strip_model()->GetWebContentsAt(1);
+  EXPECT_TRUE(ExecJs(a->GetMainFrame(),
+                     "window.addEventListener('beforeunload', function (e) "
+                     "{e.returnValue = '';});"));
+  EXPECT_TRUE(a->NeedToFireBeforeUnloadOrUnloadEvents());
+  CloseTabAt(1);
+  EXPECT_EQ(closed_tab_cache().EntriesCount(), 0U);
+  a->DispatchBeforeUnload(/*auto_cancel=*/false);
+
+  // Cache WebContents when no beforeunload listeners are run.
+  NavigateToURL(browser(), "b.com");
+  content::WebContents* b = browser()->tab_strip_model()->GetWebContentsAt(2);
+  EXPECT_FALSE(b->NeedToFireBeforeUnloadOrUnloadEvents());
+  CloseTabAt(2);
+  EXPECT_EQ(closed_tab_cache().EntriesCount(), 1U);
+
+  // Ensure that the browser can shutdown. Otherwise tests might timeout.
+  base::RepeatingCallback<void(bool)> on_close_confirmed = base::BindRepeating(
+      [](bool placeholder) { LOG(ERROR) << "Should not be reached!"; });
+  EXPECT_FALSE(browser()->TryToCloseWindow(/*skip_beforeunload=*/true,
+                                           on_close_confirmed));
 }
 
 // Restore an entry when the cache is empty.
@@ -195,7 +227,7 @@ IN_PROC_BROWSER_TEST_F(ClosedTabCacheBrowserTest, EvictEntryOnTimeout) {
   EXPECT_EQ(closed_tab_cache().EntriesCount(), 1U);
 
   // Fast forward to just before eviction is due.
-  base::TimeDelta delta = base::TimeDelta::FromMilliseconds(1);
+  base::TimeDelta delta = base::Milliseconds(1);
   base::TimeDelta ttl = ClosedTabCache::GetTimeToLiveInClosedTabCache();
   task_runner->FastForwardBy(ttl - delta);
 
@@ -221,7 +253,7 @@ class ClosedTabCacheBrowserTestWithMemoryPressure
   }
 
   void SetMemoryPressure(
-      util::test::FakeMemoryPressureMonitor::MemoryPressureLevel level) {
+      memory_pressure::test::FakeMemoryPressureMonitor::MemoryPressureLevel level) {
     fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(level);
 
     // Wait for all the pressure callbacks to be run.

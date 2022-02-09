@@ -39,8 +39,12 @@ class PasswordModelTypeController : public syncer::ModelTypeController,
       scoped_refptr<PasswordStoreInterface> account_password_store_for_cleanup,
       PrefService* pref_service,
       signin::IdentityManager* identity_manager,
-      syncer::SyncService* sync_service,
-      const base::RepeatingClosure& state_changed_callback);
+      syncer::SyncService* sync_service);
+
+  PasswordModelTypeController(const PasswordModelTypeController&) = delete;
+  PasswordModelTypeController& operator=(const PasswordModelTypeController&) =
+      delete;
+
   ~PasswordModelTypeController() override;
 
   // DataTypeController overrides.
@@ -71,7 +75,6 @@ class PasswordModelTypeController : public syncer::ModelTypeController,
   PrefService* const pref_service_;
   signin::IdentityManager* const identity_manager_;
   syncer::SyncService* const sync_service_;
-  const base::RepeatingClosure state_changed_callback_;
 
   PasswordAccountStorageSettingsWatcher account_storage_settings_watcher_;
 
@@ -79,8 +82,6 @@ class PasswordModelTypeController : public syncer::ModelTypeController,
   syncer::SyncMode sync_mode_ = syncer::SyncMode::kFull;
 
   base::WeakPtrFactory<PasswordModelTypeController> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PasswordModelTypeController);
 };
 
 }  // namespace password_manager

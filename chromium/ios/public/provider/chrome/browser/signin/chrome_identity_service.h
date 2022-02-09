@@ -43,9 +43,6 @@ typedef void (^AccessTokenCallback)(NSString* token,
 // completed with success.
 typedef void (^ForgetIdentityCallback)(NSError* error);
 
-// Callback passed to method |GetAvatarForIdentity()|.
-typedef void (^GetAvatarCallback)(UIImage* avatar);
-
 // Callback passed to method |GetHostedDomainForIdentity()|.
 // |hosted_domain|:
 //   + nil, if error.
@@ -102,6 +99,10 @@ class ChromeIdentityService {
   class Observer {
    public:
     Observer() {}
+
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
+
     virtual ~Observer() {}
 
     // Handles identity list changed events.
@@ -123,9 +124,6 @@ class ChromeIdentityService {
 
     // Called when the ChromeIdentityService will be destroyed.
     virtual void OnChromeIdentityServiceWillBeDestroyed() {}
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(Observer);
   };
 
   // Callback invoked for each ChromeIdentity when iterating over them with
@@ -134,14 +132,11 @@ class ChromeIdentityService {
       base::RepeatingCallback<IdentityIteratorCallbackResult(ChromeIdentity*)>;
 
   ChromeIdentityService();
-  virtual ~ChromeIdentityService();
 
-  // Handles open URL authentication callback. Returns whether the URL was
-  // actually handled. This should be called within
-  // -[<UIApplicationDelegate> application:openURL:options:].
-  virtual bool HandleApplicationOpenURL(UIApplication* application,
-                                        NSURL* url,
-                                        NSDictionary* options);
+  ChromeIdentityService(const ChromeIdentityService&) = delete;
+  ChromeIdentityService& operator=(const ChromeIdentityService&) = delete;
+
+  virtual ~ChromeIdentityService();
 
   // Handles open URL authentication callback. Returns whether the URL was
   // actually handled. This should be called within
@@ -211,9 +206,9 @@ class ChromeIdentityService {
 
   // Fetches the profile avatar, from the cache or the network.
   // For high resolution iPads, returns large images (200 x 200) to avoid
-  // pixelization. Calls back on the main thread. |callback| may be nil.
-  virtual void GetAvatarForIdentity(ChromeIdentity* identity,
-                                    GetAvatarCallback callback);
+  // pixelization.
+  // Observer::OnProfileUpdate() will be called when the avatar is available.
+  virtual void GetAvatarForIdentity(ChromeIdentity* identity);
 
   // Synchronously returns any cached avatar, or nil.
   // GetAvatarForIdentity() should be generally used instead of this method.
@@ -239,6 +234,9 @@ class ChromeIdentityService {
   // will evaluate to false.
   void CanOfferExtendedSyncPromos(ChromeIdentity* identity,
                                   CapabilitiesCallback callback);
+
+  // Returns true if the service can be used, and supports ChromeIdentity list.
+  virtual bool IsServiceSupported();
 
   // Returns the MDM device status associated with |user_info|.
   virtual MDMDeviceStatus GetMDMDeviceStatus(NSDictionary* user_info);
@@ -286,8 +284,6 @@ class ChromeIdentityService {
 
  private:
   base::ObserverList<Observer, true>::Unchecked observer_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeIdentityService);
 };
 
 }  // namespace ios

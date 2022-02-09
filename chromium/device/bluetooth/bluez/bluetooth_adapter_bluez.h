@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/containers/queue.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
@@ -108,6 +109,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   static scoped_refptr<BluetoothAdapterBlueZ> CreateAdapter();
+
+  BluetoothAdapterBlueZ(const BluetoothAdapterBlueZ&) = delete;
+  BluetoothAdapterBlueZ& operator=(const BluetoothAdapterBlueZ&) = delete;
 
   // BluetoothAdapter:
   void Initialize(base::OnceClosure callback) override;
@@ -609,8 +613,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.
   base::WeakPtrFactory<BluetoothAdapterBlueZ> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BluetoothAdapterBlueZ);
 };
 
 }  // namespace bluez

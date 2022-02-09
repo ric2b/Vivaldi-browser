@@ -50,6 +50,11 @@ hooks = [
     ],
   },
   {
+    'name': 'Ensure bootstrap',
+    'pattern': '.',
+    'action': ["bash", 'chromium/third_party/depot_tools/ensure_bootstrap'],
+  },
+  {
     # Ensure that we don't accidentally reference any .pyc files whose
     # corresponding .py files have since been deleted.
     # We could actually try to avoid generating .pyc files, crbug.com/500078.
@@ -135,7 +140,7 @@ hooks = [
   },
   {
     # Should run after the clang hook.
-    'name': 'objdump/mac',
+    'name': 'objdump',
     'pattern': '.',
     'condition': 'checkout_mac and host_os != "mac"',
     'action': ['python3', 'chromium/tools/clang/scripts/update.py',

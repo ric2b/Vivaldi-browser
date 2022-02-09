@@ -63,6 +63,10 @@ class CastNetworkContexts::URLLoaderFactoryForSystem
     DETACH_FROM_SEQUENCE(sequence_checker_);
   }
 
+  URLLoaderFactoryForSystem(const URLLoaderFactoryForSystem&) = delete;
+  URLLoaderFactoryForSystem& operator=(const URLLoaderFactoryForSystem&) =
+      delete;
+
   // mojom::URLLoaderFactory implementation:
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
@@ -102,8 +106,6 @@ class CastNetworkContexts::URLLoaderFactoryForSystem
 
   SEQUENCE_CHECKER(sequence_checker_);
   CastNetworkContexts* network_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(URLLoaderFactoryForSystem);
 };
 
 CastNetworkContexts::CastNetworkContexts(
@@ -225,8 +227,11 @@ void CastNetworkContexts::ConfigureDefaultNetworkContextParams(
 
   auto* browser_context = CastBrowserProcess::GetInstance()->browser_context();
   DCHECK(browser_context);
-  network_context_params->cookie_path =
-      browser_context->GetPath().Append(kCookieStoreFile);
+  network_context_params->file_paths =
+      network::mojom::NetworkContextFilePaths::New();
+  network_context_params->file_paths->data_path = browser_context->GetPath();
+  network_context_params->file_paths->cookie_database_name =
+      base::FilePath(kCookieStoreFile);
   network_context_params->restore_old_session_cookies = false;
   network_context_params->persist_session_cookies = true;
   network_context_params->cookie_manager_params = CreateCookieManagerParams();
@@ -252,8 +257,6 @@ CastNetworkContexts::CreateSystemNetworkContextParams() {
   network::mojom::NetworkContextParamsPtr network_context_params =
       network::mojom::NetworkContextParams::New();
   ConfigureDefaultNetworkContextParams(network_context_params.get());
-
-  network_context_params->context_name = std::string("system");
 
   network_context_params->cert_verifier_params = content::GetCertVerifierParams(
       cert_verifier::mojom::CertVerifierCreationParams::New());

@@ -41,11 +41,13 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   IPCDemuxer(scoped_refptr<base::SequencedTaskRunner> media_task_runner,
              MediaLog* media_log);
   ~IPCDemuxer() override;
+  IPCDemuxer(const IPCDemuxer&) = delete;
+  IPCDemuxer& operator=(const IPCDemuxer&) = delete;
 
   // THis must be called on media_task_runner.
   void StartIPC(DataSource* data_source,
-               std::string mimetype,
-               StartIPCResult callback);
+                std::string mimetype,
+                StartIPCResult callback);
 
   // Checks if the content is supported by this demuxer. Return an empty string
   // if this is not possible or adjusted mime type.
@@ -101,8 +103,6 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   SEQUENCE_CHECKER(owner_sequence_checker_);
 
   base::WeakPtrFactory<IPCDemuxer> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(IPCDemuxer);
 };
 
 }  // namespace media

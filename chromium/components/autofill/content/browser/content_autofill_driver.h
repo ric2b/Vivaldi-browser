@@ -55,9 +55,19 @@ constexpr uint32_t kWebOTPUsed = 1 << 1;
 constexpr uint32_t kPhoneCollected = 1 << 2;
 }  // namespace phone_collection_metric
 
-// ContentAutofillDriver drives the autofill flow in the browser process based
-// on communication from the renderer and from the external world. There is one
-// instance per RenderFrameHost.
+// ContentAutofillDriver drives the Autofill flow in the browser process based
+// on communication from the renderer and from the external world.
+//
+// Each ContentAutofillDriver is associated with exactly one RenderFrameHost
+// and communicates with exactly one AutofillAgent throughout its entire
+// lifetime.
+//
+// This RenderFrameHost owns all forms and fields in the renderer-browser
+// communication:
+// - ContentAutofillDriver may assume that forms and fields received in the
+//   mojom::AutofillDriver events are owned by that RenderFrameHost.
+// - Conversely, the forms and fields which ContentAutofillDriver passes to
+//   mojom::AutofillAgent events must be owned by that RenderFrameHost.
 //
 // Events in AutofillDriver and mojom::AutofillDriver are passed on to
 // ContentAutofillRouter, which has one instance per WebContents. The naming
@@ -117,6 +127,7 @@ class ContentAutofillDriver : public AutofillDriver,
                               public mojom::AutofillDriver {
  public:
   // Gets the driver for |render_frame_host|.
+  // If |render_frame_host| is currently being deleted, this may be nullptr.
   static ContentAutofillDriver* GetForRenderFrameHost(
       content::RenderFrameHost* render_frame_host);
 
@@ -143,7 +154,8 @@ class ContentAutofillDriver : public AutofillDriver,
   ui::AXTreeID GetAxTreeId() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
-  InternalAuthenticator* GetOrCreateCreditCardInternalAuthenticator() override;
+  webauthn::InternalAuthenticator* GetOrCreateCreditCardInternalAuthenticator()
+      override;
   void PropagateAutofillPredictions(
       const std::vector<autofill::FormStructure*>& forms) override;
   void HandleParsedForms(const std::vector<const FormData*>& forms) override;
@@ -205,12 +217,13 @@ class ContentAutofillDriver : public AutofillDriver,
   // These events are forwarded to ContentAutofillRouter.
   // Their implementations (*Impl()) call into AutofillManager.
   //
-  // We do not expect to receive autofill related messages from a prerendered
+  // We do not expect to receive Autofill related messages from a prerendered
   // page, so we will validate calls accordingly. If we receive an unexpected
   // call, we will shut down the renderer and log the bad message.
   void SetFormToBeProbablySubmitted(
       const absl::optional<FormData>& form) override;
-  void FormsSeen(const std::vector<FormData>& forms) override;
+  void FormsSeen(const std::vector<FormData>& updated_forms,
+                 const std::vector<FormRendererId>& removed_forms) override;
   void FormSubmitted(const FormData& form,
                      bool known_success,
                      mojom::SubmissionSource source) override;
@@ -243,7 +256,8 @@ class ContentAutofillDriver : public AutofillDriver,
   // Implementations of the mojom::AutofillDriver functions called by the
   // renderer. These functions are called by ContentAutofillRouter.
   void SetFormToBeProbablySubmittedImpl(const absl::optional<FormData>& form);
-  void FormsSeenImpl(const std::vector<FormData>& forms);
+  void FormsSeenImpl(const std::vector<FormData>& updated_forms,
+                     const std::vector<FormGlobalId>& removed_forms);
   void FormSubmittedImpl(const FormData& form,
                          bool known_success,
                          mojom::SubmissionSource source);
@@ -320,6 +334,7 @@ class ContentAutofillDriver : public AutofillDriver,
     return browser_autofill_manager_;
   }
   AutofillManager* autofill_manager() { return autofill_manager_.get(); }
+
   content::RenderFrameHost* render_frame_host() { return render_frame_host_; }
 
   const mojo::AssociatedRemote<mojom::AutofillAgent>& GetAutofillAgent();
@@ -389,7 +404,7 @@ class ContentAutofillDriver : public AutofillDriver,
   void ShowOfferNotificationIfApplicable(
       content::NavigationHandle* navigation_handle);
 
-  // Returns the autofill router and confirms that it may be accessed (we should
+  // Returns the AutofillRouter and confirms that it may be accessed (we should
   // not be using the router if we're prerendering).
   ContentAutofillRouter& GetAutofillRouter();
 
@@ -421,7 +436,7 @@ class ContentAutofillDriver : public AutofillDriver,
   BrowserAutofillManager* browser_autofill_manager_;
 
   // Pointer to an implementation of InternalAuthenticator.
-  std::unique_ptr<InternalAuthenticator> authenticator_impl_;
+  std::unique_ptr<webauthn::InternalAuthenticator> authenticator_impl_;
 
   content::RenderWidgetHost::KeyPressEventCallback key_press_handler_;
 

@@ -6,9 +6,7 @@
 #include "chrome/browser/app_controller_mac.h"
 
 namespace vivaldi {
-void BuildVivaldiMainMenu(
-    NSApplication* nsapp,
-    AppController* app_controller);
+void BuildVivaldiMainMenu(NSApplication* nsapp, AppController* app_controller);
 }
 
 #endif  // VIVALDI_BROWSER_UI_VIVALDI_MAIN_MENU_BUILDER_H

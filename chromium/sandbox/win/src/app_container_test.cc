@@ -21,6 +21,7 @@
 #include "base/rand_util.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
@@ -918,8 +919,9 @@ class SocketBrokerTest
 };
 
 TEST_P(SocketBrokerTest, SocketBrokerTestUDP) {
-  // App Container socket brokering only supported on Win10 RS1 and above.
-  if (base::win::GetVersion() < base::win::Version::WIN10_RS1)
+  // Some APIs, such as named capabilities, needed to create the network service
+  // sandbox require Windows 10 RS2.
+  if (base::win::GetVersion() < base::win::Version::WIN10_RS2)
     return;
 
   UDPEchoServer server;
@@ -936,8 +938,9 @@ TEST_P(SocketBrokerTest, SocketBrokerTestUDP) {
 }
 
 TEST_P(SocketBrokerTest, SocketBrokerTestTCP) {
-  // App Container socket brokering only supported on Win10 RS1 and above.
-  if (base::win::GetVersion() < base::win::Version::WIN10_RS1)
+  // Some APIs, such as named capabilities, needed to create the network service
+  // sandbox require Windows 10 RS2.
+  if (base::win::GetVersion() < base::win::Version::WIN10_RS2)
     return;
 
   std::wstring hostname = GetTestHostName();
@@ -950,7 +953,7 @@ TEST_P(SocketBrokerTest, SocketBrokerTestTCP) {
                           .c_str()));
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     AppContainerBrokered,
     SocketBrokerTest,
     ::testing::Combine(
@@ -958,7 +961,7 @@ INSTANTIATE_TEST_CASE_P(
         /* using socket brokering */ ::testing::Values(true),
         /* connect to real adapter */ ::testing::Values(true, false),
         /* add brokering rule */ ::testing::Values(true, false)));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     AppContainerNonBrokered,
     SocketBrokerTest,
     ::testing::Combine(
@@ -966,7 +969,7 @@ INSTANTIATE_TEST_CASE_P(
         /* using socket brokering */ ::testing::Values(false),
         /* connect to real adapter */ ::testing::Values(true, false),
         /* add brokering rule */ ::testing::Values(true, false)));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     NoAppContainerNonBrokered,
     SocketBrokerTest,
     ::testing::Combine(

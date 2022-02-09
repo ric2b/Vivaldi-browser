@@ -9,6 +9,7 @@
 
 #include "base/observer_list_types.h"
 #include "base/types/pass_key.h"
+#include "content/browser/prerender/prerender_attributes.h"
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
 #include "content/browser/renderer_host/stored_page.h"
 #include "content/common/content_export.h"
@@ -18,7 +19,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
-#include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -33,7 +33,7 @@ class WebContentsImpl;
 // that triggered prerendering and starts prerendering. Then NavigationRequest
 // is expected to find this host from PrerenderHostRegistry and activate the
 // prerendered page upon navigation. This is created per request from a renderer
-// process via PrerenderProcessor or will directly be created for
+// process via SpeculationHostImpl or will directly be created for
 // browser-initiated prerendering (this code path is not implemented yet). This
 // is owned by PrerenderHostRegistry.
 class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
@@ -80,10 +80,13 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
     kLoginAuthRequested = 26,
     kUaChangeRequiresReload = 27,
     kBlockedByClient = 28,
-    kMaxValue = kBlockedByClient,
+    kAudioOutputDeviceRequested = 29,
+    kMixedContent = 30,
+    kTriggerBackgrounded = 31,
+    kMaxValue = kTriggerBackgrounded,
   };
 
-  PrerenderHost(blink::mojom::PrerenderAttributesPtr attributes,
+  PrerenderHost(const PrerenderAttributes& attributes,
                 RenderFrameHostImpl& initiator_render_frame_host);
   ~PrerenderHost() override;
 
@@ -97,6 +100,7 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
 
   // WebContentsObserver implementation:
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
+  void OnVisibilityChanged(Visibility visibility) override;
   void ResourceLoadComplete(
       RenderFrameHost* render_frame_host,
       const GlobalRequestID& request_id,
@@ -146,6 +150,7 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
   absl::optional<int64_t> GetInitialNavigationId() const;
 
   url::Origin initiator_origin() const { return initiator_origin_; }
+  const GURL& initiator_url() const { return initiator_url_; }
 
   int frame_tree_node_id() const { return frame_tree_node_id_; }
 
@@ -170,10 +175,9 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
   bool AreCommonNavigationParamsCompatibleWithNavigation(
       const blink::mojom::CommonNavigationParams& potential_activation);
 
-  // TODO(https://crbug.com/1217045): Flatten the params and do not rely on
-  // PrerenderAttributesPtr.
-  const blink::mojom::PrerenderAttributesPtr attributes_;
+  const PrerenderAttributes attributes_;
   const url::Origin initiator_origin_;
+  const GURL initiator_url_;
   const int initiator_process_id_;
   const blink::LocalFrameToken initiator_frame_token_;
 
@@ -192,9 +196,10 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
   base::ObserverList<Observer> observers_;
 
   // Navigation parameters for the navigation which loaded the main document of
-  // the prerendered page, copied immediately after BeginNavigation. They will
-  // be compared with the navigation parameters of the potential activation when
-  // attempting to reserve the prerender host for a navigation.
+  // the prerendered page, copied immediately after BeginNavigation when
+  // throttles are created. They will be compared with the navigation parameters
+  // of the potential activation when attempting to reserve the prerender host
+  // for a navigation.
   blink::mojom::BeginNavigationParamsPtr begin_params_;
   blink::mojom::CommonNavigationParamsPtr common_params_;
 

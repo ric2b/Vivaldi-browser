@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {DialogType} from 'chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/common/js/dialog_type.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+
 import {addEntries, ENTRIES, EntryType, getCaller, getHistogramCount, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo, wait} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
@@ -338,7 +341,8 @@ testcase.openQuickView = async () => {
 testcase.openQuickViewDialog = async () => {
   // Open Files app on Downloads containing ENTRIES.hello.
   const appId = await setupAndWaitUntilReady(
-      RootPath.DOWNLOADS, [ENTRIES.hello], [], {type: 'open-file'});
+      RootPath.DOWNLOADS, [ENTRIES.hello], [],
+      {type: DialogType.SELECT_OPEN_FILE});
 
   // Open the file in Quick View.
   await openQuickView(appId, ENTRIES.hello.nameText);
@@ -1573,10 +1577,14 @@ testcase.openQuickViewImageRawWithOrientation = async () => {
   // Get the fileSafeMedia element preview thumbnail image size.
   const element = await remoteCall.waitForElement(appId, filesSafeMedia);
   const image = new Image();
-  image.src = element.attributes.src;
   image.onload = () => {
     image.imageSize = image.naturalWidth + ' x ' + image.naturalHeight;
   };
+
+  const sourceContent =
+      /** @type {FilePreviewContent} */ (JSON.parse(element.attributes.src));
+  assert(sourceContent.data);
+  image.src = sourceContent.data;
 
   // Check: the preview thumbnail should have an orientiated size.
   await repeatUntil(async () => {

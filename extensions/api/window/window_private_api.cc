@@ -8,7 +8,6 @@
 
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
-#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
@@ -21,6 +20,8 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -29,8 +30,11 @@
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/zoom/zoom_api.h"
-#include "extensions/tools/vivaldi_tools.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "ui/base/ui_base_types.h"
+
+#include "browser/vivaldi_browser_finder.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -234,7 +238,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   using vivaldi::window_private::Create::Params;
   namespace Results = vivaldi::window_private::Create::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int top = 0;
@@ -351,8 +355,10 @@ void WindowPrivateCreateFunction::OnAppUILoaded(VivaldiBrowserWindow* window) {
 ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
   namespace Results = vivaldi::window_private::GetCurrentId::Results;
 
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-      dispatcher()->GetAssociatedWebContents());
+  // It is OK to use GetSenderWebContents() as JS will call this function from
+  // the proper window.
+  content::WebContents* web_contents = GetSenderWebContents();
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(web_contents);
   if (!browser)
     return RespondNow(Error("No Browser instance"));
 
@@ -362,7 +368,7 @@ ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
 ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   using vivaldi::window_private::SetState::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   Browser* browser;
@@ -378,8 +384,8 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   // Don't trigger onStateChanged event for changes coming from JS. The
   // assumption is that JS updates its state as needed after each
   // windowPrivate.setState() call.
-  static_cast<VivaldiBrowserWindow*>(browser->window())->SetWindowState(
-      show_state);
+  static_cast<VivaldiBrowserWindow*>(browser->window())
+      ->SetWindowState(show_state);
 
   switch (show_state) {
     case ui::SHOW_STATE_MINIMIZED:
@@ -417,6 +423,51 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
       break;
   }
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+WindowPrivateGetFocusedElementInfoFunction::Run() {
+  using vivaldi::window_private::GetFocusedElementInfo::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+
+  content::WebContentsImpl* web_contents =
+      static_cast<content::WebContentsImpl*>(window->web_contents());
+  content::RenderFrameHostImpl* render_frame_host =
+      web_contents->GetFocusedFrameIncludingInnerWebContents();
+  if (!render_frame_host) {
+    render_frame_host = web_contents->GetMainFrame();
+  }
+  render_frame_host->GetVivaldiFrameService()->GetFocusedElementInfo(
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&WindowPrivateGetFocusedElementInfoFunction::
+                             FocusedElementInfoReceived,
+                         this),
+          "", "", false, ""));
+
+  return RespondLater();
+}
+
+void WindowPrivateGetFocusedElementInfoFunction::FocusedElementInfoReceived(
+    const std::string& tag_name,
+    const std::string& type,
+    bool editable,
+    const std::string& role) {
+  namespace Results = vivaldi::window_private::GetFocusedElementInfo::Results;
+
+  vivaldi::window_private::FocusedElementInfo info;
+  info.tag_name = tag_name;
+  info.type = type;
+  info.editable = editable;
+  info.role = role;
+  return Respond(ArgumentList(Results::Create(info)));
 }
 
 }  // namespace extensions

@@ -749,8 +749,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("menulist-collapse-next.html"));
 }
 
-// TODO(crbug/1232295): Flaky on Linux.
-#if defined(OS_LINUX)
+// TODO(crbug/1232295): Flaky on Linux and Win.
+#if defined(OS_LINUX) || defined(OS_WIN)
 #define MAYBE_AccessibilityEventsMenuListExpand \
   DISABLED_AccessibilityEventsMenuListExpand
 #else
@@ -772,6 +772,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("menulist-next.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsMenuWithOptgroupListNext) {
+  RunEventTest(FILE_PATH_LITERAL("menulist-with-optgroup-next.html"));
+}
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsMultipleAriaPropertiesChanged) {
   RunEventTest(FILE_PATH_LITERAL("multiple-aria-properties-changed.html"));

@@ -39,6 +39,7 @@
 #include "base/time/default_tick_clock.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 
@@ -131,7 +132,7 @@ class BASE_EXPORT SequenceManagerImpl
   Task* SelectNextTask(
       SelectTaskOption option = SelectTaskOption::kDefault) override;
   void DidRunTask() override;
-  TimeDelta DelayTillNextTask(
+  TimeTicks GetNextTaskTime(
       LazyNow* lazy_now,
       SelectTaskOption option = SelectTaskOption::kDefault) const override;
   bool HasPendingHighResolutionTasks() override;
@@ -192,8 +193,7 @@ class BASE_EXPORT SequenceManagerImpl
   WeakPtr<SequenceManagerImpl> GetWeakPtr();
 
   // How frequently to perform housekeeping tasks (sweeping canceled tasks etc).
-  static constexpr TimeDelta kReclaimMemoryInterval =
-      TimeDelta::FromSeconds(30);
+  static constexpr TimeDelta kReclaimMemoryInterval = Seconds(30);
 
  protected:
   static std::unique_ptr<ThreadControllerImpl>
@@ -270,7 +270,7 @@ class BASE_EXPORT SequenceManagerImpl
     std::array<char, static_cast<size_t>(debug::CrashKeySize::Size64)>
         async_stack_buffer = {};
 
-    base::InsecureRandomGenerator random_generator;
+    absl::optional<base::InsecureRandomGenerator> random_generator;
 
     internal::TaskQueueSelector selector;
     ObserverList<TaskObserver>::Unchecked task_observers;
@@ -377,6 +377,9 @@ class BASE_EXPORT SequenceManagerImpl
   TaskQueue::TaskTiming::TimeRecordingPolicy ShouldRecordTaskTiming(
       const internal::TaskQueueImpl* task_queue);
   bool ShouldRecordCPUTimeForTask();
+
+  // Write the async stack trace onto a crash key as whitespace-delimited hex
+  // addresses.
   void RecordCrashKeys(const PendingTask&);
 
   // Helper to terminate all scoped trace events to allow starting new ones
@@ -388,8 +391,8 @@ class BASE_EXPORT SequenceManagerImpl
   bool ShouldRunTaskOfPriority(TaskQueue::QueuePriority priority) const;
 
   // Ignores any immediate work.
-  TimeDelta GetDelayTillNextDelayedTask(LazyNow* lazy_now,
-                                        SelectTaskOption option) const;
+  TimeTicks GetNextDelayedTaskTimeImpl(LazyNow* lazy_now,
+                                       SelectTaskOption option) const;
 
 #if DCHECK_IS_ON()
   void LogTaskDebugInfo(const internal::WorkQueue* work_queue) const;

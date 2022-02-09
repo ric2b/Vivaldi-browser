@@ -33,4 +33,4 @@ void BindVivaldiContentTranslateDriver(
   translate_client->translate_driver()->AddReceiver(std::move(receiver));
 }
 
-}  // namespace language
+}  // namespace vivaldi

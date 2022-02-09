@@ -27,6 +27,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -55,6 +56,7 @@ public class AccessibilityContentShellActivityTestRule extends ContentShellActiv
         mWcax = getWebContentsAccessibility();
         mWcax.setState(true);
         mWcax.setAccessibilityEnabledForTesting();
+        mWcax.setBrowserAccessibilityStateForTesting();
 
         mNodeProvider = getAccessibilityNodeProvider();
 
@@ -164,6 +166,25 @@ public class AccessibilityContentShellActivityTestRule extends ContentShellActiv
             throws ExecutionException {
         return TestThreadUtils.runOnUiThreadBlocking(
                 () -> mNodeProvider.performAction(viewId, action, args));
+    }
+
+    /**
+     * Helper method to perform an action on the UI, then poll for a given criteria to verify
+     * the action was completed.
+     *
+     * @param viewId int                   virtualViewId of the given node
+     * @param action int                   desired AccessibilityNodeInfo action
+     * @param args Bundle                  action bundle
+     * @param criteria Callable<Boolean>   criteria to poll against to verify completion
+     * @return boolean                     return value of performAction
+     * @throws ExecutionException          Error
+     * @throws Throwable                   Error
+     */
+    public boolean performActionOnUiThread(int viewId, int action, Bundle args,
+            Callable<Boolean> criteria) throws ExecutionException, Throwable {
+        boolean returnValue = performActionOnUiThread(viewId, action, args);
+        CriteriaHelper.pollUiThread(criteria, NODE_TIMEOUT_ERROR);
+        return returnValue;
     }
 
     /**

@@ -25,17 +25,6 @@ const std::string& WebContentsImpl::GetExtData() const {
   return ext_data_;
 }
 
-void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,
-                                                  double loaded_bytes,
-                                                  int loaded_elements,
-                                                  int total_elements) {
-  loaded_bytes_ = loaded_bytes;
-  loaded_elements_ = loaded_elements;
-  total_elements_ = total_elements;
-
-  DidChangeLoadProgress(load_progress);
-}
-
 void WebContentsImpl::FrameTreeNodeDestroyed() {
   observers_.NotifyObservers(&WebContentsObserver::WebContentsDidDetach);
 }
@@ -52,7 +41,6 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {
     OuterContentsFrameTreeNode()->RemoveObserver(this);
   }
   if (outer_web_contents_) {
-
     auto* outernode = OuterContentsFrameTreeNode();
 
     if (outernode) {
@@ -67,20 +55,18 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {
       current_web_contents_->GetFrameTree()->RemoveFrame(outernode);
     }
 
-
     // This is an unsupported case, but if the inner webcontents of the outer
     // contents has been destroyed, discarded, we won't get notified. Check if
     // it is attached and remove it if it is.
 
     for (auto* outers_inner_contents :
-          outer_web_contents_->GetInnerWebContents()) {
+         outer_web_contents_->GetInnerWebContents()) {
       if (outers_inner_contents == current_web_contents_) {
         // Detach inner so the WebContents is not destroyed, it is destroyed
         // by the |TabStripModel|. This also makes sure there is no dangling
         // pointers to current_web_contents_ when a WebContents is deleted
         // without the FrameTreeNode being removed.
-        outer_web_contents_->node_
-            .DetachInnerWebContents(current_web_contents_)
+        outer_web_contents_->node_.DetachInnerWebContents(current_web_contents_)
             .release();
         break;
       }
@@ -102,8 +88,7 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
   // us early to avoid crashers later. This section is taken
   // from the destructor of WebContentsImpl. Note that this must be done
   // before clearing the proxy hosts.
-  WebContentsImpl* outermost =
-      current_web_contents_->GetOutermostWebContents();
+  WebContentsImpl* outermost = current_web_contents_->GetOutermostWebContents();
   if (current_web_contents_->ContainsOrIsFocusedWebContents()) {
     // If the current WebContents is in focus, unset it.
     outermost->SetAsFocusedWebContentsIfNecessary();
@@ -118,7 +103,7 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
   // structures.
   if (outermost->text_input_manager_) {
     for (WebContentsImpl* contents :
-          current_web_contents_->GetWebContentsAndAllInner()) {
+         current_web_contents_->GetWebContentsAndAllInner()) {
       auto* view = static_cast<RenderWidgetHostViewBase*>(
           contents->GetRenderManager()->GetRenderWidgetHostView());
       if (view && outermost->text_input_manager_->IsRegistered(view)) {

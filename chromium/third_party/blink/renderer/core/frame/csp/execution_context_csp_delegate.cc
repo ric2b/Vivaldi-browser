@@ -29,6 +29,8 @@
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace blink {
 
 ExecutionContextCSPDelegate::ExecutionContextCSPDelegate(
@@ -63,6 +65,17 @@ void ExecutionContextCSPDelegate::SetSandboxFlags(
   if (worklet_or_worker) {
     worklet_or_worker->SetSandboxFlags(mask);
   }
+
+  // NOTE(andre@vivaldi.com) : We need this override as the navigation for
+  // extension popups is done in the Vivaldi ui-document and the
+  // PolicyContainerPolicies would be inherited from the parent, Vivaldi ui, in
+  // NavigationRequest::ComputeSandboxFlagsToCommit the navigation is in
+  // Chrome-ui navigated through the backgroundpage and inherit the sandbox
+  // flags from there. This was VB-83203.
+  if (vivaldi::IsVivaldiRunning()) {
+    execution_context_->GetSecurityContext().SetSandboxFlags(mask);
+  }
+
   // Just check that all the sandbox flags that are set by CSP have
   // already been set on the security context. Meta tags can't set them
   // and we should have already constructed the document with the correct
@@ -209,9 +222,8 @@ void ExecutionContextCSPDelegate::AddConsoleMessage(
   execution_context_->AddConsoleMessage(console_message);
 }
 
-void ExecutionContextCSPDelegate::AddInspectorIssue(
-    mojom::blink::InspectorIssueInfoPtr info) {
-  execution_context_->AddInspectorIssue(std::move(info));
+void ExecutionContextCSPDelegate::AddInspectorIssue(AuditsIssue issue) {
+  execution_context_->AddInspectorIssue(std::move(issue));
 }
 
 void ExecutionContextCSPDelegate::DisableEval(const String& error_message) {

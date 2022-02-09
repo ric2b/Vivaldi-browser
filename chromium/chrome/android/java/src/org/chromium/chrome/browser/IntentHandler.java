@@ -130,7 +130,7 @@ public class IntentHandler {
             "com.android.chrome.invoked_from_shortcut";
 
     /**
-     * An extra to indicate that the intent was triggered from am app widget.
+     * An extra to indicate that the intent was triggered from an app widget.
      */
     public static final String EXTRA_INVOKED_FROM_APP_WIDGET =
             "com.android.chrome.invoked_from_app_widget";
@@ -1176,7 +1176,8 @@ public class IntentHandler {
         // except dash, plus and period. Those are the only valid scheme chars:
         // https://tools.ietf.org/html/rfc3986#section-3.1
         boolean nonAlphaNum = false;
-        for (char ch : scheme.toCharArray()) {
+        for (int i = 0; i < scheme.length(); i++) {
+            char ch = scheme.charAt(i);
             if (!Character.isLetterOrDigit(ch) && ch != '-' && ch != '+' && ch != '.') {
                 nonAlphaNum = true;
                 break;

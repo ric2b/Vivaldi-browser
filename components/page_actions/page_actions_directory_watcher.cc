@@ -193,12 +193,12 @@ DirectoryWatcher::FilePathTimesMap DirectoryWatcher::GetModificationTimes(
   base::FileEnumerator enumerator(path, false, base::FileEnumerator::FILES);
   base::FilePath file_path = enumerator.Next();
   while (!file_path.empty()) {
-    if (!file_path.MatchesExtension(kCSSExtension) &&
-        !file_path.MatchesExtension(kJSExtension))
-      continue;
-    base::FileEnumerator::FileInfo file_info = enumerator.GetInfo();
-    DCHECK(file_path.DirName() == path);
-    times_map[file_path] = file_info.GetLastModifiedTime();
+    if (file_path.MatchesExtension(kCSSExtension) ||
+        file_path.MatchesExtension(kJSExtension)) {
+      base::FileEnumerator::FileInfo file_info = enumerator.GetInfo();
+      DCHECK(file_path.DirName() == path);
+      times_map[file_path] = file_info.GetLastModifiedTime();
+    }
     file_path = enumerator.Next();
   }
   return times_map;

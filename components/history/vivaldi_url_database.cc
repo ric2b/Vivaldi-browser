@@ -42,10 +42,8 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
   if (prefix_keyword != -1) {
     statement.BindInt(2, prefix_keyword);
     statement.BindString16(
-        3, wild +
-               lower_query.substr(
-                   lower_query.find_first_of(u" ") + 1) +
-               wild);
+        3,
+        wild + lower_query.substr(lower_query.find_first_of(u" ") + 1) + wild);
     statement.BindInt(4, max_results);
   } else {
     statement.BindInt(2, max_results);
@@ -69,12 +67,12 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
 }
 
 bool URLDatabase::GetMatchesWStatement(const char* sql_statement,
-  const std::string& search_string,
-  int max_hits,
-  URLRows* results) {
+                                       const std::string& search_string,
+                                       int max_hits,
+                                       URLRows* results) {
   results->clear();
   sql::Statement statement(
-    GetDB().GetCachedStatement(SQL_FROM_HERE, sql_statement));
+      GetDB().GetCachedStatement(SQL_FROM_HERE, sql_statement));
 
   statement.BindString(0, search_string);
   statement.BindString(1, search_string);

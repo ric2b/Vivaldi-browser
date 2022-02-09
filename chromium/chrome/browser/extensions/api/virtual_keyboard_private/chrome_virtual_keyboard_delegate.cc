@@ -35,7 +35,7 @@
 #include "media/audio/audio_system.h"
 #include "ui/aura/event_injector.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/base/ime/chromeos/ime_bridge.h"
+#include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/constants.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
@@ -554,6 +554,12 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       "assistiveAutoCorrect",
       base::FeatureList::IsEnabled(chromeos::features::kAssistAutoCorrect)));
   features.Append(GenerateFeatureFlag(
+      "systemchinesephysicaltyping",
+      chromeos::features::IsSystemChinesePhysicalTypingEnabled()));
+  features.Append(GenerateFeatureFlag(
+      "systemkoreanphysicaltyping",
+      chromeos::features::IsSystemKoreanPhysicalTypingEnabled()));
+  features.Append(GenerateFeatureFlag(
       "systemlatinphysicaltyping",
       chromeos::features::IsSystemLatinPhysicalTypingEnabled()));
   features.Append(GenerateFeatureFlag(
@@ -566,6 +572,9 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       "multipaste-suggestion",
       base::FeatureList::IsEnabled(
           chromeos::features::kVirtualKeyboardMultipasteSuggestion)));
+  features.Append(GenerateFeatureFlag(
+      "imeoptionsinsettings",
+      base::FeatureList::IsEnabled(chromeos::features::kImeOptionsInSettings)));
 
   results->SetKey("features", std::move(features));
 

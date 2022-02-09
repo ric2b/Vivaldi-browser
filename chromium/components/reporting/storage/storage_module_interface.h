@@ -10,6 +10,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/reporting/proto/record.pb.h"
 #include "components/reporting/proto/record_constants.pb.h"
+#include "components/reporting/storage/storage_uploader_interface.h"
 #include "components/reporting/util/status.h"
 
 namespace reporting {
@@ -38,7 +39,7 @@ class StorageModuleInterface
   // Once a record has been successfully uploaded, the sequencing information
   // can be passed back to the StorageModuleInterface here for record deletion.
   // If |force| is false (which is used in most cases), |sequencing_information|
-  // only affects Storage if no higher sequeincing was confirmed before;
+  // only affects Storage if no higher sequencing was confirmed before;
   // otherwise it is accepted unconditionally.
   virtual void ReportSuccess(SequencingInformation sequencing_information,
                              bool force) = 0;

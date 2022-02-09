@@ -12,7 +12,7 @@
 #include "base/trace_event/trace_event.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink.h"
+#include "third_party/blink/public/mojom/navigation/renderer_eviction_reason.mojom-blink.h"
 #include "third_party/blink/renderer/platform/back_forward_cache_utils.h"
 #include "third_party/blink/renderer/platform/loader/fetch/back_forward_cache_loader_helper.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
@@ -23,7 +23,7 @@
 
 namespace blink {
 
-constexpr size_t kDefaultMaxBufferedBodyBytesPerRequest = 100 * 1000;
+constexpr size_t kDefaultMaxBufferedBodyBytesPerRequest = 200 * 1000;
 
 class ResponseBodyLoader::DelegatingBytesConsumer final
     : public BytesConsumer,
@@ -477,9 +477,12 @@ void ResponseBodyLoader::DidBufferLoadWhileInBackForwardCache(
 bool ResponseBodyLoader::CanContinueBufferingWhileInBackForwardCache() {
   if (!back_forward_cache_loader_helper_)
     return false;
-  return body_buffer_->IsUnderPerRequestBytesLimit() &&
-         back_forward_cache_loader_helper_
-             ->CanContinueBufferingWhileInBackForwardCache();
+  if (!OnlyUsePerProcessBufferLimit() &&
+      !body_buffer_->IsUnderPerRequestBytesLimit())
+    return false;
+
+  return back_forward_cache_loader_helper_
+      ->CanContinueBufferingWhileInBackForwardCache();
 }
 
 void ResponseBodyLoader::Start() {

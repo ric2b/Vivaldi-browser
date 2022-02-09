@@ -21,13 +21,12 @@
 #include "chrome/browser/ash/policy/dlp/mock_dlp_rules_manager.h"
 #include "chrome/browser/ash/policy/login/login_policy_test_base.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
-#include "chrome/browser/policy/messaging_layer/public/report_queue_impl.h"
 #include "chrome/browser/printing/print_view_manager.h"
 #include "chrome/browser/printing/print_view_manager_common.h"
 #include "chrome/browser/printing/test_print_preview_dialog_cloned_observer.h"
 #include "chrome/browser/printing/test_print_view_manager_for_request_preview.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/ash/chrome_capture_mode_delegate.h"
+#include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/screenshot_area.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -35,7 +34,9 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/policy/policy_constants.h"
+#include "components/reporting/client/report_queue_impl.h"
 #include "components/reporting/storage/test_storage_module.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,6 +52,9 @@ const DlpContentRestrictionSet kEmptyRestrictionSet;
 const DlpContentRestrictionSet kScreenshotRestricted(
     DlpContentRestriction::kScreenshot,
     DlpRulesManager::Level::kBlock);
+const DlpContentRestrictionSet kScreenshotWarned(
+    DlpContentRestriction::kScreenshot,
+    DlpRulesManager::Level::kWarn);
 const DlpContentRestrictionSet kScreenshotReported(
     DlpContentRestriction::kScreenshot,
     DlpRulesManager::Level::kReport);
@@ -143,7 +147,8 @@ class DlpContentManagerBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
   SetupReporting();
   DlpContentManager* manager = helper_.GetContentManager();
-  ui_test_utils::NavigateToURL(browser(), GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://example.com")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   aura::Window* root_window =
@@ -161,10 +166,10 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
   ScreenshotArea partial_in =
       ScreenshotArea::CreateForPartialWindow(root_window, in_rect);
 
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(window));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   histogram_tester_.ExpectBucketCount(
       GetDlpHistogramPrefix() + dlp::kScreenshotBlockedUMA, true, 0);
   histogram_tester_.ExpectBucketCount(
@@ -173,10 +178,10 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
               DlpRulesManager::Level::kBlock, 0u);
 
   helper_.ChangeConfidentiality(web_contents, kScreenshotRestricted);
-  EXPECT_TRUE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_TRUE(manager->IsScreenshotRestricted(window));
-  EXPECT_TRUE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   histogram_tester_.ExpectBucketCount(
       GetDlpHistogramPrefix() + dlp::kScreenshotBlockedUMA, true, 3);
   histogram_tester_.ExpectBucketCount(
@@ -186,10 +191,10 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
 
   web_contents->WasHidden();
   helper_.ChangeVisibility(web_contents);
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_TRUE(manager->IsScreenshotRestricted(window));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   histogram_tester_.ExpectBucketCount(
       GetDlpHistogramPrefix() + dlp::kScreenshotBlockedUMA, true, 4);
   histogram_tester_.ExpectBucketCount(
@@ -199,10 +204,10 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
 
   web_contents->WasShown();
   helper_.ChangeVisibility(web_contents);
-  EXPECT_TRUE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_TRUE(manager->IsScreenshotRestricted(window));
-  EXPECT_TRUE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   histogram_tester_.ExpectBucketCount(
       GetDlpHistogramPrefix() + dlp::kScreenshotBlockedUMA, true, 7);
   histogram_tester_.ExpectBucketCount(
@@ -211,9 +216,9 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
               DlpRulesManager::Level::kBlock, 7u);
 
   helper_.DestroyWebContents(web_contents);
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   histogram_tester_.ExpectBucketCount(
       GetDlpHistogramPrefix() + dlp::kScreenshotBlockedUMA, true, 7);
   histogram_tester_.ExpectBucketCount(
@@ -222,10 +227,10 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsRestricted) {
               DlpRulesManager::Level::kBlock, 7u);
 }
 
-IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsReported) {
-  SetupReporting();
+IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsWarned) {
   DlpContentManager* manager = helper_.GetContentManager();
-  ui_test_utils::NavigateToURL(browser(), GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://example.com")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   aura::Window* root_window =
@@ -243,43 +248,96 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsReported) {
   ScreenshotArea partial_in =
       ScreenshotArea::CreateForPartialWindow(root_window, in_rect);
 
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(window));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
+
+  helper_.ChangeConfidentiality(web_contents, kScreenshotWarned);
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
+
+  web_contents->WasHidden();
+  helper_.ChangeVisibility(web_contents);
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
+
+  web_contents->WasShown();
+  helper_.ChangeVisibility(web_contents);
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_TRUE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
+
+  helper_.DestroyWebContents(web_contents);
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
+}
+
+IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, ScreenshotsReported) {
+  SetupReporting();
+  DlpContentManager* manager = helper_.GetContentManager();
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://example.com")));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  aura::Window* root_window =
+      browser()->window()->GetNativeWindow()->GetRootWindow();
+  ScreenshotArea fullscreen = ScreenshotArea::CreateForAllRootWindows();
+  ScreenshotArea window =
+      ScreenshotArea::CreateForWindow(web_contents->GetNativeView());
+  const gfx::Rect web_contents_rect = web_contents->GetContainerBounds();
+  gfx::Rect out_rect(web_contents_rect);
+  out_rect.Offset(web_contents_rect.width(), web_contents_rect.height());
+  gfx::Rect in_rect(web_contents_rect);
+  in_rect.Offset(web_contents_rect.width() / 2, web_contents_rect.height() / 2);
+  ScreenshotArea partial_out =
+      ScreenshotArea::CreateForPartialWindow(root_window, out_rect);
+  ScreenshotArea partial_in =
+      ScreenshotArea::CreateForPartialWindow(root_window, in_rect);
+
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   CheckEvents(DlpRulesManager::Restriction::kScreenshot,
               DlpRulesManager::Level::kReport, 0u);
 
   helper_.ChangeConfidentiality(web_contents, kScreenshotReported);
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(window));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   CheckEvents(DlpRulesManager::Restriction::kScreenshot,
               DlpRulesManager::Level::kReport, 3u);
 
   web_contents->WasHidden();
   helper_.ChangeVisibility(web_contents);
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(window));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   CheckEvents(DlpRulesManager::Restriction::kScreenshot,
               DlpRulesManager::Level::kReport, 4u);
 
   web_contents->WasShown();
   helper_.ChangeVisibility(web_contents);
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(window));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(window));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   CheckEvents(DlpRulesManager::Restriction::kScreenshot,
               DlpRulesManager::Level::kReport, 7u);
 
   helper_.DestroyWebContents(web_contents);
-  EXPECT_FALSE(manager->IsScreenshotRestricted(fullscreen));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_in));
-  EXPECT_FALSE(manager->IsScreenshotRestricted(partial_out));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(fullscreen));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_in));
+  EXPECT_FALSE(manager->IsScreenshotApiRestricted(partial_out));
   histogram_tester_.ExpectBucketCount(
       GetDlpHistogramPrefix() + dlp::kScreenshotBlockedUMA, true, 0);
   histogram_tester_.ExpectBucketCount(
@@ -297,7 +355,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   // Open first browser window.
   Browser* browser1 = browser();
   chrome::NewTab(browser1);
-  ui_test_utils::NavigateToURL(browser1, GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser1, GURL("https://example.com")));
   content::WebContents* web_contents1 =
       browser1->tab_strip_model()->GetActiveWebContents();
 
@@ -305,7 +364,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   Browser* browser2 =
       Browser::Create(Browser::CreateParams(browser()->profile(), true));
   chrome::NewTab(browser2);
-  ui_test_utils::NavigateToURL(browser2, GURL("https://google.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser2, GURL("https://google.com")));
 
   // Resize browsers so that second window covers the first one.
   // Browser window can't have width less than 500.
@@ -345,7 +405,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, VideoCaptureReported) {
   // Open first browser window.
   Browser* browser1 = browser();
   chrome::NewTab(browser1);
-  ui_test_utils::NavigateToURL(browser1, GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser1, GURL("https://example.com")));
   content::WebContents* web_contents1 =
       browser1->tab_strip_model()->GetActiveWebContents();
 
@@ -353,7 +414,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, VideoCaptureReported) {
   Browser* browser2 =
       Browser::Create(Browser::CreateParams(browser()->profile(), true));
   chrome::NewTab(browser2);
-  ui_test_utils::NavigateToURL(browser2, GURL("https://google.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser2, GURL("https://google.com")));
 
   // Resize browsers so that second window covers the first one.
   // Browser window can't have width less than 500.
@@ -394,7 +456,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   // Open first browser window.
   Browser* browser1 = browser();
   chrome::NewTab(browser1);
-  ui_test_utils::NavigateToURL(browser1, GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser1, GURL("https://example.com")));
   content::WebContents* web_contents1 =
       browser1->tab_strip_model()->GetActiveWebContents();
 
@@ -402,7 +465,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   Browser* browser2 =
       Browser::Create(Browser::CreateParams(browser()->profile(), true));
   chrome::NewTab(browser2);
-  ui_test_utils::NavigateToURL(browser2, GURL("https://google.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser2, GURL("https://google.com")));
 
   // Resize browsers so that second window covers the first one.
   // Browser window can't have width less than 500.
@@ -443,7 +507,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   // Open first browser window.
   Browser* browser1 = browser();
   chrome::NewTab(browser1);
-  ui_test_utils::NavigateToURL(browser1, GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser1, GURL("https://example.com")));
   content::WebContents* web_contents1 =
       browser1->tab_strip_model()->GetActiveWebContents();
 
@@ -451,7 +516,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   Browser* browser2 =
       Browser::Create(Browser::CreateParams(browser()->profile(), true));
   chrome::NewTab(browser2);
-  ui_test_utils::NavigateToURL(browser2, GURL("https://google.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser2, GURL("https://google.com")));
 
   // Resize browsers so that second window covers the first one.
   // Browser window can't have width less than 500.
@@ -488,7 +554,8 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
   SetupReporting();
   NotificationDisplayServiceTester display_service_tester(browser()->profile());
   DlpContentManager* manager = helper_.GetContentManager();
-  ui_test_utils::NavigateToURL(browser(), GURL("https://example.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://example.com")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   aura::Window* root_window =
@@ -548,7 +615,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest,
 IN_PROC_BROWSER_TEST_F(DlpContentManagerBrowserTest, PrintingNotRestricted) {
   // Set up mock report queue and mock rules manager.
   SetupReporting();
-  ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -653,7 +720,12 @@ class DlpContentManagerReportingBrowserTest
         .WillRepeatedly(testing::WithArgs<1, 2>(testing::Invoke(
             [=](reporting::Record record,
                 base::OnceCallback<void(reporting::Status)> callback) {
-              CheckRecord(restriction, level, std::move(record));
+              content::GetUIThreadTaskRunner({})->PostTask(
+                  FROM_HERE,
+                  base::BindOnce(
+                      &DlpContentManagerReportingBrowserTest::CheckRecord,
+                      base::Unretained(this), restriction, level,
+                      std::move(record)));
               std::move(callback).Run(reporting::Status::StatusOK());
             })));
   }
@@ -678,7 +750,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerReportingBrowserTest,
   SetAddRecordCheck(DlpRulesManager::Restriction::kPrinting,
                     DlpRulesManager::Level::kBlock, /*times=*/2);
 
-  ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -722,7 +794,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerReportingBrowserTest,
   SetAddRecordCheck(DlpRulesManager::Restriction::kPrinting,
                     DlpRulesManager::Level::kReport, /*times=*/2);
 
-  ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -750,7 +822,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerReportingBrowserTest, PrintingWarn) {
   // Set up mock rules manager.
   SetupDlpRulesManager();
 
-  ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -787,7 +859,7 @@ class DlpContentManagerPolicyBrowserTest : public LoginPolicyTestBase {
 IN_PROC_BROWSER_TEST_F(DlpContentManagerPolicyBrowserTest,
                        GetRestrictionSetForURL) {
   SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
+  LogIn();
 
   base::Value rules(base::Value::Type::LIST);
 

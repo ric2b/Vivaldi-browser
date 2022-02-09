@@ -13,9 +13,12 @@ class NotesSubMenuObserver;
 class NotesSubMenuObserverHelperMac : public NotesSubMenuObserverHelper {
  public:
   NotesSubMenuObserverHelperMac(
-    NotesSubMenuObserver* sub_menu_observer,
-    RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate);
+      NotesSubMenuObserver* sub_menu_observer,
+      RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate);
   ~NotesSubMenuObserverHelperMac() override;
+  NotesSubMenuObserverHelperMac(const NotesSubMenuObserverHelperMac&) = delete;
+  NotesSubMenuObserverHelperMac& operator=(
+      const NotesSubMenuObserverHelperMac&) = delete;
 
   bool SupportsDelayedLoading() override;
 
@@ -25,8 +28,6 @@ class NotesSubMenuObserverHelperMac : public NotesSubMenuObserverHelper {
 
  private:
   NotesSubMenuObserver* sub_menu_observer_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesSubMenuObserverHelperMac);
 };
 
 #endif  // NOTES_NOTES_SUBMENU_OBSERVER_HELPER_VIEWS_H_

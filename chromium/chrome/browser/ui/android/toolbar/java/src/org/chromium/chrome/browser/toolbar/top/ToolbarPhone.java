@@ -85,7 +85,12 @@ import java.util.List;
 import android.content.res.Configuration;
 
 import org.chromium.build.BuildConfig;
+import org.chromium.base.supplier.BooleanSupplier;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarTabController;
+import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.ui.widget.ChromeImageButton;
 
 import org.vivaldi.browser.toolbar.TrackerShieldButton;
@@ -294,6 +299,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     private ImageButton mBackButton;
     private ImageButton mForwardButton;
     private NavigationPopup mNavigationPopup;
+    private HistoryDelegate mHistoryDelegate;
 
     /**
      * A global layout listener used to capture a new texture when the experimental toolbar button
@@ -1856,7 +1862,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     }
 
     private void updateViewsForTabSwitcherMode() {
-        setVisibility(mTabSwitcherState == STATIC_TAB ? View.VISIBLE : View.INVISIBLE);
+        setVisibility(mTabSwitcherState == STATIC_TAB ? View.VISIBLE : View.GONE);
 
         updateProgressBarVisibility();
         updateShadowVisibility();
@@ -1974,10 +1980,8 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     void onStartSurfaceStateChanged(boolean shouldBeVisible, boolean isShowingStartSurface) {
         super.onStartSurfaceStateChanged(shouldBeVisible, isShowingStartSurface);
 
-        // Update visibilities of toolbar layout, progress bar and shadow. When |shouldBeVisible| is
-        // false, set INVISIBLE instead of Gone here because of re-inflation issue. See
-        // https://crbug.com/1226970 for more information.
-        setVisibility(shouldBeVisible ? VISIBLE : INVISIBLE);
+        // Update visibilities of toolbar layout, progress bar and shadow.
+        setVisibility(shouldBeVisible ? VISIBLE : GONE);
         updateProgressBarVisibility();
         updateShadowVisibility();
         // Url bar should be focusable. This will be set in UrlBar#onDraw but there's a delay which
@@ -1989,8 +1993,8 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         if (mStartSurfaceScrollFraction != startSurfaceScrollFraction) {
             mStartSurfaceScrollFraction = startSurfaceScrollFraction;
             updateUrlExpansionFraction();
-            updateVisualsForLocationBarState();
         }
+        updateVisualsForLocationBarState();
     }
 
     @Override
@@ -3041,7 +3045,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         mNavigationPopup = new NavigationPopup(Profile.fromWebContents(tab.getWebContents()),
                 getContext(), tab.getWebContents().getNavigationController(),
                 isForward ? NavigationPopup.Type.TABLET_FORWARD : NavigationPopup.Type.TABLET_BACK,
-                null, null);
+                getToolbarDataProvider()::getTab, mHistoryDelegate);
         mNavigationPopup.show(anchorView);
     }
 
@@ -3067,5 +3071,19 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     public boolean areNavigationButtonsVisible() {
         return (mBackButton.getVisibility() == VISIBLE ||
                 mForwardButton.getVisibility() == VISIBLE);
+    }
+
+    @Override
+    protected void initialize(ToolbarDataProvider toolbarDataProvider,
+                              ToolbarTabController tabController,
+                              MenuButtonCoordinator menuButtonCoordinator,
+                              ObservableSupplier<Boolean> isProgressBarVisibleSupplier,
+                              HistoryDelegate historyDelegate,
+                              BooleanSupplier partnerHomepageEnabledSupplier,
+                              ToolbarTablet.OfflineDownloader offlineDownloader) {
+        super.initialize(toolbarDataProvider, tabController, menuButtonCoordinator,
+                isProgressBarVisibleSupplier, historyDelegate, partnerHomepageEnabledSupplier,
+                offlineDownloader);
+        mHistoryDelegate = historyDelegate;
     }
 }

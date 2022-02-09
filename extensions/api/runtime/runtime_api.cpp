@@ -207,7 +207,7 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
   using vivaldi::runtime_private::SetFeatureEnabled::Params;
   namespace Results = vivaldi::runtime_private::SetFeatureEnabled::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool found = vivaldi_runtime_feature::Enable(
@@ -219,7 +219,7 @@ ExtensionFunction::ResponseAction RuntimePrivateIsGuestSessionFunction::Run() {
   using vivaldi::runtime_private::IsGuestSession::Params;
   namespace Results = vivaldi::runtime_private::IsGuestSession::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool is_guest = false;
@@ -306,7 +306,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
   using vivaldi::runtime_private::GetUserProfiles::Params;
   namespace Results = vivaldi::runtime_private::GetUserProfiles::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   ProfileManager* manager = g_browser_process->profile_manager();
@@ -441,7 +441,7 @@ RuntimePrivateOpenNamedProfileFunction::Run() {
   using vivaldi::runtime_private::OpenNamedProfile::Params;
   namespace Results = vivaldi::runtime_private::OpenNamedProfile::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool success = false;
@@ -501,7 +501,7 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
   using vivaldi::runtime_private::UpdateActiveProfile::Params;
   namespace Results = vivaldi::runtime_private::UpdateActiveProfile::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::u16string name = base::UTF8ToUTF16(params->name);
@@ -563,7 +563,7 @@ ExtensionFunction::ResponseAction RuntimePrivateCreateProfileFunction::Run() {
   if (!profiles::IsMultipleProfilesEnabled()) {
     return RespondNow(ArgumentList(Results::Create(false)));
   }
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::u16string name = base::UTF8ToUTF16(params->name);
@@ -651,7 +651,7 @@ ExtensionFunction::ResponseAction
 RuntimePrivateGetProfileStatisticsFunction::Run() {
   using vivaldi::runtime_private::GetProfileStatistics::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath profile_path =
@@ -715,7 +715,7 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
   namespace Results = vivaldi::runtime_private::DeleteProfile::Results;
   using vivaldi::runtime_private::DeleteProfile::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath profile_path =

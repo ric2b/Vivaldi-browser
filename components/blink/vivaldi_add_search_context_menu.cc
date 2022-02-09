@@ -8,20 +8,20 @@
 
 #include "components/blink/vivaldi_add_search_context_menu.h"
 
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_searchable_form_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_form_element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/visible_selection.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
-#include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
-#include "third_party/blink/public/platform/web_url.h"
-#include "third_party/blink/public/web/web_searchable_form_data.h"
-#include "third_party/blink/public/web/web_form_element.h"
-#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 
 using blink::FrameSelection;
 using blink::HTMLElement;
@@ -59,8 +59,8 @@ HTMLFormElement* ScanForForm(const Node* start) {
       child_document = blink::DynamicTo<blink::HTMLIFrameElement>(&element)
                            ->contentDocument();
     } else if (blink::IsA<blink::HTMLFrameElement>(&element)) {
-      child_document =
-          blink::DynamicTo<blink::HTMLFrameElement>(&element)->contentDocument();
+      child_document = blink::DynamicTo<blink::HTMLFrameElement>(&element)
+                           ->contentDocument();
     }
     if (child_document) {
       const blink::Element* child_root = child_document->documentElement();

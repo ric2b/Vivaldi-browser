@@ -14,6 +14,8 @@ source_set("request_filter") {
     "request_filter_proxying_url_loader_factory.h",
     "request_filter_proxying_websocket.cc",
     "request_filter_proxying_websocket.h",
+    "request_filter_proxying_webtransport.cc",
+    "request_filter_proxying_webtransport.h",
     "request_filter.cc",
     "request_filter.h",
   ]

@@ -50,6 +50,9 @@ import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Handles updating the UI based on requests to the HTML Fullscreen API.
  */
@@ -501,6 +504,8 @@ public class FullscreenHtmlApiHandler implements ActivityStateListener, WindowFo
      * Whether we show a toast message when entering fullscreen.
      */
     private boolean shouldShowToast() {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
         return !(VrModuleProvider.getDelegate().isInVr()
                 || VrModuleProvider.getDelegate().bootsToVr());
     }

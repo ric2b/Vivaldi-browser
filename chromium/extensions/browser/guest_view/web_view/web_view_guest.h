@@ -46,6 +46,9 @@ class WebViewInternalFindFunction;
 // a particular <webview>.
 class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
  public:
+  WebViewGuest(const WebViewGuest&) = delete;
+  WebViewGuest& operator=(const WebViewGuest&) = delete;
+
   // Clean up state when this GuestView is being destroyed. See
   // GuestViewBase::CleanUp().
   static void CleanUp(content::BrowserContext* browser_context,
@@ -293,6 +296,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
       int32_t line_no,
       const std::u16string& source_id,
       const absl::optional<std::u16string>& untrusted_stack_trace) final;
+  bool IsBackForwardCacheSupported() override;
 
   // Informs the embedder of a frame name change.
   void ReportFrameNameChange(const std::string& name);
@@ -414,8 +418,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // This is used to ensure pending tasks will not fire after this object is
   // destroyed.
   base::WeakPtrFactory<WebViewGuest> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewGuest);
 };
 
 }  // namespace extensions

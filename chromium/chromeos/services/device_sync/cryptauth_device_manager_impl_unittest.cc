@@ -187,8 +187,8 @@ void ExpectSyncedDevicesAndPrefAreEqual(
 
   const base::ListValue* synced_devices_pref =
       pref_service.GetList(prefs::kCryptAuthDeviceSyncUnlockKeys);
-  ASSERT_EQ(expected_devices.size(), synced_devices_pref->GetSize());
-  for (size_t i = 0; i < synced_devices_pref->GetSize(); ++i) {
+  ASSERT_EQ(expected_devices.size(), synced_devices_pref->GetList().size());
+  for (size_t i = 0; i < synced_devices_pref->GetList().size(); ++i) {
     SCOPED_TRACE(base::StringPrintf("Compare pref dictionary at index=%d",
                                     static_cast<int>(i)));
     const base::DictionaryValue* device_dictionary;
@@ -290,8 +290,8 @@ void ExpectSyncedDevicesAndPrefAreEqual(
     const base::ListValue* beacon_seeds_from_prefs;
     if (device_dictionary->GetList("beacon_seeds", &beacon_seeds_from_prefs)) {
       ASSERT_EQ(static_cast<size_t>(expected_device.beacon_seeds_size()),
-                beacon_seeds_from_prefs->GetSize());
-      for (size_t i = 0; i < beacon_seeds_from_prefs->GetSize(); i++) {
+                beacon_seeds_from_prefs->GetList().size());
+      for (size_t i = 0; i < beacon_seeds_from_prefs->GetList().size(); i++) {
         const base::DictionaryValue* seed;
         ASSERT_TRUE(beacon_seeds_from_prefs->GetDictionary(i, &seed));
 
@@ -400,6 +400,10 @@ class TestCryptAuthDeviceManager : public CryptAuthDeviceManagerImpl {
     SetSyncSchedulerForTest(base::WrapUnique(scoped_sync_scheduler_));
   }
 
+  TestCryptAuthDeviceManager(const TestCryptAuthDeviceManager&) = delete;
+  TestCryptAuthDeviceManager& operator=(const TestCryptAuthDeviceManager&) =
+      delete;
+
   ~TestCryptAuthDeviceManager() override {}
 
   base::WeakPtr<MockSyncScheduler> GetSyncScheduler() {
@@ -416,8 +420,6 @@ class TestCryptAuthDeviceManager : public CryptAuthDeviceManagerImpl {
   // This should be safe because the life-time this SyncScheduler will always be
   // within the life of the TestCryptAuthDeviceManager object.
   base::WeakPtrFactory<MockSyncScheduler> weak_sync_scheduler_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestCryptAuthDeviceManager);
 };
 
 }  // namespace
@@ -643,7 +645,7 @@ TEST_F(DeviceSyncCryptAuthDeviceManagerImplTest, GetSyncState) {
       .WillByDefault(Return(SyncScheduler::Strategy::AGGRESSIVE_RECOVERY));
   EXPECT_TRUE(device_manager_->IsRecoveringFromFailure());
 
-  base::TimeDelta time_to_next_sync = base::TimeDelta::FromMinutes(60);
+  base::TimeDelta time_to_next_sync = base::Minutes(60);
   ON_CALL(*sync_scheduler(), GetTimeToNextSync())
       .WillByDefault(Return(time_to_next_sync));
   EXPECT_EQ(time_to_next_sync, device_manager_->GetTimeToNextAttempt());
@@ -934,9 +936,9 @@ TEST_F(DeviceSyncCryptAuthDeviceManagerImplTest, SyncThreeDevices) {
 
   device_manager_->Start();
   EXPECT_EQ(1u, device_manager_->GetSyncedDevices().size());
-  EXPECT_EQ(
-      1u,
-      pref_service_.GetList(prefs::kCryptAuthDeviceSyncUnlockKeys)->GetSize());
+  EXPECT_EQ(1u, pref_service_.GetList(prefs::kCryptAuthDeviceSyncUnlockKeys)
+                    ->GetList()
+                    .size());
 
   FireSchedulerForSync(cryptauth::INVOCATION_REASON_PERIODIC);
   ASSERT_FALSE(success_callback_.is_null());

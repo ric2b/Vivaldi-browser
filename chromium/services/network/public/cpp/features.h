@@ -39,12 +39,6 @@ extern const base::Feature kCrossOriginEmbedderPolicyCredentiallessOriginTrial;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCrossOriginOpenerPolicyReporting;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCrossOriginOpenerPolicyReportingOriginTrial;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCrossOriginOpenerPolicyAccessReporting;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyByDefault;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kSplitAuthCacheByNetworkIsolationKey;
@@ -85,8 +79,14 @@ extern const base::Feature kSCTAuditingRetryAndPersistReports;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kLoaderDataPipeTuningFeature;
 
+enum class DataPipeAllocationSize {
+  kDefaultSizeOnly,
+  kLargerSizeIfPossible,
+};
+
 COMPONENT_EXPORT(NETWORK_CPP)
-extern uint32_t GetDataPipeDefaultAllocationSize();
+extern uint32_t GetDataPipeDefaultAllocationSize(
+    DataPipeAllocationSize = DataPipeAllocationSize::kDefaultSizeOnly);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern uint32_t GetLoaderChunkSize();

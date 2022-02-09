@@ -34,6 +34,8 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
  public:
   explicit AVFMediaReaderRunner();
   ~AVFMediaReaderRunner() override;
+  AVFMediaReaderRunner(const AVFMediaReaderRunner&) = delete;
+  AVFMediaReaderRunner& operator=(const AVFMediaReaderRunner&) = delete;
 
   // A run-time check is required to determine usability of
   // AVFMediaReaderRunner.
@@ -56,8 +58,6 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<AVFMediaReaderRunner> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AVFMediaReaderRunner);
 };
 
 }  // namespace media

@@ -114,7 +114,8 @@ import java.util.concurrent.ExecutionException;
 // clang-format off
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:use_root_bookmark_as_default/false"})
 public class BookmarkTest {
     // clang-format on
     @Rule
@@ -134,6 +135,7 @@ public class BookmarkTest {
     private static final String TEST_FOLDER_TITLE = "Test folder";
     private static final String TEST_FOLDER_TITLE2 = "Test folder 2";
     private static final String TEST_TITLE_A = "a";
+    private static final int TEST_PORT = 12345;
 
     private BookmarkManager mManager;
     private BookmarkModel mBookmarkModel;
@@ -174,7 +176,9 @@ public class BookmarkTest {
             when(mSyncService.isSyncRequested()).thenReturn(false);
             SyncService.overrideForTests(mSyncService);
         });
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        // Use a custom port so the links are consistent for render tests.
+        mActivityTestRule.getEmbeddedTestServerRule().setServerPort(TEST_PORT);
+        mTestServer = mActivityTestRule.getTestServer();
         mTestUrlA = new GURL("http://a.com");
         mTestPage = new GURL(mTestServer.getURL(TEST_PAGE_URL_GOOGLE));
         mTestPageFoo = new GURL(mTestServer.getURL(TEST_PAGE_URL_FOO));
@@ -210,7 +214,6 @@ public class BookmarkTest {
 
     @After
     public void tearDown() throws Exception {
-        if (mTestServer != null) mTestServer.stopAndDestroyServer();
         if (mBookmarkActivity != null) ApplicationTestUtils.finishActivity(mBookmarkActivity);
         if (mActionTester != null) mActionTester.tearDown();
     }
@@ -435,7 +438,7 @@ public class BookmarkTest {
         BookmarkActionBar toolbar = ((BookmarkManager) delegate).getToolbarForTests();
 
         // We should default to the root bookmark.
-        Assert.assertTrue(BookmarkUtils.shouldUseRootFolderAsDefaultForReadLater());
+        Assert.assertTrue(ReadingListFeatures.shouldUseRootFolderAsDefaultForReadLater());
         Assert.assertEquals(BookmarkUIState.STATE_FOLDER, delegate.getCurrentState());
         Assert.assertEquals("chrome-native://bookmarks/folder/0",
                 BookmarkUtils.getLastUsedUrl(mActivityTestRule.getActivity()));
@@ -487,6 +490,12 @@ public class BookmarkTest {
         Assert.assertEquals(SelectableListToolbar.NAVIGATION_BUTTON_BACK,
                 toolbar.getNavigationButtonForTests());
         Assert.assertTrue(toolbar.getMenu().findItem(R.id.edit_menu_id).isVisible());
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> mBookmarkModel.setBookmarkTitle(testFolder, TEST_FOLDER_TITLE2));
+
+        // Check that the test folder reflects name changes.
+        Assert.assertEquals(TEST_FOLDER_TITLE2, toolbar.getTitle());
 
         // Call BookmarkActionBar#onClick() to activate the navigation button.
         TestThreadUtils.runOnUiThreadBlocking(() -> toolbar.onClick(toolbar));
@@ -1885,6 +1894,33 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + "<Study"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:add_to_reading_list_in_app_menu/true"})
+    public void
+    testAddToReadingListFromAppMenu() throws Exception {
+        mActivityTestRule.loadUrl(mTestPage);
+
+        // Click "Add to Reading List" to add the current tab.
+        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
+                mActivityTestRule.getActivity(), R.id.add_to_reading_list_menu_id);
+        BookmarkTestUtil.waitForBookmarkModelLoaded();
+
+        CriteriaHelper.pollUiThread(() -> mBookmarkModel.getReadingListItem(mTestPage) != null);
+
+        // All actions with BookmarkModel needs to run on UI thread.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            BookmarkItem item = mBookmarkBridge.getReadingListItem(mTestPage);
+            Assert.assertEquals(BookmarkType.READING_LIST, item.getId().getType());
+            Assert.assertEquals(mTestPage, item.getUrl());
+            Assert.assertEquals(TEST_PAGE_TITLE_GOOGLE, item.getTitle());
+        });
+
+        waitForOfflinePageSaved(mTestPage);
+    }
+
+    @Test
+    @MediumTest
     public void testBookmarksDoesNotRecordLaunchMetrics() throws Throwable {
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
@@ -1967,6 +2003,105 @@ public class BookmarkTest {
                 RecordHistogram.getHistogramValueCountForTesting(
                         "Bookmarks.OpenBookmarkManager.PerProfileType",
                         BrowserProfileType.INCOGNITO));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + "<Study"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:bookmark_visuals_enabled/true"})
+    public void
+    testBookmarksVisualRefreshFolders() throws Exception {
+        BookmarkPromoHeader.forcePromoStateForTests(BookmarkPromoHeader.PromoState.PROMO_NONE);
+        addFolder(TEST_FOLDER_TITLE);
+        addFolder(TEST_FOLDER_TITLE);
+        openBookmarkManager();
+
+        RecyclerView.Adapter adapter = getAdapter();
+        final BookmarkManager manager = getBookmarkManager();
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_folders");
+        BookmarkRow itemView = (BookmarkRow) manager.getRecyclerViewForTests()
+                                       .findViewHolderForAdapterPosition(0)
+                                       .itemView;
+
+        toggleSelectionAndEndAnimation(getIdByPosition(0), itemView);
+
+        // Make sure the Item "test" is selected.
+        CriteriaHelper.pollUiThread(
+                itemView::isChecked, "Expected item \"test\" to become selected");
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_folders_selected");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + "<Study"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:bookmark_visuals_enabled/true"})
+    public void
+    testBookmarksVisualRefreshBookmarks() throws Exception {
+        BookmarkPromoHeader.forcePromoStateForTests(BookmarkPromoHeader.PromoState.PROMO_NONE);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        openBookmarkManager();
+
+        RecyclerView.Adapter adapter = getAdapter();
+        final BookmarkManager manager = getBookmarkManager();
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_bookmarks");
+        BookmarkRow itemView = (BookmarkRow) manager.getRecyclerViewForTests()
+                                       .findViewHolderForAdapterPosition(0)
+                                       .itemView;
+
+        toggleSelectionAndEndAnimation(getIdByPosition(0), itemView);
+
+        // Make sure the Item "test" is selected.
+        CriteriaHelper.pollUiThread(
+                itemView::isChecked, "Expected item \"test\" to become selected");
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_bookmarks_selected");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + "<Study"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:bookmark_visuals_enabled/true"})
+    public void
+    testBookmarksVisualRefreshBookmarksAndFolder() throws Exception {
+        BookmarkPromoHeader.forcePromoStateForTests(BookmarkPromoHeader.PromoState.PROMO_NONE);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        addFolder(TEST_FOLDER_TITLE);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        addFolder(TEST_FOLDER_TITLE);
+        openBookmarkManager();
+
+        RecyclerView.Adapter adapter = getAdapter();
+        final BookmarkManager manager = getBookmarkManager();
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_bookmarksandfolders");
+        BookmarkRow itemView1 = (BookmarkRow) manager.getRecyclerViewForTests()
+                                        .findViewHolderForAdapterPosition(0)
+                                        .itemView;
+        BookmarkRow itemView2 = (BookmarkRow) manager.getRecyclerViewForTests()
+                                        .findViewHolderForAdapterPosition(1)
+                                        .itemView;
+
+        toggleSelectionAndEndAnimation(getIdByPosition(0), itemView1);
+        toggleSelectionAndEndAnimation(getIdByPosition(1), itemView2);
+
+        // Make sure the Item "test" is selected.
+        CriteriaHelper.pollUiThread(
+                itemView1::isChecked, "Expected item \"test\" to become selected");
+        CriteriaHelper.pollUiThread(
+                itemView2::isChecked, "Expected item \"test\" to become selected");
+
+        mRenderTestRule.render(
+                manager.getView(), "bookmarks_visual_refresh_bookmarksandfolders_selected");
     }
 
     /**

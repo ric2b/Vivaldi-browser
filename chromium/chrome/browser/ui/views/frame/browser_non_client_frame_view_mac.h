@@ -7,6 +7,7 @@
 
 #import <CoreGraphics/CGBase.h>
 
+#include "base/gtest_prod_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
@@ -25,6 +26,11 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
  public:
   // Mac implementation of BrowserNonClientFrameView.
   BrowserNonClientFrameViewMac(BrowserFrame* frame, BrowserView* browser_view);
+
+  BrowserNonClientFrameViewMac(const BrowserNonClientFrameViewMac&) = delete;
+  BrowserNonClientFrameViewMac& operator=(const BrowserNonClientFrameViewMac&) =
+      delete;
+
   ~BrowserNonClientFrameViewMac() override;
 
   // BrowserNonClientFrameView:
@@ -130,8 +136,6 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
 
   base::scoped_nsobject<FullscreenToolbarController>
       fullscreen_toolbar_controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserNonClientFrameViewMac);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MAC_H_

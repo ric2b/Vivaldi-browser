@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
 <translation id="1559528461873125649">そんなファイルとかフォルダーないみたいやわ</translation>
-<translation id="1620510694547887537">カメラ</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみて。</translation>
 <translation id="1645368109819982629">対応してへんプロトコル</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断試してみて<ph name="END_LINK" />。</translation>
 <translation id="1834321415901700177">このサイト、有害なプログラム入ってるで</translation>
 <translation id="1916770123977586577">さらの設定をこのサイトに適用するんやったら、ページリロードして</translation>
-<translation id="1919345977826869612">チラシ</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">音声</translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">バックグラウンド同期</translation>
 <translation id="2166378884831602661">このサイト、安全に接続できへんわ</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
 <translation id="2224337661447660594">ネット繋がってへん</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">インターネットアクセスがブロックされてるわ</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが要るねん。</translation>
 <translation id="2337852623177822836">管理者が指定する設定</translation>
-<translation id="2344028582131185878">自動ダウンロード</translation>
 <translation id="2355395290879513365">悪さしよるユーザーが、あんたがこのサイトで見ている画像勝手に変えて、あんたを騙そうとしているかも知れへん。</translation>
 <translation id="2356070529366658676">確認して</translation>
 <translation id="2359808026110333948">続ける</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断使う<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">通知</translation>
 <translation id="2491414235131909199">このページは拡張機能がブロックしたわ</translation>
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2539524384386349900">検出</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />から無効な応答送られてきよったわ。</translation>
-<translation id="2586657967955657006">クリップボード</translation>
 <translation id="2609632851001447353">バリエーション</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> のサーバーのIPアドレス見つからへんかったわ。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" /> <ph name="CITY" /></translation>
@@ -67,7 +60,6 @@
       次の方法試してみて。
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">ページ読み込むんやったらデータ再送信せなあかんから、再読み込みボタンを押したって。</translation>
-<translation id="3227137524299004712">マイク</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
 <translation id="3308738399950580893">広告</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">細かいこと</translation>
 <translation id="4558551763791394412">拡張機能、無効にしてみて。</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> への接続はおニューの暗号スイートで暗号化されてるで。</translation>
-<translation id="4690462567478992370">無効な証明書は使えへんようにする</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">接続が途中で切れたわ</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windowsのネットワーク診断使う<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号とか）は第三者に見られへんになってる。</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは今だけダウンしてるか、新しいウェブアドレスに引っ越したんかも。</translation>
+<translation id="483241715238664915">警告オンにする</translation>
 <translation id="4943872375798546930">見つからへんわ</translation>
-<translation id="4974590756084640048">警告をもっかい有効にする</translation>
 <translation id="5023310440958281426">管理者ポリシー確認してもうてもええかな</translation>
 <translation id="5039804452771397117">ええよ</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">接続を確認する</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" />でリダイレクト何回もあったわ。</translation>
 <translation id="5675650730144413517">このページ動いてへんわ</translation>
-<translation id="5689516760719285838">今おるとこ</translation>
-<translation id="5710435578057952990">このウェブサイトは確認されてへんで。</translation>
-<translation id="5778550464785688721">MIDI デバイスのフルコントロール</translation>
 <translation id="5785756445106461925">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの見た目も変わるかも知れへん。</translation>
 <translation id="5799902971440853357"><ph name="SITE" />から送信された暗号化済みの認証情報がVivaldiで処理できへんから、今このウェブサイトにアクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="5810442152076338065"><ph name="DOMAIN" /> への接続は昔の暗号スイートで暗号化されてるで。</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">このサイトへの接続、保護されてへんで</translation>
 <translation id="6203231073485539293">インターネット接続確認してもうてもええかな</translation>
 <translation id="6225522625585012689">&lt;strong&gt;vivaldi://policy&lt;/strong&gt; で、ブロックされた URL のリストとシステム管理者が設定した他のポリシー確認できるで。</translation>
-<translation id="625755898061068298">このサイトのセキュリティ警告、無効にしたで。</translation>
 <translation id="6264485186158353794">セキュリティで保護されたページに戻る</translation>
 <translation id="6305205051461490394"><ph name="URL" />にアクセスできへん。</translation>
 <translation id="6321917430147971392">DNS設定確認してもうてもええかな</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7079718277001814089">このサイト、悪さするソフトウェア入ってるで</translation>
+<translation id="7096937462164235847">このウェブサイトのID認証されてへんで。</translation>
 <translation id="7108819624672055576">拡張機能で許可されとる</translation>
 <translation id="7111012039238467737">（有効）</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">接続してるサーバー、十分な検証ができへんねん。このサーバーは、そのネットワーク内だけでしか有効ちゃう名前使っててな、他所の認証局はその所有権を検証できへんねん。そういう名義の子らに対して無条件に証明書発行する認証局もあるし、接続先が意図したウェブサイトか、悪さしよるユーザーのサイトかかは確認できへんねん。</translation>
 <translation id="7455133967321480974">グローバルのデフォルト値（つまりブロック）にしとく</translation>
 <translation id="7518003948725431193">次のウェブページアドレス見つからへんかったわ: <ph name="URL" /></translation>
-<translation id="7521387064766892559">Javascript</translation>
 <translation id="7549584377607005141">このウェブページちゃんと表示するんやったら、さっき入れたデータが要るで。データ再送信できるけど、このページでさっきやったこと、もっかいやらなあかんで。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" />、今このリクエスト処理できへんねんて。</translation>
 <translation id="7662298039739062396">拡張機能に指定される設定</translation>
@@ -227,11 +214,11 @@
 <translation id="9039213469156557790">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの動作も変わるかも知れへん。</translation>
 <translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
+<translation id="9073799351042754113">このサイトに対するセキュリティ警告無効にしたで。</translation>
 <translation id="910924428752220542">Vivaldiパスワード</translation>
 <translation id="9169664750068251925">このサイトではいつもブロック</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>
-<translation id="9219103736887031265">画像</translation>
 <translation id="936602727769022409">Googleアカウントにアクセスできへんようになるかも。パスワード変えた方がええかも。変えるんやったら要ログインな。</translation>
 <translation id="969892804517981540">公式ビルド</translation>
 <translation id="988159990683914416">デベロッパービルド</translation>

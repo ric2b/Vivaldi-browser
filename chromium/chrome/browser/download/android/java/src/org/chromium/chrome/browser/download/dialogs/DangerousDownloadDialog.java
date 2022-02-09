@@ -12,6 +12,7 @@ import androidx.core.content.res.ResourcesCompat;
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.download.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.util.DownloadUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -23,6 +24,7 @@ import org.chromium.ui.modelutil.PropertyModel;
  * from ModalDialogManager.
  */
 public class DangerousDownloadDialog {
+    private static final String FILL_NEGATIVE_BUTTON_PARAM_NAME = "filled_negative_button";
     /**
      * Events related to the dangerous download dialog, used for UMA reporting.
      * These values are persisted to logs. Entries should not be renumbered and
@@ -55,11 +57,12 @@ public class DangerousDownloadDialog {
      */
     public void show(Context context, ModalDialogManager modalDialogManager, String fileName,
             long totalBytes, int iconId, Callback<Boolean> callback) {
-        String message =
-                context.getResources().getString(R.string.dangerous_download_dialog_text, fileName);
-        if (totalBytes > 0) {
-            message += "\n\n(" + DownloadUtils.getStringForBytes(context, totalBytes) + ")";
-        }
+        String message = totalBytes > 0
+                ? context.getResources().getString(
+                        R.string.dangerous_download_dialog_text, fileName)
+                : context.getResources().getString(
+                        R.string.dangerous_download_dialog_text_with_size, fileName,
+                        DownloadUtils.getStringForBytes(context, totalBytes));
 
         PropertyModel propertyModel =
                 new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
@@ -67,17 +70,17 @@ public class DangerousDownloadDialog {
                                 new ModalDialogProperties.Controller() {
                                     @Override
                                     public void onClick(PropertyModel model, int buttonType) {
-                                        boolean isConfirm = buttonType
+                                        boolean acceptDownload = buttonType
                                                 == ModalDialogProperties.ButtonType.POSITIVE;
                                         if (callback != null) {
-                                            callback.onResult(isConfirm);
+                                            callback.onResult(acceptDownload);
                                         }
                                         modalDialogManager.dismissDialog(model,
-                                                isConfirm ? DialogDismissalCause
-                                                                    .POSITIVE_BUTTON_CLICKED
-                                                          : DialogDismissalCause
-                                                                    .NEGATIVE_BUTTON_CLICKED);
-                                        recordDangerousDownloadDialogEvent(isConfirm
+                                                acceptDownload ? DialogDismissalCause
+                                                                         .POSITIVE_BUTTON_CLICKED
+                                                               : DialogDismissalCause
+                                                                         .NEGATIVE_BUTTON_CLICKED);
+                                        recordDangerousDownloadDialogEvent(acceptDownload
                                                         ? DangerousDownloadDialogEvent
                                                                   .DANGEROUS_DOWNLOAD_DIALOG_CONFIRM
                                                         : DangerousDownloadDialogEvent
@@ -111,9 +114,17 @@ public class DangerousDownloadDialog {
                         .with(ModalDialogProperties.TITLE_ICON,
                                 ResourcesCompat.getDrawable(
                                         context.getResources(), iconId, context.getTheme()))
+                        .with(ModalDialogProperties.BUTTON_STYLES,
+                                ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                                        ChromeFeatureList.ENABLE_DANGEROUS_DOWNLOAD_DIALOG,
+                                        FILL_NEGATIVE_BUTTON_PARAM_NAME, false)
+                                        ? ModalDialogProperties.ButtonStyles
+                                                  .PRIMARY_OUTLINE_NEGATIVE_FILLED
+                                        : ModalDialogProperties.ButtonStyles
+                                                  .PRIMARY_OUTLINE_NEGATIVE_OUTLINE)
                         .build();
 
-        modalDialogManager.showDialog(propertyModel, ModalDialogManager.ModalDialogType.APP);
+        modalDialogManager.showDialog(propertyModel, ModalDialogManager.ModalDialogType.TAB);
         recordDangerousDownloadDialogEvent(
                 DangerousDownloadDialogEvent.DANGEROUS_DOWNLOAD_DIALOG_SHOW);
     }

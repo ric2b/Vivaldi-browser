@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event.h"
@@ -30,8 +31,7 @@ TEST(AcceleratorTest, TimeStamp) {
   const Accelerator accelerator_a(VKEY_A, EF_NONE);
   EXPECT_EQ(base::TimeTicks(), accelerator_a.time_stamp());
 
-  const base::TimeTicks event_time =
-      base::TimeTicks() + base::TimeDelta::FromMilliseconds(1);
+  const base::TimeTicks event_time = base::TimeTicks() + base::Milliseconds(1);
   KeyEvent keyevent(ET_KEY_PRESSED, VKEY_SPACE, EF_NONE, event_time);
 
   const Accelerator accelerator_b(keyevent);

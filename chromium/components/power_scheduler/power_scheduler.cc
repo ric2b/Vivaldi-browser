@@ -15,6 +15,7 @@
 #include "base/no_destructor.h"
 #include "base/process/process_handle.h"
 #include "base/process/process_metrics.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/task/current_thread.h"
 #include "base/task/thread_pool.h"
@@ -82,8 +83,8 @@ bool CpuAffinityApplicable() {
 // Default policy params for the PowerScheduler feature. Please update the
 // comment in power_scheduler_features.cc when changing these defaults.
 static constexpr SchedulingPolicyParams kDefaultParams{
-    SchedulingPolicy::kThrottleIdleAndNopAnimation,
-    base::TimeDelta::FromMilliseconds(500), 0.5f};
+    SchedulingPolicy::kThrottleIdleAndNopAnimation, base::Milliseconds(500),
+    0.5f};
 
 // Keys/values for the field trial params.
 static const char kPolicyKey[] = "policy";
@@ -229,7 +230,7 @@ void PowerScheduler::InitializePolicyFromFeatureList() {
     int min_time_ms = 0;
     if (base::StringToInt(field_trial_params[kMinTimeInModeMsKey],
                           &min_time_ms)) {
-      params.min_time_in_mode = base::TimeDelta::FromMilliseconds(min_time_ms);
+      params.min_time_in_mode = base::Milliseconds(min_time_ms);
     }
 
     double min_cputime_ratio = 0;
@@ -421,9 +422,8 @@ void PowerScheduler::ApplyPolicyOnSequence() {
       !enforced_affinity_setup_time_.is_null()) {
     auto throttling_duration = now - enforced_affinity_setup_time_;
     UMA_HISTOGRAM_CUSTOM_TIMES("Power.PowerScheduler.ThrottlingDuration",
-                               throttling_duration,
-                               base::TimeDelta::FromMilliseconds(1),
-                               base::TimeDelta::FromMinutes(10), 100);
+                               throttling_duration, base::Milliseconds(1),
+                               base::Minutes(10), 100);
 
     UMA_HISTOGRAM_SCALED_ENUMERATION(
         "Power.PowerScheduler.ThrottlingDurationPerCpuAffinityMode",

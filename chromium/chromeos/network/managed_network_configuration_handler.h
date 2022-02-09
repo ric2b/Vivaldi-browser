@@ -26,6 +26,7 @@ namespace chromeos {
 class NetworkConfigurationHandler;
 class NetworkDeviceHandler;
 class NetworkPolicyObserver;
+struct NetworkProfile;
 class NetworkProfileHandler;
 class NetworkStateHandler;
 
@@ -100,6 +101,14 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
       network_handler::ServiceResultCallback callback,
       network_handler::ErrorCallback error_callback) const = 0;
 
+  // Creates network configuration with given |shill_properties| from policy.
+  // Any conflicting configuration for the same network will have to be removed
+  // before calling this method. |callback| will be called after the
+  // configuration update has been reflected in NetworkStateHandler, or on
+  // error. This fires OnPolicyApplied notification on success.
+  virtual void ConfigurePolicyNetwork(const base::Value& shill_properties,
+                                      base::OnceClosure callback) const = 0;
+
   // Removes the user's configuration from the network with |service_path|. The
   // network may still show up in the visible networks after this, but no user
   // configuration will remain. If it was managed, it will still be configured.
@@ -123,11 +132,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
   // immediately) to Shill's profiles and enforced in future configurations
   // until the policy associated with |userhash| and |onc_source| is changed
   // again with this function. For device policies, |userhash| must be empty.
-  virtual void SetPolicy(
-      ::onc::ONCSource onc_source,
-      const std::string& userhash,
-      const base::Value& network_configs_onc,
-      const base::DictionaryValue& global_network_config) = 0;
+  virtual void SetPolicy(::onc::ONCSource onc_source,
+                         const std::string& userhash,
+                         const base::Value& network_configs_onc,
+                         const base::Value& global_network_config) = 0;
 
   // Returns true if any policy application is currently running or pending.
   // NetworkPolicyObservers are notified about applications finishing.
@@ -168,6 +176,16 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
   virtual bool CanRemoveNetworkConfig(
       const std::string& guid,
       const std::string& profile_path) const = 0;
+
+  // Notify observers that the policy has been fully applied and is reflected in
+  // NetworkStateHandler.
+  virtual void NotifyPolicyAppliedToNetwork(
+      const std::string& service_path) const = 0;
+
+  // Called after new Cellular networks have been provisioned and configured via
+  // policy. CellularPolicyHandler calls this method after eSIM profiles are
+  // installed from policy. The network list should be updated at this point.
+  virtual void OnCellularPoliciesApplied(const NetworkProfile& profile) = 0;
 
   // Return true if AllowOnlyPolicyCellularNetworks policy is enabled.
   virtual bool AllowOnlyPolicyCellularNetworks() const = 0;

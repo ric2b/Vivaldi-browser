@@ -412,7 +412,7 @@ NoteModelMerger::NoteModelMerger(UpdateResponseDataList updates,
   DCHECK(note_tracker_->IsEmpty());
 }
 
-NoteModelMerger::~NoteModelMerger() {}
+NoteModelMerger::~NoteModelMerger() = default;
 
 void NoteModelMerger::Merge() {
   // Algorithm description:

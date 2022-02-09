@@ -31,6 +31,10 @@ ShillManagerClient* g_instance = nullptr;
 class ShillManagerClientImpl : public ShillManagerClient {
  public:
   ShillManagerClientImpl() = default;
+
+  ShillManagerClientImpl(const ShillManagerClientImpl&) = delete;
+  ShillManagerClientImpl& operator=(const ShillManagerClientImpl&) = delete;
+
   ~ShillManagerClientImpl() override = default;
 
   ////////////////////////////////////
@@ -48,7 +52,11 @@ class ShillManagerClientImpl : public ShillManagerClient {
   void GetProperties(DBusMethodCallback<base::Value> callback) override {
     dbus::MethodCall method_call(shill::kFlimflamManagerInterface,
                                  shill::kGetPropertiesFunction);
-    helper_->CallValueMethod(&method_call, std::move(callback));
+    helper_->CallValueMethod(
+        &method_call,
+        base::BindOnce(&ShillClientHelper::OnGetProperties,
+                       dbus::ObjectPath(shill::kFlimflamServicePath),
+                       std::move(callback)));
   }
 
   void GetNetworksForGeolocation(
@@ -193,8 +201,6 @@ class ShillManagerClientImpl : public ShillManagerClient {
 
   dbus::ObjectProxy* proxy_ = nullptr;
   std::unique_ptr<ShillClientHelper> helper_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShillManagerClientImpl);
 };
 
 }  // namespace

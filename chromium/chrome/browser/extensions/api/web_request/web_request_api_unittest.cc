@@ -72,7 +72,6 @@ namespace web_request = extensions::api::web_request;
 using base::DictionaryValue;
 using base::ListValue;
 using base::Time;
-using base::TimeDelta;
 using base::Value;
 using helpers::CalculateOnAuthRequiredDelta;
 using helpers::CalculateOnBeforeRequestDelta;
@@ -142,7 +141,7 @@ bool GenerateInfoSpec(content::BrowserContext* browser_context,
   for (const std::string& cur :
        base::SplitString(values, ",", base::KEEP_WHITESPACE,
                          base::SPLIT_WANT_NONEMPTY))
-    list_value.AppendString(cur);
+    list_value.Append(cur);
   return ExtraInfoSpec::InitFromValue(browser_context, list_value, result);
 }
 
@@ -1118,7 +1117,7 @@ std::string GetCookieExpirationDate(int delta_secs) {
   };
 
   Time::Exploded exploded_time;
-  (Time::Now() + TimeDelta::FromSeconds(delta_secs)).UTCExplode(&exploded_time);
+  (Time::Now() + base::Seconds(delta_secs)).UTCExplode(&exploded_time);
 
   return base::StringPrintf("%s, %d %s %d %.2d:%.2d:%.2d GMT",
                             kWeekDays[exploded_time.day_of_week],
@@ -1181,7 +1180,7 @@ TEST(ExtensionWebRequestHelpersTest,
   edit_cookie.filter.emplace();
   edit_cookie.filter->name = "name2";
   edit_cookie.modification.emplace();
-  edit_cookie.modification->value = "new value";
+  edit_cookie.modification->value = "newvalue";
 
   ResponseCookieModification edit_cookie_2;
   edit_cookie_2.type = helpers::EDIT;
@@ -1259,9 +1258,9 @@ TEST(ExtensionWebRequestHelpersTest,
   edit_cookie_9.type = helpers::EDIT;
   edit_cookie_9.filter.emplace();
   edit_cookie_9.filter->name = "uBound4";
-  edit_cookie_9.filter->age_upper_bound = 2501;
+  edit_cookie_9.filter->age_upper_bound = 2499;
   edit_cookie_9.modification.emplace();
-  edit_cookie_9.modification->value = "Will not change";
+  edit_cookie_9.modification->value = "Willnotchange";
 
   // Tests 'ageUpperBound' filter when both 'max-age' and 'expires' cookie
   // attributes are provided. 'expires' value matches the filter, however
@@ -1271,9 +1270,9 @@ TEST(ExtensionWebRequestHelpersTest,
   edit_cookie_10.type = helpers::EDIT;
   edit_cookie_10.filter.emplace();
   edit_cookie_10.filter->name = "uBound5";
-  edit_cookie_10.filter->age_upper_bound = 800;
+  edit_cookie_10.filter->age_upper_bound = 599;
   edit_cookie_10.modification.emplace();
-  edit_cookie_10.modification->value = "Will not change";
+  edit_cookie_10.modification->value = "Willnotchange";
 
   ResponseCookieModification remove_cookie;
   remove_cookie.type = helpers::REMOVE;
@@ -1323,7 +1322,7 @@ TEST(ExtensionWebRequestHelpersTest,
   std::string cookie_string;
   std::set<std::string> expected_cookies;
   expected_cookies.insert("name=value; domain=google.com; secure");
-  expected_cookies.insert("name2=value2; secure");
+  expected_cookies.insert("name2=newvalue; secure");
   expected_cookies.insert("name4=\"value4\"; secure");
   expected_cookies.insert(
       "lBound1=greater_1; expires=" + cookie_expiration + "; secure");

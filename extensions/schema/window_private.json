@@ -99,6 +99,29 @@
           "name": "popup",
           "description": "This is a popup window."
         }]
+      },
+      {
+        "id": "FocusedElementInfo",
+        "type": "object",
+        "description": "Information about the HTML element having focus.",
+        "properties": {
+          "tagName": {
+            "type": "string",
+            "description": "Element tag name"
+          },
+          "type": {
+            "type": "string",
+            "description": "Element type"
+          },
+          "editable": {
+            "type": "boolean",
+            "description": "True if element is editable."
+          },
+          "role": {
+            "type": "string",
+            "description": "Element role"
+          }
+        }
       }
     ],
     "functions": [
@@ -167,6 +190,26 @@
             "description": "The state to set the window to."
           }
         ]
+      },
+      {
+        "name": "getFocusedElementInfo",
+        "type": "function",
+        "description": "Get information about currently focused element in Vivaldi window or any of its webviews.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "info",
+              "$ref": "FocusedElementInfo"
+            }
+          ]
+        }
       }
     ],
     "events": [

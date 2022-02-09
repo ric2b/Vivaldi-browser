@@ -292,7 +292,7 @@ void BrowserCommandController::FullscreenStateChanged() {
   UpdateCommandsForFullscreenMode();
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 void BrowserCommandController::LockedFullscreenStateChanged() {
   UpdateCommandsForLockedFullscreenMode();
 }
@@ -652,6 +652,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_FOCUS_PREVIOUS_PANE:
       FocusPreviousPane(browser_);
+      break;
+    case IDC_FOCUS_WEB_CONTENTS_PANE:
+      FocusWebContentsPane(browser_);
       break;
 
     // Show various bits of UI
@@ -1019,11 +1022,9 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_RESTORE_WINDOW, true);
   bool use_system_title_bar = true;
 #if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform()) {
-    use_system_title_bar = ui::OzonePlatform::GetInstance()
-                               ->GetPlatformRuntimeProperties()
-                               .supports_server_side_window_decorations;
-  }
+  use_system_title_bar = ui::OzonePlatform::GetInstance()
+                             ->GetPlatformRuntimeProperties()
+                             .supports_server_side_window_decorations;
 #endif
   command_updater_.UpdateCommandEnabled(IDC_USE_SYSTEM_TITLE_BAR,
                                         use_system_title_bar);
@@ -1178,14 +1179,15 @@ void BrowserCommandController::UpdateSharedCommandsForIncognitoAvailability(
   IncognitoModePrefs::Availability incognito_availability =
       IncognitoModePrefs::GetAvailability(profile->GetPrefs());
   command_updater->UpdateCommandEnabled(
-      IDC_NEW_WINDOW, incognito_availability != IncognitoModePrefs::FORCED);
+      IDC_NEW_WINDOW,
+      incognito_availability != IncognitoModePrefs::Availability::kForced);
   command_updater->UpdateCommandEnabled(
       IDC_NEW_INCOGNITO_WINDOW,
-      incognito_availability != IncognitoModePrefs::DISABLED &&
+      incognito_availability != IncognitoModePrefs::Availability::kDisabled &&
           !profile->IsGuestSession());
 
   const bool forced_incognito =
-      incognito_availability == IncognitoModePrefs::FORCED;
+      incognito_availability == IncognitoModePrefs::Availability::kForced;
   const bool is_guest = profile->IsGuestSession();
 
   command_updater->UpdateCommandEnabled(
@@ -1392,6 +1394,8 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
                                         main_not_fullscreen);
   command_updater_.UpdateCommandEnabled(IDC_FOCUS_PREVIOUS_PANE,
                                         main_not_fullscreen);
+  command_updater_.UpdateCommandEnabled(IDC_FOCUS_WEB_CONTENTS_PANE,
+                                        main_not_fullscreen);
   command_updater_.UpdateCommandEnabled(IDC_FOCUS_BOOKMARKS,
                                         main_not_fullscreen);
   command_updater_.UpdateCommandEnabled(
@@ -1454,7 +1458,7 @@ void BrowserCommandController::UpdateCommandsForHostedAppAvailability() {
   command_updater_.UpdateCommandEnabled(IDC_SHOW_APP_MENU, has_toolbar);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 namespace {
 
 #if DCHECK_IS_ON()

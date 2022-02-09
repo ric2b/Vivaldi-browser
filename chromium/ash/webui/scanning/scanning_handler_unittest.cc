@@ -142,8 +142,10 @@ class FakeScanningAppDelegate : public ScanningAppDelegate {
     file_paths_ = file_paths;
   }
 
-  bool ShowFileInFilesApp(const base::FilePath& path_to_file) override {
-    return kTestFilePath == path_to_file.value();
+  void ShowFileInFilesApp(
+      const base::FilePath& path_to_file,
+      base::OnceCallback<void(const bool)> callback) override {
+    std::move(callback).Run(kTestFilePath == path_to_file.value());
   }
 
   void SaveScanSettingsToPrefs(const std::string& scan_settings) override {
@@ -356,6 +358,7 @@ TEST_F(ScanningHandlerTest, ValidFilePathExists) {
   args.Append(kHandlerFunctionName);
   args.Append(myScanPath.value());
   web_ui_.HandleReceivedMessage("ensureValidFilePath", &args);
+  task_environment_.RunUntilIdle();
 
   const content::TestWebUI::CallData& call_data =
       GetCallData(call_data_count_before_call);
@@ -376,6 +379,7 @@ TEST_F(ScanningHandlerTest, InvalidFilePath) {
   args.Append(kHandlerFunctionName);
   args.Append(invalidFilePath);
   web_ui_.HandleReceivedMessage("ensureValidFilePath", &args);
+  task_environment_.RunUntilIdle();
 
   const content::TestWebUI::CallData& call_data =
       GetCallData(call_data_count_before_call);

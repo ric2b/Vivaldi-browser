@@ -22,9 +22,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
+#include "chrome/browser/ash/policy/core/device_cloud_policy_client_factory_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_store_ash.h"
 #include "chrome/browser/ash/policy/enrollment/device_cloud_policy_initializer.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_handler.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/settings/device_settings_test_helper.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service.h"
@@ -126,6 +128,12 @@ class TestingDeviceCloudPolicyManagerAsh : public DeviceCloudPolicyManagerAsh {
 class DeviceCloudPolicyManagerAshTest
     : public ash::DeviceSettingsTestBase,
       public chromeos::SessionManagerClient::Observer {
+ public:
+  DeviceCloudPolicyManagerAshTest(const DeviceCloudPolicyManagerAshTest&) =
+      delete;
+  DeviceCloudPolicyManagerAshTest& operator=(
+      const DeviceCloudPolicyManagerAshTest&) = delete;
+
  protected:
   DeviceCloudPolicyManagerAshTest()
       : state_keys_broker_(&session_manager_client_), store_(nullptr) {
@@ -229,12 +237,9 @@ class DeviceCloudPolicyManagerAshTest
     manager_->Initialize(&local_state_);
     policy::EnrollmentRequisitionManager::Initialize();
     initializer_ = std::make_unique<DeviceCloudPolicyInitializer>(
-        &local_state_, &device_management_service_,
-        base::ThreadTaskRunnerHandle::Get(), install_attributes_.get(),
-        &state_keys_broker_, store_, manager_.get(), &mock_attestation_flow_,
+        &local_state_, &device_management_service_, install_attributes_.get(),
+        &state_keys_broker_, store_, manager_.get(),
         &fake_statistics_provider_);
-    initializer_->SetSigningServiceForTesting(
-        std::make_unique<FakeSigningService>());
     initializer_->SetSystemURLLoaderFactoryForTesting(
         test_url_loader_factory_.GetSafeWeakWrapper());
     initializer_->Init();
@@ -309,8 +314,6 @@ class DeviceCloudPolicyManagerAshTest
   // This property is required to instantiate the session manager, a singleton
   // which is used by the device status collector.
   session_manager::SessionManager session_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceCloudPolicyManagerAshTest);
 };
 
 TEST_F(DeviceCloudPolicyManagerAshTest, FreshDevice) {
@@ -466,7 +469,14 @@ class DeviceCloudPolicyManagerAshEnrollmentTest
     : public DeviceCloudPolicyManagerAshTest,
       public testing::WithParamInterface<bool> {
  public:
+  DeviceCloudPolicyManagerAshEnrollmentTest(
+      const DeviceCloudPolicyManagerAshEnrollmentTest&) = delete;
+  DeviceCloudPolicyManagerAshEnrollmentTest& operator=(
+      const DeviceCloudPolicyManagerAshEnrollmentTest&) = delete;
+
   void Done(EnrollmentStatus status) {
+    enrollment_handler_.reset();
+    ConnectManager(false);
     status_ = status;
     done_ = true;
   }
@@ -507,8 +517,6 @@ class DeviceCloudPolicyManagerAshEnrollmentTest
 
     PolicyBundle bundle;
     EXPECT_TRUE(manager_->policies().Equals(bundle));
-
-    ConnectManager(false);
 
     if (ShouldRegisterWithCert()) {
       EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, _, _))
@@ -559,12 +567,25 @@ class DeviceCloudPolicyManagerAshEnrollmentTest
                                        : EnrollmentConfig::MODE_MANUAL;
     DMAuth auth =
         with_cert ? DMAuth::NoAuth() : DMAuth::FromOAuthToken("auth token");
-    initializer_->PrepareEnrollment(
-        &device_management_service_, nullptr, enrollment_config,
-        std::move(auth),
+
+    auto fake_signing_service = std::make_unique<FakeSigningService>();
+    auto client = CreateDeviceCloudPolicyClientAsh(
+        &fake_statistics_provider_, &device_management_service_,
+        test_url_loader_factory_.GetSafeWeakWrapper(),
+        CloudPolicyClient::DeviceDMTokenCallback());
+
+    enrollment_handler_ = std::make_unique<EnrollmentHandler>(
+        store_, install_attributes_.get(), &state_keys_broker_,
+        &mock_attestation_flow_, std::move(fake_signing_service),
+        std::move(client), base::ThreadTaskRunnerHandle::Get(),
+        /*ad_join_delegate=*/nullptr, enrollment_config, std::move(auth),
+        install_attributes_->GetDeviceId(),
+        EnrollmentRequisitionManager::GetDeviceRequisition(),
+        EnrollmentRequisitionManager::GetSubOrganization(),
+
         base::BindOnce(&DeviceCloudPolicyManagerAshEnrollmentTest::Done,
                        base::Unretained(this)));
-    initializer_->StartEnrollment();
+    enrollment_handler_->StartEnrollment();
     base::RunLoop().RunUntilIdle();
     Mock::VerifyAndClearExpectations(&device_management_service_);
 
@@ -750,13 +771,12 @@ class DeviceCloudPolicyManagerAshEnrollmentTest
   DeviceManagementService::JobConfiguration::ParameterMap query_params_;
   EnrollmentStatus status_;
 
+  std::unique_ptr<EnrollmentHandler> enrollment_handler_;
+
   // Set to true if the robot auth fetch is expected to fail.
   bool expect_robot_auth_fetch_failure_;
 
   bool done_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeviceCloudPolicyManagerAshEnrollmentTest);
 };
 
 TEST_P(DeviceCloudPolicyManagerAshEnrollmentTest, Success) {

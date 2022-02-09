@@ -2629,7 +2629,7 @@
     RemoteContext.prototype.remote_done = function(data) {
         if (tests.status.status === null &&
             data.status.status !== data.status.OK) {
-            tests.set_status(data.status.status, data.status.message, data.status.sack);
+            tests.set_status(data.status.status, data.status.message, data.status.stack);
         }
 
         for (let assert of data.asserts) {
@@ -2942,7 +2942,8 @@
     };
 
     Tests.prototype.all_done = function() {
-        return this.tests.length > 0 && test_environment.all_loaded &&
+        return (this.tests.length > 0 || this.pending_remotes.length > 0) &&
+                test_environment.all_loaded &&
                 (this.num_pending === 0 || this.is_aborted) && !this.wait_for_finish &&
                 !this.processing_callbacks &&
                 !this.pending_remotes.some(function(w) { return w.running; });

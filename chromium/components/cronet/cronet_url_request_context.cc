@@ -45,8 +45,10 @@
 #include "net/base/url_util.h"
 #include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/x509_certificate.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_auth_handler_factory.h"
+#include "net/http/transport_security_state.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log_util.h"
 #include "net/net_buildflags.h"
@@ -69,6 +71,10 @@ namespace {
 class NetLogWithNetworkChangeEvents {
  public:
   NetLogWithNetworkChangeEvents() : net_log_(net::NetLog::Get()) {}
+
+  NetLogWithNetworkChangeEvents(const NetLogWithNetworkChangeEvents&) = delete;
+  NetLogWithNetworkChangeEvents& operator=(
+      const NetLogWithNetworkChangeEvents&) = delete;
 
   net::NetLog* net_log() { return net_log_; }
   // This function registers with the NetworkChangeNotifier and so must be
@@ -95,8 +101,6 @@ class NetLogWithNetworkChangeEvents {
   // This class bundles one LoggingNetworkChangeObserver with one NetLog,
   // so network change event are logged just once in the NetLog.
   std::unique_ptr<net::LoggingNetworkChangeObserver> net_change_logger_;
-
-  DISALLOW_COPY_AND_ASSIGN(NetLogWithNetworkChangeEvents);
 };
 
 // Use a global NetLog instance. See crbug.com/486120.
@@ -106,6 +110,10 @@ static base::LazyInstance<NetLogWithNetworkChangeEvents>::Leaky g_net_log =
 class BasicNetworkDelegate : public net::NetworkDelegateImpl {
  public:
   BasicNetworkDelegate() {}
+
+  BasicNetworkDelegate(const BasicNetworkDelegate&) = delete;
+  BasicNetworkDelegate& operator=(const BasicNetworkDelegate&) = delete;
+
   ~BasicNetworkDelegate() override {}
 
  private:
@@ -128,8 +136,6 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
     // Disallow saving cookies by default.
     return false;
   }
-
-  DISALLOW_COPY_AND_ASSIGN(BasicNetworkDelegate);
 };
 
 }  // namespace
@@ -464,6 +470,9 @@ class CronetURLRequestContext::ContextGetter
     DCHECK(cronet_context_);
   }
 
+  ContextGetter(const ContextGetter&) = delete;
+  ContextGetter& operator=(const ContextGetter&) = delete;
+
   net::URLRequestContext* GetURLRequestContext() override {
     return cronet_context_->GetURLRequestContext();
   }
@@ -479,8 +488,6 @@ class CronetURLRequestContext::ContextGetter
 
   // CronetURLRequestContext associated with this ContextGetter.
   CronetURLRequestContext* const cronet_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContextGetter);
 };
 
 net::URLRequestContextGetter*

@@ -25,8 +25,6 @@ struct ParseResult {
   FetchResult fetch_result = FetchResult::kSuccess;
   RulesInfo rules_info;
   base::Value tracker_infos;
-
-  DISALLOW_COPY_AND_ASSIGN(ParseResult);
 };
 
 }  // namespace adblock_filter

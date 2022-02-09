@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Mezipaměť obrázků</translation>
 <translation id="1601560923496285236">Použít</translation>
 <translation id="1603914832182249871">(Soukromý režim)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Popisovače souborů</translation>
 <translation id="1682548588986054654">Nové soukromé okno</translation>
-<translation id="1706625117072057435">Úrovně přiblížení</translation>
 <translation id="1708338024780164500">(Nečinný)</translation>
 <translation id="1723824996674794290">Nové okno</translation>
-<translation id="1725149567830788547">Zobrazit &amp;ovládací prvky</translation>
 <translation id="1729533290416704613">Také řídí, která stránka se zobrazí, když budete vyhledávat v omniboxu.</translation>
 <translation id="174123615272205933">Vlastní</translation>
 <translation id="1744108098763830590">Prozkoumat stránku na &amp;pozadí</translation>
@@ -89,11 +86,9 @@
 <translation id="2445081178310039857">Je vyžadován kořenový adresář rozšíření.</translation>
 <translation id="2470702053775288986">Nepodporovaná rozšíření byla zakázána</translation>
 <translation id="2476578072172137802">Nastavení stránky</translation>
-<translation id="2482878487686419369">Oznámení</translation>
 <translation id="2498539833203011245">Minimalizovat</translation>
 <translation id="2509495747794740764">Hodnota měřítka musí být v intervalu 10 až 200.</translation>
 <translation id="253557089021624350">Aktivity zabraňující ukončení</translation>
-<translation id="2546283357679194313">Soubory cookie a data webových stránek</translation>
 <translation id="2550212893339833758">Stránkovaná paměť</translation>
 <translation id="2553440850688409052">Skrýt tento plugin</translation>
 <translation id="26224892172169984">Nepovolovat žádným stránkám zpracovávat protokoly</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">Mezipaměť CSS</translation>
 <translation id="3008272652534848354">Resetovat oprávnění</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">Zařízení MIDI</translation>
 <translation id="3021678814754966447">Zobrazit zdrojo&amp;vý kód rámce</translation>
 <translation id="3036546437875325427">Povolit Flash</translation>
 <translation id="3046910703532196514">Webová stránka, úplná</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Otevřít odkaz jako</translation>
 <translation id="3154429428035006212">Nepoužívána déle než měsíc</translation>
 <translation id="3222066309010235055">Předběžně vykreslit: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vyberte kořenový adresář rozšíření, které chcete zabalit. Chcete-li rozšíření aktualizovat, vyberte také soubor soukromého klíče, jenž chcete znovu použít.</translation>
 <translation id="3280237271814976245">Uložit &amp;jako…</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">Nepovolovat zavřeným webům dokončit odeslání a příjem dat</translation>
 <translation id="3711931198657368127">Vl&amp;ožit a přejít na adresu <ph name="URL" /></translation>
 <translation id="3727187387656390258">Prozkoumat vyskakovací okno</translation>
-<translation id="3744111561329211289">Synchronizace na pozadí</translation>
 <translation id="3760460896538743390">Prozkoumat stránku na &amp;pozadí</translation>
 <translation id="3797900183766075808">&amp;Vyhledat „<ph name="SEARCH_TERMS" />“ pomocí vyhledávače <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3800806661949714323">Zobrazit vše (doporučeno)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Nepoužívána déle než rok</translation>
 <translation id="3905761538810670789">Opravit aplikaci</translation>
 <translation id="3908501907586732282">Aktivovat rozšíření</translation>
+<translation id="3909701002594999354">Zobrazit všechny ovláda&amp;cí prvky</translation>
 <translation id="3909791450649380159">Vyjmou&amp;t</translation>
 <translation id="3927932062596804919">Odmítnout</translation>
 <translation id="3936390757709632190">&amp;Otevřít zvuk v novém listu</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Deaktivovat</translation>
 <translation id="4409697491990005945">Okraje</translation>
 <translation id="4423376891418188461">Obnovit nastavení</translation>
-<translation id="4434045419905280838">Vyskakovací okna a přesměrování</translation>
 <translation id="4478664379124702289">Uložit cíl od&amp;kazu jako…</translation>
 <translation id="4579581181964204535">Nelze odeslat do <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Přejít na adresu <ph name="URL" /></translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Nízká</translation>
 <translation id="5627086634964711283">Také řídí, která stránka se zobrazí po kliknutí na tlačítko Domovská stránka.</translation>
 <translation id="563535393368633106">Před přístupem se zeptat (doporučeno)</translation>
-<translation id="5649053991847567735">Samovolné stahování</translation>
 <translation id="5677928146339483299">Blokováno</translation>
-<translation id="5689516760719285838">Poloha</translation>
 <translation id="5707185214361380026">Nepodařilo se načíst rozšíření z:</translation>
 <translation id="5715711091495208045">Zprostředkovatel zásuvného modulu: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Uložit jako PDF</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">&amp;Přeložit do jazyka <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Vymazání údajů stránek</translation>
 <translation id="6042308850641462728">Více</translation>
-<translation id="6059925163896151826">Zařízení USB</translation>
 <translation id="6086846494333236931">Nainstalováno vaším administrátorem</translation>
 <translation id="6101226222197207147">Byla přidána nová aplikace (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Vaše připojení k internetu je ovládáno</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">Aplikace: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kopírovat o&amp;brázek</translation>
 <translation id="6550675742724504774">Možnosti</translation>
-<translation id="6612358246767739896">Chráněný obsah</translation>
+<translation id="6579369886355986318">Zobrazit všechny ovláda&amp;cí prvky</translation>
 <translation id="6639554308659482635">Paměť SQLite</translation>
 <translation id="6686817083349815241">Uložte si heslo</translation>
 <translation id="6691936601825168937">&amp;Vpřed</translation>
@@ -359,7 +348,6 @@
 <translation id="7270858098575133036">Zeptat se, bude-li stránka vyžadovat přímý přístup k zařízením MIDI</translation>
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">Zobrazit &amp;ovládací prvky</translation>
 <translation id="7385854874724088939">Při pokusu o tisk došlo k chybě. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="7412226954991670867">Paměť GPU</translation>
 <translation id="7421925624202799674">Zobrazit zdrojo&amp;vý kód stránky</translation>
@@ -367,7 +355,6 @@
 <translation id="7427348830195639090">Stránka na pozadí: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Výběrem tiskárny udělíte následujícímu rozšíření oprávnění k přístupu k tiskárně:</translation>
 <translation id="749028671485790643">Osoba <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Ukončit úlohu</translation>
 <translation id="7576690715254076113">Kompletovat</translation>
 <translation id="7629827748548208700">List: <ph name="TAB_NAME" /></translation>
@@ -418,7 +405,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Probíhá stahování}few{Probíhají stahování}many{Probíhají stahování}other{Probíhají stahování}}</translation>
 <translation id="8230134520748321204">Uložit heslo pro <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Toto rozšíření není uvedeno na webu <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo být přidáno bez vašeho vědomí.</translation>
-<translation id="8270242299912238708">Dokumenty PDF</translation>
 <translation id="8339059274628563283">Údaje stránky <ph name="SITE" /> v místním úložišti</translation>
 <translation id="8351419472474436977">Toto rozšíření převzalo kontrolu nad nastavením vašeho proxy serveru, což znamená, že může změnit, narušit nebo sledovat vše, co děláte na internetu. Pokud si nejste jisti, proč k tomu došlo, zřejmě se jedná o nežádoucí změnu.</translation>
 <translation id="8382913212082956454">Kopírovat &amp;e-mailovou adresu</translation>
@@ -466,8 +452,8 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="9170848237812810038">Z&amp;pět</translation>
 <translation id="9215293857209265904">Bylo přidáno rozšíření <ph name="EXTENSION_NAME" /></translation>
 <translation id="9218430445555521422">Nastavit jako výchozí</translation>
-<translation id="9219103736887031265">Obrázky</translation>
 <translation id="93766956588638423">Opravit rozšíření</translation>
+<translation id="961012016278832836">Zastaralý Microsoft Edge</translation>
 <translation id="98515147261107953">Na šířku</translation>
 <translation id="994289308992179865">&amp;Opakovat</translation>
 <translation id="998747458861718449">&amp;Prozkoumat</translation>

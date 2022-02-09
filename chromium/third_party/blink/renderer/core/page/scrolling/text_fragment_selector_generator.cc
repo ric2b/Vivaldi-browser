@@ -9,6 +9,7 @@
 #include "base/time/default_tick_clock.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_metrics.h"
+#include "third_party/abseil-cpp/absl/base/macros.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -255,11 +256,11 @@ void TextFragmentSelectorGenerator::RecordSelectorStateUma() const {
 }
 
 void TextFragmentSelectorGenerator::DidFindMatch(
-    const EphemeralRangeInFlatTree& match,
+    const RangeInFlatTree& match,
     const TextFragmentAnchorMetrics::Match match_metrics,
     bool is_unique) {
   if (is_unique &&
-      PlainText(match).StripWhiteSpace().length() ==
+      PlainText(match.ToEphemeralRange()).StripWhiteSpace().length() ==
           PlainText(range_->ToEphemeralRange()).StripWhiteSpace().length()) {
     state_ = kSuccess;
     ResolveSelectorState();

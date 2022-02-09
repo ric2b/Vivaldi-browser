@@ -12,6 +12,10 @@
 #include "extensions/schema/menubar_menu.h"
 #include "ui/vivaldi_context_menu.h"
 
+namespace content {
+class WebContents;
+}
+
 namespace ui {
 class Accelerator;
 }
@@ -22,15 +26,13 @@ struct BookmarkMenuContainer;
 
 namespace extensions {
 
-
 class MenubarMenuAPI : public BrowserContextKeyedAPI {
  public:
   explicit MenubarMenuAPI(content::BrowserContext* context);
   ~MenubarMenuAPI() override;
 
   // BrowserContextKeyedAPI implementation.
-  static BrowserContextKeyedAPIFactory<MenubarMenuAPI>*
-        GetFactoryInstance();
+  static BrowserContextKeyedAPIFactory<MenubarMenuAPI>* GetFactoryInstance();
 
   // Functions that will send events to JS.
   static void SendActivated(content::BrowserContext* browser_context,
@@ -43,8 +45,8 @@ class MenubarMenuAPI : public BrowserContextKeyedAPI {
                                int64_t bookmark_id,
                                int event_state);
   static void SendBookmarkAction(content::BrowserContext* browser_context,
-                               int64_t bookmark_id,
-                               int menu_id);
+                                 int64_t bookmark_id,
+                                 int menu_id);
   static void SendOpen(content::BrowserContext* browser_context, int id);
   static void SendClose(content::BrowserContext* browser_context);
   static void SendHover(content::BrowserContext* browser_context,
@@ -69,24 +71,23 @@ class MenubarMenuAPI : public BrowserContextKeyedAPI {
 // Not used on Mac but we still need a stub
 class MenubarMenuShowFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION(
-        "menubarMenu.show", MENUBARMENU_SHOW)
+  DECLARE_EXTENSION_FUNCTION("menubarMenu.show", MENUBARMENU_SHOW)
   MenubarMenuShowFunction();
+
  private:
   ~MenubarMenuShowFunction() override;
   // ExtensionFunction:
   ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(MenubarMenuShowFunction);
 };
 #else
-class MenubarMenuShowFunction : public ExtensionFunction,
-    public ::vivaldi::MenubarMenuParams::Delegate,
-    public ::vivaldi::BookmarkMenuContainer::Delegate {
+class MenubarMenuShowFunction
+    : public ExtensionFunction,
+      public ::vivaldi::MenubarMenuParams::Delegate,
+      public ::vivaldi::BookmarkMenuContainer::Delegate {
  public:
   using Element = extensions::vivaldi::menubar_menu::Element;
   using Item = extensions::vivaldi::menubar_menu::Item;
-  DECLARE_EXTENSION_FUNCTION(
-        "menubarMenu.show", MENUBARMENU_SHOW)
+  DECLARE_EXTENSION_FUNCTION("menubarMenu.show", MENUBARMENU_SHOW)
   MenubarMenuShowFunction();
 
  private:
@@ -100,29 +101,30 @@ class MenubarMenuShowFunction : public ExtensionFunction,
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  std::string PopulateModel(
-      vivaldi::menubar_menu::Show::Params* params,
-      int menu_id,
-      bool dark_text_color,
-      const std::vector<Element>& list,
-      ui::SimpleMenuModel* menu_model);
+  std::string PopulateModel(vivaldi::menubar_menu::Show::Params* params,
+                            int menu_id,
+                            bool dark_text_color,
+                            const std::vector<Element>& list,
+                            ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
-  std::string Open(int id);
+  std::string Open(content::WebContents* web_contents, int id);
 
   // vivaldi::MenubarMenuParams::Delegate
-  void PopulateModel(int menu_id, bool dark_text_color,
+  void PopulateModel(int menu_id,
+                     bool dark_text_color,
                      ui::MenuModel** menu_model) override;
-  void PopulateSubmodel(int menu_id, bool dark_text_color,
+  void PopulateSubmodel(int menu_id,
+                        bool dark_text_color,
                         ui::MenuModel* menu_model) override;
   void OnMenuOpened(int menu_id) override;
   void OnMenuClosed() override;
   void OnAction(int command, int event_state) override;
   bool IsBookmarkMenu(int menu_id) override;
-  int  GetSelectedMenuId() override;
+  int GetSelectedMenuId() override;
   bool IsItemChecked(int id) override;
   bool IsItemPersistent(int id) override;
   bool GetAccelerator(int id, ui::Accelerator* accelerator) override;
-  bool GetUrl(int id, std::string *url) override;
+  bool GetUrl(int id, std::string* url) override;
   ::vivaldi::BookmarkMenuContainer* GetBookmarkMenuContainer() override;
   // vivaldi::BookmarkMenuContainer::Delegate
   void OnHover(const std::string& url) override;
@@ -146,8 +148,6 @@ class MenubarMenuShowFunction : public ExtensionFunction,
   IdToElementVectorMap id_to_elementvector_map_;
   int bookmark_menu_id_ = -1;
   int selected_menu_id_ = -1;
-
-  DISALLOW_COPY_AND_ASSIGN(MenubarMenuShowFunction);
 };
 #endif
 

@@ -33,7 +33,7 @@ namespace {
 
 // Change kTimeLimit to something higher if you need more time to capture a
 // trace.
-constexpr base::TimeDelta kTimeLimit = base::TimeDelta::FromSeconds(2);
+constexpr base::TimeDelta kTimeLimit = base::Seconds(2);
 constexpr int kWarmupRuns = 10000;
 constexpr int kTimeCheckInterval = 100000;
 constexpr size_t kAllocSize = 40;
@@ -93,8 +93,9 @@ class PartitionAllocator : public Allocator {
   ThreadSafePartitionRoot alloc_{{PartitionOptions::AlignedAlloc::kDisallowed,
                                   PartitionOptions::ThreadCache::kDisabled,
                                   PartitionOptions::Quarantine::kDisallowed,
-                                  PartitionOptions::Cookies::kAllowed,
-                                  PartitionOptions::RefCount::kDisallowed}};
+                                  PartitionOptions::Cookie::kAllowed,
+                                  PartitionOptions::BackupRefPtr::kDisabled,
+                                  PartitionOptions::UseConfigurablePool::kNo}};
 };
 
 // Only one partition with a thread cache.
@@ -107,8 +108,9 @@ class PartitionAllocatorWithThreadCache : public Allocator {
           {PartitionOptions::AlignedAlloc::kDisallowed,
            PartitionOptions::ThreadCache::kEnabled,
            PartitionOptions::Quarantine::kDisallowed,
-           PartitionOptions::Cookies::kAllowed,
-           PartitionOptions::RefCount::kDisallowed});
+           PartitionOptions::Cookie::kAllowed,
+           PartitionOptions::BackupRefPtr::kDisabled,
+           PartitionOptions::UseConfigurablePool::kNo});
     }
     internal::ThreadCacheRegistry::Instance().PurgeAll();
   }

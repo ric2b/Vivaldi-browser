@@ -41,19 +41,19 @@ class PersistentNotesEntity : public LoopbackServerEntity {
   // Factory function for PersistentNotesEntity used when de-serializing the
   // information stored in the persistent storage.
   static std::unique_ptr<LoopbackServerEntity> CreateFromEntity(
-    const sync_pb::SyncEntity& client_entity);
+      const sync_pb::SyncEntity& client_entity);
 
   PersistentNotesEntity(const std::string& id,
-              int64_t version,
-              const std::string& name,
-              const std::string& originator_cache_guid,
-              const std::string& originator_client_item_id,
-              const sync_pb::UniquePosition& unique_position,
-              const sync_pb::EntitySpecifics& specifics,
-              bool is_folder,
-              const std::string& parent_id,
-              int64_t creation_time,
-              int64_t last_modified_time);
+                        int64_t version,
+                        const std::string& name,
+                        const std::string& originator_cache_guid,
+                        const std::string& originator_client_item_id,
+                        const sync_pb::UniquePosition& unique_position,
+                        const sync_pb::EntitySpecifics& specifics,
+                        bool is_folder,
+                        const std::string& parent_id,
+                        int64_t creation_time,
+                        int64_t last_modified_time);
 
   // LoopbackServerEntity implementation.
   bool RequiresParentId() const override;
@@ -62,7 +62,7 @@ class PersistentNotesEntity : public LoopbackServerEntity {
   bool IsDeleted() const override;
   bool IsFolder() const override;
   sync_pb::LoopbackServerEntity_Type GetLoopbackServerEntityType()
-    const override;
+      const override;
 
  private:
   // All member values have equivalent fields in SyncEntity.
@@ -75,6 +75,6 @@ class PersistentNotesEntity : public LoopbackServerEntity {
   int64_t last_modified_time_;
 };
 
-}  // namespace fake_server
+}  // namespace syncer
 
 #endif  // SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_

@@ -37,6 +37,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/commander/commander.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
@@ -83,12 +84,12 @@
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_elider.h"
-#include "ui/native_theme/native_theme.h"
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING) || BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/feature_list.h"
@@ -181,6 +182,9 @@ class HelpMenuModel : public ui::SimpleMenuModel {
     Build(browser);
   }
 
+  HelpMenuModel(const HelpMenuModel&) = delete;
+  HelpMenuModel& operator=(const HelpMenuModel&) = delete;
+
  private:
   void Build(Browser* browser) {
 #if BUILDFLAG(IS_CHROMEOS_ASH) && defined(OFFICIAL_BUILD)
@@ -217,8 +221,6 @@ class HelpMenuModel : public ui::SimpleMenuModel {
     if (browser->profile()->GetPrefs()->GetBoolean(prefs::kUserFeedbackAllowed))
       AddItemWithStringId(IDC_FEEDBACK, IDS_FEEDBACK);
   }
-
-  DISALLOW_COPY_AND_ASSIGN(HelpMenuModel);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -245,8 +247,9 @@ void ToolsMenuModel::Build(Browser* browser) {
   }
 
   AddItemWithStringId(IDC_CREATE_SHORTCUT, IDS_ADD_TO_OS_LAUNCH_SURFACE);
-  if (base::FeatureList::IsEnabled(features::kWindowNaming))
-    AddItemWithStringId(IDC_NAME_WINDOW, IDS_NAME_WINDOW);
+  AddItemWithStringId(IDC_NAME_WINDOW, IDS_NAME_WINDOW);
+  if (commander::IsEnabled())
+    AddItemWithStringId(IDC_TOGGLE_COMMANDER, IDS_TOGGLE_COMMANDER);
 
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddItemWithStringId(IDC_CLEAR_BROWSING_DATA, IDS_CLEAR_BROWSING_DATA);
@@ -810,7 +813,9 @@ void AppMenuModel::Build() {
   if (AddGlobalErrorMenuItems() || IsCommandIdVisible(IDC_UPGRADE_DIALOG))
     AddSeparator(ui::NORMAL_SEPARATOR);
 
-  AddItemWithStringId(IDC_NEW_TAB, IDS_NEW_TAB);
+  AddItemWithStringId(IDC_NEW_TAB, browser_->profile()->IsIncognitoProfile()
+                                       ? IDS_NEW_INCOGNITO_TAB
+                                       : IDS_NEW_TAB);
   AddItemWithStringId(IDC_NEW_WINDOW, IDS_NEW_WINDOW);
   if (ShouldShowNewIncognitoWindowMenuItem())
     AddItemWithStringId(IDC_NEW_INCOGNITO_WINDOW, IDS_NEW_INCOGNITO_WINDOW);
@@ -866,13 +871,19 @@ void AppMenuModel::Build() {
     AddItem(IDC_INSTALL_PWA, *name);
   } else if (absl::optional<web_app::AppId> app_id =
                  web_app::GetWebAppForActiveTab(browser_)) {
-    auto* provider = web_app::WebAppProvider::Get(browser_->profile());
-    const std::u16string short_name =
-        base::UTF8ToUTF16(provider->registrar().GetAppShortName(*app_id));
-    const std::u16string truncated_name = gfx::TruncateString(
-        short_name, kMaxAppNameLength, gfx::CHARACTER_BREAK);
-    AddItem(IDC_OPEN_IN_PWA_WINDOW,
-            l10n_util::GetStringFUTF16(IDS_OPEN_IN_APP_WINDOW, truncated_name));
+    auto* provider =
+        web_app::WebAppProvider::GetForLocalAppsUnchecked(browser_->profile());
+    // Only applies to apps that open in an app window.
+    if (provider->registrar().GetAppUserDisplayMode(*app_id) !=
+        web_app::DisplayMode::kBrowser) {
+      const std::u16string short_name =
+          base::UTF8ToUTF16(provider->registrar().GetAppShortName(*app_id));
+      const std::u16string truncated_name = gfx::TruncateString(
+          short_name, kMaxAppNameLength, gfx::CHARACTER_BREAK);
+      AddItem(
+          IDC_OPEN_IN_PWA_WINDOW,
+          l10n_util::GetStringFUTF16(IDS_OPEN_IN_APP_WINDOW, truncated_name));
+    }
   }
 
   if (dom_distiller::IsDomDistillerEnabled() &&
@@ -900,7 +911,7 @@ void AppMenuModel::Build() {
   // Always show this option if we're in tablet mode on Chrome OS.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableRequestTabletSite) ||
-      (ash::TabletMode::Get() && ash::TabletMode::Get()->InTabletMode())) {
+      (ash::TabletMode::IsInTabletMode())) {
     AddCheckItemWithStringId(IDC_TOGGLE_REQUEST_TABLET_SITE,
                              IDS_TOGGLE_REQUEST_TABLET_SITE);
   }
@@ -942,10 +953,9 @@ void AppMenuModel::Build() {
     AddHighlightedItemWithIcon(
         IDC_SHOW_MANAGEMENT_PAGE,
         chrome::GetManagedUiMenuItemLabel(browser_->profile()),
-        ui::ImageModel::FromVectorIcon(
-            vector_icons::kBusinessIcon,
-            ui::NativeTheme::kColorId_HighlightedMenuItemForegroundColor,
-            kIconSize));
+        ui::ImageModel::FromVectorIcon(vector_icons::kBusinessIcon,
+                                       ui::kColorMenuItemForegroundHighlighted,
+                                       kIconSize));
   }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -989,7 +999,7 @@ bool AppMenuModel::ShouldShowNewIncognitoWindowMenuItem() {
     return false;
 
   return IncognitoModePrefs::GetAvailability(browser_->profile()->GetPrefs()) !=
-         IncognitoModePrefs::DISABLED;
+         IncognitoModePrefs::Availability::kDisabled;
 }
 
 bool AppMenuModel::AddGlobalErrorMenuItems() {

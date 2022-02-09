@@ -229,6 +229,11 @@
             "type": "string",
             "name": "id",
             "description": "Bookmark id"
+          },
+          {
+            "type": "string",
+            "name": "favicon_url",
+            "description": "The favicon's url"
           }
         ]
       },

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
@@ -49,6 +50,10 @@ void CopyLog(const base::FilePath& src_dir);
 // prior to completing the actual uninstallation.
 void SleepFor(int seconds);
 
+// Waits for a given predicate to become true, testing it by polling. Returns
+// true if the predicate becomes true before a timeout, otherwise returns false.
+bool WaitFor(base::RepeatingCallback<bool()> predicate);
+
 // Returns the path to the updater data dir.
 absl::optional<base::FilePath> GetDataDirPath(UpdaterScope scope);
 
@@ -74,9 +79,11 @@ void Uninstall(UpdaterScope scope);
 // `exit_code`. The server should exit a few seconds after.
 void RunWake(UpdaterScope scope, int exit_code);
 
-// Registers the test app. As a result, the bundled updater is installed,
-// promoted and registered.
-void RegisterTestApp(UpdaterScope scope);
+// Invokes the active instance's UpdateService::Update (via RPC) for an app.
+void Update(const std::string& app_id);
+
+// Invokes the active instance's UpdateService::UpdateAll (via RPC).
+void UpdateAll();
 
 // Runs the command and waits for it to exit or time out.
 bool Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code);
@@ -122,12 +129,18 @@ void SetServerStarts(int value);
 
 void ExpectAppUnregisteredExistenceCheckerPath(const std::string& app_id);
 
+void ExpectAppVersion(UpdaterScope scope,
+                      const std::string& app_id,
+                      const base::Version& version);
+
 void RegisterApp(const std::string& app_id);
 
 void WaitForServerExit(UpdaterScope scope);
 
 #if defined(OS_WIN)
 void ExpectInterfacesRegistered(UpdaterScope scope);
+void ExpectLegacyUpdate3WebSucceeds(UpdaterScope scope,
+                                    const std::string& app_id);
 void RunTestServiceCommand(const std::string& sub_command);
 #endif  // OS_WIN
 

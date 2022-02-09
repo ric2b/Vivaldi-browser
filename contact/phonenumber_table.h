@@ -34,6 +34,9 @@ class PhonenumberTable {
   // happening to avoid thread-safety problems.
   virtual ~PhonenumberTable();
 
+  PhonenumberTable(const PhonenumberTable&) = delete;
+  PhonenumberTable& operator=(const PhonenumberTable&) = delete;
+
   PhonenumberID AddPhoneNumber(AddPropertyObject row);
   bool UpdatePhoneNumber(UpdatePropertyObject row);
   bool DeletePhoneNumber(PhonenumberID phonenumber_id, ContactID contact_id);
@@ -45,9 +48,6 @@ class PhonenumberTable {
  protected:
   virtual sql::Database& GetDB() = 0;
   bool CreatePhonenumberTable();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PhonenumberTable);
 };
 
 }  // namespace contact

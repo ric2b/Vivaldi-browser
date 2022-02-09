@@ -906,12 +906,10 @@ void NotesBridge::NotesNodeRemoved(vivaldi::NotesModel* model,
   NoteNodeRemoved(model, parent, old_index, node, urls);
 }
 
-
-void NotesBridge::ReorderChildren(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_note_id_obj,
-    jlongArray arr) {
+void NotesBridge::ReorderChildren(JNIEnv* env,
+                                  const JavaParamRef<jobject>& obj,
+                                  const JavaParamRef<jobject>& j_note_id_obj,
+                                  jlongArray arr) {
   DCHECK(IsLoaded());
   // get the NoteNode* for the "parent" note parameter
   const long note_id = JavaNoteIdGetId(env, j_note_id_obj);

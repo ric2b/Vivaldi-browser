@@ -1,3 +1,4 @@
+
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -84,6 +85,9 @@ class NET_EXPORT ParsedCertificate
       const ParseCertificateOptions& options,
       CertErrors* errors);
 
+  ParsedCertificate(const ParsedCertificate&) = delete;
+  ParsedCertificate& operator=(const ParsedCertificate&) = delete;
+
   // Returns the DER-encoded certificate data for this cert.
   const der::Input& der_cert() const { return cert_; }
 
@@ -105,14 +109,22 @@ class NET_EXPORT ParsedCertificate
     return *signature_algorithm_;
   }
 
+  // Returns the DER-encoded raw subject value (including the outer sequence
+  // tag). This is guaranteed to be valid DER, though the contents of unhandled
+  // string types are treated as raw bytes.
+  der::Input subject_tlv() const { return tbs_.subject_tlv; }
   // Returns the DER-encoded normalized subject value (not including outer
-  // Sequence tag). This is gauranteed to be valid DER, though the contents of
+  // Sequence tag). This is guaranteed to be valid DER, though the contents of
   // unhandled string types are treated as raw bytes.
   der::Input normalized_subject() const {
     return der::Input(&normalized_subject_);
   }
+  // Returns the DER-encoded raw issuer value (including the outer sequence
+  // tag). This is guaranteed to be valid DER, though the contents of unhandled
+  // string types are treated as raw bytes.
+  der::Input issuer_tlv() const { return tbs_.issuer_tlv; }
   // Returns the DER-encoded normalized issuer value (not including outer
-  // Sequence tag). This is gauranteed to be valid DER, though the contents of
+  // Sequence tag). This is guaranteed to be valid DER, though the contents of
   // unhandled string types are treated as raw bytes.
   der::Input normalized_issuer() const {
     return der::Input(&normalized_issuer_);
@@ -339,8 +351,6 @@ class NET_EXPORT ParsedCertificate
 
   // All of the extensions.
   ExtensionsMap extensions_;
-
-  DISALLOW_COPY_AND_ASSIGN(ParsedCertificate);
 };
 
 }  // namespace net

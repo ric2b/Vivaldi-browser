@@ -71,7 +71,6 @@ class LocationBarBubbleDelegateView : public views::BubbleDialogDelegateView,
       content::NavigationHandle* navigation_handle) override;
 
   // views::BubbleDialogDelegateView:
-  ax::mojom::Role GetAccessibleWindowRole() override;
   gfx::Rect GetAnchorBoundsInScreen() const override;
 
   // If the bubble is not anchored to a view, places the bubble in the top right
@@ -88,6 +87,10 @@ class LocationBarBubbleDelegateView : public views::BubbleDialogDelegateView,
    public:
     WebContentMouseHandler(LocationBarBubbleDelegateView* bubble,
                            content::WebContents* web_contents);
+
+    WebContentMouseHandler(const WebContentMouseHandler&) = delete;
+    WebContentMouseHandler& operator=(const WebContentMouseHandler&) = delete;
+
     ~WebContentMouseHandler() override;
 
     // ui::EventObserver:
@@ -97,8 +100,6 @@ class LocationBarBubbleDelegateView : public views::BubbleDialogDelegateView,
     LocationBarBubbleDelegateView* bubble_;
     content::WebContents* web_contents_;
     std::unique_ptr<views::EventMonitor> event_monitor_;
-
-    DISALLOW_COPY_AND_ASSIGN(WebContentMouseHandler);
   };
 
   // Closes the bubble.

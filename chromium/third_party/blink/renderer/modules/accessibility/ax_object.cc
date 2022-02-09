@@ -32,6 +32,7 @@
 #include <ostream>
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "skia/ext/skia_matrix_44.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
@@ -44,6 +45,7 @@
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -403,7 +405,9 @@ const RoleEntry kAriaRoles[] = {
     {"spinbutton", ax::mojom::blink::Role::kSpinButton},
     {"status", ax::mojom::blink::Role::kStatus},
     {"strong", ax::mojom::blink::Role::kStrong},
+    {"subscript", ax::mojom::blink::Role::kSubscript},
     {"suggestion", ax::mojom::blink::Role::kSuggestion},
+    {"superscript", ax::mojom::blink::Role::kSuperscript},
     {"switch", ax::mojom::blink::Role::kSwitch},
     {"tab", ax::mojom::blink::Role::kTab},
     {"table", ax::mojom::blink::Role::kTable},
@@ -482,6 +486,9 @@ int32_t ToAXMarkerType(DocumentMarker::MarkerType marker_type) {
       break;
     case DocumentMarker::kSuggestion:
       result = ax::mojom::blink::MarkerType::kSuggestion;
+      break;
+    case DocumentMarker::kHighlight:
+      result = ax::mojom::blink::MarkerType::kHighlight;
       break;
     default:
       result = ax::mojom::blink::MarkerType::kNone;
@@ -1126,6 +1133,8 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
     node_data->SetHasPopup(HasPopup());
   else if (RoleValue() == ax::mojom::blink::Role::kPopUpButton)
     node_data->SetHasPopup(ax::mojom::blink::HasPopup::kMenu);
+  else if (ui::IsComboBox(RoleValue()))
+    node_data->SetHasPopup(ax::mojom::blink::HasPopup::kListbox);
 
   if (IsAutofillAvailable())
     node_data->AddState(ax::mojom::blink::State::kAutofillAvailable);
@@ -1237,10 +1246,6 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
     return;
   }
 
-  TruncateAndAddStringAttribute(
-      node_data, ax::mojom::blink::StringAttribute::kValue,
-      SlowGetValueForControlIncludingContentEditable().Utf8());
-
   switch (Restriction()) {
     case AXRestriction::kRestrictionReadOnly:
       node_data->SetRestriction(ax::mojom::blink::Restriction::kReadOnly);
@@ -1249,8 +1254,7 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
       node_data->SetRestriction(ax::mojom::blink::Restriction::kDisabled);
       break;
     case AXRestriction::kRestrictionNone:
-      if (CanSetValueAttribute())
-        node_data->AddAction(ax::mojom::blink::Action::kSetValue);
+      SerializeActionAttributes(node_data);
       break;
   }
 
@@ -1268,6 +1272,15 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
   SerializeSparseAttributes(node_data);
 
   if (Element* element = GetElement()) {
+    String value_text = SlowGetValueForControlIncludingContentEditable();
+    if (!value_text.IsEmpty() || !IsRangeValueSupported()) {
+      // TODO(nektar) Once contenteditable values are computed on the browser
+      // side, only expose this when value text is non-empty.
+      TruncateAndAddStringAttribute(node_data,
+                                    ax::mojom::blink::StringAttribute::kValue,
+                                    value_text.Utf8());
+    }
+
     if (IsAtomicTextField()) {
       // Selection offsets are only used for plain text controls, (input of a
       // text field type, and textarea). Rich editable areas, such as
@@ -1389,11 +1402,19 @@ const AtomicString& AXObject::GetRoleAttributeStringForObjectAttribute() {
     return role_str;
   }
 
-  // Landmarks are the only native roles exposed in xml-roles, matching Firefox.
-  if (ui::IsLandmark(RoleValue()))
-    return ARIARoleName(RoleValue());
+  ax::mojom::blink::Role landmark_role = RoleValue();
+  if (landmark_role == ax::mojom::blink::Role::kFooter) {
+    // - Treat <footer> as "contentinfo" in xml-roles object attribute.
+    landmark_role = ax::mojom::blink::Role::kContentInfo;
+  } else if (landmark_role == ax::mojom::blink::Role::kHeader) {
+    // - Treat <header> as "banner" in xml-roles object attribute.
+    landmark_role = ax::mojom::blink::Role::kBanner;
+  } else if (!ui::IsLandmark(RoleValue())) {
+    // Landmarks are the only roles exposed in xml-roles, matching Firefox.
+    return g_null_atom;
+  }
 
-  return g_null_atom;
+  return ARIARoleName(landmark_role);
 }
 
 void AXObject::SerializeElementAttributes(ui::AXNodeData* node_data) {
@@ -1452,7 +1473,7 @@ void AXObject::SerializeHTMLAttributes(ui::AXNodeData* node_data) {
 
 // TODO(nektar): Turn off kHTMLAccessibilityMode for automation and Mac
 // and remove ifdef.
-#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
   if (node_data->role == ax::mojom::blink::Role::kMath &&
       element->innerHTML().length()) {
     TruncateAndAddStringAttribute(node_data,
@@ -1622,6 +1643,15 @@ void AXObject::SerializeChooserPopupAttributes(ui::AXNodeData* node_data) {
   controls_ids.push_back(chooser_popup_id);
   node_data->AddIntListAttribute(
       ax::mojom::blink::IntListAttribute::kControlsIds, controls_ids);
+}
+
+void AXObject::SerializeActionAttributes(ui::AXNodeData* node_data) {
+  if (CanSetValueAttribute())
+    node_data->AddAction(ax::mojom::blink::Action::kSetValue);
+  if (IsSlider()) {
+    node_data->AddAction(ax::mojom::blink::Action::kDecrement);
+    node_data->AddAction(ax::mojom::blink::Action::kIncrement);
+  }
 }
 
 void AXObject::TruncateAndAddStringAttribute(
@@ -2224,17 +2254,29 @@ bool AXObject::IsAriaHidden() const {
 }
 
 bool AXObject::ComputeIsAriaHidden(IgnoredReasons* ignored_reasons) const {
-  const AXObject* hidden_root = AriaHiddenRoot();
-  if (hidden_root) {
-    if (ignored_reasons) {
-      if (hidden_root == this) {
-        ignored_reasons->push_back(IgnoredReason(kAXAriaHiddenElement));
-      } else {
-        ignored_reasons->push_back(
-            IgnoredReason(kAXAriaHiddenSubtree, hidden_root));
-      }
-    }
+  if (IsA<Document>(GetNode()))
+    return false;  // The root node cannot be aria-hidden.
+
+  // aria-hidden:true works a bit like display:none.
+  // * aria-hidden=true affects entire subtree.
+  // * aria-hidden=false cannot override aria-hidden=true on an ancestor.
+  //   It can only affect elements that are styled as hidden, and only when
+  //   there is no aria-hidden=true in the ancestor chain.
+  // Therefore aria-hidden=true must be checked on every ancestor.
+  if (AOMPropertyOrARIAAttributeIsTrue(AOMBooleanProperty::kHidden)) {
+    if (ignored_reasons)
+      ignored_reasons->push_back(IgnoredReason(kAXAriaHiddenElement));
     return true;
+  }
+
+  if (AXObject* parent = ParentObject()) {
+    if (parent->IsAriaHidden()) {
+      if (ignored_reasons) {
+        ignored_reasons->push_back(
+            IgnoredReason(kAXAriaHiddenSubtree, AriaHiddenRoot()));
+      }
+      return true;
+    }
   }
 
   return false;
@@ -2284,6 +2326,8 @@ bool AXObject::IsVisible() const {
 }
 
 const AXObject* AXObject::AriaHiddenRoot() const {
+  if (!IsAriaHidden())
+    return nullptr;
   for (const AXObject* object = this; object; object = object->ParentObject()) {
     if (object->AOMPropertyOrARIAAttributeIsTrue(AOMBooleanProperty::kHidden))
       return object;
@@ -2490,12 +2534,23 @@ bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
       return true;
   }
 
-  // The ignored state of media controls can change without a layout update.
-  // Keep them in the tree at all times so that the serializer isn't
-  // accidentally working with unincluded nodes, which is not allowed.
-  if (node->IsInUserAgentShadowRoot() &&
-      IsA<HTMLMediaElement>(node->OwnerShadowHost())) {
-    return true;
+  if (const Element* owner = node->OwnerShadowHost()) {
+    // The ignored state of media controls can change without a layout update.
+    // Keep them in the tree at all times so that the serializer isn't
+    // accidentally working with unincluded nodes, which is not allowed.
+    if (IsA<HTMLMediaElement>(owner))
+      return true;
+
+    // Do not include ignored descendants of an <input type="number"> because
+    // they interfere with AXPosition code that assumes a plain input field
+    // structure. Specifically, caret moved events will not be emitted for the
+    // final offset because the associated tree position for that offset is an
+    // ignored node. In some cases platform accessibility code will instead
+    // incorrectly emit a caret moved event for the AXPosition which follows the
+    // input.
+    if (IsA<HTMLInputElement>(owner) &&
+        DynamicTo<HTMLInputElement>(owner)->type() == input_type_names::kNumber)
+      return false;
   }
 
   Element* element = GetElement();
@@ -2937,6 +2992,21 @@ bool AXObject::SupportsARIASetSizeAndPosInSet() const {
   return ui::IsSetLike(RoleValue()) || ui::IsItemLike(RoleValue());
 }
 
+bool AXObject::IsProhibited(ax::mojom::blink::StringAttribute attribute) const {
+  // ARIA 1.2 prohibits aria-roledescription on the "generic" role.
+  if (attribute == ax::mojom::blink::StringAttribute::kRoleDescription)
+    return RoleValue() == ax::mojom::blink::Role::kGenericContainer;
+  return false;
+}
+
+bool AXObject::IsProhibited(ax::mojom::blink::IntAttribute attribute) const {
+  // ARIA 1.2 prohibits exposure of aria-errormessage when aria-invalid is
+  // false.
+  if (attribute == ax::mojom::blink::IntAttribute::kErrormessageId)
+    return GetInvalidState() == ax::mojom::blink::InvalidState::kFalse;
+  return false;
+}
+
 // Simplify whitespace, but preserve a single leading and trailing whitespace
 // character if it's present.
 // static
@@ -3019,7 +3089,7 @@ bool AXObject::ComputeIsHiddenViaStyle() const {
     return false;
 
   // content-visibility:hidden or content-visibility: auto.
-  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node)) {
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*node)) {
     // Ensure contents of head, style and script are never exposed.
     // Note: an AXObject is created for <title> to gather the document's name.
     DCHECK(!Traversal<SVGStyleElement>::FirstAncestorOrSelf(*node)) << node;
@@ -3073,7 +3143,7 @@ bool AXObject::IsHiddenForTextAlternativeCalculation() const {
     return false;
 
   // Display-locked elements are available for text/name resolution.
-  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node))
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*node))
     return false;
 
   Document* document = GetDocument();
@@ -4245,6 +4315,15 @@ AXObject* AXObject::ContainerWidget() const {
   return ancestor;
 }
 
+AXObject* AXObject::ContainerListMarkerIncludingIgnored() const {
+  AXObject* ancestor = ParentObject();
+  while (ancestor && (!ancestor->GetLayoutObject() ||
+                      !ancestor->GetLayoutObject()->IsListMarkerIncludingAll()))
+    ancestor = ancestor->ParentObject();
+
+  return ancestor;
+}
+
 // Determine which traversal approach is used to get children of an object.
 bool AXObject::ShouldUseLayoutObjectTraversalForChildren() const {
   // There are two types of traversal used to find AXObjects:
@@ -4355,7 +4434,10 @@ void AXObject::ClearChildren() const {
   if (!node)
     return;
 
-  if (GetDocument()->IsFlatTreeTraversalForbidden()) {
+  if (GetDocument()->IsFlatTreeTraversalForbidden() ||
+      node->GetDocument()
+          .GetSlotAssignmentEngine()
+          .HasPendingSlotAssignmentRecalc()) {
     // Cannot use layout tree builder traversal now, will have to rely on
     // RepairParent() at a later point.
     return;
@@ -5484,6 +5566,8 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
     case ax::mojom::blink::Role::kRuby:
     case ax::mojom::blink::Role::kSection:
     case ax::mojom::blink::Role::kStrong:
+    case ax::mojom::blink::Role::kSubscript:
+    case ax::mojom::blink::Role::kSuperscript:
     case ax::mojom::blink::Role::kTime:
       if (recursive) {
         // Use contents if part of a recursive name computation.

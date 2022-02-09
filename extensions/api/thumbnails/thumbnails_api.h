@@ -53,8 +53,6 @@ class ThumbnailsCaptureUIFunction : public ExtensionFunction {
   CaptureFormat format_;
   std::string image_data_;
   base::FilePath file_path_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUIFunction);
 };
 
 class ThumbnailsCaptureTabFunction : public ExtensionFunction {
@@ -79,8 +77,6 @@ class ThumbnailsCaptureTabFunction : public ExtensionFunction {
   SkBitmap bitmap_;
   std::string image_data_;
   base::FilePath file_path_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureTabFunction);
 };
 
 class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction {
@@ -98,8 +94,6 @@ class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction {
   void SendResult(bool success);
 
   GURL url_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureBookmarkFunction);
 };
 
 }  // namespace extensions

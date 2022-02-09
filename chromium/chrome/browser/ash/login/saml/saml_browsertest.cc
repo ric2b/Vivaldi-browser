@@ -33,7 +33,6 @@
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/enrollment_ui_mixin.h"
 #include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
-#include "chrome/browser/ash/login/test/https_forwarder.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
@@ -177,6 +176,11 @@ class SecretInterceptingFakeUserDataAuthClient : public FakeUserDataAuthClient {
  public:
   SecretInterceptingFakeUserDataAuthClient();
 
+  SecretInterceptingFakeUserDataAuthClient(
+      const SecretInterceptingFakeUserDataAuthClient&) = delete;
+  SecretInterceptingFakeUserDataAuthClient& operator=(
+      const SecretInterceptingFakeUserDataAuthClient&) = delete;
+
   void Mount(const ::user_data_auth::MountRequest& request,
              MountCallback callback) override;
 
@@ -184,8 +188,6 @@ class SecretInterceptingFakeUserDataAuthClient : public FakeUserDataAuthClient {
 
  private:
   std::string salted_hashed_secret_;
-
-  DISALLOW_COPY_AND_ASSIGN(SecretInterceptingFakeUserDataAuthClient);
 };
 
 SecretInterceptingFakeUserDataAuthClient::
@@ -205,6 +207,10 @@ class SamlTest : public OobeBaseTest {
   SamlTest() {
     fake_gaia_.set_initialize_fake_merge_session(false);
   }
+
+  SamlTest(const SamlTest&) = delete;
+  SamlTest& operator=(const SamlTest&) = delete;
+
   ~SamlTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -321,17 +327,15 @@ class SamlTest : public OobeBaseTest {
  protected:
   SecretInterceptingFakeUserDataAuthClient* cryptohome_client_;
 
-  FakeGaiaMixin fake_gaia_{&mixin_host_, embedded_test_server()};
+  FakeGaiaMixin fake_gaia_{&mixin_host_};
 
-  chromeos::DeviceStateMixin device_state_{
-      &mixin_host_, chromeos::DeviceStateMixin::State::OOBE_COMPLETED_UNOWNED};
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_UNOWNED};
 
  private:
   FakeSamlIdpMixin fake_saml_idp_mixin_{&mixin_host_, &fake_gaia_};
 
   base::test::ScopedFeatureList feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(SamlTest);
 };
 
 // Tests that signin frame should display the SAML notice and the 'back' button
@@ -727,14 +731,18 @@ IN_PROC_BROWSER_TEST_F(SamlTest, PasswordConfirmFlow) {
 // http://crbug.com/447818.
 IN_PROC_BROWSER_TEST_F(SamlTest, NoticeUpdatedOnRedirect) {
   // Start another https server at `kAdditionalIdPHost`.
-  HTTPSForwarder saml_https_forwarder;
-  ASSERT_TRUE(saml_https_forwarder.Initialize(
-      kAdditionalIdPHost, embedded_test_server()->base_url()));
+  net::EmbeddedTestServer saml_https_server(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  net::EmbeddedTestServer::ServerCertificateConfig saml_cert_config;
+  saml_cert_config.dns_names = {kAdditionalIdPHost};
+  saml_https_server.SetSSLConfig(saml_cert_config);
+  saml_https_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(saml_https_server.Start());
 
   // Make the login flow redirect to `kAdditionalIdPHost`.
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_instant_meta_refresh.html");
   fake_saml_idp()->SetRefreshURL(
-      saml_https_forwarder.GetURLForSSLHost("simple.html"));
+      saml_https_server.GetURL(kAdditionalIdPHost, "/simple.html"));
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFirstUserCorpExampleComEmail);
 
@@ -812,6 +820,10 @@ IN_PROC_BROWSER_TEST_F(SamlTest, MetaRefreshToHTTPDisallowed) {
 class SAMLEnrollmentTest : public SamlTest {
  public:
   SAMLEnrollmentTest();
+
+  SAMLEnrollmentTest(const SAMLEnrollmentTest&) = delete;
+  SAMLEnrollmentTest& operator=(const SAMLEnrollmentTest&) = delete;
+
   ~SAMLEnrollmentTest() override;
 
   // SamlTest:
@@ -821,9 +833,6 @@ class SAMLEnrollmentTest : public SamlTest {
  protected:
   LocalPolicyTestServerMixin local_policy_mixin_{&mixin_host_};
   test::EnrollmentUIMixin enrollment_ui_{&mixin_host_};
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SAMLEnrollmentTest);
 };
 
 SAMLEnrollmentTest::SAMLEnrollmentTest() {
@@ -887,11 +896,16 @@ IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, WithCredentialsPassingAPI) {
 class SAMLPolicyTest : public SamlTest {
  public:
   SAMLPolicyTest();
+
+  SAMLPolicyTest(const SAMLPolicyTest&) = delete;
+  SAMLPolicyTest& operator=(const SAMLPolicyTest&) = delete;
+
   ~SAMLPolicyTest() override;
 
   // SamlTest:
   void SetUpInProcessBrowserTestFixture() override;
   void SetUpOnMainThread() override;
+  void SetUpCommandLine(base::CommandLine* command_line) override;
 
   void SetSAMLOfflineSigninTimeLimitPolicy(int limit);
   void EnableTransferSAMLCookiesPolicy();
@@ -919,13 +933,10 @@ class SAMLPolicyTest : public SamlTest {
   // Add a fake user so the login screen does not show GAIA auth by default.
   // This enables tests to control when the GAIA is shown (and ensure it's
   // loaded after SAML config has been set up).
-  chromeos::LoginManagerMixin login_manager_{
+  LoginManagerMixin login_manager_{
       &mixin_host_,
-      {chromeos::LoginManagerMixin::TestUserInfo(
+      {LoginManagerMixin::TestUserInfo(
           AccountId::FromUserEmailGaiaId("user@gmail.com", "1111"))}};
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SAMLPolicyTest);
 };
 
 SAMLPolicyTest::SAMLPolicyTest()
@@ -998,6 +1009,12 @@ void SAMLPolicyTest::SetUpOnMainThread() {
       ->GetTestInterface()
       ->SetupDefaultEnvironment();
 }
+void SAMLPolicyTest::SetUpCommandLine(base::CommandLine* command_line) {
+  SamlTest::SetUpCommandLine(command_line);
+
+  // Disable token check to allow offline sign-in for the fake gaia users.
+  command_line->AppendSwitch(chromeos::switches::kDisableGaiaServices);
+}
 
 void SAMLPolicyTest::SetSAMLOfflineSigninTimeLimitPolicy(int limit) {
   policy::PolicyMap user_policy;
@@ -1058,6 +1075,8 @@ void SAMLPolicyTest::SetLoginVideoCaptureAllowedUrls(
 }
 
 void SAMLPolicyTest::ShowGAIALoginForm() {
+  ash::LoginDisplayHost::default_host()->StartWizard(GaiaView::kScreenId);
+  OobeScreenWaiter(GaiaView::kScreenId).Wait();
   content::DOMMessageQueue message_queue;
   ASSERT_TRUE(content::ExecuteScript(
       GetLoginUI()->GetWebContents(),
@@ -1072,8 +1091,9 @@ void SAMLPolicyTest::ShowGAIALoginForm() {
 }
 
 void SAMLPolicyTest::ShowSAMLInterstitial() {
-  WaitForOobeUI();
+  MaybeWaitForLoginScreenLoad();
   ASSERT_TRUE(LoginScreenTestApi::ClickAddUserButton());
+  OobeScreenWaiter(GaiaView::kScreenId).Wait();
   test::OobeJS()
       .CreateVisibilityWaiter(true, {"gaia-signin", "saml-interstitial"})
       ->Wait();
@@ -1149,12 +1169,17 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_NoSAML) {
   fake_gaia_.SetupFakeGaiaForLogin(kNonSAMLUserEmail, "", kTestRefreshToken);
 
   // Log in without SAML.
+  LoginDisplayHost::default_host()->StartWizard(GaiaView::kScreenId);
   LoginDisplayHost::default_host()
       ->GetOobeUI()
       ->GetView<GaiaScreenHandler>()
       ->ShowSigninScreenForTest(kNonSAMLUserEmail, "password", "[]");
-
   test::WaitForPrimaryUserSessionStart();
+  // Fake OAUTH token for this user will be invalidated in-session.
+  // Pretend that it's still valid.
+  user_manager::UserManager::Get()->SaveUserOAuthStatus(
+      AccountId::FromUserEmail(kNonSAMLUserEmail),
+      user_manager::User::OAUTH2_TOKEN_STATUS_VALID);
 }
 
 // Verifies that the offline login time limit does not affect a user who
@@ -1350,6 +1375,8 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   SetLoginVideoCaptureAllowedUrls({url1, url2});
   WaitForSigninScreen();
 
+  // Make sure WebUI is loaded.
+  LoginDisplayHost::default_host()->GetWizardController();
   content::WebContents* web_contents = GetLoginUI()->GetWebContents();
   content::WebContentsDelegate* web_contents_delegate =
       web_contents->GetDelegate();
@@ -1390,13 +1417,15 @@ class SAMLPasswordAttributesTest : public SAMLPolicyTest,
                                    public testing::WithParamInterface<bool> {
  public:
   SAMLPasswordAttributesTest() = default;
+
+  SAMLPasswordAttributesTest(const SAMLPasswordAttributesTest&) = delete;
+  SAMLPasswordAttributesTest& operator=(const SAMLPasswordAttributesTest&) =
+      delete;
+
   void SetUpOnMainThread() override;
 
  protected:
   bool in_session_pw_change_policy_enabled() { return GetParam(); }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SAMLPasswordAttributesTest);
 };
 
 void SAMLPasswordAttributesTest::SetUpOnMainThread() {
@@ -1493,10 +1522,8 @@ void FakeGetCertificateCallbackTrue(
   std::move(callback).Run(attestation::ATTESTATION_SUCCESS, "certificate");
 }
 
-constexpr base::TimeDelta kTimeoutTaskDelay =
-    base::TimeDelta::FromMilliseconds(500);
-constexpr base::TimeDelta kBuildResponseTaskDelay =
-    base::TimeDelta::FromSeconds(3);
+constexpr base::TimeDelta kTimeoutTaskDelay = base::Milliseconds(500);
+constexpr base::TimeDelta kBuildResponseTaskDelay = base::Seconds(3);
 static_assert(
     kTimeoutTaskDelay < kBuildResponseTaskDelay,
     "kTimeoutTaskDelay should be less than kBuildResponseTaskDelay to trigger "

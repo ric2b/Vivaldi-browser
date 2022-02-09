@@ -15,7 +15,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/dump_accessibility_browsertest_base.h"
@@ -48,9 +47,12 @@ using ui::AXTreeFormatter;
 std::vector<ui::AXPropertyFilter> DumpAccessibilityTreeTest::DefaultFilters()
     const {
   std::vector<AXPropertyFilter> property_filters;
+  if (GetParam() == AXInspectFactory::kMac)
+    return property_filters;
+
   property_filters.emplace_back("value='*'", AXPropertyFilter::ALLOW);
-  // The value attribute on the document object contains the URL of the current
-  // page which will not be the same every time the test is run.
+  // The value attribute on the document object contains the URL of the
+  // current page which will not be the same every time the test is run.
   property_filters.emplace_back("value='http*'", AXPropertyFilter::DENY);
   // Object attributes.value
   property_filters.emplace_back("layout-guess:*", AXPropertyFilter::ALLOW);
@@ -63,9 +65,10 @@ std::vector<ui::AXPropertyFilter> DumpAccessibilityTreeTest::DefaultFilters()
   property_filters.emplace_back("multiselectable", AXPropertyFilter::ALLOW);
   property_filters.emplace_back("placeholder=*", AXPropertyFilter::ALLOW);
 
-  // Deny most empty values
+  // Deny most empty values.
   property_filters.emplace_back("*=''", AXPropertyFilter::DENY);
-  // After denying empty values, because we want to allow name=''
+  // After denying empty values, we need to add the following filter because we
+  // want to allow name=''.
   property_filters.emplace_back("name=*", AXPropertyFilter::ALLOW_EMPTY);
   return property_filters;
 }
@@ -300,6 +303,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityCSSPseudoElementAlternativeText) {
   RunCSSTest(FILE_PATH_LITERAL("pseudo-element-alternative-text.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSPseudoElementHighlight) {
+  RunCSSTest(FILE_PATH_LITERAL("pseudo-element-highlight.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -575,6 +583,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaCombobox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-combobox.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaComboboxImplicitHasPopup) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-combobox-implicit-haspopup.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -1747,6 +1760,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCustomElementNestedSlots) {
+  RunHtmlTest(FILE_PATH_LITERAL("custom-element-nested-slots.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityCustomElementRemoveNodes) {
   RunHtmlTest(FILE_PATH_LITERAL("custom-element-remove-nodes.html"));
 }
@@ -2140,6 +2158,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("input-radio-in-menu.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityInputRadioWrappedLabel) {
+  RunHtmlTest(FILE_PATH_LITERAL("input-radio-wrapped-label.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInputRange) {
   RunHtmlTest(FILE_PATH_LITERAL("input-range.html"));
 }
@@ -2334,6 +2357,30 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityListMarkers) {
   RunHtmlTest(FILE_PATH_LITERAL("list-markers.html"));
 }
 
+// Explicitly enables 'speak-as' descriptor for CSS @counter-style rule to test
+// accessibility tree with custom counter styles.
+// TODO(xiaochengh): Remove this class after shipping 'speak-as'.
+class DumpAccessibilityTreeWithSpeakAsDescriptorTest
+    : public DumpAccessibilityTreeTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    DumpAccessibilityTreeTest::SetUpCommandLine(command_line);
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kEnableBlinkFeatures,
+        "CSSAtRuleCounterStyleSpeakAsDescriptor");
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DumpAccessibilityTreeWithSpeakAsDescriptorTest,
+    ::testing::ValuesIn(DumpAccessibilityTestHelper::TreeTestPasses()),
+    DumpAccessibilityTreeTestPassToString());
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithSpeakAsDescriptorTest,
+                       AccessibilityListMarkerStylesCustom) {
+  RunCSSTest(FILE_PATH_LITERAL("list-marker-styles-custom.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityLongText) {
   RunHtmlTest(FILE_PATH_LITERAL("long-text.html"));
 }
@@ -2377,6 +2424,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityMeta) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityMeter) {
   RunHtmlTest(FILE_PATH_LITERAL("meter.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityMicroClearfixHack) {
+  RunHtmlTest(FILE_PATH_LITERAL("micro-clearfix-hack.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -2619,6 +2671,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("select-follows-focus-multiselect.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilitySelectMenu) {
+  RunHtmlTest(FILE_PATH_LITERAL("select-menu.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilitySelectMenuOpen) {
+  RunHtmlTest(FILE_PATH_LITERAL("select-menu-open.html"));
+}
+
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_AccessibilitySource DISABLED_AccessibilitySource
 #else
@@ -2666,8 +2726,52 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilitySvg) {
   RunHtmlTest(FILE_PATH_LITERAL("svg.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgChildOfButton) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-child-of-button.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilitySvgDescInGroup) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-desc-in-group.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgElementsNotMapped) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-elements-not-mapped.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgTextAlternativeComputation) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-text-alternative-computation.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgTitleInGroup) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-title-in-group.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgWithClickableRect) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-with-clickable-rect.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgWithForeignObject) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-with-foreign-object.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgWithLinkToDocument) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-with-link-to-document.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySvgSymbolWithRole) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-symbol-with-role.html"));
+}
+
 // On ChromeOS, SVG <g> elements are included.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 #define AccessibilitySvgG_TestFile FILE_PATH_LITERAL("svg-g-for-cros.html")
 #else
 #define AccessibilitySvgG_TestFile FILE_PATH_LITERAL("svg-g.html")
@@ -3009,6 +3113,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, ReusedMapChangeUsemap) {
   RunRegressionTest(FILE_PATH_LITERAL("reused-map-change-usemap.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilitySlotCreationCrash) {
+  RunRegressionTest(FILE_PATH_LITERAL("slot-creation-crash.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, TitleInShadow) {
   RunRegressionTest(FILE_PATH_LITERAL("title-in-shadow.html"));
 }
@@ -3060,6 +3169,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, ComboboxItemVisibility) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MathNameFromContents) {
   RunHtmlTest(FILE_PATH_LITERAL("math-name-from-contents.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, SVGAndMathElements) {
+  RunHtmlTest(FILE_PATH_LITERAL("svg-and-math-elements.html"));
 }
 
 //

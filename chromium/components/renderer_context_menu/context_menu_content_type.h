@@ -19,6 +19,9 @@ class WebContents;
 // Subclasses can override the behavior of showing/hiding a category.
 class ContextMenuContentType {
  public:
+  ContextMenuContentType(const ContextMenuContentType&) = delete;
+  ContextMenuContentType& operator=(const ContextMenuContentType&) = delete;
+
   virtual ~ContextMenuContentType();
 
   // Represents a group of menu items.
@@ -30,8 +33,6 @@ class ContextMenuContentType {
     ITEM_GROUP_LINK,
     ITEM_GROUP_SMART_SELECTION,
     ITEM_GROUP_MEDIA_IMAGE,
-    ITEM_GROUP_LENS_REGION_SEARCH,
-    ITEM_GROUP_SEARCHLENSFORIMAGE,
     ITEM_GROUP_SEARCHWEBFORIMAGE,
     ITEM_GROUP_MEDIA_VIDEO,
     ITEM_GROUP_MEDIA_AUDIO,
@@ -71,8 +72,6 @@ class ContextMenuContentType {
   const content::ContextMenuParams params_;
   content::WebContents* const source_web_contents_;
   const bool supports_custom_items_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContextMenuContentType);
 };
 
 #endif  // COMPONENTS_RENDERER_CONTEXT_MENU_CONTEXT_MENU_CONTENT_TYPE_H_

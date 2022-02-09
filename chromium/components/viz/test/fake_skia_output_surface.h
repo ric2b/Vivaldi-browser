@@ -38,6 +38,9 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
     return base::WrapUnique(new FakeSkiaOutputSurface(std::move(provider)));
   }
 
+  FakeSkiaOutputSurface(const FakeSkiaOutputSurface&) = delete;
+  FakeSkiaOutputSurface& operator=(const FakeSkiaOutputSurface&) = delete;
+
   ~FakeSkiaOutputSurface() override;
 
   // OutputSurface implementation:
@@ -107,6 +110,7 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
   void RemoveContextLostObserver(ContextLostObserver* observer) override;
   gpu::SharedImageInterface* GetSharedImageInterface() override;
   gpu::SyncToken Flush() override;
+  void OnObservingBeginFrameSourceChanged(bool observing) override {}
 #if defined(OS_APPLE) || defined(USE_OZONE)
   SkCanvas* BeginPaintRenderPassOverlay(
       const gfx::Size& size,
@@ -186,8 +190,6 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
   THREAD_CHECKER(thread_checker_);
 
   base::WeakPtrFactory<FakeSkiaOutputSurface> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(FakeSkiaOutputSurface);
 };
 
 }  // namespace viz

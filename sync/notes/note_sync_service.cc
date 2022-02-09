@@ -14,7 +14,7 @@ NoteSyncService::NoteSyncService() {
   note_model_type_processor_ = std::make_unique<NoteModelTypeProcessor>();
 }
 
-NoteSyncService::~NoteSyncService() {}
+NoteSyncService::~NoteSyncService() = default;
 
 std::string NoteSyncService::EncodeNoteSyncMetadata() {
   if (!note_model_type_processor_) {

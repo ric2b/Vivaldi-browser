@@ -96,6 +96,10 @@ class FakeNotificationSurface : public exo::NotificationSurface {
                           const std::string& notification_key)
       : exo::NotificationSurface(manager, surface, notification_key),
         manager_(manager) {}
+
+  FakeNotificationSurface(const FakeNotificationSurface&) = delete;
+  FakeNotificationSurface& operator=(const FakeNotificationSurface&) = delete;
+
   ~FakeNotificationSurface() override { manager_->RemoveSurface(this); }
 
  private:
@@ -108,8 +112,6 @@ class FakeNotificationSurface : public exo::NotificationSurface {
   }
 
   exo::NotificationSurfaceManager* const manager_;  // Not owned.
-
-  DISALLOW_COPY_AND_ASSIGN(FakeNotificationSurface);
 };
 
 aura::Window* GetFocusedWindow() {
@@ -128,6 +130,12 @@ class DummyEvent : public ui::Event {
 class ArcNotificationContentViewTest : public AshTestBase {
  public:
   ArcNotificationContentViewTest() = default;
+
+  ArcNotificationContentViewTest(const ArcNotificationContentViewTest&) =
+      delete;
+  ArcNotificationContentViewTest& operator=(
+      const ArcNotificationContentViewTest&) = delete;
+
   ~ArcNotificationContentViewTest() override = default;
 
   void SetUp() override {
@@ -184,7 +192,8 @@ class ArcNotificationContentViewTest : public AshTestBase {
   CreateNotificationView(const Notification& notification) {
     std::unique_ptr<ArcNotificationView> notification_view(
         static_cast<ArcNotificationView*>(
-            MessageViewFactory::Create(notification)));
+            MessageViewFactory::Create(notification, /*shown_in_popup=*/false)
+                .release()));
 
     views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -269,8 +278,6 @@ class ArcNotificationContentViewTest : public AshTestBase {
   // owned by the |wrapper_widget_|.
   ArcNotificationView* notification_view_ = nullptr;
   std::unique_ptr<views::Widget> wrapper_widget_;
-
-  DISALLOW_COPY_AND_ASSIGN(ArcNotificationContentViewTest);
 };
 
 TEST_F(ArcNotificationContentViewTest, CreateSurfaceAfterNotification) {
@@ -353,7 +360,8 @@ TEST_F(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
   MessageViewFactory::SetCustomNotificationViewFactory(
       kArcNotificationCustomViewType,
       base::BindLambdaForTesting(
-          [&notification_view](const message_center::Notification& notification)
+          [&notification_view](const message_center::Notification& notification,
+                               bool shown_in_popup)
               -> std::unique_ptr<message_center::MessageView> {
             auto* arc_delegate =
                 static_cast<ArcNotificationDelegate*>(notification.delegate());

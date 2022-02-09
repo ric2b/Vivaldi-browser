@@ -329,6 +329,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
     TrackbarExtraParams trackbar;
   };
 
+  NativeTheme(const NativeTheme&) = delete;
+  NativeTheme& operator=(const NativeTheme&) = delete;
+
   // Return the size of the part.
   virtual gfx::Size GetPartSize(Part part,
                                 State state,
@@ -346,16 +349,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
                      const ExtraParams& extra,
                      ColorScheme color_scheme = ColorScheme::kDefault,
                      const absl::optional<SkColor>& accent_color = 0) const = 0;
-
-  // Paint part during state transition, used for overlay scrollbar state
-  // transition animation.
-  virtual void PaintStateTransition(cc::PaintCanvas* canvas,
-                                    Part part,
-                                    State startState,
-                                    State endState,
-                                    double progress,
-                                    const gfx::Rect& rect,
-                                    ScrollbarOverlayColorTheme theme) const {}
 
   // Returns whether the theme uses a nine-patch resource for the given part.
   // If true, calling code should always paint into a canvas the size of which
@@ -482,6 +475,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     preferred_contrast_ = preferred_contrast;
   }
   void set_system_colors(const std::map<SystemThemeColor, SkColor>& colors);
+  bool is_custom_system_theme() const { return is_custom_system_theme_; }
 
   // Updates the state of dark mode, forced colors mode, and the map of system
   // colors. Returns true if NativeTheme was updated as a result, or false if
@@ -503,7 +497,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
                                          float zoom_level) const;
 
  protected:
-  explicit NativeTheme(bool should_only_use_dark_colors);
+  explicit NativeTheme(bool should_only_use_dark_colors,
+                       bool is_custom_system_theme = false);
   virtual ~NativeTheme();
 
   // Gets the color from the color provider if using a color provider is enable.
@@ -551,6 +546,12 @@ class NATIVE_THEME_EXPORT NativeTheme {
       : public NativeThemeObserver {
    public:
     ColorSchemeNativeThemeObserver(NativeTheme* theme_to_update);
+
+    ColorSchemeNativeThemeObserver(const ColorSchemeNativeThemeObserver&) =
+        delete;
+    ColorSchemeNativeThemeObserver& operator=(
+        const ColorSchemeNativeThemeObserver&) = delete;
+
     ~ColorSchemeNativeThemeObserver() override;
 
    private:
@@ -559,8 +560,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
     // The theme that gets updated when OnNativeThemeUpdated() is called.
     NativeTheme* const theme_to_update_;
-
-    DISALLOW_COPY_AND_ASSIGN(ColorSchemeNativeThemeObserver);
   };
 
   mutable std::map<SystemThemeColor, SkColor> system_colors_;
@@ -574,13 +573,12 @@ class NATIVE_THEME_EXPORT NativeTheme {
   base::ObserverList<NativeThemeObserver>::Unchecked native_theme_observers_;
 
   bool should_use_dark_colors_ = false;
+  const bool is_custom_system_theme_;
   bool forced_colors_ = false;
   PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;
   PreferredContrast preferred_contrast_ = PreferredContrast::kNoPreference;
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(NativeTheme);
 };
 
 }  // namespace ui

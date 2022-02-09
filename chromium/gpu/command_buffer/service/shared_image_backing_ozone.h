@@ -20,6 +20,7 @@
 #include "gpu/command_buffer/service/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
@@ -42,20 +43,25 @@ class SharedImageBackingOzone final : public ClearTrackingSharedImageBacking {
       GrSurfaceOrigin surface_origin,
       SkAlphaType alpha_type,
       uint32_t usage,
-      SharedContextState* context_state,
+      scoped_refptr<SharedContextState> context_state,
       scoped_refptr<gfx::NativePixmap> pixmap,
       scoped_refptr<base::RefCountedData<DawnProcTable>> dawn_procs);
+
+  SharedImageBackingOzone(const SharedImageBackingOzone&) = delete;
+  SharedImageBackingOzone& operator=(const SharedImageBackingOzone&) = delete;
 
   ~SharedImageBackingOzone() override;
 
   // gpu::SharedImageBacking:
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
   bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
+  scoped_refptr<gfx::NativePixmap> GetNativePixmap() override;
   bool WritePixels(base::span<const uint8_t> pixel_data,
                    SharedContextState* const shared_context_state,
                    viz::ResourceFormat format,
                    const gfx::Size& size,
                    SkAlphaType alpha_type);
+  void SetSharedMemoryWrapper(SharedMemoryRegionWrapper wrapper);
 
  protected:
   std::unique_ptr<SharedImageRepresentationDawn> ProduceDawn(
@@ -82,7 +88,7 @@ class SharedImageBackingOzone final : public ClearTrackingSharedImageBacking {
       VaapiDependenciesFactory* dep_factory) override;
 
  private:
-  friend class SharedImageRepresentationGLOzone;
+  friend class SharedImageRepresentationGLOzoneShared;
   friend class SharedImageRepresentationDawnOzone;
   class SharedImageRepresentationVaapiOzone;
   class SharedImageRepresentationOverlayOzone;
@@ -105,8 +111,9 @@ class SharedImageBackingOzone final : public ClearTrackingSharedImageBacking {
   scoped_refptr<base::RefCountedData<DawnProcTable>> dawn_procs_;
   gfx::GpuFenceHandle write_fence_;
   std::vector<gfx::GpuFenceHandle> read_fences_;
-
-  DISALLOW_COPY_AND_ASSIGN(SharedImageBackingOzone);
+  // Set for shared memory GMB.
+  SharedMemoryRegionWrapper shared_memory_wrapper_;
+  scoped_refptr<SharedContextState> context_state_;
 };
 
 }  // namespace gpu

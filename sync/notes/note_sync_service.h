@@ -29,6 +29,9 @@ class NoteSyncService : public KeyedService {
  public:
   NoteSyncService();
 
+  NoteSyncService(const NoteSyncService&) = delete;
+  NoteSyncService& operator=(const NoteSyncService&) = delete;
+
   // KeyedService implemenation.
   ~NoteSyncService() override;
 
@@ -47,8 +50,6 @@ class NoteSyncService : public KeyedService {
   // NoteModelTypeProcessor handles communications between sync engine and
   // NotesModel.
   std::unique_ptr<NoteModelTypeProcessor> note_model_type_processor_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteSyncService);
 };
 
 }  // namespace sync_notes

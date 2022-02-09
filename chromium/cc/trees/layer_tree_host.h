@@ -25,6 +25,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "cc/base/completion_event.h"
 #include "cc/benchmarks/micro_benchmark.h"
 #include "cc/benchmarks/micro_benchmark_controller.h"
 #include "cc/cc_export.h"
@@ -329,11 +330,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   // Returns the id of the benchmark on success, 0 otherwise.
   int ScheduleMicroBenchmark(const std::string& benchmark_name,
-                             std::unique_ptr<base::Value> value,
+                             base::Value settings,
                              MicroBenchmark::DoneCallback callback);
 
   // Returns true if the message was successfully delivered and handled.
-  bool SendMessageToMicroBenchmark(int id, std::unique_ptr<base::Value> value);
+  bool SendMessageToMicroBenchmark(int id, base::Value message);
 
   // When the main thread informs the compositor thread that it is ready to
   // commit, generally it would remain blocked until the main thread state is
@@ -446,6 +447,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   void SetPrefersReducedMotion(bool prefers_reduced_motion);
 
+  void SetMayThrottleIfUndrawnFrames(bool may_throttle_if_undrawn_frames);
+  bool GetMayThrottleIfUndrawnFramesForTesting() const;
+
   void SetBrowserControlsParams(const BrowserControlsParams& params);
   void SetBrowserControlsShownRatio(float top_ratio, float bottom_ratio);
 
@@ -503,6 +507,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool new_local_surface_id_request_for_testing() const {
     return new_local_surface_id_request_;
   }
+
+  // Records the amount of time spent performing an update in response to new
+  // blink::VisualProperties.
+  void SetVisualPropertiesUpdateDuration(
+      base::TimeDelta visual_properties_update_duration);
 
   void SetDisplayColorSpaces(
       const gfx::DisplayColorSpaces& display_color_spaces);
@@ -622,8 +631,14 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time);
   void AnimateLayers(base::TimeTicks monotonic_frame_begin_time);
   void RequestMainFrameUpdate(bool report_cc_metrics);
-  void FinishCommitOnImplThread(LayerTreeHostImpl* host_impl);
-  void WillCommit();
+  void FinishCommitOnImplThread(
+      LayerTreeHostImpl* host_impl,
+      std::vector<std::unique_ptr<SwapPromise>> swap_promises);
+  void WillCommit(std::unique_ptr<CompletionEvent> completion);
+  bool in_commit() const {
+    return commit_completion_event_ && !commit_completion_event_->IsSignaled();
+  }
+  void WaitForCommitCompletion();
   void CommitComplete();
   void RequestNewLayerTreeFrameSink();
   void DidInitializeLayerTreeFrameSink();
@@ -700,7 +715,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void SetElementScrollOffsetMutated(
       ElementId element_id,
       ElementListType list_type,
-      const gfx::ScrollOffset& scroll_offset) override;
+      const gfx::Vector2dF& scroll_offset) override;
 
   void ElementIsAnimatingChanged(const PropertyToElementIdMap& element_id_map,
                                  ElementListType list_type,
@@ -715,7 +730,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       PaintWorkletInput::PropertyValue property_value) override {}
 
   void ScrollOffsetAnimationFinished() override {}
-  gfx::ScrollOffset GetScrollOffsetForAnimation(
+  gfx::Vector2dF GetScrollOffsetForAnimation(
       ElementId element_id) const override;
 
   void NotifyAnimationWorkletStateChange(AnimationWorkletMutationState state,
@@ -750,6 +765,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // synchronization.
   void SetImplCommitStartTime(base::TimeTicks commit_start_time) {
     impl_commit_start_time_ = commit_start_time;
+  }
+  void SetImplCommitFinishTime(base::TimeTicks commit_finish_time) {
+    impl_commit_finish_time_ = commit_finish_time;
   }
 
   void SetDelegatedInkMetadata(
@@ -821,7 +839,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // client. This lets the client skip a commit if the value does not change.
   void UpdateScrollOffsetFromImpl(
       const ElementId&,
-      const gfx::ScrollOffset& delta,
+      const gfx::Vector2dF& delta,
       const absl::optional<TargetSnapAreaElementIds>&);
 
   const CompositorMode compositor_mode_;
@@ -898,6 +916,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool clear_caches_on_next_commit_ = false;
   viz::LocalSurfaceId local_surface_id_from_parent_;
   bool new_local_surface_id_request_ = false;
+  base::TimeDelta visual_properties_update_duration_;
   uint32_t defer_main_frame_update_count_ = 0;
 
   SkColor background_color_ = SK_ColorWHITE;
@@ -918,6 +937,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool is_viewport_mobile_optimized_ = false;
 
   bool prefers_reduced_motion_ = false;
+  bool may_throttle_if_undrawn_frames_ = true;
   bool have_scroll_event_handlers_ = false;
   EventListenerProperties event_listener_properties_
       [static_cast<size_t>(EventListenerClass::kLast) + 1];
@@ -993,6 +1013,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // sent from the main thread. Zero if the most recent BeginMainFrame did not
   // result in a commit (due to no change in content).
   base::TimeTicks impl_commit_start_time_;
+  base::TimeTicks impl_commit_finish_time_;
+
+  std::unique_ptr<CompletionEvent> commit_completion_event_;
 
   EventsMetricsManager events_metrics_manager_;
 

@@ -55,6 +55,11 @@ void IgnoreBoolCallback(bool result) {}
 class NetInternalsMessageHandler : public content::WebUIMessageHandler {
  public:
   explicit NetInternalsMessageHandler(content::WebUI* web_ui);
+
+  NetInternalsMessageHandler(const NetInternalsMessageHandler&) = delete;
+  NetInternalsMessageHandler& operator=(const NetInternalsMessageHandler&) =
+      delete;
+
   ~NetInternalsMessageHandler() override = default;
 
  protected:
@@ -91,8 +96,6 @@ class NetInternalsMessageHandler : public content::WebUIMessageHandler {
 
   content::WebUI* web_ui_;
   base::WeakPtrFactory<NetInternalsMessageHandler> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NetInternalsMessageHandler);
 };
 
 NetInternalsMessageHandler::NetInternalsMessageHandler(content::WebUI* web_ui)
@@ -101,46 +104,46 @@ NetInternalsMessageHandler::NetInternalsMessageHandler(content::WebUI* web_ui)
 void NetInternalsMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "reloadProxySettings",
       base::BindRepeating(&NetInternalsMessageHandler::OnReloadProxySettings,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "clearBadProxies",
       base::BindRepeating(&NetInternalsMessageHandler::OnClearBadProxies,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "clearHostResolverCache",
       base::BindRepeating(&NetInternalsMessageHandler::OnClearHostResolverCache,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "domainSecurityPolicyDelete",
       base::BindRepeating(
           &NetInternalsMessageHandler::OnDomainSecurityPolicyDelete,
           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "hstsQuery", base::BindRepeating(&NetInternalsMessageHandler::OnHSTSQuery,
                                        base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "hstsAdd", base::BindRepeating(&NetInternalsMessageHandler::OnHSTSAdd,
                                      base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "expectCTQuery",
       base::BindRepeating(&NetInternalsMessageHandler::OnExpectCTQuery,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "expectCTAdd",
       base::BindRepeating(&NetInternalsMessageHandler::OnExpectCTAdd,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "expectCTTestReport",
       base::BindRepeating(&NetInternalsMessageHandler::OnExpectCTTestReport,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "closeIdleSockets",
       base::BindRepeating(&NetInternalsMessageHandler::OnCloseIdleSockets,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "flushSocketPools",
       base::BindRepeating(&NetInternalsMessageHandler::OnFlushSocketPools,
                           base::Unretained(this)));
@@ -213,7 +216,7 @@ void NetInternalsMessageHandler::OnHSTSAdd(const base::ListValue* list) {
   result = list->GetBoolean(1, &sts_include_subdomains);
   DCHECK(result);
 
-  base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
+  base::Time expiry = base::Time::Now() + base::Days(1000);
   GetNetworkContext()->AddHSTS(domain, expiry, sts_include_subdomains,
                                base::DoNothing());
 }
@@ -257,7 +260,7 @@ void NetInternalsMessageHandler::OnExpectCTAdd(const base::ListValue* list) {
 
   url::Origin origin = url::Origin::Create(GURL("https://" + domain));
 
-  base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
+  base::Time expiry = base::Time::Now() + base::Days(1000);
   GetNetworkContext()->AddExpectCT(
       domain, expiry, enforce, GURL(report_uri_str),
       net::NetworkIsolationKey(origin /* top_frame_site */,

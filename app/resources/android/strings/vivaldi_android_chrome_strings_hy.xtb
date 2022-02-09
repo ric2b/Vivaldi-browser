@@ -8,6 +8,7 @@
 <translation id="1829244130665387512">Գտնել էջում</translation>
 <translation id="1910514478706885609">Բացել ներդիրների նոր խմբում</translation>
 <translation id="2038563949887743358">Միացնել համակարգչային տարբերակի հայցումը</translation>
+<translation id="2139186145475833000">Ավելացնել սկզբնական էկրանին</translation>
 <translation id="2306442503286132111">Էջանիշը պահպանված է <ph name="FOLDER_NAME" /> պանակում</translation>
 <translation id="2433507940547922241">Արտաքին տեսք</translation>
 <translation id="2501278716633472235">Գնալ հետ</translation>
@@ -21,7 +22,7 @@
 <translation id="3504699618187058974">Խմբել ներդիրները</translation>
 <translation id="3518985090088779359">Ընդունել և շարունակել</translation>
 <translation id="3700829948786686853">Բարի գալուստ Vivaldi</translation>
-<translation id="3719826155360621982">Սկզբնական էջ</translation>
+<translation id="3719826155360621982">Գլխավոր էջ</translation>
 <translation id="385051799172605136">Հետ</translation>
 <translation id="4121750346708795461">Օգտագործելով այս հավելվածը՝ Դուք ընդունում եք Vivaldi-ի <ph name="BEGIN_LINK1" />Օգտագործման պայմաններն<ph name="END_LINK1" /> ու <ph name="BEGIN_LINK2" />Գաղտնիության դրույթները<ph name="END_LINK2" />։</translation>
 <translation id="4243710787042215766">Բացել գաղտնի ներդիրում</translation>
@@ -49,7 +50,7 @@
 <translation id="7465104139234185284">Փակել բոլոր գաղտնի ներդիրները</translation>
 <translation id="7519434535192513364">Արագ որոնումը հասանելի է, երբ Vivaldi-ում որպես ստանդարտ որոնիչ ընտրված է Google-ը։ Նշված բառն ու տվյալ էջը, որպես կոնտեքստ, ուղարկվում են Google որոնմանը։ Դուք կարող եք այն անջատել <ph name="BEGIN_LINK" />կարգավորումներից<ph name="END_LINK" />։</translation>
 <translation id="804786196054284061">Օգտագործման պայմաններ</translation>
-<translation id="85991616550051997">Գնալ սկզբնական էջ</translation>
+<translation id="85991616550051997">Գնալ գլխավոր էջ</translation>
 <translation id="8820817407110198400">Էջանիշեր</translation>
 <translation id="9063523880881406963">Անջատել համակարգչային տարբերակի հայցումը</translation>
 <translation id="9080642952018487277">Անցնել գաղտնի ռեժիմին</translation>

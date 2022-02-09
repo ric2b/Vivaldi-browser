@@ -42,8 +42,7 @@ SendTabToSelfToolbarBubbleView::SendTabToSelfToolbarBubbleView(
     SendTabToSelfToolbarIconView* parent,
     const SendTabToSelfEntry& entry,
     base::OnceCallback<void(NavigateParams*)> navigate_callback)
-    : views::BubbleDialogDelegateView(dynamic_cast<views::View*>(parent),
-                                      views::BubbleBorder::TOP_RIGHT),
+    : views::BubbleDialogDelegateView(parent, views::BubbleBorder::TOP_RIGHT),
       toolbar_button_(parent),
       navigate_callback_(std::move(navigate_callback)),
       profile_(profile),
@@ -108,7 +107,7 @@ SendTabToSelfToolbarBubbleView::SendTabToSelfToolbarBubbleView(
                       views::LayoutAlignment::kEnd);
   AddChildView(std::move(button));
 
-  base::TimeDelta kTimeoutMs = base::TimeDelta::FromMilliseconds(30000);
+  base::TimeDelta kTimeoutMs = base::Milliseconds(30000);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&SendTabToSelfToolbarBubbleView::Timeout,

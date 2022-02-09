@@ -54,8 +54,7 @@ using captured_sites_test_utils::GetCapturedSites;
 
 namespace {
 
-const base::TimeDelta autofill_wait_for_action_interval =
-    base::TimeDelta::FromSeconds(5);
+const base::TimeDelta autofill_wait_for_action_interval = base::Seconds(5);
 
 base::FilePath GetReplayFilesRootDirectory() {
   base::FilePath src_dir;
@@ -242,7 +241,8 @@ class AutofillCapturedSitesInteractiveTest
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{features::kAutofillAcrossIframes,
                               features::kAutofillShowTypePredictions,
-                              features::kAutofillUseNewFormExtraction},
+                              features::kAutofillUseNewFormExtraction,
+                              features::kAutofillUseUnassociatedListedElements},
         /*disabled_features=*/{});
     command_line->AppendSwitchASCII(
         variations::switches::kVariationsOverrideCountry, "us");

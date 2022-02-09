@@ -6,6 +6,7 @@
 #define CHROMEOS_COMPONENTS_PHONEHUB_FAKE_PHONE_HUB_MANAGER_H_
 
 #include "chromeos/components/phonehub/fake_browser_tabs_model_provider.h"
+#include "chromeos/components/phonehub/fake_camera_roll_manager.h"
 #include "chromeos/components/phonehub/fake_connection_scheduler.h"
 #include "chromeos/components/phonehub/fake_do_not_disturb_controller.h"
 #include "chromeos/components/phonehub/fake_feature_status_provider.h"
@@ -15,6 +16,7 @@
 #include "chromeos/components/phonehub/fake_notification_manager.h"
 #include "chromeos/components/phonehub/fake_onboarding_ui_tracker.h"
 #include "chromeos/components/phonehub/fake_recent_apps_interaction_handler.h"
+#include "chromeos/components/phonehub/fake_screen_lock_manager.h"
 #include "chromeos/components/phonehub/fake_tether_controller.h"
 #include "chromeos/components/phonehub/fake_user_action_recorder.h"
 #include "chromeos/components/phonehub/mutable_phone_model.h"
@@ -61,6 +63,10 @@ class FakePhoneHubManager : public PhoneHubManager {
     return &fake_recent_apps_interaction_handler_;
   }
 
+  FakeScreenLockManager* fake_screen_lock_manager() {
+    return &fake_screen_lock_manager_;
+  }
+
   MutablePhoneModel* mutable_phone_model() { return &mutable_phone_model_; }
 
   FakeTetherController* fake_tether_controller() {
@@ -79,9 +85,14 @@ class FakePhoneHubManager : public PhoneHubManager {
     return &fake_browser_tabs_model_provider_;
   }
 
+  FakeCameraRollManager* fake_camera_roll_manager() {
+    return &fake_camera_roll_manager_;
+  }
+
  private:
   // PhoneHubManager:
   BrowserTabsModelProvider* GetBrowserTabsModelProvider() override;
+  CameraRollManager* GetCameraRollManager() override;
   DoNotDisturbController* GetDoNotDisturbController() override;
   FeatureStatusProvider* GetFeatureStatusProvider() override;
   FindMyDeviceController* GetFindMyDeviceController() override;
@@ -91,6 +102,7 @@ class FakePhoneHubManager : public PhoneHubManager {
   OnboardingUiTracker* GetOnboardingUiTracker() override;
   PhoneModel* GetPhoneModel() override;
   RecentAppsInteractionHandler* GetRecentAppsInteractionHandler() override;
+  ScreenLockManager* GetScreenLockManager() override;
   TetherController* GetTetherController() override;
   ConnectionScheduler* GetConnectionScheduler() override;
   UserActionRecorder* GetUserActionRecorder() override;
@@ -104,10 +116,12 @@ class FakePhoneHubManager : public PhoneHubManager {
   FakeOnboardingUiTracker fake_onboarding_ui_tracker_;
   MutablePhoneModel mutable_phone_model_;
   FakeRecentAppsInteractionHandler fake_recent_apps_interaction_handler_;
+  FakeScreenLockManager fake_screen_lock_manager_;
   FakeTetherController fake_tether_controller_;
   FakeConnectionScheduler fake_connection_scheduler_;
   FakeUserActionRecorder fake_user_action_recorder_;
   FakeBrowserTabsModelProvider fake_browser_tabs_model_provider_;
+  FakeCameraRollManager fake_camera_roll_manager_;
 };
 
 }  // namespace phonehub

@@ -12,6 +12,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -45,6 +46,10 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
       StoragePartitionImpl* storage_partition,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       scoped_refptr<ChromeAppCacheService> appcache_service);
+
+  SharedWorkerServiceImpl(const SharedWorkerServiceImpl&) = delete;
+  SharedWorkerServiceImpl& operator=(const SharedWorkerServiceImpl&) = delete;
+
   ~SharedWorkerServiceImpl() override;
 
   // SharedWorkerService implementation.
@@ -150,8 +155,6 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
   base::ObserverList<Observer> observers_;
 
   base::WeakPtrFactory<SharedWorkerServiceImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SharedWorkerServiceImpl);
 };
 
 }  // namespace content

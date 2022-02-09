@@ -13,14 +13,14 @@ namespace extensions {
 class VivaldiAppHelper : public content::WebContentsUserData<VivaldiAppHelper> {
  public:
   ~VivaldiAppHelper() override;
+  VivaldiAppHelper(const VivaldiAppHelper&) = delete;
+  VivaldiAppHelper& operator=(const VivaldiAppHelper&) = delete;
 
  private:
   explicit VivaldiAppHelper(content::WebContents* contents);
   friend class content::WebContentsUserData<VivaldiAppHelper>;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAppHelper);
 };
 
 }  // namespace extensions

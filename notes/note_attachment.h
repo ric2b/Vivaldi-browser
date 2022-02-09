@@ -40,8 +40,6 @@ class NoteAttachment {
  private:
   std::string checksum_;
   std::string content_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteAttachment);
 };
 
 typedef std::map<std::string, NoteAttachment> NoteAttachments;

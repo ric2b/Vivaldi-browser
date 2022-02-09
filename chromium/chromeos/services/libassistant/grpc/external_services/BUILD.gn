@@ -20,6 +20,12 @@ source_set("grpc_services_initializer") {
   ]
 }
 
+source_set("grpc_services_observer") {
+  sources = [ "grpc_services_observer.h" ]
+
+  deps = [ "//base" ]
+}
+
 source_set("customer_registration_client") {
   sources = [
     "customer_registration_client.cc",
@@ -47,6 +53,7 @@ source_set("heartbeat_event_handler_driver") {
   ]
 
   deps = [
+    ":grpc_services_observer",
     "//base",
     "//chromeos/services/libassistant/grpc:grpc_service",
     "//third_party/grpc:grpc++",

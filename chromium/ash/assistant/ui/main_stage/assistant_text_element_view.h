@@ -29,6 +29,9 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantTextElementView
 
   explicit AssistantTextElementView(const std::string& text);
 
+  AssistantTextElementView(const AssistantTextElementView&) = delete;
+  AssistantTextElementView& operator=(const AssistantTextElementView&) = delete;
+
   ~AssistantTextElementView() override;
 
   // AssistantUiElementView:
@@ -38,12 +41,13 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantTextElementView
   void ChildPreferredSizeChanged(views::View* child) override;
   std::unique_ptr<ElementAnimator> CreateAnimator() override;
 
+  // views:View:
+  void OnThemeChanged() override;
+
  private:
   void InitLayout(const std::string& text);
 
   views::Label* label_;  // Owned by view hierarchy.
-
-  DISALLOW_COPY_AND_ASSIGN(AssistantTextElementView);
 };
 
 }  // namespace ash

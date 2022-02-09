@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_INPUT_EVENT_HANDLER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INPUT_EVENT_HANDLER_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -123,6 +124,8 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
   // testing.
   bool CursorUpdatePending();
 
+  bool IsHandlingKeyEvent() const;
+
   void SetResizingFrameSet(HTMLFrameSetElement*);
 
   void ResizeScrollableAreaDestroyed();
@@ -160,8 +163,7 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
       const WebMouseEvent&,
       const AtomicString& event_type,
       const Vector<WebMouseEvent>& coalesced_events,
-      const Vector<WebMouseEvent>& predicted_events,
-      const String& canvas_node_id = String());
+      const Vector<WebMouseEvent>& predicted_events);
 
   // Called on the local root frame exactly once per gesture event.
   WebInputEventResult HandleGestureEvent(const WebGestureEvent&);
@@ -321,7 +323,6 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
   WebInputEventResult DispatchMousePointerEvent(
       const WebInputEvent::Type,
       Element* target,
-      const String& canvas_region_id,
       const WebMouseEvent&,
       const Vector<WebMouseEvent>& coalesced_events,
       const Vector<WebMouseEvent>& predicted_events,

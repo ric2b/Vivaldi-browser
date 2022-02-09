@@ -13,34 +13,35 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/components/web_app_icon_generator.h"
-#include "chrome/browser/web_applications/components/web_app_install_utils.h"
-#include "chrome/browser/web_applications/components/web_app_prefs_utils.h"
-#include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
-#include "chrome/browser/web_applications/components/web_app_system_web_app_data.h"
-#include "chrome/browser/web_applications/components/web_app_ui_manager.h"
-#include "chrome/browser/web_applications/components/web_app_utils.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/file_handlers_permission_helper.h"
 #include "chrome/browser/web_applications/isolation_prefs_utils.h"
 #include "chrome/browser/web_applications/manifest_update_task.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
+#include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_installation_utils.h"
+#include "chrome/browser/web_applications/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/browser/web_applications/web_app_shortcuts_menu.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/browser/web_applications/web_app_system_web_app_data.h"
+#include "chrome/browser/web_applications/web_app_ui_manager.h"
+#include "chrome/browser/web_applications/web_app_uninstall_commit_task.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -76,6 +77,9 @@ Source::Type InferSourceFromWebAppUninstallSource(
 
     case webapps::WebappUninstallSource::kArc:
       return Source::kWebAppStore;
+
+    case webapps::WebappUninstallSource::kSubApp:
+      return Source::kSubApp;
   }
 }
 
@@ -96,6 +100,9 @@ webapps::WebappUninstallSource ConvertSourceTypeToWebAppUninstallSource(
 
     case Source::kWebAppStore:
       return webapps::WebappUninstallSource::kArc;
+
+    case Source::kSubApp:
+      return webapps::WebappUninstallSource::kSubApp;
   }
 }
 
@@ -181,9 +188,7 @@ void WebAppInstallFinalizer::FinalizeInstall(
   if (webapps::InstallableMetrics::IsUserInitiatedInstallSource(
           options.install_source) ||
       !existing_web_app) {
-    web_app->SetUserDisplayMode(web_app_info.open_as_window
-                                    ? DisplayMode::kStandalone
-                                    : DisplayMode::kBrowser);
+    web_app->SetUserDisplayMode(web_app_info.user_display_mode);
   }
 
   // `WebApp::chromeos_data` has a default value already. Only override if the
@@ -209,16 +214,9 @@ void WebAppInstallFinalizer::FinalizeInstall(
   web_app->SetAdditionalSearchTerms(web_app_info.additional_search_terms);
   web_app->AddSource(source);
   web_app->SetIsFromSyncAndPendingInstallation(false);
-  web_app->SetStorageIsolated(web_app_info.is_storage_isolated);
 
-  UpdateIntWebAppPref(profile_->GetPrefs(), app_id, kLatestWebAppInstallSource,
-                      static_cast<int>(options.install_source));
-
-  // TODO(crbug.com/897314): Store this as a display mode on WebApp to
-  // participate in the DB transactional model.
-  registry_controller().SetExperimentalTabbedWindowMode(
-      app_id, web_app_info.enable_experimental_tabbed_window,
-      /*is_user_action=*/false);
+  UpdateWebAppInstallSource(profile_->GetPrefs(), app_id,
+                            static_cast<int>(options.install_source));
 
   file_handlers_helper_->WillInstallApp(web_app_info);
 
@@ -226,8 +224,14 @@ void WebAppInstallFinalizer::FinalizeInstall(
       &WebAppInstallFinalizer::OnDatabaseCommitCompletedForInstall,
       weak_ptr_factory_.GetWeakPtr(), std::move(callback), app_id);
 
-  SetWebAppManifestFieldsAndWriteData(web_app_info, std::move(web_app),
-                                      std::move(commit_callback));
+  if (options.overwrite_existing_manifest_fields || !existing_web_app) {
+    SetWebAppManifestFieldsAndWriteData(web_app_info, std::move(web_app),
+                                        std::move(commit_callback));
+  } else {
+    // Updates the web app with an additional source.
+    OnIconsDataWritten(std::move(commit_callback), std::move(web_app),
+                       /*success=*/true);
+  }
 }
 
 void WebAppInstallFinalizer::UninstallExternalWebApp(
@@ -440,11 +444,11 @@ void WebAppInstallFinalizer::SetRemoveSourceCallbackForTesting(
 void WebAppInstallFinalizer::SetSubsystems(
     WebAppRegistrar* registrar,
     WebAppUiManager* ui_manager,
-    AppRegistryController* registry_controller,
+    WebAppSyncBridge* sync_bridge,
     OsIntegrationManager* os_integration_manager) {
   registrar_ = registrar;
   ui_manager_ = ui_manager;
-  registry_controller_ = registry_controller;
+  sync_bridge_ = sync_bridge;
   os_integration_manager_ = os_integration_manager;
 }
 
@@ -452,33 +456,30 @@ void WebAppInstallFinalizer::UninstallWebAppInternal(
     const AppId& app_id,
     webapps::WebappUninstallSource uninstall_source,
     UninstallWebAppCallback callback) {
-  // If the app is already uninstalling then avoid triggering another uninstall.
-  {
-    ScopedRegistryUpdate update(registry_controller().AsWebAppSyncBridge());
-    WebApp* app = update->UpdateApp(app_id);
-    if (!app || app->is_uninstalling()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::BindOnce(std::move(callback),
-                                    /*uninstalled=*/false));
-      return;
-    }
-    // Set uninstalling flag and continue with app uninstall.
-    app->SetIsUninstalling(true);
+  if (registrar_->GetAppById(app_id) == nullptr ||
+      base::Contains(pending_non_sync_uninstalls_, app_id)) {
+    std::move(callback).Run(false);
+    return;
   }
-  registrar().NotifyWebAppWillBeUninstalled(app_id);
-  os_integration_manager().UninstallAllOsHooks(
-      app_id, base::BindOnce(&WebAppInstallFinalizer::OnUninstallOsHooks,
-                             weak_ptr_factory_.GetWeakPtr(), app_id,
-                             uninstall_source, std::move(callback)));
+  auto uninstall_task = std::make_unique<WebAppUninstallCommitTask>(
+      os_integration_manager_, sync_bridge_, icon_manager_, registrar_,
+      profile_->GetPrefs());
+  uninstall_task->Start(
+      app_id, url::Origin::Create(registrar_->GetAppById(app_id)->start_url()),
+      uninstall_source,
+      base::BindOnce(&WebAppInstallFinalizer::OnNonSyncUninstallComplete,
+                     weak_ptr_factory_.GetWeakPtr(), app_id, uninstall_source,
+                     std::move(callback)));
+  pending_non_sync_uninstalls_[app_id] = std::move(uninstall_task);
 }
 
 void WebAppInstallFinalizer::OnSyncUninstallOsHooksUninstall(
     AppId app_id,
-    OsHooksResults results) {
+    OsHooksErrors errors) {
   DCHECK(base::Contains(pending_sync_uninstalls_, app_id));
   auto& uninstall_state = pending_sync_uninstalls_[app_id];
   uninstall_state->hooks_uninstalled = true;
-  uninstall_state->success = uninstall_state->success && results.all();
+  uninstall_state->success = uninstall_state->success && errors.none();
   MaybeFinishSyncUninstall(app_id);
 }
 
@@ -497,33 +498,31 @@ void WebAppInstallFinalizer::MaybeFinishSyncUninstall(AppId app_id) {
   if (uninstall_state->hooks_uninstalled && uninstall_state->app_data_deleted) {
     UMA_HISTOGRAM_BOOLEAN("Webapp.SyncInitiatedUninstallResult",
                           uninstall_state->success);
-    OnIconsDataDeletedAndWebAppUninstalled(
-        app_id, webapps::WebappUninstallSource::kSync,
-        std::move(uninstall_state->callback), uninstall_state->success);
+
+    registrar().NotifyWebAppUninstalled(app_id);
+
+    webapps::InstallableMetrics::TrackUninstallEvent(
+        webapps::WebappUninstallSource::kSync);
+
+    std::move(uninstall_state->callback).Run(uninstall_state->success);
     // WebApp object is destroyed here.
     pending_sync_uninstalls_.erase(app_id);
   }
 }
 
-void WebAppInstallFinalizer::OnUninstallOsHooks(
-    const AppId& app_id,
-    webapps::WebappUninstallSource uninstall_source,
+void WebAppInstallFinalizer::OnNonSyncUninstallComplete(
+    AppId app_id,
+    webapps::WebappUninstallSource source,
     UninstallWebAppCallback callback,
-    OsHooksResults os_hooks_info) {
-  const WebApp* web_app = registrar().GetAppById(app_id);
-  DCHECK(web_app);
-  RemoveAppIsolationState(profile_->GetPrefs(),
-                          url::Origin::Create(web_app->scope()));
-
-  ScopedRegistryUpdate update(registry_controller().AsWebAppSyncBridge());
-  update->DeleteApp(app_id);
-
-  icon_manager_->DeleteData(
-      app_id,
-      base::BindOnce(
-          &WebAppInstallFinalizer::OnIconsDataDeletedAndWebAppUninstalled,
-          weak_ptr_factory_.GetWeakPtr(), app_id, uninstall_source,
-          std::move(callback)));
+    WebAppUninstallCommitTaskResult result) {
+  DCHECK(base::Contains(pending_non_sync_uninstalls_, app_id));
+  pending_non_sync_uninstalls_.erase(app_id);
+  if (source == webapps::WebappUninstallSource::kSync) {
+    base::UmaHistogramBoolean(
+        "Webapp.SyncInitiatedUninstallResult",
+        result == WebAppUninstallCommitTaskResult::kSuccess);
+  }
+  std::move(callback).Run(result == WebAppUninstallCommitTaskResult::kSuccess);
 }
 
 void WebAppInstallFinalizer::UninstallExternalWebAppOrRemoveSource(
@@ -543,7 +542,7 @@ void WebAppInstallFinalizer::UninstallExternalWebAppOrRemoveSource(
         ConvertSourceTypeToWebAppUninstallSource(source);
     UninstallWebAppInternal(app_id, uninstall_source, std::move(callback));
   } else {
-    ScopedRegistryUpdate update(registry_controller().AsWebAppSyncBridge());
+    ScopedRegistryUpdate update(sync_bridge_);
     WebApp* app_to_update = update->UpdateApp(app_id);
     app_to_update->RemoveSource(source);
     if (install_source_removed_callback_for_testing_)
@@ -560,6 +559,8 @@ void WebAppInstallFinalizer::SetWebAppManifestFieldsAndWriteData(
     std::unique_ptr<WebApp> web_app,
     CommitCallback commit_callback) {
   SetWebAppManifestFields(web_app_info, *web_app);
+  web_app->SetFileHandlerPermissionBlocked(
+      file_handlers_helper_->IsPermissionBlocked(web_app->scope()));
 
   AppId app_id = web_app->app_id();
 
@@ -588,8 +589,7 @@ void WebAppInstallFinalizer::OnIconsDataWritten(
 
   AppId app_id = web_app->app_id();
 
-  std::unique_ptr<WebAppRegistryUpdate> update =
-      registry_controller().AsWebAppSyncBridge()->BeginUpdate();
+  std::unique_ptr<WebAppRegistryUpdate> update = sync_bridge_->BeginUpdate();
 
   WebApp* app_to_override = update->UpdateApp(app_id);
   if (app_to_override)
@@ -597,20 +597,7 @@ void WebAppInstallFinalizer::OnIconsDataWritten(
   else
     update->CreateApp(std::move(web_app));
 
-  registry_controller().AsWebAppSyncBridge()->CommitUpdate(
-      std::move(update), std::move(commit_callback));
-}
-
-void WebAppInstallFinalizer::OnIconsDataDeletedAndWebAppUninstalled(
-    const AppId& app_id,
-    webapps::WebappUninstallSource uninstall_source,
-    UninstallWebAppCallback callback,
-    bool success) {
-  registrar().NotifyWebAppUninstalled(app_id);
-
-  webapps::InstallableMetrics::TrackUninstallEvent(uninstall_source);
-
-  std::move(callback).Run(success);
+  sync_bridge_->CommitUpdate(std::move(update), std::move(commit_callback));
 }
 
 void WebAppInstallFinalizer::OnDatabaseCommitCompletedForInstall(

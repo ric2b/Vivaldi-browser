@@ -145,7 +145,6 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   void SetUpOnMainThread() override {
     OobeBaseTest::SetUpOnMainThread();
 
-    error_screen_ = GetOobeUI()->GetErrorScreen();
     // Set up fake networks.
     network_state_test_helper_ =
         std::make_unique<chromeos::NetworkStateTestHelper>(
@@ -194,7 +193,6 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
  protected:
   UpdateRequiredScreen* update_required_screen_;
   // Error screen - owned by OobeUI.
-  ErrorScreen* error_screen_ = nullptr;
   // Version updater - owned by `update_required_screen_`.
   VersionUpdater* version_updater_ = nullptr;
   // For testing captive portal
@@ -203,9 +201,8 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   // Handles network connections
   std::unique_ptr<chromeos::NetworkStateTestHelper> network_state_test_helper_;
   policy::DevicePolicyCrosTestHelper policy_helper_;
-  chromeos::DeviceStateMixin device_state_mixin_{
-      &mixin_host_,
-      chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+  DeviceStateMixin device_state_mixin_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
   LoginManagerMixin login_manager_mixin_{&mixin_host_};
 };
 
@@ -217,7 +214,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
 
   static_cast<UpdateRequiredScreen*>(
       WizardController::default_controller()->current_screen())
-      ->SetErrorMessageDelayForTesting(base::TimeDelta::FromMilliseconds(10));
+      ->SetErrorMessageDelayForTesting(base::Milliseconds(10));
 
   test::OobeJS().ExpectVisiblePath(kUpdateRequiredStep);
 
@@ -230,8 +227,9 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
   error_screen_waiter.set_assert_next_screen();
   error_screen_waiter.Wait();
 
+  ErrorScreen* error_screen = GetOobeUI()->GetErrorScreen();
   EXPECT_EQ(UpdateRequiredView::kScreenId.AsId(),
-            error_screen_->GetParentScreen());
+            error_screen->GetParentScreen());
   test::OobeJS().ExpectVisible("error-message");
   test::OobeJS().ExpectVisiblePath(
       {"error-message", "captive-portal-message-text"});
@@ -242,8 +240,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
   // process should start.
   network_portal_detector_.SimulateDefaultNetworkState(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
-  EXPECT_EQ(OobeScreen::SCREEN_UNKNOWN.AsId(),
-            error_screen_->GetParentScreen());
+  EXPECT_EQ(OobeScreen::SCREEN_UNKNOWN.AsId(), error_screen->GetParentScreen());
 
   SetUpdateEngineStatus(update_engine::Operation::CHECKING_FOR_UPDATE);
   SetUpdateEngineStatus(update_engine::Operation::UPDATE_AVAILABLE);
@@ -254,7 +251,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReached) {
   update_engine_client()->set_eol_date(
-      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+      base::DefaultClock::GetInstance()->Now() - base::Days(1));
   ShowUpdateRequiredScreen();
 
   test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
@@ -268,7 +265,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReached) {
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolDeleteUsersConfirm) {
   EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 2u);
   update_engine_client()->set_eol_date(
-      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+      base::DefaultClock::GetInstance()->Now() - base::Days(1));
   ShowUpdateRequiredScreen();
 
   test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
@@ -290,7 +287,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolDeleteUsersConfirm) {
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolDeleteUsersCancel) {
   EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 2u);
   update_engine_client()->set_eol_date(
-      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+      base::DefaultClock::GetInstance()->Now() - base::Days(1));
   ShowUpdateRequiredScreen();
 
   test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
@@ -309,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolDeleteUsersCancel) {
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReachedAdminMessage) {
   update_engine_client()->set_eol_date(
-      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+      base::DefaultClock::GetInstance()->Now() - base::Days(1));
   SetEolMessageAndWaitForSettingsChange(kDemoEolMessage);
   ShowUpdateRequiredScreen();
 
@@ -321,7 +318,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReachedAdminMessage) {
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolNotReached) {
   update_engine_client()->set_eol_date(
-      base::DefaultClock::GetInstance()->Now() + base::TimeDelta::FromDays(1));
+      base::DefaultClock::GetInstance()->Now() + base::Days(1));
   ShowUpdateRequiredScreen();
 
   test::OobeJS().ExpectHiddenPath(kUpdateRequiredEolDialog);
@@ -506,8 +503,7 @@ class UpdateRequiredScreenPolicyPresentTest : public OobeBaseTest {
             false /* unmanaged_user_restricted */));
     // Simulate end-of-life reached.
     update_engine_client()->set_eol_date(
-        base::DefaultClock::GetInstance()->Now() -
-        base::TimeDelta::FromDays(1));
+        base::DefaultClock::GetInstance()->Now() - base::Days(1));
   }
 
   void SetMinimumChromeVersionPolicy(const base::Value& value) {
@@ -525,9 +521,8 @@ class UpdateRequiredScreenPolicyPresentTest : public OobeBaseTest {
   }
 
  protected:
-  chromeos::DeviceStateMixin device_state_mixin_{
-      &mixin_host_,
-      chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+  DeviceStateMixin device_state_mixin_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
   policy::DevicePolicyCrosTestHelper policy_helper_;
 };
 

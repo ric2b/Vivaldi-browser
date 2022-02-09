@@ -15,6 +15,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/ip_endpoint.h"
+#include "net/cookies/site_for_cookies.h"
 #include "net/http/http_util.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
@@ -32,6 +33,9 @@ namespace {
 class ShutdownNotifierFactory
     : public BrowserContextKeyedServiceShutdownNotifierFactory {
  public:
+  ShutdownNotifierFactory(const ShutdownNotifierFactory&) = delete;
+  ShutdownNotifierFactory& operator=(const ShutdownNotifierFactory&) = delete;
+
   static ShutdownNotifierFactory* GetInstance() {
     static base::NoDestructor<ShutdownNotifierFactory> factory;
     return factory.get();
@@ -44,8 +48,6 @@ class ShutdownNotifierFactory
       : BrowserContextKeyedServiceShutdownNotifierFactory(
             "RequestFilterProxyingWebSocket") {}
   ~ShutdownNotifierFactory() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(ShutdownNotifierFactory);
 };
 
 void ForwardOnBeforeSendHeadersCallback(
@@ -109,6 +111,7 @@ RequestFilterProxyingWebSocket::RequestFilterProxyingWebSocket(
             content::ContentBrowserClient::URLLoaderFactoryType::
                 kDocumentSubResource,
             /*is_async=*/true,
+            /*is_webtransport=*/false,
             /*navigation_id=*/absl::nullopt),
       proxies_(proxies) {
   // base::Unretained is safe here because the callback will be canceled when
@@ -306,7 +309,7 @@ void RequestFilterProxyingWebSocket::OnHeadersReceived(
 
 void RequestFilterProxyingWebSocket::StartProxying(
     WebSocketFactory factory,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
@@ -326,7 +329,7 @@ void RequestFilterProxyingWebSocket::StartProxying(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   network::ResourceRequest request;
   request.url = url;
-  request.site_for_cookies = net::SiteForCookies::FromUrl(site_for_cookies);
+  request.site_for_cookies = site_for_cookies;
   if (user_agent) {
     request.headers.SetHeader(net::HttpRequestHeaders::kUserAgent, *user_agent);
   }
@@ -357,8 +360,8 @@ void RequestFilterProxyingWebSocket::OnBeforeRequestComplete(int error_code) {
       weak_factory_.GetWeakPtr());
 
   int result = request_handler_->OnBeforeSendHeaders(
-      browser_context_, &info_, continuation, &request_headers_,
-      &set_request_headers_, &removed_request_headers_);
+      browser_context_, &info_, continuation, &request_headers_, nullptr,
+      nullptr);
 
   if (result == net::ERR_BLOCKED_BY_CLIENT) {
     OnError(result);

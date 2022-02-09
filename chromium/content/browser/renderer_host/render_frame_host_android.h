@@ -25,6 +25,10 @@ class RenderFrameHostImpl;
 class RenderFrameHostAndroid : public base::SupportsUserData::Data {
  public:
   RenderFrameHostAndroid(RenderFrameHostImpl* render_frame_host);
+
+  RenderFrameHostAndroid(const RenderFrameHostAndroid&) = delete;
+  RenderFrameHostAndroid& operator=(const RenderFrameHostAndroid&) = delete;
+
   ~RenderFrameHostAndroid() override;
 
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
@@ -55,7 +59,7 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
   void NotifyUserActivation(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>&);
 
-  jboolean SignalModalCloseWatcherIfActive(
+  jboolean SignalCloseWatcherIfActive(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&) const;
 
@@ -82,7 +86,8 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&,
       const base::android::JavaParamRef<jstring>&,
-      const base::android::JavaParamRef<jobject>&) const;
+      const base::android::JavaParamRef<jobject>&,
+      jboolean is_payment_credential_get_assertion) const;
 
   jint PerformMakeCredentialWebAuthSecurityChecks(
       JNIEnv* env,
@@ -99,8 +104,6 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
  private:
   RenderFrameHostImpl* const render_frame_host_;
   JavaObjectWeakGlobalRef obj_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostAndroid);
 };
 
 }  // namespace content

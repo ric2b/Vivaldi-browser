@@ -23,15 +23,16 @@
 
 namespace content {
 class RenderFrameHost;
-}
+}  // namespace content
 
 namespace safe_browsing {
 class UrlCheckerDelegate;
-}
+}  // namespace safe_browsing
 
 namespace net {
 class IsolationInfo;
-}
+class SiteForCookies;
+}  // namespace net
 
 namespace android_webview {
 
@@ -55,6 +56,10 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   // |aw_feature_list_creator| should not be null.
   explicit AwContentBrowserClient(
       AwFeatureListCreator* aw_feature_list_creator);
+
+  AwContentBrowserClient(const AwContentBrowserClient&) = delete;
+  AwContentBrowserClient& operator=(const AwContentBrowserClient&) = delete;
+
   ~AwContentBrowserClient() override;
 
   // Allows AwBrowserMainParts to initialize a BrowserContext at the right
@@ -85,7 +90,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   std::string GetAcceptLangs(content::BrowserContext* context) override;
   gfx::ImageSkia GetDefaultFavicon() override;
   bool AllowAppCache(const GURL& manifest_url,
-                     const GURL& site_for_cookies,
+                     const net::SiteForCookies& site_for_cookies,
                      const absl::optional<url::Origin>& top_frame_origin,
                      content::BrowserContext* context) override;
   scoped_refptr<content::QuotaPermissionContext> CreateQuotaPermissionContext()
@@ -184,6 +189,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       int frame_tree_node_id,
       content::NavigationUIData* navigation_data,
       bool is_main_frame,
+      network::mojom::WebSandboxFlags sandbox_flags,
       ui::PageTransition page_transition,
       bool has_user_gesture,
       const absl::optional<url::Origin>& initiating_origin,
@@ -195,9 +201,11 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool ShouldIsolateErrorPage(bool in_main_frame) override;
   bool ShouldEnableStrictSiteIsolation() override;
-  bool ShouldDisableSiteIsolation() override;
+  bool ShouldDisableSiteIsolation(
+      content::SiteIsolationMode site_isolation_mode) override;
   bool ShouldLockProcessToSite(content::BrowserContext* browser_context,
                                const GURL& effective_url) override;
+  size_t GetMaxRendererProcessCountOverride() override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame,
@@ -231,6 +239,9 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                    blink::mojom::WebFeature feature) override;
   bool IsOriginTrialRequiredForAppCache(
       content::BrowserContext* browser_text) override;
+  bool ShouldAllowInsecurePrivateNetworkRequests(
+      content::BrowserContext* browser_context,
+      const url::Origin& origin) override;
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
   bool HasErrorPage(int http_status_code) override;
@@ -258,8 +269,6 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
 
   // The AwFeatureListCreator is owned by AwMainDelegate.
   AwFeatureListCreator* const aw_feature_list_creator_;
-
-  DISALLOW_COPY_AND_ASSIGN(AwContentBrowserClient);
 };
 
 }  // namespace android_webview

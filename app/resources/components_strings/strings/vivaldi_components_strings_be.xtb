@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Звесткі пра версію</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не адправіў даных.</translation>
 <translation id="1559528461873125649">Такога файла або каталога няма</translation>
-<translation id="1620510694547887537">Камера</translation>
 <translation id="1640244768702815859">Паспрабуйце <ph name="BEGIN_LINK" /> адкрыць галоўную старонку сайта <ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Пратакол не падтрымліваецца</translation>
 <translation id="1710259589646384581">Аперацыйная сістэма</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Паспрабуйце запусціць дыягностыку сеткі Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Гэты сайт змяшчае шкоднаснае праграмнае забеспячэнне</translation>
 <translation id="1916770123977586577">Каб налады ўжыліся, перазагрузіце старонку</translation>
-<translation id="1919345977826869612">Рэклама</translation>
 <translation id="1974060860693918893">Падрабязней</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Праверце налады проксі-сервера і брандмаўэра<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Гук</translation>
 <translation id="2119505898009119320">Выдадзена: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Фонавая сінхранізацыя</translation>
 <translation id="2166378884831602661">З гэтым сайтам немагчыма наладзіць бяспечнае злучэнне</translation>
 <translation id="2187317261103489799">Выяўляць (прадвызначана)</translation>
 <translation id="2224337661447660594">Адсутнічае злучэнне з інтэрнэтам</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">Доступ у інтэрнэт заблакаваны</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
 <translation id="2337852623177822836">Параметр кантралюецца адміністратарам</translation>
-<translation id="2344028582131185878">Аўтаматычнае спампоўванне</translation>
 <translation id="2355395290879513365">Злачынцы могуць бачыць выявы, якія бачыце вы, і змяняць іх у злачынных мэтах.</translation>
 <translation id="2356070529366658676">Пытацца</translation>
 <translation id="2359808026110333948">Працягнуць</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Запуск дыягностыкі сеткі<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Апавяшчэнні</translation>
 <translation id="2491414235131909199">Старонка была заблакаваная пашырэннем</translation>
 <translation id="2501278716633472235">Назад</translation>
 <translation id="2539524384386349900">Выяўляць</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> адправіў хібны адказ.</translation>
-<translation id="2586657967955657006">Буфер абмену</translation>
 <translation id="2609632851001447353">Варыянты</translation>
 <translation id="2634124572758952069">Не атрымалася знайсці IP-адрас сервера <ph name="HOST_NAME" /> .</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
        проксі-сервер:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Каб паўторна ўвесці даныя, неабходныя для загрузкі старонкі, неабходна яе перазагрузіць.</translation>
-<translation id="3227137524299004712">Мікрафон</translation>
 <translation id="3234666976984236645">Заўседы выяўляць важнае змесціва на гэтым сайце</translation>
 <translation id="3308738399950580893">рэклама</translation>
 <translation id="3422472998109090673">Старонка <ph name="HOST_NAME" /> недаступная.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Падрабязней</translation>
 <translation id="4558551763791394412">Паспрабуйце адключыць пашырэнні.</translation>
 <translation id="4592951414987517459">Злучэнне з <ph name="DOMAIN" /> зашыфравана з дапамогай сучасных шыфраў.</translation>
-<translation id="4690462567478992370">Не выкарыстоўваць гэты сертыфікат</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Злучэнне перапынена</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запуск дыягностыкі сеткі Windows<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">Шлях да запускальнага файла</translation>
 <translation id="4750917950439032686">Прыватныя звесткі (напрыклад, пароль, або нумар карткі), якія вы адпраўляеце на сайт, абароненыя.</translation>
 <translation id="4764776831041365478">Старонка па адрасе <ph name="URL" /> , часова недасягальная або перамешчаная па новым адрасе.</translation>
+<translation id="483241715238664915">Уключыць папярэджанні</translation>
 <translation id="4943872375798546930">Нічога не знойдзена</translation>
-<translation id="4974590756084640048">Аднавіць папярэджанні</translation>
 <translation id="5023310440958281426">Праверце правілы, прызначаныя адміністратарам</translation>
 <translation id="5039804452771397117">Дазволіць</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(выкарыстоўваецца 1 файл cookie)}one{(выкарыстоўваецца # файл cookie)}few{(выкарыстоўваецца # файлы cookie)}many{(выкарыстоўваецца # файлаў cookie)}other{(выкарыстоўваецца # файлаў cookie)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">Праверка злучэння</translation>
 <translation id="5617949217645503996">Старонка <ph name="HOST_NAME" /> перанакіравала вас занадта шмат разоў.</translation>
 <translation id="5675650730144413517">Старонка не працуе</translation>
-<translation id="5689516760719285838">Месцазнаходжанне</translation>
-<translation id="5710435578057952990">Уліковыя даныя сайта не правераныя.</translation>
-<translation id="5778550464785688721">Поўны кантроль над MIDI-прыладамі</translation>
 <translation id="5785756445106461925">Таксама на старонцы выяўлена небяспечнае змесціва. Гэтае змесціва падчас перадачы могуць праглядаць іншыя, а злачынцы могуць мадыфікаваць яго, каб змяніць паводзіны старонкі і яе выгляд.</translation>
 <translation id="5799902971440853357">Зараз вы не можаце наведаць <ph name="SITE" /> , бо сайт адправіў хібныя ўліковыя даныя. Часцей за ўсё памылкі сеткі або атакі злачынцаў носяць часовы характар.</translation>
 <translation id="5810442152076338065">Злучэнне з <ph name="DOMAIN" /> зашыфравана з дапамогай састарэлых шыфраў.</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">Злучэнне з гэтым сайтам не забаронена</translation>
 <translation id="6203231073485539293">Праверце злучэнне з інтэрнэтам</translation>
 <translation id="6225522625585012689">Каб праглядзець спіс заблакаваных URL-адрасоў і іншыя правілы, якія вызначае сістэмны адміністратар, наведайце &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
-<translation id="625755898061068298">Вы адключылі папярэджанні сістэмы бяспекі для гэтага сайта.</translation>
 <translation id="6264485186158353794">Вярнуцца да бяспекі</translation>
 <translation id="6305205051461490394">Сайт <ph name="URL" /> недаступны.</translation>
 <translation id="6321917430147971392">Праверце налады DNS</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">Агент карыстальніка</translation>
 <translation id="7053983685419859001">Заблакаваць</translation>
 <translation id="7079718277001814089">Гэты сайт змяшчае шкоднаснае праграмнае забеспячэнне</translation>
+<translation id="7096937462164235847">Сапраўднасць гэтага вэб-сайта не спраўджаная.</translation>
 <translation id="7108819624672055576">Дазволена пашырэннем</translation>
 <translation id="7111012039238467737">(Дзейны)</translation>
 <translation id="7113310725918019676">Дазволіць <ph name="BLOCKED_TYPE" /> з <ph name="DOMAIN" /></translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">Немагчыма цалкам праверыць уліковыя даныя сервера, да якога вы падлучыліся. Вы падлучыліся да сервера пад назвай, якая сапраўдная толкі ў вашай сетцы, таму ўладальніка сервера немагчыма праверыць вонкавым цэнтрам сертыфікацыі. Некаторыя цэнтры сертыфікацыі могуць выдаваць сертыфікаты для падобных назваў, таму няма аніякіх гарантый, што гэта патрэбны вам сервер, а не сайт злачынцаў.</translation>
 <translation id="7455133967321480974">Выкарыстоўваць глабальна (блакаваць)</translation>
 <translation id="7518003948725431193">Па адрасе не знойдзена старонкі: <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Для карэктнага адлюстравання старонкі неабходныя ўведзеныя раней даныя. Іх можна адправіць паўторна, але дзеянні на старонцы выканаюцца зноў.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> пакуль не можа апрацаваць гэты запыт.</translation>
 <translation id="7662298039739062396">Параметр кантралюецца пашырэннем</translation>
@@ -220,17 +207,18 @@
 <translation id="8740359287975076522">Не атрымліваецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрас&lt;/abbr&gt; сайта <ph name="HOST_NAME" /> . Выконваецца дыягностыка.</translation>
 <translation id="8820817407110198400">Закладкі</translation>
 <translation id="8940028675168378100">Заблакавана <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Перайсці да налад сайта</translation>
 <translation id="9001074447101275817">Проксі-сервер <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
 <translation id="9008201768610948239">Не зважаць</translation>
 <translation id="9025348182339809926">(хібны)</translation>
 <translation id="9039213469156557790">Таксама на старонцы выяўлена небяспечнае змесціва. Гэтае змесціва падчас перадачы могуць праглядаць іншыя, а злачынцы могуць мадыфікаваць яго, каб змяніць паводзіны старонкі.</translation>
 <translation id="9062620674789239642">Магчыма, ён быў перамешчаны, зменены або выдалены.</translation>
 <translation id="9069693763241529744">Заблакавана пашырэннем</translation>
+<translation id="9073799351042754113">Вы адключылі папярэджанні сістэмы бяспекі для гэтага сайта.</translation>
 <translation id="910924428752220542">Паролі Vivaldi</translation>
 <translation id="9169664750068251925">Заўседы блакаваць на гэтым сайце</translation>
 <translation id="9180553614777056266">Блакаванне рэкламы</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> выкарыстоўвае пратакол, які не падтрымліваецца.</translation>
-<translation id="9219103736887031265">Выявы</translation>
 <translation id="936602727769022409">Вы можаце страціць доступ да акаўнта Google. Рэкамендуем змяніць пароль. Пасля гэтага спатрэбіцца зноў увайсці ў акаўнт.</translation>
 <translation id="969892804517981540">Афіцыйная зборка</translation>
 <translation id="988159990683914416">Зборка для распрацоўнікаў</translation>

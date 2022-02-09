@@ -76,22 +76,6 @@ class UtilityProcessSandboxBrowserTest
     done_closure_ =
         base::BindOnce(&UtilityProcessSandboxBrowserTest::DoneRunning,
                        base::Unretained(this), run_loop.QuitClosure());
-    if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
-      RunUtilityProcessOnProcessThread();
-    } else {
-      GetIOThreadTaskRunner({})->PostTask(
-          FROM_HERE, base::BindOnce(&UtilityProcessSandboxBrowserTest::
-                                        RunUtilityProcessOnProcessThread,
-                                    base::Unretained(this)));
-      run_loop.Run();
-    }
-  }
-
- private:
-  void RunUtilityProcessOnProcessThread() {
-    DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                            ? content::BrowserThread::UI
-                            : content::BrowserThread::IO);
     UtilityProcessHost* host = new UtilityProcessHost();
     host->SetSandboxType(GetParam());
     host->SetName(u"SandboxTestProcess");
@@ -100,28 +84,28 @@ class UtilityProcessSandboxBrowserTest
 
     host->GetChildProcess()->BindReceiver(
         service_.BindNewPipeAndPassReceiver());
-    service_->GetSandboxStatus(base::BindOnce(
-        &UtilityProcessSandboxBrowserTest::OnGotSandboxStatusOnProcessThread,
-        base::Unretained(this)));
+    service_->GetSandboxStatus(
+        base::BindOnce(&UtilityProcessSandboxBrowserTest::OnGotSandboxStatus,
+                       base::Unretained(this)));
+
+    run_loop.Run();
   }
 
-  void OnGotSandboxStatusOnProcessThread(int32_t sandbox_status) {
-    DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
-                            ? content::BrowserThread::UI
-                            : content::BrowserThread::IO);
+ private:
+  void OnGotSandboxStatus(int32_t sandbox_status) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     // Aside from kNoSandbox, every utility process launched explicitly with a
     // sandbox type should always end up with a sandbox.
-    // kVideoCapture is equivalent to kNoSandbox on all platforms except
-    // Fuchsia.
     switch (GetParam()) {
       case SandboxType::kNoSandbox:
-      case SandboxType::kVideoCapture:
         EXPECT_EQ(sandbox_status, 0);
         break;
 
       case SandboxType::kCdm:
+#if BUILDFLAG(ENABLE_PLUGINS)
       case SandboxType::kPpapi:
+#endif
       case SandboxType::kPrintCompositor:
       case SandboxType::kService:
       case SandboxType::kUtility: {

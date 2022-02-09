@@ -80,8 +80,7 @@ bool ResetSettingsHandler::ShouldShowResetProfileBanner(Profile* profile) {
 
   // Otherwise, only show the banner if it has been less than |kBannerShowTime|
   // since reset.
-  static constexpr base::TimeDelta kBannerShowTime =
-      base::TimeDelta::FromDays(5);
+  static constexpr base::TimeDelta kBannerShowTime = base::Days(5);
   const base::TimeDelta since_reset = base::Time::Now() - reset_time;
   return since_reset < kBannerShowTime;
 }
@@ -98,33 +97,33 @@ void ResetSettingsHandler::OnJavascriptDisallowed() {
 }
 
 void ResetSettingsHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "performResetProfileSettings",
       base::BindRepeating(&ResetSettingsHandler::HandleResetProfileSettings,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "onShowResetProfileDialog",
       base::BindRepeating(&ResetSettingsHandler::OnShowResetProfileDialog,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getReportedSettings",
       base::BindRepeating(&ResetSettingsHandler::HandleGetReportedSettings,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "onHideResetProfileDialog",
       base::BindRepeating(&ResetSettingsHandler::OnHideResetProfileDialog,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "onHideResetProfileBanner",
       base::BindRepeating(&ResetSettingsHandler::OnHideResetProfileBanner,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getTriggeredResetToolName",
       base::BindRepeating(
           &ResetSettingsHandler::HandleGetTriggeredResetToolName,
           base::Unretained(this)));
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "onPowerwashDialogShow",
       base::BindRepeating(&ResetSettingsHandler::OnShowPowerwashDialog,
                           base::Unretained(this)));
@@ -135,7 +134,7 @@ void ResetSettingsHandler::HandleResetProfileSettings(
     const base::ListValue* args) {
   AllowJavascript();
 
-  CHECK_EQ(3U, args->GetSize());
+  CHECK_EQ(3U, args->GetList().size());
   std::string callback_id;
   CHECK(args->GetString(0, &callback_id));
   bool send_settings = false;
@@ -181,7 +180,7 @@ void ResetSettingsHandler::HandleGetReportedSettings(
     const base::ListValue* args) {
   AllowJavascript();
 
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   std::string callback_id;
   CHECK(args->GetString(0, &callback_id));
 
@@ -270,7 +269,7 @@ void ResetSettingsHandler::HandleGetTriggeredResetToolName(
     const base::ListValue* args) {
   AllowJavascript();
 
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 

@@ -20,12 +20,15 @@
 #include "ui/events/event_handler.h"
 #include "ui/wm/public/activation_change_observer.h"
 
+class Profile;
+
 namespace arc {
 class ArcGraphicsJankDetector;
 class ArcSystemStatCollector;
 }  // namespace arc
 
 namespace base {
+class FilePath;
 class ListValue;
 }  // namespace base
 
@@ -42,7 +45,15 @@ class ArcGraphicsTracingHandler : public content::WebUIMessageHandler,
                                   public ui::EventHandler,
                                   public exo::SurfaceObserver {
  public:
+  static base::FilePath GetModelPathFromTitle(Profile* profile,
+                                              const std::string& title);
+
   explicit ArcGraphicsTracingHandler(ArcGraphicsTracingMode mode);
+
+  ArcGraphicsTracingHandler(const ArcGraphicsTracingHandler&) = delete;
+  ArcGraphicsTracingHandler& operator=(const ArcGraphicsTracingHandler&) =
+      delete;
+
   ~ArcGraphicsTracingHandler() override;
 
   // content::WebUIMessageHandler:
@@ -108,7 +119,7 @@ class ArcGraphicsTracingHandler : public content::WebUIMessageHandler,
 
   // Determines the maximum tracing time.
   // Works only in |ArcGraphicsTracingMode::kOverview| mode.
-  base::TimeDelta max_tracing_time_ = base::TimeDelta::FromSeconds(5);
+  base::TimeDelta max_tracing_time_ = base::Seconds(5);
 
   base::OneShotTimer stop_tracing_timer_;
 
@@ -138,8 +149,6 @@ class ArcGraphicsTracingHandler : public content::WebUIMessageHandler,
   base::Time timestamp_;
 
   base::WeakPtrFactory<ArcGraphicsTracingHandler> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ArcGraphicsTracingHandler);
 };
 
 }  // namespace chromeos

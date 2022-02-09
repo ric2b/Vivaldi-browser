@@ -32,6 +32,8 @@ class NotesCodec {
   // reassignments to achieve uniqueness.
   NotesCodec();
   ~NotesCodec();
+  NotesCodec(const NotesCodec&) = delete;
+  NotesCodec& operator=(const NotesCodec&) = delete;
 
   // Encodes the model to a JSON value. This is invoked to encode the contents
   // of the notes model and is currently a convenience to invoking Encode that
@@ -162,8 +164,6 @@ class NotesCodec {
 
   // Maximum ID assigned when decoding data.
   int64_t maximum_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesCodec);
 };
 
 }  // namespace vivaldi

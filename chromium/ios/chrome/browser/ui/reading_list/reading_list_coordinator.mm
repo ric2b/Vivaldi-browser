@@ -41,7 +41,6 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_provider.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_table_view_controller.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/table_view/feature_flags.h"
 #import "ios/chrome/browser/ui/table_view/table_view_animator.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
@@ -128,9 +127,7 @@
   self.tableViewController.audience = self;
   self.tableViewController.dataSource = self.mediator;
 
-  if (@available(iOS 13.0, *)) {
-    self.tableViewController.menuProvider = self;
-  }
+  self.tableViewController.menuProvider = self;
 
   itemFactory.accessibilityDelegate = self.tableViewController;
 
@@ -153,17 +150,11 @@
   [self readingListHasItems:self.mediator.hasElements];
 
   BOOL useCustomPresentation = YES;
-  if (IsCollectionsCardPresentationStyleEnabled()) {
-    if (@available(iOS 13, *)) {
-#if defined(__IPHONE_13_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_13_0)
       [self.navigationController
           setModalPresentationStyle:UIModalPresentationFormSheet];
       self.navigationController.presentationController.delegate =
           self.tableViewController;
       useCustomPresentation = NO;
-#endif
-    }
-  }
 
   if (useCustomPresentation) {
     self.navigationController.transitioningDelegate = self;
@@ -396,7 +387,7 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
            incognito:(BOOL)incognito {
   // Only open a new incognito tab when incognito is authenticated. Prompt for
   // auth otherwise.
-  if (base::FeatureList::IsEnabled(kIncognitoAuthentication) && incognito) {
+  if (incognito) {
     IncognitoReauthSceneAgent* reauthAgent = [IncognitoReauthSceneAgent
         agentFromScene:SceneStateBrowserAgent::FromBrowser(self.browser)
                            ->GetSceneState()];

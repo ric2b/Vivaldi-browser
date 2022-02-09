@@ -28,6 +28,7 @@
 
 namespace net {
 class IPEndPoint;
+class SiteForCookies;
 }  // namespace net
 
 namespace vivaldi {
@@ -58,6 +59,12 @@ class RequestFilterProxyingWebSocket
       RequestFilterManager::RequestIDGenerator* request_id_generator,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::ProxySet* proxies);
+
+  RequestFilterProxyingWebSocket(const RequestFilterProxyingWebSocket&) =
+      delete;
+  RequestFilterProxyingWebSocket& operator=(
+      const RequestFilterProxyingWebSocket&) = delete;
+
   ~RequestFilterProxyingWebSocket() override;
 
   void Start();
@@ -88,7 +95,7 @@ class RequestFilterProxyingWebSocket
 
   static void StartProxying(
       WebSocketFactory factory,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
@@ -147,8 +154,6 @@ class RequestFilterProxyingWebSocket
   network::mojom::URLResponseHeadPtr response_;
   OnAuthRequiredCallback auth_required_callback_;
   scoped_refptr<net::HttpResponseHeaders> override_headers_;
-  std::set<std::string> set_request_headers_;
-  std::set<std::string> removed_request_headers_;
   std::vector<network::mojom::HttpHeaderPtr> additional_headers_;
 
   OnBeforeSendHeadersCallback on_before_send_headers_callback_;
@@ -172,7 +177,6 @@ class RequestFilterProxyingWebSocket
   base::CallbackListSubscription shutdown_notifier_subscription_;
 
   base::WeakPtrFactory<RequestFilterProxyingWebSocket> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(RequestFilterProxyingWebSocket);
 };
 
 }  // namespace vivaldi

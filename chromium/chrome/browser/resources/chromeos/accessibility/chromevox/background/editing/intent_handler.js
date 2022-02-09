@@ -20,6 +20,7 @@ const IntentCommandType = chrome.automation.IntentCommandType;
 const IntentTextBoundaryType = chrome.automation.IntentTextBoundaryType;
 const Movement = cursors.Movement;
 const Range = cursors.Range;
+const RoleType = chrome.automation.RoleType;
 const Unit = cursors.Unit;
 
 /**
@@ -91,15 +92,16 @@ IntentHandler = class {
 
         // First, handle the case where there is no text to the right of the
         // cursor.
-        if (!text) {
+        if (!text && prev) {
           // Detect cases where |cur| is immediately before an abstractSpan.
-          const nextCursor =
-              cur.end.move(Unit.CHARACTER, Movement.DIRECTIONAL, Dir.FORWARD);
-          const ancestors =
-              AutomationUtil.getUniqueAncestors(nextCursor.node, cur.end.node);
+          const enteredAncestors =
+              AutomationUtil.getUniqueAncestors(prev.end.node, cur.end.node);
+          const exitedAncestors =
+              AutomationUtil.getUniqueAncestors(cur.end.node, prev.end.node);
 
           // Scan up only to a root or the editable root.
           let ancestor;
+          const ancestors = enteredAncestors.concat(exitedAncestors);
           while ((ancestor = ancestors.pop()) &&
                  !AutomationPredicate.rootOrEditableRoot(ancestor)) {
             const roleInfo = Output.ROLE_INFO[ancestor.role];
@@ -140,6 +142,28 @@ IntentHandler = class {
         cur.speakLine(prev);
         return true;
 
+      case IntentTextBoundaryType.PARAGRAPH_START: {
+        let node = cur.startContainer;
+
+        if (node.role === RoleType.LINE_BREAK) {
+          return false;
+        }
+
+        while (node && AutomationPredicate.text(node)) {
+          node = node.parent;
+        }
+
+        if (!node || node.role === RoleType.TEXT_FIELD) {
+          return false;
+        }
+
+        new Output()
+            .withRichSpeechAndBraille(
+                cursors.Range.fromNode(node), null, OutputEventType.NAVIGATE)
+            .go();
+        return true;
+      }
+
       case IntentTextBoundaryType.WORD_END:
       case IntentTextBoundaryType.WORD_START: {
         const shouldMoveToPreviousWord =
@@ -156,13 +180,14 @@ IntentHandler = class {
         return true;
       }
         // TODO: implement support.
-      case IntentTextBoundaryType.FORMAT:
+      case IntentTextBoundaryType.FORMAT_END:
+      case IntentTextBoundaryType.FORMAT_START:
+      case IntentTextBoundaryType.FORMAT_START_OR_END:
       case IntentTextBoundaryType.OBJECT:
       case IntentTextBoundaryType.PAGE_END:
       case IntentTextBoundaryType.PAGE_START:
       case IntentTextBoundaryType.PAGE_START_OR_END:
       case IntentTextBoundaryType.PARAGRAPH_END:
-      case IntentTextBoundaryType.PARAGRAPH_START:
       case IntentTextBoundaryType.PARAGRAPH_START_OR_END:
       case IntentTextBoundaryType.SENTENCE_END:
       case IntentTextBoundaryType.SENTENCE_START:

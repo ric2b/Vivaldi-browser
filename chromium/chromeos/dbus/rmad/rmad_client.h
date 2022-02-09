@@ -33,8 +33,11 @@ class COMPONENT_EXPORT(RMAD) RmadClient {
 
     // Called when calibration progress is updated.
     virtual void CalibrationProgress(
-        rmad::CheckCalibrationState::CalibrationStatus::Component component,
-        double progress) {}
+        const rmad::CalibrationComponentStatus& component_status) {}
+
+    // Called when overall calibration progress is updated.
+    virtual void CalibrationOverallProgress(
+        rmad::CalibrationOverallStatus status) {}
 
     // Called when provisioning progress is updated.
     virtual void ProvisioningProgress(
@@ -46,6 +49,10 @@ class COMPONENT_EXPORT(RMAD) RmadClient {
 
     // Called when power cable is plugged in or removed.
     virtual void PowerCableState(bool plugged_in) {}
+
+    // Called when hardware verification completes.
+    virtual void HardwareVerificationResult(
+        const rmad::HardwareVerificationResult& hardware_verification_result) {}
   };
 
   // Creates and initializes a global instance. |bus| must not be null.

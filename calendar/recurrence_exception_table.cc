@@ -108,7 +108,7 @@ bool RecurrrenceExceptionTable ::UpdateRecurrenceExceptionRow(
   statement.BindInt64(0, rec_ex.parent_event_id);
   statement.BindInt64(1, rec_ex.exception_event_id);
   statement.BindInt64(2, rec_ex.exception_day.ToInternalValue());
-  statement.BindInt(3, rec_ex.cancelled);
+  statement.BindInt(3, rec_ex.cancelled ? 1: 0);
   statement.BindInt64(4, base::Time().Now().ToInternalValue());
 
   statement.BindInt64(5, rec_ex.id);
@@ -128,7 +128,7 @@ void RecurrrenceExceptionTable::FillRecurrenceExceptionRow(
   recurrenceRow->parent_event_id = parent_event_id;
   recurrenceRow->exception_event_id = exception_event_id;
   recurrenceRow->exception_day = exception_day;
-  recurrenceRow->cancelled = cancelled == 1 ? true : false;
+  recurrenceRow->cancelled = cancelled;
 }
 
 bool RecurrrenceExceptionTable ::DeleteRecurrenceException(

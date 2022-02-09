@@ -10,6 +10,11 @@
 #include <memory>
 #include <utility>
 
+#include "ash/components/drivefs/drivefs_host.h"
+#include "ash/components/drivefs/fake_drivefs.h"
+#include "ash/components/drivefs/mojom/drivefs.mojom.h"
+#include "ash/components/smbfs/smbfs_host.h"
+#include "ash/components/smbfs/smbfs_mounter.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/test/shell_test_api.h"
@@ -17,6 +22,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -28,6 +34,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
@@ -63,24 +70,20 @@
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/extensions/extension_dialog.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_types.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_switches.h"
-#include "chromeos/components/drivefs/drivefs_host.h"
-#include "chromeos/components/drivefs/fake_drivefs.h"
-#include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
-#include "chromeos/components/smbfs/smbfs_host.h"
-#include "chromeos/components/smbfs/smbfs_mounter.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/cros_disks/fake_cros_disks_client.h"
@@ -97,7 +100,9 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -105,11 +110,12 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/test/test_api.h"
+#include "extensions/browser/api/test/test_api_observer.h"
+#include "extensions/browser/api/test/test_api_observer_registry.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_registry.h"
-#include "extensions/browser/notification_types.h"
 #include "extensions/common/api/test.h"
 #include "google_apis/common/test_util.h"
 #include "google_apis/drive/drive_api_parser.h"
@@ -166,10 +172,9 @@ class WebContentCapturingObserver : public content::TestNavigationObserver {
 
   content::WebContents* web_contents() { return web_contents_; }
 
-  void OnDidFinishNavigation(
+  void NavigationOfInterestDidFinish(
       content::NavigationHandle* navigation_handle) override {
     web_contents_ = navigation_handle->GetWebContents();
-    content::TestNavigationObserver::OnDidFinishNavigation(navigation_handle);
   }
 
  private:
@@ -506,22 +511,31 @@ struct AddEntriesMessage {
 };
 
 // Listens for chrome.test messages: PASS, FAIL, and SendMessage.
-class FileManagerTestMessageListener : public content::NotificationObserver {
+class FileManagerTestMessageListener : public extensions::TestApiObserver {
  public:
   struct Message {
-    int type;
+    enum class Completion {
+      kNone,
+      kPass,
+      kFail,
+    };
+
+    Completion completion;
     std::string message;
     scoped_refptr<extensions::TestSendMessageFunction> function;
   };
 
   FileManagerTestMessageListener() {
-    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_PASSED,
-                   content::NotificationService::AllSources());
-    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_FAILED,
-                   content::NotificationService::AllSources());
-    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE,
-                   content::NotificationService::AllSources());
+    test_api_observation_.Observe(
+        extensions::TestApiObserverRegistry::GetInstance());
   }
+
+  FileManagerTestMessageListener(const FileManagerTestMessageListener&) =
+      delete;
+  FileManagerTestMessageListener& operator=(
+      const FileManagerTestMessageListener&) = delete;
+
+  ~FileManagerTestMessageListener() override = default;
 
   Message GetNextMessage() {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -538,45 +552,48 @@ class FileManagerTestMessageListener : public content::NotificationObserver {
     return next;
   }
 
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+ private:
+  // extensions::TestApiObserver:
+  void OnTestPassed(content::BrowserContext* browser_context) override {
+    test_complete_ = true;
+    QueueMessage({Message::Completion::kPass, std::string(), nullptr});
+  }
+  void OnTestFailed(content::BrowserContext* browser_context,
+                    const std::string& message) override {
+    test_complete_ = true;
+    QueueMessage({Message::Completion::kFail, message, nullptr});
+  }
+  bool OnTestMessage(extensions::TestSendMessageFunction* function,
+                     const std::string& message) override {
+    // crbug.com/668680
+    EXPECT_FALSE(test_complete_) << "LATE MESSAGE: " << message;
+    QueueMessage({Message::Completion::kNone, message, function});
+    return true;
+  }
 
-    Message message{type, std::string(), nullptr};
-    if (type == extensions::NOTIFICATION_EXTENSION_TEST_PASSED) {
-      test_complete_ = true;
-    } else if (type == extensions::NOTIFICATION_EXTENSION_TEST_FAILED) {
-      message.message = *content::Details<std::string>(details).ptr();
-      test_complete_ = true;
-    } else if (type == extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE) {
-      message.message = *content::Details<std::string>(details).ptr();
-      using SendMessage = content::Source<extensions::TestSendMessageFunction>;
-      message.function = SendMessage(source).ptr();
-      using WillReply = content::Details<std::pair<std::string, bool*>>;
-      *WillReply(details).ptr()->second = true;  // crbug.com/668680
-      CHECK(!test_complete_) << "LATE MESSAGE: " << message.message;
-    }
-
+  void QueueMessage(const Message& message) {
     messages_.push_back(message);
     if (quit_closure_) {
       std::move(quit_closure_).Run();
     }
   }
 
- private:
   bool test_complete_ = false;
   base::OnceClosure quit_closure_;
   base::circular_deque<Message> messages_;
-  content::NotificationRegistrar registrar_;
-
-  DISALLOW_COPY_AND_ASSIGN(FileManagerTestMessageListener);
+  base::ScopedObservation<extensions::TestApiObserverRegistry,
+                          extensions::TestApiObserver>
+      test_api_observation_{this};
 };
 
 // Test volume.
 class TestVolume {
  protected:
   explicit TestVolume(const std::string& name) : name_(name) {}
+
+  TestVolume(const TestVolume&) = delete;
+  TestVolume& operator=(const TestVolume&) = delete;
+
   virtual ~TestVolume() = default;
 
   bool CreateRootDirectory(const Profile* profile) {
@@ -608,8 +625,6 @@ class TestVolume {
   base::FilePath root_;
   bool root_initialized_ = false;
   std::string name_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestVolume);
 };
 
 base::Lock& GetLockForBlockingDefaultFileTaskRunner() {
@@ -770,8 +785,6 @@ std::ostream& operator<<(std::ostream& out,
   PRINT_IF_NOT_DEFAULT(photos_documents_provider)
   PRINT_IF_NOT_DEFAULT(single_partition_format)
   PRINT_IF_NOT_DEFAULT(tablet_mode)
-  PRINT_IF_NOT_DEFAULT(zip)
-  PRINT_IF_NOT_DEFAULT(zip_no_nacl)
 
 #undef PRINT_IF_NOT_DEFAULT
 
@@ -805,6 +818,10 @@ class FileManagerBrowserTestBase::MockFileTasksObserver
 class LocalTestVolume : public TestVolume {
  public:
   explicit LocalTestVolume(const std::string& name) : TestVolume(name) {}
+
+  LocalTestVolume(const LocalTestVolume&) = delete;
+  LocalTestVolume& operator=(const LocalTestVolume&) = delete;
+
   ~LocalTestVolume() override = default;
 
   // Adds this local volume. Returns true on success.
@@ -880,14 +897,16 @@ class LocalTestVolume : public TestVolume {
   }
 
   std::map<base::FilePath, const AddEntriesMessage::TestEntryInfo> entries_;
-
-  DISALLOW_COPY_AND_ASSIGN(LocalTestVolume);
 };
 
 // DownloadsTestVolume: local test volume for the "Downloads" directory.
 class DownloadsTestVolume : public LocalTestVolume {
  public:
   DownloadsTestVolume() : LocalTestVolume("MyFiles") {}
+
+  DownloadsTestVolume(const DownloadsTestVolume&) = delete;
+  DownloadsTestVolume& operator=(const DownloadsTestVolume&) = delete;
+
   ~DownloadsTestVolume() override = default;
 
   void EnsureDownloadsFolderExists() {
@@ -925,14 +944,15 @@ class DownloadsTestVolume : public LocalTestVolume {
     auto* volume = VolumeManager::Get(profile);
     volume->RemoveDownloadsDirectoryForTesting();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DownloadsTestVolume);
 };
 
 class AndroidFilesTestVolume : public LocalTestVolume {
  public:
   AndroidFilesTestVolume() : LocalTestVolume("AndroidFiles") {}
+
+  AndroidFilesTestVolume(const AndroidFilesTestVolume&) = delete;
+  AndroidFilesTestVolume& operator=(const AndroidFilesTestVolume&) = delete;
+
   ~AndroidFilesTestVolume() override = default;
 
   bool Mount(Profile* profile) override {
@@ -947,15 +967,16 @@ class AndroidFilesTestVolume : public LocalTestVolume {
     VolumeManager::Get(profile)->RemoveAndroidFilesDirectoryForTesting(
         root_path());
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AndroidFilesTestVolume);
 };
 
 // CrostiniTestVolume: local test volume for the "Linux files" directory.
 class CrostiniTestVolume : public LocalTestVolume {
  public:
   CrostiniTestVolume() : LocalTestVolume("Crostini") {}
+
+  CrostiniTestVolume(const CrostiniTestVolume&) = delete;
+  CrostiniTestVolume& operator=(const CrostiniTestVolume&) = delete;
+
   ~CrostiniTestVolume() override = default;
 
   // Create root dir so entries can be created, but volume is not mounted.
@@ -968,9 +989,6 @@ class CrostiniTestVolume : public LocalTestVolume {
   }
 
   const base::FilePath& mount_path() const { return root_path(); }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CrostiniTestVolume);
 };
 
 // FakeTestVolume: local test volume with a given volume and device type.
@@ -982,6 +1000,10 @@ class FakeTestVolume : public LocalTestVolume {
       : LocalTestVolume(name),
         volume_type_(volume_type),
         device_type_(device_type) {}
+
+  FakeTestVolume(const FakeTestVolume&) = delete;
+  FakeTestVolume& operator=(const FakeTestVolume&) = delete;
+
   ~FakeTestVolume() override = default;
 
   // Add the fake test volume entries.
@@ -1058,9 +1080,6 @@ class FakeTestVolume : public LocalTestVolume {
   const VolumeType volume_type_;
   const chromeos::DeviceType device_type_;
   const bool read_only_ = false;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FakeTestVolume);
 };
 
 // Removable TestVolume: local test volume for external media devices.
@@ -1076,6 +1095,10 @@ class RemovableTestVolume : public FakeTestVolume {
         device_path_(device_path),
         drive_label_(drive_label),
         file_system_type_(file_system_type) {}
+
+  RemovableTestVolume(const RemovableTestVolume&) = delete;
+  RemovableTestVolume& operator=(const RemovableTestVolume&) = delete;
+
   ~RemovableTestVolume() override = default;
 
   bool Mount(Profile* profile) override {
@@ -1100,8 +1123,6 @@ class RemovableTestVolume : public FakeTestVolume {
   const base::FilePath device_path_;
   const std::string drive_label_;
   const std::string file_system_type_;
-
-  DISALLOW_COPY_AND_ASSIGN(RemovableTestVolume);
 };
 
 // DriveFsTestVolume: test volume for Google Drive using DriveFS.
@@ -1109,6 +1130,10 @@ class DriveFsTestVolume : public TestVolume {
  public:
   explicit DriveFsTestVolume(Profile* original_profile)
       : TestVolume("drive"), original_profile_(original_profile) {}
+
+  DriveFsTestVolume(const DriveFsTestVolume&) = delete;
+  DriveFsTestVolume& operator=(const DriveFsTestVolume&) = delete;
+
   ~DriveFsTestVolume() override = default;
 
   drive::DriveIntegrationService* CreateDriveIntegrationService(
@@ -1316,8 +1341,6 @@ class DriveFsTestVolume : public TestVolume {
   Profile* const original_profile_;
   std::map<base::FilePath, const AddEntriesMessage::TestEntryInfo> entries_;
   std::unique_ptr<drive::FakeDriveFsHelper> fake_drivefs_helper_;
-
-  DISALLOW_COPY_AND_ASSIGN(DriveFsTestVolume);
 };
 
 // DocumentsProviderTestVolume: test volume for Android DocumentsProvider.
@@ -1344,6 +1367,11 @@ class DocumentsProviderTestVolume : public TestVolume {
                                     authority,
                                     root_document_id,
                                     read_only) {}
+
+  DocumentsProviderTestVolume(const DocumentsProviderTestVolume&) = delete;
+  DocumentsProviderTestVolume& operator=(const DocumentsProviderTestVolume&) =
+      delete;
+
   ~DocumentsProviderTestVolume() override = default;
 
   virtual void CreateEntry(const AddEntriesMessage::TestEntryInfo& entry) {
@@ -1425,8 +1453,6 @@ class DocumentsProviderTestVolume : public TestVolume {
     url::EncodeURIComponent(component.c_str(), component.size(), &encoded);
     return {encoded.data(), static_cast<size_t>(encoded.length())};
   }
-
-  DISALLOW_COPY_AND_ASSIGN(DocumentsProviderTestVolume);
 };
 
 // MediaViewTestVolume: Test volume for the "media views": Audio, Images and
@@ -1442,6 +1468,9 @@ class MediaViewTestVolume : public DocumentsProviderTestVolume {
                                     root_document_id,
                                     true /* read_only */) {}
 
+  MediaViewTestVolume(const MediaViewTestVolume&) = delete;
+  MediaViewTestVolume& operator=(const MediaViewTestVolume&) = delete;
+
   ~MediaViewTestVolume() override = default;
 
   bool Mount(Profile* profile) override {
@@ -1449,9 +1478,6 @@ class MediaViewTestVolume : public DocumentsProviderTestVolume {
     return VolumeManager::Get(profile)->RegisterMediaViewForTesting(
         root_document_id_);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MediaViewTestVolume);
 };
 
 class MockSmbFsMounter : public smbfs::SmbFsMounter {
@@ -1485,6 +1511,10 @@ class MockSmbFsImpl : public smbfs::mojom::SmbFs {
 class SmbfsTestVolume : public LocalTestVolume {
  public:
   SmbfsTestVolume() : LocalTestVolume("smbfs") {}
+
+  SmbfsTestVolume(const SmbfsTestVolume&) = delete;
+  SmbfsTestVolume& operator=(const SmbfsTestVolume&) = delete;
+
   ~SmbfsTestVolume() override = default;
 
   // Create root dir so entries can be created, but volume is not mounted.
@@ -1572,8 +1602,6 @@ class SmbfsTestVolume : public LocalTestVolume {
 
   std::unique_ptr<MockSmbFsImpl> mock_smbfs_;
   mojo::Remote<smbfs::mojom::SmbFsDelegate> delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(SmbfsTestVolume);
 };
 
 FileManagerBrowserTestBase::FileManagerBrowserTestBase() = default;
@@ -1664,7 +1692,7 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
     // Although in this path no browser is created (and so one can never
     // close..), setting this to false prevents InProcessBrowserTest from adding
     // the kDisableZeroBrowsersOpenForTests flag, which would prevent
-    // chrome_browser_main_chromeos from adding the keepalive that normally
+    // `ChromeBrowserMainPartsAsh` from adding the keepalive that normally
     // stops chromeos from shutting down unexpectedly.
     set_exit_when_last_browser_closes(false);
   }
@@ -1701,28 +1729,12 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
     arc::SetArcAvailableCommandLineForTesting(command_line);
   }
 
-  if (options.zip_no_nacl) {
-    enabled_features.push_back(chromeos::features::kFilesZipMount);
-    enabled_features.push_back(chromeos::features::kFilesZipPack);
-    enabled_features.push_back(chromeos::features::kFilesZipUnpack);
-  } else {
-    disabled_features.push_back(chromeos::features::kFilesZipMount);
-    disabled_features.push_back(chromeos::features::kFilesZipPack);
-    disabled_features.push_back(chromeos::features::kFilesZipUnpack);
-  }
-
   if (options.drive_dss_pin) {
     enabled_features.push_back(
         chromeos::features::kDriveFsBidirectionalNativeMessaging);
   } else {
     disabled_features.push_back(
         chromeos::features::kDriveFsBidirectionalNativeMessaging);
-  }
-
-  if (options.enable_sharesheet) {
-    enabled_features.push_back(features::kSharesheet);
-  } else {
-    disabled_features.push_back(features::kSharesheet);
   }
 
   if (options.single_partition_format) {
@@ -1733,6 +1745,12 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
     enabled_features.push_back(chromeos::features::kFilesTrash);
   } else {
     disabled_features.push_back(chromeos::features::kFilesTrash);
+  }
+
+  if (options.enable_banners_framework) {
+    enabled_features.push_back(chromeos::features::kFilesBannerFramework);
+  } else {
+    disabled_features.push_back(chromeos::features::kFilesBannerFramework);
   }
 
   if (command_line->HasSwitch(switches::kDevtoolsCodeCoverage) &&
@@ -1906,7 +1924,8 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
   // Enable System Web Apps if needed.
   if (options.media_swa || options.files_swa) {
     auto& system_web_app_manager =
-        web_app::WebAppProvider::Get(profile())->system_web_app_manager();
+        web_app::WebAppProvider::GetForTest(profile())
+            ->system_web_app_manager();
     system_web_app_manager.InstallSystemAppsForTesting();
   }
 
@@ -1920,9 +1939,7 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
 }
 
 void FileManagerBrowserTestBase::TearDownOnMainThread() {
-  for (const auto& p : swa_list_) {
-    p.second->Close();
-  }
+  swa_web_contents_.clear();
 
   file_tasks_observer_.reset();
   select_factory_ = nullptr;
@@ -1982,9 +1999,12 @@ void FileManagerBrowserTestBase::RunTestMessageLoop() {
   while (true) {
     auto message = listener.GetNextMessage();
 
-    if (message.type == extensions::NOTIFICATION_EXTENSION_TEST_PASSED)
+    if (message.completion ==
+        FileManagerTestMessageListener::Message::Completion::kPass) {
       return;  // Test PASSED.
-    if (message.type == extensions::NOTIFICATION_EXTENSION_TEST_FAILED) {
+    }
+    if (message.completion ==
+        FileManagerTestMessageListener::Message::Completion::kFail) {
       ADD_FAILURE() << message.message;
       return;  // Test FAILED.
     }
@@ -2039,6 +2059,17 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  if (name == "showItemInFolder") {
+    std::string relative_path;
+    ASSERT_TRUE(value.GetString("localPath", &relative_path));
+    base::FilePath full_path =
+        file_manager::util::GetMyFilesFolderForProfile(profile());
+    full_path = full_path.AppendASCII(relative_path);
+
+    platform_util::ShowItemInFolder(profile(), full_path);
+    return;
+  }
+
   if (name == "launchAppOnLocalFolder") {
     GetLocalPathMessage message;
     ASSERT_TRUE(GetLocalPathMessage::ConvertJSONValue(value, &message));
@@ -2077,21 +2108,29 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
         profile(), web_app::SystemAppType::FILE_MANAGER, params);
     observer.Wait();
     ASSERT_TRUE(observer.last_navigation_succeeded());
-    CHECK(observer.web_contents());
+    LoadSwaTestUtils(observer.web_contents());
 
-    // Load runtime and static test_utils.js. In Files.app test_utils.js is
-    // always loaded, while runtime_loaded_test_util.js is loaded on the first
-    // chrome.runtime.sendMessage is sent by the test extension. However, since
-    // we use callSwaTestMessageListener, rather than c.r.sendMessage to
-    // communicate with Files SWA, we need to explicitly load those files.
-    bool result;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        observer.web_contents(), "test.swaLoadTestUtils()", &result));
-    ASSERT_TRUE(result);
-    const std::string app_id = base::StrCat({baseURL, launchDir});
-    swa_list_.push_back(std::make_pair(app_id, observer.web_contents()));
+    const std::string app_id = GetSwaAppId(observer.web_contents());
+
+    swa_web_contents_.insert({app_id, observer.web_contents()});
     *output = app_id;
     return;
+  }
+
+  if (name == "findSwaWindow") {
+    const Options& options = GetOptions();
+    if (options.files_swa) {
+      // Only search for unknown windows.
+      content::WebContents* web_contents = GetLastOpenWindowWebContents();
+      if (web_contents) {
+        const std::string app_id = GetSwaAppId(web_contents);
+        swa_web_contents_.insert({app_id, web_contents});
+        *output = app_id;
+      } else {
+        *output = "none";
+      }
+      return;
+    }
   }
 
   if (name == "callSwaTestMessageListener") {
@@ -2102,15 +2141,65 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     // short-circuit sending messages by directly invoking dedicated function in
     // Files SWA.
     std::string data;
+    std::string app_id;
     ASSERT_TRUE(value.GetString("data", &data));
-    // FIXME: determine WebContents based on |appId| from |value|. Currently we
-    // only launch one window so this works. Once multiple windows are enabled
-    // for SWAs, this code needs to map |appId| to specific SWA's WebContents.
-    content::WebContents* web_contents = GetLastOpenWindowWebContents();
-    CHECK(web_contents);
+    value.GetString("appId", &app_id);
+
+    content::WebContents* web_contents;
+    if (!app_id.empty()) {
+      CHECK(base::Contains(swa_web_contents_, app_id))
+          << "Couldn't find the SWA WebContents for appId: " << app_id
+          << " command data: " << data;
+      web_contents = swa_web_contents_[app_id];
+    } else {
+      // Commands for the background page might send to a WebContents which is
+      // in swa_web_contents_.
+      web_contents = GetLastOpenWindowWebContents();
+      if (!web_contents && swa_web_contents_.size() > 0) {
+        // If can't find any unknown WebContents, try the last known:
+        web_contents = std::prev(swa_web_contents_.end())->second;
+      }
+      CHECK(web_contents) << "Couldn't find the SWA WebContents without appId"
+                          << " command data: " << data;
+    }
     CHECK(ExecuteScriptAndExtractString(
         web_contents, base::StrCat({"test.swaTestMessageListener(", data, ")"}),
         output));
+    return;
+  }
+
+  if (name == "getWindowsSWA") {
+    bool is_swa = false;
+    ASSERT_TRUE(value.GetBoolean("isSWA", &is_swa));
+    ASSERT_TRUE(is_swa);
+
+    base::DictionaryValue dictionary;
+
+    int counter = 0;
+    for (auto* web_contents : GetAllWebContents()) {
+      const std::string& url = web_contents->GetVisibleURL().spec();
+      if (base::StartsWith(url, ash::file_manager::kChromeUIFileManagerURL)) {
+        std::string app_id;
+        bool found = false;
+
+        for (const auto& pair : swa_web_contents_) {
+          if (pair.second == web_contents) {
+            app_id = pair.first;
+            dictionary.SetStringPath(app_id, app_id);
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          app_id =
+              base::StrCat({"unknow-id-", base::NumberToString(counter++)});
+          dictionary.SetStringPath(app_id, app_id);
+        }
+      }
+    }
+
+    base::JSONWriter::Write(dictionary, output);
     return;
   }
 
@@ -2134,20 +2223,8 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  // TODO(crbug.com/1240426) Remove that.
   if (name == "zipArchiverLoaded") {
-    if (options.zip) {
-      LOG(INFO) << "Preloading zip archiver NaCl module";
-      auto event = std::make_unique<extensions::Event>(
-          extensions::events::FOR_TEST,
-          extensions::api::test::OnMessage::kEventName,
-          base::JSONReader::Read(
-              R"([{"data": "preloadZip", "lastMessage": false}])")
-              .value()
-              .TakeList(),
-          profile());
-      extensions::EventRouter::Get(profile())->DispatchEventToExtension(
-          kZipArchiverId, std::move(event));
-    }
     return;
   }
 
@@ -2536,11 +2613,20 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
   if (name == "simulateClick") {
     int click_x;
     int click_y;
+    std::string app_id;
     ASSERT_TRUE(value.GetInteger("clickX", &click_x));
     ASSERT_TRUE(value.GetInteger("clickY", &click_y));
+    ASSERT_TRUE(value.GetString("appId", &app_id));
 
-    content::WebContents* web_contents = GetLastOpenWindowWebContents();
-    CHECK(web_contents);
+    const Options& options = GetOptions();
+    content::WebContents* web_contents;
+    if (options.files_swa) {
+      CHECK(base::Contains(swa_web_contents_, app_id))
+          << "Couldn't find the SWA WebContents for appId: " << app_id;
+      web_contents = swa_web_contents_[app_id];
+    } else {
+      web_contents = GetLastOpenWindowWebContents();
+    }
     SimulateMouseClickAt(web_contents, 0 /* modifiers */,
                          blink::WebMouseEvent::Button::kLeft,
                          gfx::Point(click_x, click_y));
@@ -2664,6 +2750,11 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
 
   if (name == "isTrashEnabled") {
     *output = options.enable_trash ? "true" : "false";
+    return;
+  }
+
+  if (name == "isBannersFrameworkEnabled") {
+    *output = options.enable_banners_framework ? "true" : "false";
     return;
   }
 
@@ -2810,14 +2901,81 @@ void FileManagerBrowserTestBase::EnableVirtualKeyboard() {
   ash::ShellTestApi().EnableVirtualKeyboard();
 }
 
+// Load runtime and static test_utils.js. In Files.app test_utils.js is always
+// loaded, while runtime_loaded_test_util.js is loaded on the first
+// chrome.runtime.sendMessage is sent by the test extension. However, since we
+// use callSwaTestMessageListener, rather than c.r.sendMessage to communicate
+// with Files SWA, we need to explicitly load those files.
+void FileManagerBrowserTestBase::LoadSwaTestUtils(
+    content::WebContents* web_contents) {
+  CHECK(web_contents);
+
+  bool result;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      web_contents, "test.swaLoadTestUtils()", &result));
+  ASSERT_TRUE(result);
+}
+
+std::string FileManagerBrowserTestBase::GetSwaAppId(
+    content::WebContents* web_contents) {
+  CHECK(web_contents);
+
+  std::string app_id;
+  CHECK(content::ExecuteScriptAndExtractString(web_contents,
+                                               "test.getSwaAppId()", &app_id));
+  return app_id;
+}
+
+std::vector<content::WebContents*>
+FileManagerBrowserTestBase::GetAllWebContents() {
+  // Code borrowed from WebContentsImpl.
+  std::vector<content::WebContents*> result;
+
+  std::unique_ptr<content::RenderWidgetHostIterator> widgets(
+      content::RenderWidgetHost::GetRenderWidgetHosts());
+  while (content::RenderWidgetHost* rwh = widgets->GetNextHost()) {
+    content::RenderViewHost* rvh = content::RenderViewHost::From(rwh);
+    if (!rvh)
+      continue;
+    content::WebContents* web_contents =
+        content::WebContents::FromRenderViewHost(rvh);
+    if (!web_contents)
+      continue;
+    if (web_contents->GetMainFrame()->GetRenderViewHost() != rvh)
+      continue;
+    // Because a WebContents can only have one current RVH at a time, there will
+    // be no duplicate WebContents here.
+    result.push_back(web_contents);
+  }
+  return result;
+}
+
 content::WebContents*
 FileManagerBrowserTestBase::GetLastOpenWindowWebContents() {
   const Options& options = GetOptions();
   if (options.files_swa) {
-    if (!swa_list_.empty()) {
-      return swa_list_.back().second;
+    for (auto* web_contents : GetAllWebContents()) {
+      const std::string& url = web_contents->GetVisibleURL().spec();
+      if (base::StartsWith(url, ash::file_manager::kChromeUIFileManagerURL) &&
+          !web_contents->IsLoading()) {
+        if (swa_web_contents_.size() == 0) {
+          return web_contents;
+        }
+
+        // Ignore known WebContents.
+        bool found =
+            std::find_if(swa_web_contents_.begin(), swa_web_contents_.end(),
+                         [web_contents](const auto& pair) {
+                           return pair.second == web_contents;
+                         }) != swa_web_contents_.end();
+
+        if (!found) {
+          return web_contents;
+        }
+      }
     }
   }
+
   // Assuming legacy Chrome App.
   const auto& app_windows =
       extensions::AppWindowRegistry::Get(profile())->app_windows();
@@ -2833,6 +2991,10 @@ bool FileManagerBrowserTestBase::PostKeyEvent(ui::KeyEvent* key_event) {
   gfx::NativeWindow native_window = nullptr;
 
   content::WebContents* web_contents = GetLastOpenWindowWebContents();
+  if (!web_contents && swa_web_contents_.size() > 0) {
+    // If can't find any unknown WebContents, try the last known:
+    web_contents = std::prev(swa_web_contents_.end())->second;
+  }
   if (web_contents) {
     const Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
     if (browser) {

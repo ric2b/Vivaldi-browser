@@ -213,7 +213,22 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "themePrivate": {
+    "channel": "stable",
+    "extension_types": [ "platform_app", "extension" ],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
+      "E2F7DC11CCD38036C3420F4755A6AD7363C9034F"  // theme store extension
+    ]
+  },
   "thumbnails": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "translateHistory": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "allowlist": [

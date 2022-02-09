@@ -66,7 +66,13 @@
 // an experimental, fragile, and diagnostic-only document type.
 #include "third_party/skia/src/utils/SkMultiPictureDocument.h"
 #include "ui/events/base_event_utils.h"
-#include "v8/include/v8.h"
+#include "v8/include/v8-context.h"
+#include "v8/include/v8-exception.h"
+#include "v8/include/v8-function.h"
+#include "v8/include/v8-isolate.h"
+#include "v8/include/v8-object.h"
+#include "v8/include/v8-persistent-handle.h"
+#include "v8/include/v8-primitive.h"
 
 #if defined(OS_WIN) && !defined(NDEBUG)
 // XpsObjectModel.h indirectly includes <wincrypt.h> which is
@@ -246,7 +252,7 @@ class CallbackAndContext : public base::RefCounted<CallbackAndContext> {
 };
 
 void OnMicroBenchmarkCompleted(CallbackAndContext* callback_and_context,
-                               std::unique_ptr<base::Value> result) {
+                               base::Value result) {
   v8::Isolate* isolate = callback_and_context->isolate();
   v8::HandleScope scope(isolate);
   v8::Local<v8::Context> context = callback_and_context->GetContext();
@@ -254,7 +260,7 @@ void OnMicroBenchmarkCompleted(CallbackAndContext* callback_and_context,
   WebLocalFrame* frame = WebLocalFrame::FrameForContext(context);
   if (frame) {
     v8::Local<v8::Value> value =
-        V8ValueConverter::Create()->ToV8Value(result.get(), context);
+        V8ValueConverter::Create()->ToV8Value(&result, context);
     v8::Local<v8::Value> argv[] = {value};
 
     frame->CallFunctionEvenIfScriptDisabled(callback_and_context->GetCallback(),
@@ -1300,9 +1306,10 @@ int GpuBenchmarking::RunMicroBenchmark(gin::Arguments* args) {
   v8::Local<v8::Context> v8_context = callback_and_context->GetContext();
   std::unique_ptr<base::Value> value =
       V8ValueConverter::Create()->FromV8Value(arguments, v8_context);
+  DCHECK(value);
 
   return context.layer_tree_host()->ScheduleMicroBenchmark(
-      name, std::move(value),
+      name, base::Value::FromUniquePtrValue(std::move(value)),
       base::BindOnce(&OnMicroBenchmarkCompleted,
                      base::RetainedRef(callback_and_context)));
 }
@@ -1316,9 +1323,10 @@ bool GpuBenchmarking::SendMessageToMicroBenchmark(
       context.web_frame()->MainWorldScriptContext();
   std::unique_ptr<base::Value> value =
       V8ValueConverter::Create()->FromV8Value(message, v8_context);
+  DCHECK(value);
 
   return context.layer_tree_host()->SendMessageToMicroBenchmark(
-      id, std::move(value));
+      id, base::Value::FromUniquePtrValue(std::move(value)));
 }
 
 bool GpuBenchmarking::HasGpuChannel() {

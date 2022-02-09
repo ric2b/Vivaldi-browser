@@ -34,10 +34,14 @@ class ShelfContextMenu;
 class AppShortcutShelfItemController : public ash::ShelfItemDelegate,
                                        public BrowserListObserver {
  public:
-  ~AppShortcutShelfItemController() override;
+  explicit AppShortcutShelfItemController(const ash::ShelfID& shelf_id);
 
-  static std::unique_ptr<AppShortcutShelfItemController> Create(
-      const ash::ShelfID& shelf_id);
+  AppShortcutShelfItemController(const AppShortcutShelfItemController&) =
+      delete;
+  AppShortcutShelfItemController& operator=(
+      const AppShortcutShelfItemController&) = delete;
+
+  ~AppShortcutShelfItemController() override;
 
   // ash::ShelfItemDelegate overrides:
   void ItemSelected(std::unique_ptr<ui::Event> event,
@@ -63,9 +67,6 @@ class AppShortcutShelfItemController : public ash::ShelfItemDelegate,
   void set_refocus_url(const GURL& refocus_url) { refocus_url_ = refocus_url; }
 
   bool HasRunningApplications();
-
- protected:
-  explicit AppShortcutShelfItemController(const ash::ShelfID& shelf_id);
 
  private:
   // BrowserListObserver:
@@ -111,8 +112,6 @@ class AppShortcutShelfItemController : public ash::ShelfItemDelegate,
   bool app_menu_cached_by_browsers_ = false;
 
   std::unique_ptr<ShelfContextMenu> context_menu_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppShortcutShelfItemController);
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_SHELF_APP_SHORTCUT_SHELF_ITEM_CONTROLLER_H_

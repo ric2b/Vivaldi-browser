@@ -34,7 +34,9 @@ public class PageInfoPermissionsController
         implements PageInfoSubpageController, SingleWebsiteSettings.Observer {
     /**  Parameters to represent a single permission. */
     public static class PermissionObject {
+        public @ContentSettingsType int type;
         public CharSequence name;
+        public CharSequence nameMidSentence;
         public boolean allowed;
         public @StringRes int warningTextResource;
     }
@@ -44,6 +46,7 @@ public class PageInfoPermissionsController
     private final PageInfoControllerDelegate mDelegate;
     private final String mTitle;
     private final String mPageUrl;
+    private boolean mHasSoundPermission;
     private boolean mDataIsStale;
     private SingleWebsiteSettings mSubPage;
     @ContentSettingsType
@@ -88,6 +91,8 @@ public class PageInfoPermissionsController
         if (fragmentManager.isStateSaved()) return null;
 
         Bundle fragmentArgs = SingleWebsiteSettings.createFragmentArgsForSite(mPageUrl);
+        fragmentArgs.putBoolean(SingleWebsiteSettings.EXTRA_SHOW_SOUND, mHasSoundPermission);
+
         mSubPage = (SingleWebsiteSettings) Fragment.instantiate(
                 mRowView.getContext(), SingleWebsiteSettings.class.getName(), fragmentArgs);
         mSubPage.setSiteSettingsDelegate(mDelegate.getSiteSettingsDelegate());
@@ -124,6 +129,14 @@ public class PageInfoPermissionsController
             rowParams.rowTint = mHighlightColor;
         }
         mRowView.setParams(rowParams);
+
+        mHasSoundPermission = false;
+        for (PermissionObject permission : permissions) {
+            if (permission.type == ContentSettingsType.SOUND) {
+                mHasSoundPermission = true;
+                break;
+            }
+        }
     }
 
     /**
@@ -160,13 +173,15 @@ public class PageInfoPermissionsController
             if (same) {
                 int resId = perm1.allowed ? R.string.page_info_permissions_summary_2_allowed
                                           : R.string.page_info_permissions_summary_2_blocked;
-                return resources.getString(resId, perm1.name.toString(), perm2.name.toString());
+                return resources.getString(
+                        resId, perm1.name.toString(), perm2.nameMidSentence.toString());
             }
             int resId = R.string.page_info_permissions_summary_2_mixed;
             // Put the allowed permission first.
             return resources.getString(resId,
                     perm1.allowed ? perm1.name.toString() : perm2.name.toString(),
-                    perm1.allowed ? perm2.name.toString() : perm1.name.toString());
+                    perm1.allowed ? perm2.nameMidSentence.toString()
+                                  : perm1.nameMidSentence.toString());
         }
 
         // More than 2 permissions.
@@ -174,11 +189,11 @@ public class PageInfoPermissionsController
             int resId = perm1.allowed ? R.plurals.page_info_permissions_summary_more_allowed
                                       : R.plurals.page_info_permissions_summary_more_blocked;
             return resources.getQuantityString(resId, numPermissions - 2, perm1.name.toString(),
-                    perm2.name.toString(), numPermissions - 2);
+                    perm2.nameMidSentence.toString(), numPermissions - 2);
         }
         int resId = R.plurals.page_info_permissions_summary_more_mixed;
         return resources.getQuantityString(resId, numPermissions - 2, perm1.name.toString(),
-                perm2.name.toString(), numPermissions - 2);
+                perm2.nameMidSentence.toString(), numPermissions - 2);
     }
 
     @Override
@@ -204,7 +219,7 @@ public class PageInfoPermissionsController
             mMainController.refreshPermissions();
         }
         mDataIsStale = false;
-    };
+    }
 
     // SingleWebsiteSettings.Observer methods
 

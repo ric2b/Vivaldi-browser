@@ -333,8 +333,7 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
                   ? account_password_store_->CreateSyncControllerDelegate()
                   : nullptr,
               account_password_store_, sync_client_->GetPrefService(),
-              sync_client_->GetIdentityManager(), sync_service,
-              sync_client_->GetPasswordStateChangedCallback()));
+              sync_client_->GetIdentityManager(), sync_service));
     }
   }
 
@@ -359,10 +358,10 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // When SplitSettingsSync is enabled the controller is created in
+  // When SyncSettingsCategorization is enabled the controller is created in
   // ChromeSyncClient.
   if (!disabled_types.Has(syncer::PRINTERS) &&
-      !chromeos::features::IsSplitSettingsSyncEnabled()) {
+      !chromeos::features::IsSyncSettingsCategorizationEnabled()) {
     controllers.push_back(
         CreateModelTypeControllerForModelRunningOnUIThread(syncer::PRINTERS));
   }

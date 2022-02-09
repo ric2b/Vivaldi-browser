@@ -30,7 +30,6 @@ class PageActionsEventRouter : page_actions::Service::Observer {
       const base::FilePath& script_path,
       page_actions::Service::ScriptOverride script_override) override;
 
-
  private:
   content::BrowserContext* browser_context_;
 };

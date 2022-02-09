@@ -126,11 +126,12 @@
             }
           },
           {
-            "type": "integer",
-            "name": "windowId"
+            "name": "masterPassword",
+            "type": "string",
+            "optional": true
           },
           {
-            "name": "masterPassword",
+            "name": "importPath",
             "type": "string",
             "optional": true
           },
@@ -141,12 +142,6 @@
               {
                 "name": "result",
                 "type": "string"
-              },
-              {
-                "name": "path",
-                "type": "string",
-                "optional": "true",
-                "description": "The file path the user selceted when using non-default profile location."
               }
             ]
           }

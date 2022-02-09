@@ -26,6 +26,10 @@ class VirtualKeyboardTray : public TrayBackgroundView,
                             public SessionObserver {
  public:
   explicit VirtualKeyboardTray(Shelf* shelf);
+
+  VirtualKeyboardTray(const VirtualKeyboardTray&) = delete;
+  VirtualKeyboardTray& operator=(const VirtualKeyboardTray&) = delete;
+
   ~VirtualKeyboardTray() override;
 
   // TrayBackgroundView:
@@ -35,6 +39,7 @@ class VirtualKeyboardTray : public TrayBackgroundView,
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
   bool PerformAction(const ui::Event& event) override;
+  void OnThemeChanged() override;
 
   // AccessibilityObserver:
   void OnAccessibilityStatusChanged() override;
@@ -49,8 +54,6 @@ class VirtualKeyboardTray : public TrayBackgroundView,
   const char* GetClassName() const override;
 
  private:
-  // Updates the icon UI.
-  void UpdateIcon();
 
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
@@ -58,8 +61,6 @@ class VirtualKeyboardTray : public TrayBackgroundView,
   Shelf* shelf_;
 
   ScopedSessionObserver session_observer_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(VirtualKeyboardTray);
 };
 
 }  // namespace ash

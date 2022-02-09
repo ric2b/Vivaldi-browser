@@ -13,7 +13,7 @@
 namespace views {
 class DesktopNativeWidgetAura;
 class NativeMenuWin;
-}
+}  // namespace views
 
 class VivaldiNativeAppWindowViewsWin;
 
@@ -25,14 +25,21 @@ class VivaldiAppWindowDesktopWindowTreeHostWin
       VivaldiNativeAppWindowViewsWin* window_view,
       views::DesktopNativeWidgetAura* desktop_native_widget_aura);
   ~VivaldiAppWindowDesktopWindowTreeHostWin() override;
+  VivaldiAppWindowDesktopWindowTreeHostWin(
+      const VivaldiAppWindowDesktopWindowTreeHostWin&) = delete;
+  VivaldiAppWindowDesktopWindowTreeHostWin& operator=(
+      const VivaldiAppWindowDesktopWindowTreeHostWin&) = delete;
 
  private:
   // Overridden from DesktopWindowTreeHostWin:
   void HandleFrameChanged() override;
+  void PostHandleMSG(UINT message, WPARAM w_param, LPARAM l_param) override;
   bool PreHandleMSG(UINT message,
                     WPARAM w_param,
                     LPARAM l_param,
                     LRESULT* result) override;
+
+  void UpdateSystemColorsInPrefs();
 
   views::NativeMenuWin* GetSystemMenu();
 
@@ -40,8 +47,6 @@ class VivaldiAppWindowDesktopWindowTreeHostWin
 
   // The wrapped system menu itself.
   std::unique_ptr<views::NativeMenuWin> system_menu_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAppWindowDesktopWindowTreeHostWin);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_APPS_APP_WINDOW_DESKTOP_WINDOW_TREE_HOST_WIN_H_

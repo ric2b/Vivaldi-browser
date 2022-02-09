@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
 #include "components/download/public/common/quarantine_connection.h"
@@ -45,6 +46,12 @@ class ChromeContentBrowserClientExtensionsPart
     : public ChromeContentBrowserClientParts {
  public:
   ChromeContentBrowserClientExtensionsPart();
+
+  ChromeContentBrowserClientExtensionsPart(
+      const ChromeContentBrowserClientExtensionsPart&) = delete;
+  ChromeContentBrowserClientExtensionsPart& operator=(
+      const ChromeContentBrowserClientExtensionsPart&) = delete;
+
   ~ChromeContentBrowserClientExtensionsPart() override;
 
   // Corresponds to the ChromeContentBrowserClient function of the same name.
@@ -132,8 +139,6 @@ class ChromeContentBrowserClientExtensionsPart
       service_manager::BinderRegistry* registry,
       blink::AssociatedInterfaceRegistry* associated_registry,
       content::RenderProcessHost* render_process_host) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeContentBrowserClientExtensionsPart);
 };
 
 }  // namespace extensions

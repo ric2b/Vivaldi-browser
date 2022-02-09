@@ -27,8 +27,7 @@ class CastWebService;
 // A simplified interface for loading and displaying WebContents in cast_shell.
 class CastWebView {
  public:
-  class Delegate : public CastWebContents::Delegate,
-                   public CastContentWindow::Delegate {};
+  class Delegate : public CastContentWindow::Delegate {};
 
   // When the unique_ptr is reset, the CastWebView may not necessarily be
   // destroyed. In some cases ownership will be passed to the CastWebService,
@@ -43,9 +42,6 @@ class CastWebView {
     // CastWebView delegate. Must be non-null.
     base::WeakPtr<Delegate> delegate = nullptr;
 
-    // CastWebContents delegate. This may be null.
-    base::WeakPtr<CastWebContents::Delegate> web_contents_delegate = nullptr;
-
     // CastContentWindow delegate. This may be null.
     base::WeakPtr<CastContentWindow::Delegate> window_delegate = nullptr;
 
@@ -55,6 +51,10 @@ class CastWebView {
   };
 
   CastWebView() = default;
+
+  CastWebView(const CastWebView&) = delete;
+  CastWebView& operator=(const CastWebView&) = delete;
+
   virtual ~CastWebView() = default;
 
   virtual CastContentWindow* window() const = 0;
@@ -68,9 +68,6 @@ class CastWebView {
   void BindReceivers(
       mojo::PendingReceiver<mojom::CastWebContents> web_contents_receiver,
       mojo::PendingReceiver<mojom::CastContentWindow> window_receiver);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CastWebView);
 };
 
 }  // namespace chromecast

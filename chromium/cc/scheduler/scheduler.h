@@ -48,6 +48,7 @@ enum class FrameSkippedReason {
   kRecoverLatency,
   kNoDamage,
   kWaitingOnMain,
+  kDrawThrottled,
 };
 
 class SchedulerClient {
@@ -402,6 +403,10 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   }
 
   void UpdatePowerModeVote();
+
+  // Used only for UMa metric calculations.
+  base::TimeDelta cc_frame_time_available_;
+  base::TimeTicks cc_frame_start_;  // Begin impl frame time.
 };
 
 }  // namespace cc

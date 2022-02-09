@@ -1,58 +1,54 @@
 
 import os
-import sys
 import subprocess
+import sys
+import vivdeps
 
-import fetch_submodules
+from git_urls import BASE_URL, CHROMIUM_URL
 
 SRC = os.path.dirname(os.path.dirname(__file__))
-
-OS_CHOICES = {
-  "win32": "win",
-  "win": "win",
-  "cygwin": "win",
-  "darwin": "mac",
-  "ios": "ios",
-  "mac": "mac",
-  "unix": "linux",
-  "linux": "linux",
-  "linux2": "linux",
-  "linux3": "linux",
-  "android": "android",
-  "arm":"arm",
-  "arm64":"arm64",
-  "x86":"x86",
-  "x64":"x64",
-}
 
 cipd_pick_list = [
   "tools/clang/dsymutil",
   ]
 
-def IsAndroidEnabled():
-  if "ANDROID_ENABLED" in os.environ:
-    return True
-  return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
-
-host_os = OS_CHOICES.get(sys.platform, 'unix')
-checkout_os = ["checkout_"+host_os]
-
-if IsAndroidEnabled():
-  checkout_os = ["checkout_android", "checkout_android_native_support"]
-
-def cipd_only_filter(submodules):
-  if "__cipd__" in submodules:
-    accept_conditions = any([x in ["checkout_android", "checkout_linux"] for x in checkout_os])
-    picked_modules = {}
-    for x, d in submodules["__cipd__"].items():
-      if x in cipd_pick_list or (accept_conditions and "condition" in d):
-        picked_modules[x] = {"packages": d.get("packages", [])}
-    return {"__cipd__": picked_modules}
-  return {}
+exclude_cipd = [
+  "buildtools/linux64",
+  "buildtools/mac",
+  "buildtools/win",
+  "tools/skia_goldctl/linux",
+  "tools/skia_goldctl/win",
+  "tools/skia_goldctl/mac",
+  "tools/luci-go",
+  "tools/resultdb",
+  ]
 
 def main():
-  fetch_submodules.GetSubmodules(checkout_os, checkout_filter=cipd_only_filter if "checkout_android" not in checkout_os else None)
-  return 0
+  variables = vivdeps.get_chromium_variables()
+  if variables.get("checkout_android", False):
+    variables["checkout_android_native_support"] = True
+
+  deps = vivdeps.ChromiumDeps(variables=variables)
+
+  deps.Load(recurse=True)
+
+  existing_submodules = []
+  only_cipd = True
+  pick_list = cipd_pick_list
+
+  if variables.get("checkout_android", False):
+    only_cipd = False
+    pick_list = None
+
+    result = subprocess.run(["git", "submodule", "status", "--recursive"],
+                            capture_output=True,
+                            check=True,
+                            text=True,
+                            cwd=os.path.join(SRC, "chromium"))
+
+    existing_submodules = [x.split()[1] for x in result.stdout.splitlines()]
+
+  deps.UpdateModules(pick_list, existing_submodules, only_cipd, exclude_cipd)
 
 if __name__ == '__main__':
   sys.exit(main())

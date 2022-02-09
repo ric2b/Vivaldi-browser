@@ -31,9 +31,6 @@
 #include "extensions/common/features/feature.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 
-#include "app/vivaldi_apptools.h"
-#include "app/vivaldi_constants.h"
-
 using base::DictionaryValue;
 using base::ListValue;
 using base::Value;
@@ -101,7 +98,6 @@ TabsEventRouter::TabEntry::TabEntry(TabsEventRouter* router,
       complete_waiting_on_load_(false),
       was_audible_(false),
       was_muted_(contents->IsAudioMuted()),
-      was_discarded_(false),
       router_(router) {
   auto* audible_helper = RecentlyAudibleHelper::FromWebContents(contents);
   was_audible_ = audible_helper->WasRecentlyAudible();
@@ -136,17 +132,6 @@ bool TabsEventRouter::TabEntry::SetMuted(bool new_val) {
   return true;
 }
 
-bool TabsEventRouter::TabEntry::SetDiscarded(bool new_val) {
-  if (was_discarded_ == new_val)
-    return false;
-  was_discarded_ = new_val;
-  return true;
-}
-
-void TabsEventRouter::TabEntry::ExtDataSet(content::WebContents* contents) {
-  router_->ExtDataUpdated(contents);
-}
-
 void TabsEventRouter::TabEntry::NavigationEntryCommitted(
     const content::LoadCommittedDetails& load_details) {
   // Send 'status' of tab change. Expecting 'loading' is fired.
@@ -163,7 +148,6 @@ void TabsEventRouter::TabEntry::NavigationEntryCommitted(
 }
 
 void TabsEventRouter::TabEntry::TitleWasSet(content::NavigationEntry* entry) {
-  title_ = web_contents()->GetTitle();
   std::set<std::string> changed_property_names;
   changed_property_names.insert(tabs_constants::kTitleKey);
   router_->TabUpdated(this, std::move(changed_property_names));
@@ -363,7 +347,7 @@ void TabsEventRouter::DispatchTabInsertedAt(TabStripModel* tab_strip_model,
 
   int tab_id = ExtensionTabUtil::GetTabId(contents);
   std::unique_ptr<base::ListValue> args(new base::ListValue);
-  args->AppendInteger(tab_id);
+  args->Append(tab_id);
 
   std::unique_ptr<base::DictionaryValue> object_args(
       new base::DictionaryValue());
@@ -392,7 +376,7 @@ void TabsEventRouter::DispatchTabClosingAt(TabStripModel* tab_strip_model,
   int tab_id = ExtensionTabUtil::GetTabId(contents);
 
   std::unique_ptr<base::ListValue> args(new base::ListValue);
-  args->AppendInteger(tab_id);
+  args->Append(tab_id);
 
   std::unique_ptr<base::DictionaryValue> object_args(
       new base::DictionaryValue());
@@ -419,7 +403,7 @@ void TabsEventRouter::DispatchTabDetachedAt(WebContents* contents,
   }
 
   std::unique_ptr<base::ListValue> args(new base::ListValue);
-  args->AppendInteger(ExtensionTabUtil::GetTabId(contents));
+  args->Append(ExtensionTabUtil::GetTabId(contents));
 
   std::unique_ptr<base::DictionaryValue> object_args(
       new base::DictionaryValue());
@@ -439,7 +423,7 @@ void TabsEventRouter::DispatchActiveTabChanged(WebContents* old_contents,
                                                int index) {
   auto args = std::make_unique<base::ListValue>();
   int tab_id = ExtensionTabUtil::GetTabId(new_contents);
-  args->AppendInteger(tab_id);
+  args->Append(tab_id);
 
   auto object_args = std::make_unique<base::DictionaryValue>();
   object_args->SetKey(tabs_constants::kWindowIdKey,
@@ -479,7 +463,7 @@ void TabsEventRouter::DispatchTabSelectionChanged(
     if (!contents)
       break;
     int tab_id = ExtensionTabUtil::GetTabId(contents);
-    all_tabs.AppendInteger(tab_id);
+    all_tabs.Append(tab_id);
   }
 
   std::unique_ptr<base::ListValue> args(new base::ListValue);
@@ -506,7 +490,7 @@ void TabsEventRouter::DispatchTabMoved(WebContents* contents,
                                        int from_index,
                                        int to_index) {
   std::unique_ptr<base::ListValue> args(new base::ListValue);
-  args->AppendInteger(ExtensionTabUtil::GetTabId(contents));
+  args->Append(ExtensionTabUtil::GetTabId(contents));
 
   std::unique_ptr<base::DictionaryValue> object_args(
       new base::DictionaryValue());
@@ -529,8 +513,8 @@ void TabsEventRouter::DispatchTabReplacedAt(WebContents* old_contents,
   const int new_tab_id = ExtensionTabUtil::GetTabId(new_contents);
   const int old_tab_id = ExtensionTabUtil::GetTabId(old_contents);
   std::unique_ptr<base::ListValue> args(new base::ListValue);
-  args->AppendInteger(new_tab_id);
-  args->AppendInteger(old_tab_id);
+  args->Append(new_tab_id);
+  args->Append(old_tab_id);
 
   DispatchEvent(Profile::FromBrowserContext(new_contents->GetBrowserContext()),
                 events::TABS_ON_REPLACED, api::tabs::OnReplaced::kEventName,
@@ -586,12 +570,6 @@ void TabsEventRouter::FaviconUrlUpdated(WebContents* contents) {
   DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
 }
 
-void TabsEventRouter::ExtDataUpdated(WebContents* contents) {
-  std::set<std::string> changed_property_names;
-  changed_property_names.insert(vivaldi::kExtDataKey);
-  DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
-}
-
 void TabsEventRouter::DispatchEvent(
     Profile* profile,
     events::HistogramValue histogram_value,
@@ -619,7 +597,7 @@ void TabsEventRouter::DispatchTabUpdatedEvent(
   std::unique_ptr<base::ListValue> args_base(new base::ListValue);
 
   // First arg: The id of the tab that changed.
-  args_base->AppendInteger(ExtensionTabUtil::GetTabId(contents));
+  args_base->Append(ExtensionTabUtil::GetTabId(contents));
 
   // Second arg: An object containing the changes to the tab state.  Filled in
   // by WillDispatchTabUpdatedEvent as a copy of changed_properties, if the

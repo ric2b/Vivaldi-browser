@@ -10,8 +10,8 @@
 
 #include "platform_media/common/feature_toggles.h"
 
-#include "base/synchronization/waitable_event.h"
 #include "base/sequence_checker.h"
+#include "base/synchronization/waitable_event.h"
 #include "media/base/media_export.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 
@@ -30,9 +30,8 @@ class FFmpegURLProtocol;
 // synchronization tricks in order to appear synchronous.
 class MEDIA_EXPORT IPCAudioDecoder {
  public:
-
   class MEDIA_EXPORT ScopedDisableForTesting {
-  public:
+   public:
     ScopedDisableForTesting();
     ~ScopedDisableForTesting();
   };
@@ -41,6 +40,8 @@ class MEDIA_EXPORT IPCAudioDecoder {
 
   explicit IPCAudioDecoder(FFmpegURLProtocol* protocol);
   ~IPCAudioDecoder();
+  IPCAudioDecoder(const IPCAudioDecoder&) = delete;
+  IPCAudioDecoder& operator=(const IPCAudioDecoder&) = delete;
 
   bool Initialize();
 
@@ -80,8 +81,6 @@ class MEDIA_EXPORT IPCAudioDecoder {
   base::WaitableEvent async_task_done_;
 
   SEQUENCE_CHECKER(decoder_sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(IPCAudioDecoder);
 };
 
 }  // namespace media

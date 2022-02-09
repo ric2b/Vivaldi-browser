@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
+#include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "components/content_settings/common/content_settings_agent.mojom.h"
@@ -40,9 +41,10 @@
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "components/web_cache/browser/web_cache_manager.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
-#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
+#include "content/browser/browser_plugin/browser_plugin_guest.h"  // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h"       // nogncheck
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/eye_dropper_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -104,7 +106,8 @@ std::string WindowOpenDispositionToString(
 }
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent> renderer;
+  mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent>
+      renderer;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->SetAllowRunningInsecureContent();
 }
@@ -204,7 +207,8 @@ WebViewGuest::CursorHider::~CursorHider() {
 
 WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
     content::BrowserContext* context,
-    const GURL site, bool is_vivaldi_embedded) {
+    const GURL site,
+    bool is_vivaldi_embedded) {
   // If we already have a webview tag in the same app using the same storage
   // partition, we should use the same SiteInstance so the existing tag and
   // the new tag can script each other.
@@ -291,7 +295,7 @@ void WebViewGuest::ToggleFullscreenModeForTab(
   args->SetInteger("windowId", browser ? browser->session_id().id() : -1);
   args->SetBoolean("enterFullscreen", enter_fullscreen);
   DispatchEventToView(base::WrapUnique(
-    new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
+      new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
 }
 
 void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
@@ -332,8 +336,8 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 
   if (browser->window()) {
-    browser->window()->VivaldiShowWebsiteSettingsAt(
-        profile, web_contents(), url, pos);
+    browser->window()->VivaldiShowWebsiteSettingsAt(profile, web_contents(),
+                                                    url, pos);
   }
 }
 
@@ -393,8 +397,8 @@ void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
 bool WebViewGuest::IsMouseGesturesEnabled() const {
   if (web_contents()) {
     PrefService* pref_service =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext())
-        ->GetPrefs();
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext())
+            ->GetPrefs();
     return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesEnabled);
   }
   return true;
@@ -519,16 +523,15 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   index = std::min(std::max(index, -1), tab_strip->count());
 
   int add_types = active ? TabStripModel::ADD_ACTIVE : TabStripModel::ADD_NONE;
-  add_types |=
-      TabStripModel::ADD_FORCE_INDEX;
+  add_types |= TabStripModel::ADD_FORCE_INDEX;
   if (pinned)
     add_types |= TabStripModel::ADD_PINNED;
   if (inherit_opener) {
     add_types |= TabStripModel::ADD_INHERIT_OPENER;
   }
 
-  NavigateParams navigate_params(browser,
-      std::unique_ptr<WebContents>(guest->web_contents()));
+  NavigateParams navigate_params(
+      browser, std::unique_ptr<WebContents>(guest->web_contents()));
   navigate_params.disposition = active
                                     ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                     : WindowOpenDisposition::NEW_BACKGROUND_TAB;
@@ -559,7 +562,6 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
           tab_strip->GetIndexOfWebContents(existing_tab), 0);
     }
   }
-
 }
 
 blink::SecurityStyle WebViewGuest::GetSecurityStyle(
@@ -584,7 +586,7 @@ void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type) {
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString("blockedType", ContentSettingsTypeToString(settings_type));
   DispatchEventToView(base::WrapUnique(
-    new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
+      new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
 }
 
 void WebViewGuest::OnWindowBlocked(
@@ -592,7 +594,6 @@ void WebViewGuest::OnWindowBlocked(
     const std::string& frame_name,
     WindowOpenDisposition disposition,
     const blink::mojom::WindowFeatures& features) {
-
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kTargetURL, window_target_url.spec());
   if (features.has_height) {
@@ -609,16 +610,15 @@ void WebViewGuest::OnWindowBlocked(
   }
   args->SetString(webview::kName, frame_name);
   args->SetString(webview::kWindowOpenDisposition,
-    WindowOpenDispositionToString(disposition));
+                  WindowOpenDispositionToString(disposition));
 
   DispatchEventToView(base::WrapUnique(
-    new GuestViewEvent(webview::kEventWindowBlocked, std::move(args))));
+      new GuestViewEvent(webview::kEventWindowBlocked, std::move(args))));
 }
 
 void WebViewGuest::AllowRunningInsecureContent() {
-
   MixedContentSettingsTabHelper* mixed_content_settings =
-    MixedContentSettingsTabHelper::FromWebContents(web_contents());
+      MixedContentSettingsTabHelper::FromWebContents(web_contents());
   if (mixed_content_settings) {
     // Update browser side settings to allow active mixed content.
     mixed_content_settings->AllowRunningOfInsecureContent(
@@ -629,15 +629,14 @@ void WebViewGuest::AllowRunningInsecureContent() {
       base::BindRepeating(&SetAllowRunningInsecureContent));
 }
 
-bool WebViewGuest::ShouldAllowRunningInsecureContent(
-  WebContents* web_contents,
-  bool allowed_per_prefs,
-  const url::Origin& origin,
-  const GURL& resource_url) {
+bool WebViewGuest::ShouldAllowRunningInsecureContent(WebContents* web_contents,
+                                                     bool allowed_per_prefs,
+                                                     const url::Origin& origin,
+                                                     const GURL& resource_url) {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (browser) {
     return browser->ShouldAllowRunningInsecureContent(
-      web_contents, allowed_per_prefs, origin, resource_url);
+        web_contents, allowed_per_prefs, origin, resource_url);
   } else {
     return false;
   }
@@ -662,8 +661,8 @@ void WebViewGuest::OnMouseLeave() {
 }
 
 void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
-  TabModalConfirmDialog::Create(std::make_unique<RepostFormWarningController>(source),
-                                source);
+  TabModalConfirmDialog::Create(
+      std::make_unique<RepostFormWarningController>(source), source);
 }
 
 content::PictureInPictureResult WebViewGuest::EnterPictureInPicture(
@@ -676,6 +675,12 @@ content::PictureInPictureResult WebViewGuest::EnterPictureInPicture(
 
 void WebViewGuest::ExitPictureInPicture() {
   PictureInPictureWindowManager::GetInstance()->ExitPictureInPicture();
+}
+
+std::unique_ptr<content::EyeDropper> WebViewGuest::OpenEyeDropper(
+    content::RenderFrameHost* frame,
+    content::EyeDropperListener* listener) {
+  return ShowEyeDropper(frame, listener);
 }
 
 void WebViewGuest::LoadTabContentsIfNecessary() {
@@ -710,8 +715,8 @@ content::WebContentsDelegate* WebViewGuest::GetDevToolsConnector() {
 }
 
 content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
-  content::WebContents* source,
-  const content::NativeWebKeyboardEvent& event) {
+    content::WebContents* source,
+    const content::NativeWebKeyboardEvent& event) {
   DCHECK(source == web_contents());
   // We need override this at an early stage since |KeyboardEventManager| will
   // block the delegate(WebViewGuest::HandleKeyboardEvent) if the page does

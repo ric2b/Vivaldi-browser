@@ -656,6 +656,19 @@ AutomationNodeImpl.prototype = {
     return GetChecked(this.treeID, this.id);
   },
 
+  get caretBounds() {
+    const data = GetIntListAttribute(this.treeID, this.id, 'caretBounds');
+    if (!data) {
+      return;
+    }
+
+    if (data.length !== 4) {
+      throw 'Internal encoding error for caret bounds.';
+    }
+
+    return {left: data[0], top: data[1], width: data[2], height: data[3]};
+  },
+
   get location() {
     return GetLocation(this.treeID, this.id);
   },
@@ -742,7 +755,15 @@ AutomationNodeImpl.prototype = {
     }
     const info = GetChildIDAtIndex(this.treeID, this.id, 0);
     if (info) {
-      return AutomationRootNodeImpl.getNodeFromTree(info.treeId, info.nodeId);
+      const child =
+          AutomationRootNodeImpl.getNodeFromTree(info.treeId, info.nodeId);
+
+      // A child with an app id should always be in a different tree.
+      if (child.appId && this.treeID === info.treeId) {
+        return;
+      }
+
+      return child;
     }
   },
 
@@ -754,7 +775,15 @@ AutomationNodeImpl.prototype = {
 
     const info = GetChildIDAtIndex(this.treeID, this.id, count - 1);
     if (info) {
-      return AutomationRootNodeImpl.getNodeFromTree(info.treeId, info.nodeId);
+      const child =
+          AutomationRootNodeImpl.getNodeFromTree(info.treeId, info.nodeId);
+
+      // A child with an app id should always be in a different tree.
+      if (child.appId && this.treeID === info.treeId) {
+        return;
+      }
+
+      return child;
     }
   },
 
@@ -769,6 +798,12 @@ AutomationNodeImpl.prototype = {
       const childID = info.nodeIds[i];
       const child =
           AutomationRootNodeImpl.getNodeFromTree(info.treeId, childID);
+
+      // A child with an app id should always be in a different tree.
+      if (child.appId && this.treeID === info.treeId) {
+        continue;
+      }
+
       if (child) {
         $Array.push(children, child);
       }
@@ -2049,6 +2084,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
       [
         'ariaCurrentState',
         'bold',
+        'caretBounds',
         'checked',
         'children',
         'customActions',

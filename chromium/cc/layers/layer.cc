@@ -150,6 +150,7 @@ const Layer::LayerTreeInputs* Layer::layer_tree_inputs() const {
 #endif
 
 void Layer::SetLayerTreeHost(LayerTreeHost* host) {
+  DCHECK(IsPropertyChangeAllowed());
   if (layer_tree_host_ == host)
     return;
 
@@ -225,7 +226,12 @@ bool Layer::IsPropertyChangeAllowed() const {
   if (!layer_tree_host_)
     return true;
 
-  return !layer_tree_host_->in_paint_layer_contents();
+  return !layer_tree_host_->in_paint_layer_contents() &&
+         !layer_tree_host_->in_commit();
+}
+
+bool Layer::IsMutationAllowed() const {
+  return !layer_tree_host_ || !layer_tree_host_->in_commit();
 }
 
 void Layer::CaptureContent(const gfx::Rect& rect,
@@ -943,7 +949,7 @@ void Layer::SetTransformOrigin(const gfx::Point3F& transform_origin) {
   SetNeedsCommit();
 }
 
-void Layer::SetScrollOffset(const gfx::ScrollOffset& scroll_offset) {
+void Layer::SetScrollOffset(const gfx::Vector2dF& scroll_offset) {
   DCHECK(IsPropertyChangeAllowed());
 
   auto& inputs = EnsureLayerTreeInputs();
@@ -959,8 +965,7 @@ void Layer::SetScrollOffset(const gfx::ScrollOffset& scroll_offset) {
   SetNeedsCommit();
 }
 
-void Layer::SetScrollOffsetFromImplSide(
-    const gfx::ScrollOffset& scroll_offset) {
+void Layer::SetScrollOffsetFromImplSide(const gfx::Vector2dF& scroll_offset) {
   DCHECK(IsPropertyChangeAllowed());
   // This function only gets called during a BeginMainFrame, so there
   // is no need to call SetNeedsUpdate here.
@@ -1005,7 +1010,7 @@ void Layer::UpdatePropertyTreeScrollOffset() {
 }
 
 void Layer::SetDidScrollCallback(
-    base::RepeatingCallback<void(const gfx::ScrollOffset&, const ElementId&)>
+    base::RepeatingCallback<void(const gfx::Vector2dF&, const ElementId&)>
         callback) {
   EnsureLayerTreeInputs().did_scroll_callback = std::move(callback);
 }

@@ -93,7 +93,7 @@ ExtensionFunction::ResponseAction SessionsPrivateSaveOpenTabsFunction::Run() {
   using vivaldi::sessions_private::SaveOpenTabs::Params;
   namespace Results = vivaldi::sessions_private::SaveOpenTabs::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int error_code = SessionErrorCodes::kNoError;
@@ -142,8 +142,7 @@ ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
   path = path.Append(kSessionPath);
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&SessionsPrivateGetAllFunction::RunOnFileThread, this,
                      path),
       base::BindOnce(&SessionsPrivateGetAllFunction::SendResponse, this));
@@ -215,7 +214,7 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
   using vivaldi::sessions_private::Open::Params;
   namespace Results = vivaldi::sessions_private::Open::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   VivaldiBrowserWindow* window =
@@ -253,7 +252,7 @@ ExtensionFunction::ResponseAction SessionsPrivateDeleteFunction::Run() {
   using vivaldi::sessions_private::Delete::Params;
   namespace Results = vivaldi::sessions_private::Delete::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::ThreadRestrictions::ScopedAllowIO allow_io;

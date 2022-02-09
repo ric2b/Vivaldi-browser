@@ -24,6 +24,11 @@ class CONTENT_EXPORT NavigationControllerAndroid {
  public:
   explicit NavigationControllerAndroid(
       NavigationControllerImpl* navigation_controller);
+
+  NavigationControllerAndroid(const NavigationControllerAndroid&) = delete;
+  NavigationControllerAndroid& operator=(const NavigationControllerAndroid&) =
+      delete;
+
   ~NavigationControllerAndroid();
 
   NavigationControllerImpl* navigation_controller() const {
@@ -146,13 +151,9 @@ class CONTENT_EXPORT NavigationControllerAndroid {
       const base::android::JavaParamRef<jobject>& obj,
       jint index);
 
-  static url::Origin OriginFromPackageName(const std::string& package);
-
  private:
   NavigationControllerImpl* navigation_controller_;
   base::android::ScopedJavaGlobalRef<jobject> obj_;
-
-  DISALLOW_COPY_AND_ASSIGN(NavigationControllerAndroid);
 };
 
 }  // namespace content

@@ -54,8 +54,7 @@ DocumentBlockedThrottle::WillFailRequest() {
       blocking_page->GetHTMLContents();
 
   security_interstitials::SecurityInterstitialTabHelper::AssociateBlockingPage(
-      web_contents, navigation_handle()->GetNavigationId(),
-      std::move(blocking_page));
+      navigation_handle(), std::move(blocking_page));
 
   return content::NavigationThrottle::ThrottleCheckResult(
       CANCEL, net::ERR_BLOCKED_BY_CLIENT, error_page_contents);

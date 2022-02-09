@@ -18,11 +18,13 @@ class RenderViewContextMenuProxy;
 // This class creates the submenu, adds it to the parent menu,
 // and handles events.
 class NotesSubMenuObserver : public RenderViewContextMenuObserver {
-public:
+ public:
   NotesSubMenuObserver(
       RenderViewContextMenuProxy* proxy,
       RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate);
   ~NotesSubMenuObserver() override;
+  NotesSubMenuObserver(const NotesSubMenuObserver&) = delete;
+  NotesSubMenuObserver& operator=(const NotesSubMenuObserver&) = delete;
 
   // For configurable menus. Allows placement of the notes tree at a non-std
   // location in the menu tree.
@@ -38,10 +40,11 @@ public:
   void RootMenuWillOpen();
   void PopulateModel(ui::SimpleMenuModel* model);
   ui::SimpleMenuModel* get_root_model() {
-      return root_menu_model_ ? root_menu_model_ : models_.front().get(); }
+    return root_menu_model_ ? root_menu_model_ : models_.front().get();
+  }
   int GetRootId();
 
-private:
+ private:
   typedef std::map<ui::MenuModel*, vivaldi::NoteNode*> MenuModelToNotesMap;
   typedef std::map<int, bool> IdToBoolMap;
 
@@ -57,8 +60,6 @@ private:
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   MenuModelToNotesMap menumodel_to_note_map_;
   IdToBoolMap root_id_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesSubMenuObserver);
 };
 
 #endif  // NOTES_NOTES_SUBMENU_OBSERVER_H_

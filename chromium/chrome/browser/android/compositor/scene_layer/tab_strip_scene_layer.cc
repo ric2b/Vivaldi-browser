@@ -11,7 +11,7 @@
 #include "chrome/browser/android/compositor/layer_title_cache.h"
 #include "ui/android/resources/nine_patch_resource.h"
 #include "ui/android/resources/resource_manager_impl.h"
-#include "ui/gfx/transform.h"
+#include "ui/gfx/geometry/transform.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
@@ -52,6 +52,10 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   tab_strip_layer_->AddChild(left_fade_);
   tab_strip_layer_->AddChild(right_fade_);
   tab_strip_layer_->AddChild(model_selector_button_);
+  // Note(david@vivaldi.com): The correct layer child assignment will be done
+  // in |SetContentTree()| as we are dealing with a pair of
+  // |TabStripSceneLayer|s.
+  if (!vivaldi::IsVivaldiRunning())
   layer()->AddChild(tab_strip_layer_);
 
   // Vivaldi
@@ -79,6 +83,13 @@ void TabStripSceneLayer::SetContentTree(
       layer()->InsertChild(content_tree->layer(), 0);
       content_tree->layer()->SetPosition(
           gfx::PointF(0, -layer()->position().y()));
+      // Note(david@vivaldi.com): Add the stacking strip to the main strip scene
+      // layer in order to achieve the correct scrolling behaviour. The main
+      // strip will be normally added to the current layer.
+      if (is_stack_strip_)
+        content_tree->layer()->AddChild(tab_strip_layer_);
+      else
+        layer()->AddChild(tab_strip_layer_);
     }
   }
 }
@@ -113,6 +124,12 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
                                              jboolean should_readd_background) {
   background_tab_brightness_ = background_tab_brightness;
   gfx::RectF content(0, y_offset, width, height);
+  // Note(david@vivaldi.com): We apply a fixed height for the stack strip. The
+  // |y_offset| however is only applied to the main strip of which the stacking
+  // strip is a child of.
+  if (is_stack_strip_)
+    tab_strip_layer_->SetPosition(gfx::PointF(0, y_offset));
+  else
   layer()->SetPosition(gfx::PointF(0, y_offset));
   tab_strip_layer_->SetBounds(gfx::Size(width, height));
   scrollable_strip_layer_->SetBounds(gfx::Size(width, height));
@@ -126,7 +143,7 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
   }
 
   // Content tree should not be affected by tab strip scene layer visibility.
-  if (content_tree_)
+  if (content_tree_ && !is_stack_strip_) // Vivaldi
     content_tree_->layer()->SetPosition(gfx::PointF(0, -y_offset));
 
   // Make sure tab strip changes are committed after rotating the device.
@@ -320,7 +337,10 @@ void TabStripSceneLayer::PutStripTabLayer(
     jboolean is_loading,
     jfloat spinner_rotation,
     const JavaParamRef<jobject>& jlayer_title_cache,
-    const JavaParamRef<jobject>& jresource_manager) {
+    const JavaParamRef<jobject>& jresource_manager,
+    jfloat tab_alpha, // Vivaldi
+    jboolean is_shown_as_favicon, // Vivaldi
+    jfloat title_offset) { // Vivaldi
   LayerTitleCache* layer_title_cache =
       LayerTitleCache::FromJavaObject(jlayer_title_cache);
   ui::ResourceManager* resource_manager =
@@ -339,7 +359,8 @@ void TabStripSceneLayer::PutStripTabLayer(
                        tab_handle_outline_resource, foreground, close_pressed,
                        toolbar_width, x, y, width, height, content_offset_x,
                        close_button_alpha, is_loading, spinner_rotation,
-                       background_tab_brightness_);
+                       background_tab_brightness_,
+                       tab_alpha, is_shown_as_favicon, title_offset); // Vivaldi
 }
 
 scoped_refptr<TabHandleLayer> TabStripSceneLayer::GetNextLayer(
@@ -378,6 +399,14 @@ void TabStripSceneLayer::SetTabStripBackgroundColor(
     tab_strip_layer_->SetBackgroundColor(*color);
     use_light_foreground_on_background = use_light;
   }
+}
+
+// Vivaldi
+void TabStripSceneLayer::SetIsStackStrip(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jboolean jis_stack_strip){
+  is_stack_strip_ = jis_stack_strip;
 }
 
 static jlong JNI_TabStripSceneLayer_Init(JNIEnv* env,

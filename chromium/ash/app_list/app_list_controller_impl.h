@@ -54,6 +54,7 @@ namespace ash {
 class AppListBubblePresenter;
 class AppListControllerObserver;
 class AppListPresenterImpl;
+enum class AppListSortOrder;
 
 // Ash's AppListController owns the AppListModel and implements interface
 // functions that allow Chrome to modify and observe the Shelf and AppListModel
@@ -77,6 +78,10 @@ class ASH_EXPORT AppListControllerImpl
       public apps::AppRegistryCache::Observer {
  public:
   AppListControllerImpl();
+
+  AppListControllerImpl(const AppListControllerImpl&) = delete;
+  AppListControllerImpl& operator=(const AppListControllerImpl&) = delete;
+
   ~AppListControllerImpl() override;
 
   enum HomeLauncherTransitionState {
@@ -100,8 +105,6 @@ class ASH_EXPORT AppListControllerImpl
                        const std::string& folder_id) override;
   void RemoveItem(const std::string& id) override;
   void RemoveUninstalledItem(const std::string& id) override;
-  void MoveItemToFolder(const std::string& id,
-                        const std::string& folder_id) override;
   void SetStatus(AppListModelStatus status) override;
   void SetSearchEngineIsGoogle(bool is_google) override;
   void UpdateSearchBox(const std::u16string& text,
@@ -206,6 +209,7 @@ class ASH_EXPORT AppListControllerImpl
                     AppListLaunchedFrom launched_from) override;
   void GetContextMenuModel(const std::string& id,
                            GetContextMenuModelCallback callback) override;
+  void SortAppList(AppListSortOrder order) override;
   ui::ImplicitAnimationObserver* GetAnimationObserver(
       AppListViewState target_state) override;
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
@@ -225,7 +229,9 @@ class ASH_EXPORT AppListControllerImpl
   bool IsAssistantAllowedAndEnabled() const override;
   bool ShouldShowSuggestedContentInfo() const override;
   void MarkSuggestedContentInfoDismissed() override;
-  void OnStateTransitionAnimationCompleted(AppListViewState state) override;
+  void OnStateTransitionAnimationCompleted(
+      AppListViewState state,
+      bool was_animation_interrupted) override;
   void OnViewStateChanged(AppListViewState state) override;
   int AdjustAppListViewScrollOffset(int offset, ui::EventType type) override;
   void LoadIcon(const std::string& app_id) override;
@@ -552,9 +558,6 @@ class ASH_EXPORT AppListControllerImpl
   // initial notification badge information when app list items are added.
   apps::AppRegistryCache* cache_ = nullptr;
 
-  // Whether the notification indicator flag is enabled.
-  const bool is_notification_indicator_enabled_;
-
   // Observes user profile prefs for the app list.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
@@ -578,12 +581,13 @@ class ASH_EXPORT AppListControllerImpl
   // animations.
   absl::optional<ui::ThroughputTracker> smoothness_tracker_;
 
+  // Used for closing the Assistant ui in the asynchronous way.
+  base::ScopedClosureRunner close_assistant_ui_runner_;
+
   base::ScopedObservation<SplitViewController, SplitViewObserver>
       split_view_observation_{this};
 
   base::WeakPtrFactory<AppListControllerImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppListControllerImpl);
 };
 
 }  // namespace ash

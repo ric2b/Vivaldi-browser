@@ -26,6 +26,8 @@ class ChromiumImporter : public Importer {
 
  protected:
   ~ChromiumImporter() override;
+  ChromiumImporter(const ChromiumImporter&) = delete;
+  ChromiumImporter& operator=(const ChromiumImporter&) = delete;
 
  private:
   base::FilePath profile_dir_;
@@ -38,8 +40,6 @@ class ChromiumImporter : public Importer {
 
   bool ReadAndParseHistory(const base::FilePath& sqlite_file,
                            std::vector<ImporterURLRow>* forms);
-
-  DISALLOW_COPY_AND_ASSIGN(ChromiumImporter);
 };
 
 #endif  // IMPORTER_CHROMIUM_IMPORTER_H_

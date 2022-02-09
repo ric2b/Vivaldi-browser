@@ -24,6 +24,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/bitrate.h"
 #include "media/base/bitstream_buffer.h"
@@ -1202,7 +1203,7 @@ void RTCVideoEncoder::Impl::EncodeOneFrame() {
   if (requires_copy) {
     const base::TimeDelta timestamp =
         frame ? frame->timestamp()
-              : base::TimeDelta::FromMilliseconds(next_frame->ntp_time_ms());
+              : base::Milliseconds(next_frame->ntp_time_ms());
     // TODO(https://crbug.com/1194500): Android (e.g. android-pie-arm64-rel)
     // and CrOS does not support the optimzed path, perhaps due to not
     // supporting STORAGE_GPU_MEMORY_BUFFER or NV12? When this is fixed, remove
@@ -1337,8 +1338,7 @@ void RTCVideoEncoder::Impl::EncodeOneFrameWithNativeInput() {
     frame = media::VideoFrame::WrapVideoFrame(
         black_gmb_frame_, black_gmb_frame_->format(),
         black_gmb_frame_->visible_rect(), black_gmb_frame_->natural_size());
-    frame->set_timestamp(
-        base::TimeDelta::FromMilliseconds(next_frame->ntp_time_ms()));
+    frame->set_timestamp(base::Milliseconds(next_frame->ntp_time_ms()));
   } else {
     frame = static_cast<WebRtcVideoFrameAdapter*>(
                 next_frame->video_frame_buffer().get())
@@ -1646,9 +1646,10 @@ bool RTCVideoEncoder::H264HwSupportForTemporalLayers() {
 bool RTCVideoEncoder::Vp9HwSupportForSpatialLayers() {
 #if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH)
   return base::FeatureList::IsEnabled(media::kVaapiVp9kSVCHWEncoding);
-#endif
+#else
   // Spatial layers are not supported by hardware encoders.
   return false;
+#endif
 }
 
 }  // namespace blink

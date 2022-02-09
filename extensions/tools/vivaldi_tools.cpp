@@ -8,8 +8,8 @@
 
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -180,6 +180,8 @@ Browser* FindVivaldiBrowser() {
 void BroadcastEvent(const std::string& eventname,
                     std::vector<base::Value> args,
                     content::BrowserContext* context) {
+  if (!context)
+    return;
   auto event = std::make_unique<extensions::Event>(
       extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args));
   extensions::EventRouter* event_router = extensions::EventRouter::Get(context);

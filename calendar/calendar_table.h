@@ -30,6 +30,8 @@ class CalendarTable {
   // Must call CreateCalendarTable() before to make sure the database is
   // initialized.
   CalendarTable();
+  CalendarTable(const CalendarTable&) = delete;
+  CalendarTable& operator=(const CalendarTable&) = delete;
 
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
@@ -53,8 +55,6 @@ class CalendarTable {
 
  private:
   bool DoesAnyCalendarExist();
-
-  DISALLOW_COPY_AND_ASSIGN(CalendarTable);
 };
 
 #define CALENDAR_ROW_FIELDS                                        \

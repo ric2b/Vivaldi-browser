@@ -26,7 +26,7 @@
 #include "ui/gfx/win/direct_write.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/win/mf_util.h"
+#include "platform_media/common/win/platform_media_init.h"
 #endif
 
 namespace content {
@@ -59,7 +59,7 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
   InitializeDWriteFontProxy();
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  media::LoadMFDecodingLibraries(/*demuxer_support=*/false);
+  platform_media_init::InitForRendererProcess();
 #endif
 }
 

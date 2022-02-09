@@ -80,6 +80,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/shared_cors_origin_access_list.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_descriptors.h"
@@ -91,6 +92,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/android/network_library.h"
+#include "net/cookies/site_for_cookies.h"
 #include "net/http/http_util.h"
 #include "net/net_buildflags.h"
 #include "net/ssl/ssl_cert_request_info.h"
@@ -141,6 +143,9 @@ class AwContentsMessageFilter
  public:
   explicit AwContentsMessageFilter(int process_id);
 
+  AwContentsMessageFilter(const AwContentsMessageFilter&) = delete;
+  AwContentsMessageFilter& operator=(const AwContentsMessageFilter&) = delete;
+
   // BrowserMessageFilter methods.
   bool OnMessageReceived(const IPC::Message& message) override;
 
@@ -152,8 +157,6 @@ class AwContentsMessageFilter
   ~AwContentsMessageFilter() override;
 
   int process_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(AwContentsMessageFilter);
 };
 
 AwContentsMessageFilter::AwContentsMessageFilter(int process_id)
@@ -405,7 +408,7 @@ gfx::ImageSkia AwContentBrowserClient::GetDefaultFavicon() {
 
 bool AwContentBrowserClient::AllowAppCache(
     const GURL& manifest_url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<url::Origin>& top_frame_origin,
     content::BrowserContext* context) {
   // WebView doesn't have a per-site policy for locally stored data,
@@ -827,10 +830,19 @@ bool AwContentBrowserClient::HandleExternalProtocol(
     int frame_tree_node_id,
     content::NavigationUIData* navigation_data,
     bool is_main_frame,
+    network::mojom::WebSandboxFlags /*sandbox_flags*/,
     ui::PageTransition page_transition,
     bool has_user_gesture,
     const absl::optional<url::Origin>& initiating_origin,
     mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory) {
+  // Sandbox flags
+  // =============
+  //
+  // Contrary to the chrome/ implementation, sandbox flags are ignored. Webview
+  // by itself to not invoke external apps. However it let the embedding
+  // app to intercept the request and decide what to do. We need to be careful
+  // here not breaking applications, so the sandbox flags are ignored.
+
   mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver =
       out_factory->InitWithNewPipeAndPassReceiver();
   // We don't need to care for |security_options| as the factories constructed
@@ -888,7 +900,23 @@ bool AwContentBrowserClient::ShouldEnableStrictSiteIsolation() {
   return false;
 }
 
-bool AwContentBrowserClient::ShouldDisableSiteIsolation() {
+size_t AwContentBrowserClient::GetMaxRendererProcessCountOverride() {
+  // TODO(crbug.com/806404): These options can currently can only be turned by
+  // by manually overriding command line switches because
+  // `ShouldDisableSiteIsolation` returns true. Should coordinate if/when
+  // enabling this in production.
+  if (content::SiteIsolationPolicy::UseDedicatedProcessesForAllSites() ||
+      content::SiteIsolationPolicy::AreIsolatedOriginsEnabled() ||
+      content::SiteIsolationPolicy::IsStrictOriginIsolationEnabled()) {
+    // Do not restrict the max renderer process count for these site isolation
+    // modes. This allows OOPIFs to happen on android webview.
+    return 0u;  // Use default.
+  }
+  return 1u;
+}
+
+bool AwContentBrowserClient::ShouldDisableSiteIsolation(
+    content::SiteIsolationMode site_isolation_mode) {
   // Since AW does not yet support OOPIFs, we must return true here to disable
   // features that may trigger OOPIFs, such as origin isolation.
   //
@@ -1068,6 +1096,16 @@ bool AwContentBrowserClient::IsOriginTrialRequiredForAppCache(
   // WebView has no way of specifying an origin trial, and so never
   // consider it a requirement.
   return false;
+}
+
+bool AwContentBrowserClient::ShouldAllowInsecurePrivateNetworkRequests(
+    content::BrowserContext* browser_context,
+    const url::Origin& origin) {
+  // Webview does not implement support for deprecation trials, so webview apps
+  // broken by Private Network Access restrictions cannot help themselves by
+  // registering for the trial.
+  // See crbug.com/1255675.
+  return true;
 }
 
 content::SpeechRecognitionManagerDelegate*

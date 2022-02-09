@@ -10,8 +10,8 @@
 #include "ash/webui/sample_system_web_app_ui/url_constants.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForSampleSystemWebApp() {
@@ -29,8 +29,12 @@ std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForSampleSystemWebApp() {
       *info);
   info->theme_color = 0xFF4285F4;
   info->background_color = 0xFFFFFFFF;
+  // Bright green in dark mode to be able to see it flicker.
+  // This should match up with the dark theme background color to prevent
+  // flickering.
+  info->dark_mode_theme_color = 0xFF11ff00;
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
-  info->open_as_window = true;
+  info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
 
   {
     WebApplicationShortcutsMenuItemInfo shortcut;
@@ -70,9 +74,16 @@ bool SampleSystemAppDelegate::ShouldCaptureNavigations() const {
   return true;
 }
 
+bool SampleSystemAppDelegate::ShouldShowNewWindowMenuOption() const {
+  return true;
+}
+
+bool SampleSystemAppDelegate::ShouldBeSingleWindow() const {
+  return false;
+}
+
 absl::optional<web_app::SystemAppBackgroundTaskInfo>
 SampleSystemAppDelegate::GetTimerInfo() const {
   return web_app::SystemAppBackgroundTaskInfo(
-      base::TimeDelta::FromSeconds(30),
-      GURL("chrome://sample-system-web-app/timer.html"));
+      base::Seconds(30), GURL("chrome://sample-system-web-app/timer.html"));
 }

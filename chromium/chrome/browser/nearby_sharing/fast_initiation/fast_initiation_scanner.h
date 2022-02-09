@@ -33,12 +33,15 @@ class FastInitiationScanner
     static std::unique_ptr<FastInitiationScanner> Create(
         scoped_refptr<device::BluetoothAdapter> adapter);
 
+    static bool IsHardwareSupportAvailable(device::BluetoothAdapter* adapter);
+
     static void SetFactoryForTesting(Factory* factory);
 
    protected:
     virtual ~Factory() = default;
     virtual std::unique_ptr<FastInitiationScanner> CreateInstance(
         scoped_refptr<device::BluetoothAdapter> adapter) = 0;
+    virtual bool IsHardwareSupportAvailable() = 0;
 
    private:
     static Factory* factory_instance_;
@@ -50,11 +53,10 @@ class FastInitiationScanner
   FastInitiationScanner(const FastInitiationScanner&) = delete;
   FastInitiationScanner& operator=(const FastInitiationScanner&) = delete;
 
-  virtual void StartScanning(base::RepeatingClosure device_found_callback,
-                             base::RepeatingClosure device_lost_callback,
-                             base::OnceClosure scanner_invalidated_callback);
-
-  virtual bool AreFastInitiationDevicesDetected() const;
+  virtual void StartScanning(
+      base::RepeatingClosure devices_detected_callback,
+      base::RepeatingClosure devices_not_detected_callback,
+      base::OnceClosure scanner_invalidated_callback);
 
  private:
   // device::BluetoothLowEnergyScanSession::Delegate:
@@ -70,14 +72,14 @@ class FastInitiationScanner
       device::BluetoothLowEnergyScanSession* scan_session) override;
 
   scoped_refptr<device::BluetoothAdapter> adapter_;
-  base::RepeatingClosure device_found_callback_;
-  base::RepeatingClosure device_lost_callback_;
+  base::RepeatingClosure devices_detected_callback_;
+  base::RepeatingClosure devices_not_detected_callback_;
   base::OnceClosure scanner_invalidated_callback_;
   std::unique_ptr<device::BluetoothLowEnergyScanSession>
       background_scan_session_;
   // Set of remote devices that we detect are currently emitting fast initiation
   // advertisements.
-  base::flat_set<std::string> devices_attempting_to_share_;
+  base::flat_set<std::string> detected_devices_;
 
   base::WeakPtrFactory<FastInitiationScanner> weak_ptr_factory_{this};
 };

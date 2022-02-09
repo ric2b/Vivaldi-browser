@@ -14,7 +14,7 @@ class BookmarkNode;
 namespace vivaldi {
 
 class BookmarkSorter {
-public:
+ public:
   enum SortField {
     FIELD_NONE,
     FIELD_TITLE,
@@ -23,28 +23,25 @@ public:
     FIELD_DESCRIPTION,
     FIELD_DATEADDED
   };
-  enum SortOrder {
-    ORDER_NONE,
-    ORDER_ASCENDING,
-    ORDER_DESCENDING
-  };
+  enum SortOrder { ORDER_NONE, ORDER_ASCENDING, ORDER_DESCENDING };
 
   ~BookmarkSorter();
 
-  BookmarkSorter(SortField sort_field, SortOrder sort_order,
+  BookmarkSorter(SortField sort_field,
+                 SortOrder sort_order,
                  bool group_folders);
   void sort(std::vector<bookmarks::BookmarkNode*>& vector);
-  void setGroupFolders(bool group_folders) {group_folders_ = group_folders;}
+  void setGroupFolders(bool group_folders) { group_folders_ = group_folders; }
   bool isManualOrder() const { return sort_field_ == FIELD_NONE; }
 
-private:
+ private:
   bool fallbackToTitleSort(const icu::Collator* collator,
-                           bookmarks::BookmarkNode *b1,
-                           bookmarks::BookmarkNode *b2,
+                           bookmarks::BookmarkNode* b1,
+                           bookmarks::BookmarkNode* b2,
                            size_t l1,
                            size_t l2);
-  bool fallbackToDateSort(bookmarks::BookmarkNode *b1,
-                          bookmarks::BookmarkNode *b2,
+  bool fallbackToDateSort(bookmarks::BookmarkNode* b1,
+                          bookmarks::BookmarkNode* b2,
                           size_t l1,
                           size_t l2);
 
@@ -54,6 +51,6 @@ private:
   std::unique_ptr<icu::Collator> collator_;
 };
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif  // BROWSER_MENUS_BOOKMARK_SORTER_H_

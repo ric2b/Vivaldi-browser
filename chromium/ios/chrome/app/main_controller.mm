@@ -21,6 +21,7 @@
 #include "components/component_updater/crl_set_remover.h"
 #include "components/component_updater/installer_policies/autofill_states_component_installer.h"
 #include "components/component_updater/installer_policies/on_device_head_suggest_component_installer.h"
+#import "components/component_updater/installer_policies/optimization_hints_component_installer.h"
 #include "components/component_updater/installer_policies/safety_tips_component_installer.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/tracker.h"
@@ -66,6 +67,7 @@
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/crash_report/crash_restore_helper.h"
 #include "ios/chrome/browser/credential_provider/credential_provider_buildflags.h"
+#import "ios/chrome/browser/credential_provider/feature_flags.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
 #import "ios/chrome/browser/external_files/external_file_remover_factory.h"
 #import "ios/chrome/browser/external_files/external_file_remover_impl.h"
@@ -108,13 +110,14 @@
 #import "ios/chrome/browser/web/session_state/web_session_state_cache_factory.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
+#include "ios/chrome/common/app_group/app_group_field_trial_version.h"
 #include "ios/chrome/common/app_group/app_group_utils.h"
 #include "ios/net/cookies/cookie_store_ios.h"
 #import "ios/net/empty_nsurlcache.h"
 #include "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/mailto/mailto_handler_provider.h"
-#import "ios/public/provider/chrome/browser/overrides_provider.h"
+#import "ios/public/provider/chrome/browser/overrides/overrides_api.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
 #import "ios/web/common/features.h"
 #include "ios/web/public/webui/web_ui_ios_controller_factory.h"
@@ -198,6 +201,7 @@ void RegisterComponentsForUpdate() {
   RegisterSafetyTipsComponent(cus);
   RegisterAutofillStatesComponent(cus,
                                   GetApplicationContext()->GetLocalState());
+  RegisterOptimizationHintsComponent(cus);
 }
 
 // The delay, in seconds, for cleaning external files.
@@ -210,6 +214,12 @@ class MainControllerAuthenticationServiceDelegate
   MainControllerAuthenticationServiceDelegate(
       ChromeBrowserState* browser_state,
       id<BrowsingDataCommands> dispatcher);
+
+  MainControllerAuthenticationServiceDelegate(
+      const MainControllerAuthenticationServiceDelegate&) = delete;
+  MainControllerAuthenticationServiceDelegate& operator=(
+      const MainControllerAuthenticationServiceDelegate&) = delete;
+
   ~MainControllerAuthenticationServiceDelegate() override;
 
   // AuthenticationServiceDelegate implementation.
@@ -218,8 +228,6 @@ class MainControllerAuthenticationServiceDelegate
  private:
   ChromeBrowserState* browser_state_ = nullptr;
   __weak id<BrowsingDataCommands> dispatcher_ = nil;
-
-  DISALLOW_COPY_AND_ASSIGN(MainControllerAuthenticationServiceDelegate);
 };
 
 MainControllerAuthenticationServiceDelegate::
@@ -245,7 +253,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 @interface MainController () <PrefObserverDelegate, BlockingSceneCommands> {
   IBOutlet UIWindow* _window;
 
-  // Weak; owned by the ChromeBrowserProvider.
+  // Weak; owned by the ApplicationContext.
   ios::ChromeBrowserStateManager* _browserStateManager;
 
   // The object that drives the Chrome startup/shutdown logic.
@@ -368,6 +376,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 @synthesize isColdStart = _isColdStart;
 @synthesize appLaunchTime = _appLaunchTime;
 @synthesize isFirstRun = _isFirstRun;
+@synthesize didFinishLaunchingTime = _didFinishLaunchingTime;
+@synthesize firstSceneConnectionTime = _firstSceneConnectionTime;
 
 #pragma mark - Application lifecycle
 
@@ -562,7 +572,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
       logLaunchMetricsWithStartupInformation:self
                              connectedScenes:self.appState.connectedScenes];
 
-  ios::GetChromeBrowserProvider().GetOverridesProvider()->InstallOverrides();
+  ios::provider::InstallOverrides();
 
   [self scheduleLowPriorityStartupTasks];
 
@@ -660,7 +670,9 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   [self.appState addAgent:[[IncognitoUsageAppStateAgent alloc] init]];
   [self.appState addAgent:[[FirstRunAppAgent alloc] init]];
   [self.appState addAgent:[[CertificatePolicyAppAgent alloc] init]];
+#if BUILDFLAG(IOS_CREDENTIAL_PROVIDER_ENABLED)
   [self.appState addAgent:[[CredentialProviderAppAgent alloc] init]];
+#endif
 }
 
 #pragma mark - Property implementation.
@@ -714,7 +726,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)activateFirstUserActionRecorderWithBackgroundTime:
     (NSTimeInterval)backgroundTime {
-  base::TimeDelta delta = base::TimeDelta::FromSeconds(backgroundTime);
+  base::TimeDelta delta = base::Seconds(backgroundTime);
   _firstUserActionRecorder.reset(new FirstUserActionRecorder(delta));
 }
 
@@ -976,20 +988,27 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 - (void)saveFieldTrialValuesForExtensions {
   NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
 
-  NSString* fieldTrialValueKey =
-      base::SysUTF8ToNSString(app_group::kChromeExtensionFieldTrialPreference);
+  NSNumber* passwordCreationValue = [NSNumber
+      numberWithBool:base::FeatureList::IsEnabled(kPasswordCreationEnabled)];
+  NSNumber* passwordCreationVersion =
+      [NSNumber numberWithInt:kPasswordCreationFeatureVersion];
 
   // Add other field trial values here if they are needed by extensions.
   // The general format is
   // {
   //   name: {
-  //     value: bool,
-  //     version: bool
+  //     value: NSNumber bool,
+  //     version: NSNumber int,
   //   }
   // }
   NSDictionary* fieldTrialValues = @{
+    base::SysUTF8ToNSString(kPasswordCreationEnabled.name) : @{
+      kFieldTrialValueKey : passwordCreationValue,
+      kFieldTrialVersionKey : passwordCreationVersion,
+    }
   };
-  [sharedDefaults setObject:fieldTrialValues forKey:fieldTrialValueKey];
+  [sharedDefaults setObject:fieldTrialValues
+                     forKey:app_group::kChromeExtensionFieldTrialPreference];
 }
 
 // Schedules a call to |logIfEnterpriseManagedDevice| for deferred
@@ -1063,9 +1082,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
     // performance.
     ExternalFileRemoverFactory::GetForBrowserState(
         self.appState.mainBrowserState)
-        ->RemoveAfterDelay(
-            base::TimeDelta::FromSeconds(kExternalFilesCleanupDelaySeconds),
-            base::OnceClosure());
+        ->RemoveAfterDelay(base::Seconds(kExternalFilesCleanupDelaySeconds),
+                           base::OnceClosure());
   }
 }
 

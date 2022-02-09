@@ -22,6 +22,7 @@ import android.widget.TextView;
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.view.ViewCompat;
 
 import com.google.android.material.appbar.AppBarLayout;
@@ -54,7 +55,6 @@ class TasksView extends CoordinatorLayoutForPointer {
     private SearchBoxCoordinator mSearchBoxCoordinator;
     private IncognitoDescriptionView mIncognitoDescriptionView;
     private View.OnClickListener mIncognitoDescriptionLearnMoreListener;
-    private boolean mIncognitoCookieControlsCardIsVisible;
     private boolean mIncognitoCookieControlsToggleIsChecked;
     private OnCheckedChangeListener mIncognitoCookieControlsToggleCheckedListener;
     private @CookieControlsEnforcement int mIncognitoCookieControlsToggleEnforcement =
@@ -84,7 +84,21 @@ class TasksView extends CoordinatorLayoutForPointer {
         mCarouselTabSwitcherContainer =
                 (FrameLayout) findViewById(R.id.carousel_tab_switcher_container);
         mSearchBoxCoordinator = new SearchBoxCoordinator(getContext(), this);
+
         mHeaderView = (AppBarLayout) findViewById(R.id.task_surface_header);
+        // TODO(https://crbug.com/1251632): Find out why scrolling was broken after
+        // crrev.com/c/3025127. Force the header view to be draggable as a workaround.
+        CoordinatorLayout.LayoutParams params =
+                (CoordinatorLayout.LayoutParams) mHeaderView.getLayoutParams();
+        AppBarLayout.Behavior behavior = new AppBarLayout.Behavior();
+        behavior.setDragCallback(new AppBarLayout.Behavior.DragCallback() {
+            @Override
+            public boolean canDrag(AppBarLayout appBarLayout) {
+                return true;
+            }
+        });
+        params.setBehavior(behavior);
+
         mUiConfig = new UiConfig(this);
         setHeaderPadding();
         setTabCarouselTitleStyle();
@@ -222,7 +236,6 @@ class TasksView extends CoordinatorLayoutForPointer {
         if (mIncognitoDescriptionLearnMoreListener != null) {
             setIncognitoDescriptionLearnMoreClickListener(mIncognitoDescriptionLearnMoreListener);
         }
-        setIncognitoCookieControlsCardVisibility(mIncognitoCookieControlsCardIsVisible);
         setIncognitoCookieControlsToggleChecked(mIncognitoCookieControlsToggleIsChecked);
         if (mIncognitoCookieControlsToggleCheckedListener != null) {
             setIncognitoCookieControlsToggleCheckedListener(
@@ -251,17 +264,6 @@ class TasksView extends CoordinatorLayoutForPointer {
         if (mIncognitoDescriptionView != null) {
             mIncognitoDescriptionView.setLearnMoreOnclickListener(listener);
             mIncognitoDescriptionLearnMoreListener = null;
-        }
-    }
-
-    /**
-     * Set the visibility of the cookie controls card on the incognito description.
-     * @param isVisible Whether it's visible or not.
-     */
-    void setIncognitoCookieControlsCardVisibility(boolean isVisible) {
-        mIncognitoCookieControlsCardIsVisible = isVisible;
-        if (mIncognitoDescriptionView != null) {
-            mIncognitoDescriptionView.showCookieControlsCard(isVisible);
         }
     }
 

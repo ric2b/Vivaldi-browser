@@ -23,13 +23,11 @@ const char LazyLoadService::kLazyLoadIsSafe[] = "lazy_load_is_safe";
 LazyLoadService::LazyLoadService(Profile* profile) : profile_(profile) {
   // Make sure the TabLifecycleUnitSource instance has been set up.
   g_browser_process->GetTabManager();
-  resource_coordinator::GetTabLifecycleUnitSource()->AddObserver(
-      this);
+  resource_coordinator::GetTabLifecycleUnitSource()->AddObserver(this);
 }
 
 void LazyLoadService::Shutdown() {
-  resource_coordinator::GetTabLifecycleUnitSource()->RemoveObserver(
-      this);
+  resource_coordinator::GetTabLifecycleUnitSource()->RemoveObserver(this);
 }
 
 void LazyLoadService::OnLifecycleUnitCreated(
@@ -60,10 +58,9 @@ void LazyLoadService::OnLifecycleUnitCreated(
   // |OnLifecycleUnitCreated| we need to also check if the tab was added as
   // active.
 
-  bool is_active_tab =
-      static_cast<resource_coordinator::LifecycleUnit*>(
-          resource_coordinator::GetTabLifecycleUnitSource()
-              ->GetFocusedLifecycleUnit()) == lifecycle_unit;
+  bool is_active_tab = static_cast<resource_coordinator::LifecycleUnit*>(
+                           resource_coordinator::GetTabLifecycleUnitSource()
+                               ->GetFocusedLifecycleUnit()) == lifecycle_unit;
 
   if (is_active_tab || !tab_strip_model ||
       (tab_strip_model->GetActiveWebContents() == web_contents))

@@ -87,8 +87,6 @@ class MEDIA_EXPORT IPCDecodingBuffer {
     std::unique_ptr<PlatformVideoConfig> video_config;
   };
   std::unique_ptr<Impl> impl_;
-
-  DISALLOW_COPY_AND_ASSIGN(IPCDecodingBuffer);
 };
 
 }  // namespace media

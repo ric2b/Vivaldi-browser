@@ -14,6 +14,7 @@
 #include "chrome/browser/ash/crostini/fake_crostini_features.h"
 #include "chrome/browser/ash/policy/core/user_policy_test_helper.h"
 #include "chrome/browser/ash/policy/dlp/data_transfer_dlp_controller.h"
+#include "chrome/browser/ash/policy/dlp/dlp_histogram_helper.h"
 #include "chrome/browser/ash/policy/dlp/dlp_policy_constants.h"
 #include "chrome/browser/ash/policy/dlp/dlp_policy_event.pb.h"
 #include "chrome/browser/ash/policy/dlp/dlp_reporting_manager.h"
@@ -233,7 +234,7 @@ class DataTransferDlpBrowserTest : public LoginPolicyTestBase {
 #endif
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_EmptyPolicy) {
   SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
+  LogIn();
 
   SetClipboardText(kClipboardText116, nullptr);
 
@@ -247,7 +248,7 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_EmptyPolicy) {
 
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, BlockDestination) {
   SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
+  LogIn();
 
   FakeClipboardNotifier helper;
   FakeDlpController dlp_controller(
@@ -305,12 +306,9 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, BlockDestination) {
   EXPECT_EQ(std::u16string(), result3);
   ASSERT_TRUE(dlp_controller.ObserveWidget());
 
-  EXPECT_CALL(dlp_controller, OnWidgetClosing);
-
   SetClipboardText(kClipboardText116,
                    std::make_unique<ui::DataTransferEndpoint>(
                        url::Origin::Create(GURL(kExampleUrl))));
-  testing::Mock::VerifyAndClearExpectations(&helper);
 
   ui::DataTransferEndpoint data_dst4(url::Origin::Create(GURL(kMailUrl)));
   std::u16string result4;
@@ -329,7 +327,7 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, BlockDestination) {
 #endif
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_BlockComponent) {
   SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
+  LogIn();
 
   SetupCrostini();
 
@@ -383,7 +381,7 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_BlockComponent) {
 #endif
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_WarnDestination) {
   SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
+  LogIn();
 
   FakeClipboardNotifier helper;
   FakeDlpController dlp_controller(
@@ -459,11 +457,6 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_WarnDestination) {
   EXPECT_EQ(std::u16string(), result);
   ASSERT_TRUE(dlp_controller.ObserveWidget());
 
-  EXPECT_CALL(dlp_controller, OnWidgetClosing);
-  SetClipboardText(kClipboardText2, std::make_unique<ui::DataTransferEndpoint>(
-                                        url::Origin::Create(GURL(kDocsUrl))));
-  testing::Mock::VerifyAndClearExpectations(&dlp_controller);
-
   FlushMessageLoop();
 }
 
@@ -475,7 +468,7 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_WarnDestination) {
 #endif
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_WarnComponent) {
   SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
+  LogIn();
 
   SetupCrostini();
 
@@ -740,6 +733,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_CancelWarn) {
 #define MAYBE_Reporting Reporting
 #endif
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_Reporting) {
+  base::HistogramTester histogram_tester;
+
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -819,6 +814,13 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_Reporting) {
               IsDlpPolicyEvent(CreateDlpPolicyEvent(
                   kMailUrl, "*", DlpRulesManager::Restriction::kClipboard,
                   DlpRulesManager::Level::kReport)));
+  // The histogram sum may not have any samples when the time difference is very
+  // small (almost 0), because UmaHistogramTimes requires the time difference to
+  // be >= 1.
+  EXPECT_GE(
+      histogram_tester.GetTotalSum(GetDlpHistogramPrefix() +
+                                   dlp::kDataTransferReportingTimeDiffUMA),
+      0);
 }
 
 }  // namespace policy

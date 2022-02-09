@@ -17,10 +17,11 @@ using DrawingRecorderTest = PaintControllerTestBase;
 
 namespace {
 
-const IntRect kBounds(1, 2, 3, 4);
+const gfx::Rect kBounds(1, 2, 3, 4);
 
 TEST_F(DrawingRecorderTest, Nothing) {
-  FakeDisplayItemClient client;
+  FakeDisplayItemClient& client =
+      *MakeGarbageCollected<FakeDisplayItemClient>();
   GraphicsContext context(GetPaintController());
   {
     PaintController::CycleScope cycle_scope(GetPaintController());
@@ -29,14 +30,15 @@ TEST_F(DrawingRecorderTest, Nothing) {
     GetPaintController().CommitNewDisplayItems();
   }
   EXPECT_THAT(GetPaintController().GetDisplayItemList(),
-              ElementsAre(IsSameId(&client, kForegroundType)));
+              ElementsAre(IsSameId(client.Id(), kForegroundType)));
   EXPECT_FALSE(
       To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[0])
           .GetPaintRecord());
 }
 
 TEST_F(DrawingRecorderTest, Rect) {
-  FakeDisplayItemClient client;
+  FakeDisplayItemClient& client =
+      *MakeGarbageCollected<FakeDisplayItemClient>();
   GraphicsContext context(GetPaintController());
   {
     PaintController::CycleScope cycle_scope(GetPaintController());
@@ -45,11 +47,12 @@ TEST_F(DrawingRecorderTest, Rect) {
     GetPaintController().CommitNewDisplayItems();
   }
   EXPECT_THAT(GetPaintController().GetDisplayItemList(),
-              ElementsAre(IsSameId(&client, kForegroundType)));
+              ElementsAre(IsSameId(client.Id(), kForegroundType)));
 }
 
 TEST_F(DrawingRecorderTest, Cached) {
-  FakeDisplayItemClient client;
+  FakeDisplayItemClient& client =
+      *MakeGarbageCollected<FakeDisplayItemClient>();
   GraphicsContext context(GetPaintController());
   {
     PaintController::CycleScope cycle_scope(GetPaintController());
@@ -60,8 +63,8 @@ TEST_F(DrawingRecorderTest, Cached) {
   }
 
   EXPECT_THAT(GetPaintController().GetDisplayItemList(),
-              ElementsAre(IsSameId(&client, kBackgroundType),
-                          IsSameId(&client, kForegroundType)));
+              ElementsAre(IsSameId(client.Id(), kBackgroundType),
+                          IsSameId(client.Id(), kForegroundType)));
 
   {
     PaintController::CycleScope cycle_scope(GetPaintController());
@@ -75,8 +78,8 @@ TEST_F(DrawingRecorderTest, Cached) {
   }
 
   EXPECT_THAT(GetPaintController().GetDisplayItemList(),
-              ElementsAre(IsSameId(&client, kBackgroundType),
-                          IsSameId(&client, kForegroundType)));
+              ElementsAre(IsSameId(client.Id(), kBackgroundType),
+                          IsSameId(client.Id(), kForegroundType)));
 }
 
 }  // namespace

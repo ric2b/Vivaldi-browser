@@ -119,7 +119,7 @@ TEST_F(VideoEncoderFallbackTest, NoFallbackEncoding) {
   for (int i = 0; i < kFrameCount; i++) {
     auto frame = VideoFrame::CreateFrame(PIXEL_FORMAT_I420, kFrameSize,
                                          gfx::Rect(kFrameSize), kFrameSize,
-                                         base::TimeDelta::FromSeconds(i));
+                                         base::Seconds(i));
     fallback_encoder_->Encode(frame, true, ValidatingStatusCB());
   }
   RunLoop();
@@ -177,7 +177,7 @@ TEST_F(VideoEncoderFallbackTest, FallbackOnInitialize) {
   for (int i = 0; i < kFrameCount; i++) {
     auto frame = VideoFrame::CreateFrame(PIXEL_FORMAT_I420, kFrameSize,
                                          gfx::Rect(kFrameSize), kFrameSize,
-                                         base::TimeDelta::FromSeconds(i));
+                                         base::Seconds(i));
     fallback_encoder_->Encode(frame, true, ValidatingStatusCB());
   }
   RunLoop();
@@ -218,7 +218,7 @@ TEST_F(VideoEncoderFallbackTest, FallbackOnEncode) {
         RunStatusCallbackAync(std::move(done_cb));
       }));
 
-  auto encoder_switch_time = base::TimeDelta::FromSeconds(kFrameCount / 2);
+  auto encoder_switch_time = base::Seconds(kFrameCount / 2);
 
   // Start failing encodes after half of the frames.
   EXPECT_CALL(*main_video_encoder_, Encode(_, _, _))
@@ -259,7 +259,7 @@ TEST_F(VideoEncoderFallbackTest, FallbackOnEncode) {
   for (int i = 0; i < kFrameCount; i++) {
     auto frame = VideoFrame::CreateFrame(PIXEL_FORMAT_I420, kFrameSize,
                                          gfx::Rect(kFrameSize), kFrameSize,
-                                         base::TimeDelta::FromSeconds(i));
+                                         base::Seconds(i));
     fallback_encoder_->Encode(frame, true, ValidatingStatusCB());
   }
   RunLoop();
@@ -296,9 +296,29 @@ TEST_F(VideoEncoderFallbackTest, SecondaryFailureOnInitialize) {
                               StatusCode::kEncoderUnsupportedCodec);
       }));
 
+  EXPECT_CALL(*main_video_encoder_, Encode(_, _, _))
+      .WillRepeatedly(
+          Invoke([&, this](scoped_refptr<VideoFrame> frame, bool key_frame,
+                           VideoEncoder::StatusCB done_cb) {
+            RunStatusCallbackAync(std::move(done_cb),
+                                  StatusCode::kEncoderInitializeNeverCompleted);
+          }));
+
   fallback_encoder_->Initialize(
       profile, options, std::move(output_cb),
       ValidatingStatusCB(StatusCode::kEncoderUnsupportedCodec));
+
+  for (int i = 0; i < kFrameCount; i++) {
+    auto frame = VideoFrame::CreateFrame(PIXEL_FORMAT_I420, kFrameSize,
+                                         gfx::Rect(kFrameSize), kFrameSize,
+                                         base::Seconds(i));
+    auto done_callback = base::BindLambdaForTesting([this](Status s) {
+      EXPECT_TRUE(callback_runner_->RunsTasksInCurrentSequence());
+      EXPECT_EQ(s.code(), StatusCode::kEncoderUnsupportedCodec);
+      callback_runner_->DeleteSoon(FROM_HERE, std::move(fallback_encoder_));
+    });
+    fallback_encoder_->Encode(frame, true, std::move(done_callback));
+  }
 
   RunLoop();
   EXPECT_TRUE(FallbackHappened());

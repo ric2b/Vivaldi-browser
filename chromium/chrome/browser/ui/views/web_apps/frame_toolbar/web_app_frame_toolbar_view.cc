@@ -146,7 +146,7 @@ std::pair<int, int> WebAppFrameToolbarView::LayoutInContainer(
   const int width = std::max(trailing_x - leading_x, 0);
   const int height = preferred_size.height();
   DCHECK_LE(height, available_height);
-  SetBounds(leading_x, y + (available_height - height) / 2, width, height);
+  SetBounds(leading_x, y, width, available_height);
   Layout();
 
   if (!center_container_->GetVisible())
@@ -185,7 +185,7 @@ gfx::Size WebAppFrameToolbarView::GetToolbarButtonSize() const {
 }
 
 views::View* WebAppFrameToolbarView::GetDefaultExtensionDialogAnchorView() {
-  return right_container_->extensions_container()->extensions_button();
+  return right_container_->extensions_container()->GetExtensionsButton();
 }
 
 PageActionIconView* WebAppFrameToolbarView::GetPageActionIconView(
@@ -233,6 +233,10 @@ views::View* WebAppFrameToolbarView::GetAnchorView(PageActionIconType type) {
 void WebAppFrameToolbarView::ZoomChangedForActiveTab(bool can_show_bubble) {
   right_container_->page_action_icon_controller()->ZoomChangedForActiveTab(
       can_show_bubble);
+}
+
+ReadLaterToolbarButton* WebAppFrameToolbarView::GetSidePanelButton() {
+  return nullptr;
 }
 
 AvatarToolbarButton* WebAppFrameToolbarView::GetAvatarToolbarButton() {

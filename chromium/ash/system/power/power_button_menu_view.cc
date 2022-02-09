@@ -58,8 +58,7 @@ PowerButtonMenuView::PowerButtonMenuView(
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetRoundedCornerRadius(kMenuViewRoundRectRadiusDp);
-  layer()->SetBackgroundBlur(
-      static_cast<float>(AshColorProvider::LayerBlurSigma::kBlurDefault));
+  layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
   GetViewAccessibility().OverrideRole(ax::mojom::Role::kMenu);
   GetViewAccessibility().OverrideName(
       l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_ACCESSIBLE));
@@ -111,12 +110,12 @@ PowerButtonMenuView::GetTransformDisplacement() const {
     return transform_displacement;
   }
 
-  OrientationLockType screen_orientation =
+  chromeos::OrientationType screen_orientation =
       Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
   bool is_left_or_right = power_button_position_ == PowerButtonPosition::LEFT ||
                           power_button_position_ == PowerButtonPosition::RIGHT;
 
-  if (IsLandscapeOrientation(screen_orientation)) {
+  if (chromeos::IsLandscapeOrientation(screen_orientation)) {
     transform_displacement.direction =
         is_left_or_right ? TransformDirection::X : TransformDirection::Y;
   } else {
@@ -126,14 +125,14 @@ PowerButtonMenuView::GetTransformDisplacement() const {
 
   bool positive_transform = false;
   if (is_left_or_right) {
-    bool is_primary = IsPrimaryOrientation(screen_orientation);
+    bool is_primary = chromeos::IsPrimaryOrientation(screen_orientation);
     positive_transform = power_button_position_ == PowerButtonPosition::LEFT
                              ? is_primary
                              : !is_primary;
   } else {
     bool is_landscape_primary_or_portrait_secondary =
-        screen_orientation == OrientationLockType::kLandscapePrimary ||
-        screen_orientation == OrientationLockType::kPortraitSecondary;
+        screen_orientation == chromeos::OrientationType::kLandscapePrimary ||
+        screen_orientation == chromeos::OrientationType::kPortraitSecondary;
 
     positive_transform = power_button_position_ == PowerButtonPosition::TOP
                              ? is_landscape_primary_or_portrait_secondary

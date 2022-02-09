@@ -61,6 +61,8 @@ InspectorEmulationAgent::InspectorEmulationAgent(
       virtual_time_task_starvation_count_(&agent_state_, /*default_value=*/0),
       wait_for_navigation_(&agent_state_, /*default_value=*/false),
       emulate_focus_(&agent_state_, /*default_value=*/false),
+      emulate_auto_dark_mode_(&agent_state_, /*default_value=*/false),
+      auto_dark_mode_override_(&agent_state_, /*default_value=*/false),
       timezone_id_override_(&agent_state_, /*default_value=*/WTF::String()),
       disabled_image_types_(&agent_state_, /*default_value=*/false) {}
 
@@ -116,7 +118,8 @@ void InspectorEmulationAgent::Restore() {
   if (status_or_rgba.ok())
     setDefaultBackgroundColorOverride(std::move(status_or_rgba).value());
   setFocusEmulationEnabled(emulate_focus_.Get());
-
+  if (emulate_auto_dark_mode_.Get())
+    setAutoDarkModeOverride(auto_dark_mode_override_.Get());
   if (!timezone_id_override_.Get().IsNull())
     setTimezoneOverride(timezone_id_override_.Get());
 
@@ -176,6 +179,9 @@ Response InspectorEmulationAgent::disable() {
     setEmulatedVisionDeficiency(String("none"));
   setCPUThrottlingRate(1);
   setFocusEmulationEnabled(false);
+  if (emulate_auto_dark_mode_.Get()) {
+    setAutoDarkModeOverride(Maybe<bool>());
+  }
   setDefaultBackgroundColorOverride(Maybe<protocol::DOM::RGBA>());
   disabled_image_types_.Clear();
   return Response::Success();
@@ -329,6 +335,22 @@ Response InspectorEmulationAgent::setFocusEmulationEnabled(bool enabled) {
   return response;
 }
 
+Response InspectorEmulationAgent::setAutoDarkModeOverride(Maybe<bool> enabled) {
+  Response response = AssertPage();
+  if (!response.IsSuccess())
+    return response;
+  if (enabled.isJust()) {
+    emulate_auto_dark_mode_.Set(true);
+    auto_dark_mode_override_.Set(enabled.fromJust());
+    GetWebViewImpl()->GetDevToolsEmulator()->SetAutoDarkModeOverride(
+        enabled.fromJust());
+  } else {
+    emulate_auto_dark_mode_.Set(false);
+    GetWebViewImpl()->GetDevToolsEmulator()->ResetAutoDarkModeOverride();
+  }
+  return response;
+}
+
 Response InspectorEmulationAgent::setVirtualTimePolicy(
     const String& policy,
     Maybe<double> virtual_time_budget_ms,
@@ -418,7 +440,7 @@ void InspectorEmulationAgent::ApplyVirtualTimePolicy(
                                       TRACE_ID_LOCAL(this), "budget",
                                       *new_policy.virtual_time_budget_ms);
     base::TimeDelta budget_amount =
-        base::TimeDelta::FromMillisecondsD(*new_policy.virtual_time_budget_ms);
+        base::Milliseconds(*new_policy.virtual_time_budget_ms);
     web_local_frame_->View()->Scheduler()->GrantVirtualTimeBudget(
         budget_amount,
         WTF::Bind(&InspectorEmulationAgent::VirtualTimeBudgetExpired,

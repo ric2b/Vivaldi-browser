@@ -219,35 +219,18 @@ export function waitForAppWindow(windowUrl) {
 }
 
 /**
- * Wait for the count of windows for app |appId| to equal |expectedCount|.
- * @param{string} appId ID of the app to count windows for.
- * @param{number} expectedCount Number of app windows to wait for.
- * @return {Promise} Promise to be fulfilled when the number of app windows
- *     equals |expectedCount|.
- */
-export function waitForAppWindowCount(appId, expectedCount) {
-  const caller = getCaller();
-  const command = {'name': 'countAppWindows', 'appId': appId};
-  return repeatUntil(async () => {
-    if (await sendTestMessage(command) != expectedCount) {
-      return pending(
-          caller, 'waitForAppWindowCount ' + appId + ' ' + expectedCount);
-    }
-    return true;
-  });
-}
-
-/**
  * Get all the browser windows.
+ * @param {number} expectedInitialCount The number of windows expected before
+ *     opening a new one.
  * @return {Object} Object returned from chrome.windows.getAll().
  */
-export async function getBrowserWindows() {
+export async function getBrowserWindows(expectedInitialCount = 0) {
   const caller = getCaller();
   return repeatUntil(async () => {
     const result = await new Promise(function(fulfill) {
       chrome.windows.getAll({'populate': true}, fulfill);
     });
-    if (result.length == 0) {
+    if (result.length === expectedInitialCount) {
       return pending(caller, 'getBrowserWindows ' + result.length);
     }
     return result;

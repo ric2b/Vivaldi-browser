@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Sürüm Hakkında</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hiç veri göndermedi.</translation>
 <translation id="1559528461873125649">Belirtilen dosya veya dizin yok</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />Sitenin ana sayfasını ziyaret etmeyi deneyin<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Desteklenmeyen protokol</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows Ağ Tanılama'yı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Bu site zararlı programlar içeriyor</translation>
 <translation id="1916770123977586577">Güncellenen ayarlarınızı bu siteye uygulamak için sayfayı yeniden yükleyin</translation>
-<translation id="1919345977826869612">Reklamlar</translation>
 <translation id="1974060860693918893">Gelişmiş</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy'yi ve güvenlik duvarını kontrol edin<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Ses</translation>
 <translation id="2119505898009119320">Verildiği kuruluş: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Arka Plan Senkronizasyonu</translation>
 <translation id="2166378884831602661">Bu site güvenli bağlantı sağlayamıyor</translation>
 <translation id="2187317261103489799">Algıla (varsayılan)</translation>
 <translation id="2224337661447660594">İnternet bağlantısı yok</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">İnternet erişiminiz engellendi</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> için kullanıcı adı ve parola gerekiyor.</translation>
 <translation id="2337852623177822836">Ayar, yöneticiniz tarafından denetleniyor</translation>
-<translation id="2344028582131185878">Otomatik İndirmeler</translation>
 <translation id="2355395290879513365">Saldırganlar bu sitede baktığınız resimleri görebilir ve bu resimler üzerinde değişiklik yaparak sizi kandırabilirler.</translation>
 <translation id="2356070529366658676">Sor</translation>
 <translation id="2359808026110333948">Devam et</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları Çalıştırmak<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Bildirimler</translation>
 <translation id="2491414235131909199">Bu sayfa bir eklenti tarafından engellendi</translation>
 <translation id="2501278716633472235">Geri dön</translation>
 <translation id="2539524384386349900">Algıla</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> geçersiz bir yanıt gönderdi.</translation>
-<translation id="2586657967955657006">Pano</translation>
 <translation id="2609632851001447353">Varyasyonlar</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> ana makinesinin sunucu IP adresi bulunamadı.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
     kullanmamanız gerektiğini düşünüyorsanız:
     <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Sayfayı yüklemek üzere gereken verileri tekrar göndermek için yeniden yükle düğmesine basın.</translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Bu sitedeki önemli içeriği her zaman algıla</translation>
 <translation id="3308738399950580893">reklamlar</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ana makinesine şu anda ulaşılamıyor.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Ayrıntılar</translation>
 <translation id="4558551763791394412">Eklentilerinizi devre dışı bırakmayı deneyin.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> ile olan bağlantınız modern bir şifre seti kullanılarak şifrelendi.</translation>
-<translation id="4690462567478992370">Geçersiz bir sertifika kullanmayı bırak</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Ağ Tanılamayı Çalıştırmak<ph name="END_LINK" /></translation>
@@ -117,7 +108,6 @@
 <translation id="4750917950439032686">Bilgileriniz (örneğin, parolalar veya kredi kartı numaraları) bu siteye gönderilirken gizli olur.</translation>
 <translation id="4764776831041365478"><ph name="URL" /> adresindeki web sayfası, geçici olarak kullanılamıyor veya kalıcı olarak yeni bir web adresine taşınmış olabilir.</translation>
 <translation id="4943872375798546930">Sonuç yok</translation>
-<translation id="4974590756084640048">Uyarıları yeniden etkinleştir</translation>
 <translation id="5023310440958281426">Yöneticinizin politikalarını inceleyin</translation>
 <translation id="5039804452771397117">İzin ver</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 çerez kullanımda)} other {(# çerez kullanımda)}}</translation>
@@ -136,9 +126,6 @@
 <translation id="5610142619324316209">Bağlantınızı kontrol edin</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> sizi çok fazla kez yönlendirdi.</translation>
 <translation id="5675650730144413517">Bu sayfa çalışmıyor</translation>
-<translation id="5689516760719285838">Konum</translation>
-<translation id="5710435578057952990">Bu web sitesinin kimliği doğrulanmadı.</translation>
-<translation id="5778550464785688721">MIDI cihazları tam denetimi</translation>
 <translation id="5785756445106461925">Ayrıca, bu sayfa güvenli olmayan başka kaynaklar içeriyor. Bu kaynaklar, aktarım sırasında başkaları tarafından görülebilir ve bir saldırgan tarafından sayfanın görünüşünü değiştirmek üzere kullanılabilir.</translation>
 <translation id="5799902971440853357">Web sitesi Vivaldi'nin işleyemediği karışık kimlik bilgileri gönderdiğinden <ph name="SITE" /> sitesini şu anda ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
 <translation id="5810442152076338065"><ph name="DOMAIN" /> ile olan bağlantınız eski bir şifre seti kullanılarak şifrelendi.</translation>
@@ -154,7 +141,6 @@
 <translation id="6177128806592000436">Bu siteye bağlantınız güvenli değil</translation>
 <translation id="6203231073485539293">İnternet bağlantınızı kontrol edin</translation>
 <translation id="6225522625585012689">Engellenen adreslerin listesini ve sistem yöneticinizin zorunlu tuttuğu diğer politikaları görmek için &lt;strong&gt;vivaldi://policy&lt;/strong&gt; adresini ziyaret edin.</translation>
-<translation id="625755898061068298">Bu site için güvenlik uyarılarını devre dışı bırakmayı seçtiniz.</translation>
 <translation id="6264485186158353794">Güvenliğe geri dön</translation>
 <translation id="6305205051461490394"><ph name="URL" /> adresine ulaşılamıyor.</translation>
 <translation id="6321917430147971392">DNS ayarlarınızı kontrol edin</translation>
@@ -184,7 +170,6 @@
 <translation id="7445762425076701745">Bağlı olduğunuz sunucunun kimliği tam olarak doğrulanamıyor. Sunucuya yalnızca ağınızın içinde geçerli olan ve dış sertifika yetkilisi tarafından hiçbir şekilde sahipliği doğrulanamayacak bir isim kullanarak bağlandınız. Bazı sertifika yetkilileri bu adlar için sertifikalar yayınlasa da, bir saldırgana değil, hedeflenen web sitesine bağlandığınızdan emin olmanın herhangi bir yolu yoktur.</translation>
 <translation id="7455133967321480974">Genel varsayılanı kullan (Engelle)</translation>
 <translation id="7518003948725431193">Şu web adresi için web sayfası bulunamadı:<ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Bu Web sayfasının düzgün şekilde görüntülenmesi için, önceden girdiğiniz veriler gerekiyor. Bu verileri tekrar gönderebilirsiniz, ancak bunu yaptığınızda bu sayfanın daha önce gerçekleştirdiği işlemler de tekrar edilir.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> şu anda bu isteği işleme alamıyor.</translation>
 <translation id="7662298039739062396">Ayar bir eklenti tarafından denetleniyor</translation>
@@ -220,6 +205,7 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> ana makinesinin &lt;abbr id="dnsDefinition"&gt;DNS adresi&lt;/abbr&gt; bulunamadı. Sorun teşhis ediliyor.</translation>
 <translation id="8820817407110198400">Yer imleri</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tarafından engellendi</translation>
+<translation id="8963117664422609631">Site ayarlarına gidin</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> proxy'si için kullanıcı adı ve parola gerekiyor.</translation>
 <translation id="9008201768610948239">Yoksay</translation>
 <translation id="9025348182339809926">(Geçersiz)</translation>
@@ -230,7 +216,6 @@
 <translation id="9169664750068251925">Bu sitede her zaman engelle</translation>
 <translation id="9180553614777056266">Reklam Engelleyici</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> desteklenmeyen bir protokol kullanıyor.</translation>
-<translation id="9219103736887031265">Resimler</translation>
 <translation id="936602727769022409">Google Hesabınıza erişimi kaybedebilirsiniz. Chromium, parolanızı hemen değiştirmenizi önerir. Oturum açmanız istenecektir.</translation>
 <translation id="969892804517981540">Resmî Derleme</translation>
 <translation id="988159990683914416">Geliştirici Derlemesi</translation>

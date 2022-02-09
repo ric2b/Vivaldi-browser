@@ -16,9 +16,11 @@ namespace vivaldi {
 class VivaldiTranslateAgent : public translate::TranslateAgent {
  public:
   VivaldiTranslateAgent(content::RenderFrame* render_frame,
-                 int world_id,
-                 const std::string& extension_scheme);
+                        int world_id,
+                        const std::string& extension_scheme);
   ~VivaldiTranslateAgent() override;
+  VivaldiTranslateAgent(const VivaldiTranslateAgent&) = delete;
+  VivaldiTranslateAgent& operator=(const VivaldiTranslateAgent&) = delete;
 
   // mojom::TranslateAgent implementation.
   void RevertTranslation() override;
@@ -39,7 +41,7 @@ class VivaldiTranslateAgent : public translate::TranslateAgent {
   base::TimeDelta AdjustDelay(int delay_in_milliseconds) override;
 
  private:
-  friend class TranslateAgent;
+  friend TranslateAgent;
 
   bool script_injected_ = false;
 
@@ -50,10 +52,8 @@ class VivaldiTranslateAgent : public translate::TranslateAgent {
   // target_lang.
   static std::string BuildTranslationScript(const std::string& source_lang,
                                             const std::string& target_lang);
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiTranslateAgent);
 };
 
-}  // namespace translate
+}  // namespace vivaldi
 
 #endif  // COMPONENTS_TRANSLATE_RENDERER_VIVALDI_TRANSLATE_AGENT_H_

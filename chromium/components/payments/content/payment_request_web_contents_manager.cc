@@ -33,8 +33,9 @@ void PaymentRequestWebContentsManager::CreatePaymentRequest(
     mojo::PendingReceiver<payments::mojom::PaymentRequest> receiver,
     base::WeakPtr<PaymentRequest::ObserverForTest> observer_for_testing) {
   auto new_request = std::make_unique<PaymentRequest>(
-      render_frame_host, std::move(delegate), /*manager=*/this,
-      delegate->GetDisplayManager(), std::move(receiver), observer_for_testing);
+      render_frame_host, std::move(delegate), /*manager=*/GetWeakPtr(),
+      delegate->GetDisplayManager()->GetWeakPtr(), std::move(receiver),
+      observer_for_testing);
   PaymentRequest* request_ptr = new_request.get();
   payment_requests_.insert(std::make_pair(request_ptr, std::move(new_request)));
 }
@@ -75,6 +76,11 @@ void PaymentRequestWebContentsManager::RenderFrameDeleted(
   }
 }
 
+base::WeakPtr<PaymentRequestWebContentsManager>
+PaymentRequestWebContentsManager::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 void PaymentRequestWebContentsManager::DestroyRequest(
     base::WeakPtr<PaymentRequest> request) {
   if (!request)
@@ -88,6 +94,6 @@ PaymentRequestWebContentsManager::PaymentRequestWebContentsManager(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {}
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(PaymentRequestWebContentsManager)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PaymentRequestWebContentsManager);
 
 }  // namespace payments

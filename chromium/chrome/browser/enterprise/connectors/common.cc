@@ -140,6 +140,8 @@ FileMetadata::FileMetadata(const std::string& filename,
       size(size),
       scan_response(scan_response) {}
 FileMetadata::FileMetadata(FileMetadata&&) = default;
+FileMetadata::FileMetadata(const FileMetadata&) = default;
+FileMetadata& FileMetadata::operator=(const FileMetadata&) = default;
 FileMetadata::~FileMetadata() = default;
 
 const char ScanResult::kKey[] = "enterprise_connectors.scan_result_key";
@@ -147,6 +149,23 @@ ScanResult::ScanResult(FileMetadata metadata) {
   file_metadata.push_back(std::move(metadata));
 }
 ScanResult::~ScanResult() = default;
+
+const char SavePackageScanningData::kKey[] =
+    "enterprise_connectors.save_package_scanning_key";
+SavePackageScanningData::SavePackageScanningData(
+    content::SavePackageAllowedCallback callback)
+    : callback(std::move(callback)) {}
+SavePackageScanningData::~SavePackageScanningData() = default;
+
+void RunSavePackageScanningCallback(download::DownloadItem* item,
+                                    bool allowed) {
+  DCHECK(item);
+
+  auto* data = static_cast<SavePackageScanningData*>(
+      item->GetUserData(SavePackageScanningData::kKey));
+  if (data && !data->callback.is_null())
+    std::move(data->callback).Run(allowed);
+}
 
 bool ContainsMalwareVerdict(const ContentAnalysisResponse& response) {
   const auto& results = response.results();

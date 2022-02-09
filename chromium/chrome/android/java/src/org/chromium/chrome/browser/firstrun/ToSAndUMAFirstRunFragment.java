@@ -39,19 +39,6 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
  * User Metrics Analysis) as defined in the Chrome Privacy Notice.
  */
 public class ToSAndUMAFirstRunFragment extends Fragment implements FirstRunFragment {
-    /** FRE page that instantiates this fragment. */
-    public static class Page implements FirstRunPage<ToSAndUMAFirstRunFragment> {
-        @Override
-        public boolean shouldSkipPageOnCreate() {
-            return FirstRunStatus.shouldSkipWelcomePage();
-        }
-
-        @Override
-        public ToSAndUMAFirstRunFragment instantiateFragment() {
-            return new ToSAndUMAFirstRunFragment();
-        }
-    }
-
     /** Alerts about some methods once ToSAndUMAFirstRunFragment executes them. */
     public interface Observer {
         /** See {@link #onNativeInitialized}. */

@@ -23,10 +23,11 @@
 
 namespace media {
 
-
 class IPCAudioDecoderTest : public testing::Test {
  public:
   IPCAudioDecoderTest() = default;
+  IPCAudioDecoderTest(const IPCAudioDecoderTest&) = delete;
+  IPCAudioDecoderTest& operator=(const IPCAudioDecoderTest&) = delete;
 
   struct DecoderData {
     scoped_refptr<DecoderBuffer> buffer;
@@ -91,7 +92,6 @@ class IPCAudioDecoderTest : public testing::Test {
                 << " IPCAudioDecoder not available on this platform"
                 << " skipping test";
       GTEST_SKIP();
-      return;
     }
 
     EXPECT_EQ(channels, data->decoder->channels());
@@ -105,8 +105,6 @@ class IPCAudioDecoderTest : public testing::Test {
  protected:
   base::test::TaskEnvironment task_environment_{};
   IPCPipelineTestSetup test_setup_;
-
-  DISALLOW_COPY_AND_ASSIGN(IPCAudioDecoderTest);
 };
 
 // Note: The expected results are partly decoder-dependent.  The same

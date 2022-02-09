@@ -70,9 +70,14 @@ struct StructTraits<crosapi::mojom::AppDataView, apps::mojom::AppPtr> {
     return r->install_time;
   }
 
-  static const apps::mojom::InstallSource& install_source(
+  static const apps::mojom::InstallReason& install_reason(
       const apps::mojom::AppPtr& r) {
-    return r->install_source;
+    return r->install_reason;
+  }
+
+  static const absl::optional<std::string>& policy_id(
+      const apps::mojom::AppPtr& r) {
+    return r->policy_id;
   }
 
   static const apps::mojom::OptionalBool& recommendable(
@@ -160,11 +165,11 @@ struct StructTraits<crosapi::mojom::IconKeyDataView, apps::mojom::IconKeyPtr> {
 };
 
 template <>
-struct EnumTraits<crosapi::mojom::InstallSource, apps::mojom::InstallSource> {
-  static crosapi::mojom::InstallSource ToMojom(
-      apps::mojom::InstallSource input);
-  static bool FromMojom(crosapi::mojom::InstallSource input,
-                        apps::mojom::InstallSource* output);
+struct EnumTraits<crosapi::mojom::InstallReason, apps::mojom::InstallReason> {
+  static crosapi::mojom::InstallReason ToMojom(
+      apps::mojom::InstallReason input);
+  static bool FromMojom(crosapi::mojom::InstallReason input,
+                        apps::mojom::InstallReason* output);
 };
 
 template <>
@@ -313,6 +318,13 @@ struct EnumTraits<crosapi::mojom::WindowMode, apps::mojom::WindowMode> {
   static crosapi::mojom::WindowMode ToMojom(apps::mojom::WindowMode input);
   static bool FromMojom(crosapi::mojom::WindowMode input,
                         apps::mojom::WindowMode* output);
+};
+
+template <>
+struct EnumTraits<crosapi::mojom::LaunchSource, apps::mojom::LaunchSource> {
+  static crosapi::mojom::LaunchSource ToMojom(apps::mojom::LaunchSource input);
+  static bool FromMojom(crosapi::mojom::LaunchSource input,
+                        apps::mojom::LaunchSource* output);
 };
 
 }  // namespace mojo

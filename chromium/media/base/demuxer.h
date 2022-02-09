@@ -80,6 +80,10 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
   };
 
   Demuxer();
+
+  Demuxer(const Demuxer&) = delete;
+  Demuxer& operator=(const Demuxer&) = delete;
+
   ~Demuxer() override;
 
   // Returns the name of the demuxer for logging purpose.
@@ -172,9 +176,6 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
   // will always be called even if Initialize() was not called.
   virtual void VivaldiFinishOnMediaThread() {}
 #endif
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(Demuxer);
 };
 
 }  // namespace media

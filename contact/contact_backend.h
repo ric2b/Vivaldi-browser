@@ -126,9 +126,11 @@ class ContactBackend
 
  protected:
   ~ContactBackend() override;
+  ContactBackend(const ContactBackend&) = delete;
+  ContactBackend& operator=(const ContactBackend&) = delete;
 
  private:
-  friend class base::RefCountedThreadSafe<ContactBackend>;
+  friend base::RefCountedThreadSafe<ContactBackend>;
 
   // Does the work of Init.
   void InitImpl(const ContactDatabaseParams& contact_database_params);
@@ -170,8 +172,6 @@ class ContactBackend
   // not be opened, all users must first check for null and return immediately
   // if it is.
   std::unique_ptr<contact::ContactDatabase> db_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactBackend);
 };
 
 }  // namespace contact

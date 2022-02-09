@@ -6,21 +6,18 @@
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/submenu_view.h"
 
-
 NotesSubMenuObserverHelper* CreateSubMenuObserverHelper(
     NotesSubMenuObserver* sub_menu_observer,
     RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate) {
-  return new NotesSubMenuObserverHelperViews(sub_menu_observer,
-      static_cast<ToolkitDelegateViews*>(toolkit_delegate));
+  return new NotesSubMenuObserverHelperViews(
+      sub_menu_observer, static_cast<ToolkitDelegateViews*>(toolkit_delegate));
 }
-
 
 NotesSubMenuObserverHelperViews::NotesSubMenuObserverHelperViews(
     NotesSubMenuObserver* sub_menu_observer,
     ToolkitDelegateViews* toolkit_delegate)
-  :sub_menu_observer_(sub_menu_observer),
-   toolkit_delegate_(toolkit_delegate) {
-}
+    : sub_menu_observer_(sub_menu_observer),
+      toolkit_delegate_(toolkit_delegate) {}
 
 NotesSubMenuObserverHelperViews::~NotesSubMenuObserverHelperViews() {}
 
@@ -45,8 +42,8 @@ void NotesSubMenuObserverHelperViews::InitMap() {
     for (int i = 0; i < menu_model->GetItemCount(); i++) {
       ui::MenuModel* sub_menu_model = menu_model->GetSubmenuModelAt(i);
       if (sub_menu_model) {
-        menumodel_to_view_map_[sub_menu_model] = root->GetMenuItemByID(
-            menu_model->GetCommandIdAt(i));
+        menumodel_to_view_map_[sub_menu_model] =
+            root->GetMenuItemByID(menu_model->GetCommandIdAt(i));
       }
     }
   }
@@ -70,13 +67,14 @@ void NotesSubMenuObserverHelperViews::OnMenuWillShow(
 
 void NotesSubMenuObserverHelperViews::PopulateMenu(views::MenuItemView* parent,
                                                    ui::MenuModel* model) {
-
   for (int i = 0, max = model->GetItemCount(); i < max; ++i) {
     // Add the menu item at the end.
     int menu_index =
-        parent->HasSubmenu() ? static_cast<int>(parent->GetSubmenu()->children().size()) : 0;
-    views::MenuItemView* item = AddMenuItem(parent, menu_index, model, i,
-        model->GetTypeAt(i));
+        parent->HasSubmenu()
+            ? static_cast<int>(parent->GetSubmenu()->children().size())
+            : 0;
+    views::MenuItemView* item =
+        AddMenuItem(parent, menu_index, model, i, model->GetTypeAt(i));
     if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
       menumodel_to_view_map_[model->GetSubmenuModelAt(i)] = item;
       toolkit_delegate_->VivaldiSetMenu(item, model->GetSubmenuModelAt(i));

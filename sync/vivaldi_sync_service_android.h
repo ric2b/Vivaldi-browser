@@ -18,6 +18,9 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
  public:
   VivaldiSyncServiceAndroid(JNIEnv* env, jobject obj);
   ~VivaldiSyncServiceAndroid() override;
+  VivaldiSyncServiceAndroid(const VivaldiSyncServiceAndroid&) = delete;
+  VivaldiSyncServiceAndroid& operator=(const VivaldiSyncServiceAndroid&) =
+      delete;
 
   bool Init();
 
@@ -56,8 +59,6 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
   void SendCycleData();
 
   JavaObjectWeakGlobalRef weak_java_ref_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSyncServiceAndroid);
 };
 
 #endif  // SYNC_VIVALDI_PROFILE_SYNC_SERVICE_ANDROID_H_

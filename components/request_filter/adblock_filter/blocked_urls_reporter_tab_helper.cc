@@ -8,7 +8,7 @@
 #include "content/public/browser/navigation_handle.h"
 
 namespace adblock_filter {
-WEB_CONTENTS_USER_DATA_KEY_IMPL(BlockedUrlsReporterTabHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(BlockedUrlsReporterTabHelper);
 
 BlockedUrlsReporterTabHelper::BlockedTrackerInfo::BlockedTrackerInfo() =
     default;

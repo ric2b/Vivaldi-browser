@@ -124,9 +124,11 @@ class BoundsAnimatorDisabler {
   explicit BoundsAnimatorDisabler(views::BoundsAnimator* bounds_animator)
       : old_duration_(bounds_animator->GetAnimationDuration()),
         bounds_animator_(bounds_animator) {
-    bounds_animator_->SetAnimationDuration(
-        base::TimeDelta::FromMilliseconds(1));
+    bounds_animator_->SetAnimationDuration(base::Milliseconds(1));
   }
+
+  BoundsAnimatorDisabler(const BoundsAnimatorDisabler&) = delete;
+  BoundsAnimatorDisabler& operator=(const BoundsAnimatorDisabler&) = delete;
 
   ~BoundsAnimatorDisabler() {
     bounds_animator_->SetAnimationDuration(old_duration_);
@@ -137,8 +139,6 @@ class BoundsAnimatorDisabler {
   base::TimeDelta old_duration_;
   // The bounds animator which gets used.
   views::BoundsAnimator* bounds_animator_;
-
-  DISALLOW_COPY_AND_ASSIGN(BoundsAnimatorDisabler);
 };
 
 // Custom FocusSearch used to navigate the shelf in the order items are in
@@ -147,6 +147,10 @@ class ShelfFocusSearch : public views::FocusSearch {
  public:
   explicit ShelfFocusSearch(ShelfView* shelf_view)
       : FocusSearch(nullptr, true, true), shelf_view_(shelf_view) {}
+
+  ShelfFocusSearch(const ShelfFocusSearch&) = delete;
+  ShelfFocusSearch& operator=(const ShelfFocusSearch&) = delete;
+
   ~ShelfFocusSearch() override = default;
 
   // views::FocusSearch:
@@ -186,23 +190,18 @@ class ShelfFocusSearch : public views::FocusSearch {
 
  private:
   ShelfView* shelf_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShelfFocusSearch);
 };
 
 void ReportMoveAnimationSmoothness(int smoothness) {
-  base::UmaHistogramPercentageObsoleteDoNotUse(kShelfIconMoveAnimationHistogram,
-                                               smoothness);
+  base::UmaHistogramPercentage(kShelfIconMoveAnimationHistogram, smoothness);
 }
 
 void ReportFadeInAnimationSmoothness(int smoothness) {
-  base::UmaHistogramPercentageObsoleteDoNotUse(
-      kShelfIconFadeInAnimationHistogram, smoothness);
+  base::UmaHistogramPercentage(kShelfIconFadeInAnimationHistogram, smoothness);
 }
 
 void ReportFadeOutAnimationSmoothness(int smoothness) {
-  base::UmaHistogramPercentageObsoleteDoNotUse(
-      kShelfIconFadeOutAnimationHistogram, smoothness);
+  base::UmaHistogramPercentage(kShelfIconFadeOutAnimationHistogram, smoothness);
 }
 
 // Returns the id of the display on which |view| is shown.
@@ -244,6 +243,15 @@ bool IsRemoteApp(const std::string& app_id) {
   apps::AppRegistryCache* cache =
       apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id);
   return cache && cache->GetAppType(app_id) == apps::mojom::AppType::kRemote;
+}
+
+bool IsStandaloneBrowser(const std::string& app_id) {
+  AccountId account_id =
+      Shell::Get()->session_controller()->GetActiveAccountId();
+  apps::AppRegistryCache* cache =
+      apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id);
+  return cache &&
+         cache->GetAppType(app_id) == apps::mojom::AppType::kStandaloneBrowser;
 }
 
 // Records the user metric action for whenever a shelf item is pinned or
@@ -309,6 +317,10 @@ class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
  public:
   FadeOutAnimationDelegate(ShelfView* host, std::unique_ptr<views::View> view)
       : shelf_view_(host), view_(std::move(view)) {}
+
+  FadeOutAnimationDelegate(const FadeOutAnimationDelegate&) = delete;
+  FadeOutAnimationDelegate& operator=(const FadeOutAnimationDelegate&) = delete;
+
   ~FadeOutAnimationDelegate() override = default;
 
   // AnimationDelegate overrides:
@@ -329,8 +341,6 @@ class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
  private:
   ShelfView* shelf_view_;
   std::unique_ptr<views::View> view_;
-
-  DISALLOW_COPY_AND_ASSIGN(FadeOutAnimationDelegate);
 };
 
 // AnimationDelegate used to trigger fading an element in. When an item is
@@ -340,6 +350,11 @@ class ShelfView::StartFadeAnimationDelegate : public gfx::AnimationDelegate {
  public:
   StartFadeAnimationDelegate(ShelfView* host, views::View* view)
       : shelf_view_(host), view_(view) {}
+
+  StartFadeAnimationDelegate(const StartFadeAnimationDelegate&) = delete;
+  StartFadeAnimationDelegate& operator=(const StartFadeAnimationDelegate&) =
+      delete;
+
   ~StartFadeAnimationDelegate() override = default;
 
   // AnimationDelegate overrides:
@@ -353,8 +368,6 @@ class ShelfView::StartFadeAnimationDelegate : public gfx::AnimationDelegate {
  private:
   ShelfView* shelf_view_;
   views::View* view_;
-
-  DISALLOW_COPY_AND_ASSIGN(StartFadeAnimationDelegate);
 };
 
 // static
@@ -749,7 +762,7 @@ void ShelfView::ButtonPressed(views::Button* sender,
       FROM_HERE,
       base::BindOnce(&ShelfView::DestroyScopedDisplay,
                      weak_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(100));
+      base::Milliseconds(100));
 
   // Slow down activation animations if Control key is pressed.
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> slowing_animations;
@@ -1087,22 +1100,29 @@ void ShelfView::UpdateSeparatorIndex() {
   separator_index_ = last_pinned_index;
 }
 
-bool ShelfView::ShouldStartDrag(const std::string& app_id,
-                                const gfx::Point& location_in_screen) const {
+bool ShelfView::ShouldHandleDrag(const std::string& app_id,
+                                 const gfx::Point& location_in_screen) const {
   // Remote Apps are not pinnable.
   if (IsRemoteApp(app_id))
     return false;
 
-  // Do not start drag if an operation is already going on - or the cursor is
-  // not inside. This could happen if mouse / touch operations overlap.
-  return (drag_and_drop_shelf_id_.IsNull() && !app_id.empty() &&
-          GetBoundsInScreen().Contains(location_in_screen));
+  // Do not handle drag if an operation for another app is already in progress,
+  // or the cursor is not inside the shelf bounds. This could happen if mouse /
+  // touch operations overlap.
+  return !app_id.empty() &&
+         (drag_and_drop_shelf_id_.IsNull() ||
+          drag_and_drop_shelf_id_.app_id == app_id) &&
+         GetBoundsInScreen().Contains(location_in_screen);
 }
 
 bool ShelfView::StartDrag(const std::string& app_id,
                           const gfx::Point& location_in_screen,
                           const gfx::Rect& drag_icon_bounds_in_screen) {
-  if (!ShouldStartDrag(app_id, location_in_screen))
+  // Don't start a drag if another one is in progress.
+  if (!drag_and_drop_shelf_id_.IsNull())
+    return false;
+
+  if (!ShouldHandleDrag(app_id, location_in_screen))
     return false;
 
   DCHECK(!is_active_drag_and_drop_host_);
@@ -1118,9 +1138,15 @@ bool ShelfView::StartDrag(const std::string& app_id,
   // to be pinned to give them the same (order) possibilities as a shortcut.
   if (!model_->IsAppPinned(app_id)) {
     ShelfModel::ScopedUserTriggeredMutation user_triggered(model_);
-    model_->PinAppWithID(app_id);
-    drag_and_drop_item_pinned_ = true;
+
+    if (model_->ItemIndexByAppID(app_id) >= 0) {
+      model_->PinExistingItemWithID(app_id);
+    } else {
+      model_->AddAndPinAppWithFactoryConstructedDelegate(app_id);
+      drag_and_drop_item_pinned_ = true;
+    }
   }
+
   views::View* drag_and_drop_view =
       view_model_->view_at(model_->ItemIndexByID(drag_and_drop_shelf_id_));
   DCHECK(drag_and_drop_view);
@@ -1309,7 +1335,7 @@ void ShelfView::PointerReleasedOnButton(const views::View* view,
         if (model_->IsAppPinned(drag_app_id)) {
           model_->UnpinAppWithID(drag_app_id);
         } else {
-          model_->PinAppWithID(drag_app_id);
+          model_->PinExistingItemWithID(drag_app_id);
         }
       }
     }
@@ -1459,7 +1485,7 @@ void ShelfView::PrepareForDrag(Pointer pointer, const ui::LocatedEvent& event) {
     drag_icon_proxy_ = std::make_unique<AppDragIconProxy>(
         root_window, drag_view_->GetImage(), screen_location, gfx::Vector2d(),
         /*scale_factor=*/1.0f,
-        /*blur_radius=*/0);
+        /*use_blurred_background=*/false);
   }
 }
 
@@ -1591,7 +1617,7 @@ void ShelfView::HandleRipOffDrag(const ui::LocatedEvent& event) {
             root_window, drag_view_->GetImage(), screen_location,
             /*cursor_offset_from_center=*/gfx::Vector2d(),
             kDragAndDropProxyScale,
-            /*blur_radius=*/0);
+            /*use_blurred_background=*/false);
       }
 
       // Re-insert the item and return simply false since the caller will handle
@@ -1618,7 +1644,7 @@ void ShelfView::HandleRipOffDrag(const ui::LocatedEvent& event) {
       drag_icon_proxy_ = std::make_unique<AppDragIconProxy>(
           root_window, drag_view_->GetImage(), screen_location,
           cursor_offset_from_center, kDragAndDropProxyScale,
-          /*blur_radius=*/0);
+          /*use_blurred_background=*/false);
       delegate_->CancelScrollForItemDrag();
     }
 
@@ -1709,6 +1735,11 @@ ShelfView::RemovableState ShelfView::RemovableByRipOff(int index) const {
 
   // Note: Only pinned app shortcuts can be removed!
   const std::string& app_id = model_->items()[index].id.app_id;
+
+  // Pinned standalone browser apps should not be removable.
+  if (IsStandaloneBrowser(app_id))
+    return DRAGGABLE;
+
   return (type == TYPE_PINNED_APP && model_->IsAppPinned(app_id)) ? REMOVABLE
                                                                   : DRAGGABLE;
 }

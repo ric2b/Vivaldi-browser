@@ -6,13 +6,14 @@
 
 #include "ui/vivaldi_app_window_desktop_native_widget_aura_win.h"
 
-#include "ui/vivaldi_app_window_desktop_window_tree_host_win.h"
-#include "ui/vivaldi_native_app_window_views_win.h"
 #include "ui/aura/window.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
+#include "ui/vivaldi_app_window_desktop_window_tree_host_win.h"
+#include "ui/vivaldi_native_app_window_views_win.h"
 
-VivaldiAppWindowDesktopNativeWidgetAuraWin::VivaldiAppWindowDesktopNativeWidgetAuraWin(
-    VivaldiNativeAppWindowViewsWin* app_window)
+VivaldiAppWindowDesktopNativeWidgetAuraWin::
+    VivaldiAppWindowDesktopNativeWidgetAuraWin(
+        VivaldiNativeAppWindowViewsWin* app_window)
     : views::DesktopNativeWidgetAura(app_window->widget()),
       app_window_(app_window) {
   GetNativeWindow()->SetName("VivaldiWindowAura");

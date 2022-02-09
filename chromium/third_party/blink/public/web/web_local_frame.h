@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/callback.h"
+#include "base/containers/span.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/pass_key.h"
@@ -49,11 +50,11 @@
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/base/ime/ime_text_span.h"
 #include "ui/gfx/range/range.h"
-#include "v8/include/v8.h"
+#include "v8/include/v8-forward.h"
 
 namespace gfx {
 class Point;
-class ScrollOffset;
+class Vector2dF;
 }  // namespace gfx
 
 namespace ui {
@@ -99,10 +100,6 @@ struct WebScriptSource;
 namespace mojom {
 enum class TreeScopeType;
 }
-
-// Vivaldi
-class WebCosmeticFilterClient;
-
 
 // Interface for interacting with in process frames. This contains methods that
 // require interacting with a frame's document.
@@ -316,6 +313,11 @@ class WebLocalFrame : public WebFrame {
 
   // Scripting --------------------------------------------------------------
 
+  // The following methods execute script within the frame synchronously, even
+  // if script execution is suspended (e.g. due to a devtools breakpoint).
+  // Prefer the RequestExecute*() methods below for any script that should
+  // respect script being suspended.
+
   // Executes script in the context of the current page.
   virtual void ExecuteScript(const WebScriptSource&) = 0;
 
@@ -324,15 +326,14 @@ class WebLocalFrame : public WebFrame {
   // intrinsic JavaScript objects (String, Array, and so-on). It also
   // gets its own wrappers for all DOM nodes and DOM constructors.
   //
-  // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
+  // `world_id` must be > kMainDOMWorldId and < kEmbedderWorldIdLimit (a
+  // high number used internally).
   virtual void ExecuteScriptInIsolatedWorld(int32_t world_id,
                                             const WebScriptSource&,
                                             BackForwardCacheAware) = 0;
 
-  // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
-  // DEPRECATED: Use WebLocalFrame::requestExecuteScriptInIsolatedWorld.
+  // `world_id` must be > kMainDOMWorldId and < kEmbedderWorldIdLimit (a
+  // high number used internally).
   WARN_UNUSED_RESULT virtual v8::Local<v8::Value>
   ExecuteScriptInIsolatedWorldAndReturnValue(int32_t world_id,
                                              const WebScriptSource&,
@@ -344,7 +345,6 @@ class WebLocalFrame : public WebFrame {
 
   // Executes script in the context of the current page and returns the value
   // that the script evaluated to.
-  // DEPRECATED: Use WebLocalFrame::requestExecuteScriptAndReturnValue.
   virtual v8::Local<v8::Value> ExecuteScriptAndReturnValue(
       const WebScriptSource&) = 0;
 
@@ -377,14 +377,12 @@ class WebLocalFrame : public WebFrame {
       v8::Isolate* isolate,
       int world_id) const = 0;
 
-  // Executes script in the context of the current page and returns the value
-  // that the script evaluated to with callback. Script execution can be
-  // suspend.
-  // DEPRECATED: Prefer requestExecuteScriptInIsolatedWorld().
-  virtual void RequestExecuteScriptAndReturnValue(
-      const WebScriptSource&,
-      bool user_gesture,
-      WebScriptExecutionCallback*) = 0;
+  // The following RequestExecute*() functions execute script within the frame,
+  // but respect script suspension (e.g. from devtools), allowing the script to
+  // (potentially) finish executing asynchronously, at which point the
+  // `WebScriptExecutionCallback` will be triggered. These methods are preferred
+  // when the injected script should respect suspension (e.g., for script
+  // inserted on behalf of a developer).
 
   // Requests execution of the given function, but allowing for script
   // suspension and asynchronous execution.
@@ -404,16 +402,15 @@ class WebLocalFrame : public WebFrame {
     kAsynchronousBlockingOnload
   };
 
-  // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
-  virtual void RequestExecuteScriptInIsolatedWorld(
-      int32_t world_id,
-      const WebScriptSource* source_in,
-      unsigned num_sources,
-      bool user_gesture,
-      ScriptExecutionType,
-      WebScriptExecutionCallback*,
-      BackForwardCacheAware) = 0;
+  // Executes the script in the main world of the page.
+  // Use kMainDOMWorldId to execute in the main world; otherwise,
+  // `world_id` must be a positive integer and less than kEmbedderWorldIdLimit.
+  virtual void RequestExecuteScript(int32_t world_id,
+                                    base::span<const WebScriptSource> sources,
+                                    bool user_gesture,
+                                    ScriptExecutionType,
+                                    WebScriptExecutionCallback*,
+                                    BackForwardCacheAware) = 0;
 
   // Logs to the console associated with this frame. If |discard_duplicates| is
   // set, the message will only be added if it is unique (i.e. has not been
@@ -684,8 +681,8 @@ class WebLocalFrame : public WebFrame {
   // not be accurate if the page layout is out-of-date.
 
   // The scroll offset from the top-left corner of the frame in pixels.
-  virtual gfx::ScrollOffset GetScrollOffset() const = 0;
-  virtual void SetScrollOffset(const gfx::ScrollOffset&) = 0;
+  virtual gfx::Vector2dF GetScrollOffset() const = 0;
+  virtual void SetScrollOffset(const gfx::Vector2dF&) = 0;
 
   // The size of the document in this frame.
   virtual gfx::Size DocumentSize() const = 0;
@@ -786,20 +783,23 @@ class WebLocalFrame : public WebFrame {
 
   // User activation -----------------------------------------------------------
 
-  // See blink::LocalFrame::NotifyUserActivation().
+  // See |blink::LocalFrame::NotifyUserActivation()|.
   virtual void NotifyUserActivation(
       mojom::UserActivationNotificationType notification_type) = 0;
 
-  // See blink::LocalFrame::HasStickyUserActivation().
+  // See |blink::Frame::HasStickyUserActivation()|.
   virtual bool HasStickyUserActivation() = 0;
 
-  // See blink::LocalFrame::HasTransientUserActivation().
+  // See |blink::Frame::HasTransientUserActivation()|.
   virtual bool HasTransientUserActivation() = 0;
 
-  // See blink::LocalFrame::ConsumeTransientUserActivation().
+  // See |blink::LocalFrame::ConsumeTransientUserActivation()|.
   virtual bool ConsumeTransientUserActivation(
       UserActivationUpdateSource update_source =
           UserActivationUpdateSource::kRenderer) = 0;
+
+  // See |blink::Frame::LastActivationWasRestricted()|.
+  virtual bool LastActivationWasRestricted() const = 0;
 
   // Testing ------------------------------------------------------------------
 

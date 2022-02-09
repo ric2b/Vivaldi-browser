@@ -566,7 +566,7 @@ fileOperationUtil.Task = class {
     this.processingEntries = null;
 
     /**
-     * Total number of bytes to be processed. Filled in initialize().
+     * Total number of bytes to be processed. Filled in initialize() or run().
      * Use 1 as an initial value to indicate that the task is not completed.
      * @type {number}
      */
@@ -629,7 +629,9 @@ fileOperationUtil.Task = class {
   /**
    * @param {function()} callback When entries resolved.
    */
-  initialize(callback) {}
+  initialize(callback) {
+    callback();
+  }
 
   /**
    * Requests cancellation of this task.
@@ -888,13 +890,13 @@ fileOperationUtil.CopyTask = class extends fileOperationUtil.Task {
       }
 
       // Updates progress bar in limited frequency so that intervals between
-      // updates have at least 200ms.
+      // updates have at least one second.
       this.updateProgressRateLimiter_.run();
     };
     updateProgress = updateProgress.bind(this);
 
     this.updateProgressRateLimiter_ =
-        new AsyncUtil.RateLimiter(progressCallback);
+        new AsyncUtil.RateLimiter(progressCallback, 1000);
 
     this.numRemainingItems = this.calcNumRemainingItems_();
 
@@ -1154,16 +1156,6 @@ fileOperationUtil.ZipTask = class extends fileOperationUtil.Task {
     this.zipBaseDirEntry = zipBaseDirEntry;
   }
 
-
-  /**
-   * Initializes the ZipTask.
-   * @param {function()} callback Called when the initialize is completed.
-   */
-  initialize(callback) {
-    this.totalBytes = this.sourceEntries.length;
-    callback();
-  }
-
   /**
    * Runs a zip file creation task.
    *
@@ -1192,6 +1184,10 @@ fileOperationUtil.ZipTask = class extends fileOperationUtil.Task {
         const destPath = await fileOperationUtil.deduplicatePath(
             this.targetDirEntry, destName + '.zip');
 
+        if (this.cancelRequested_) {
+          throw util.createDOMError(util.FileError.ABORT_ERR);
+        }
+
         // Start ZIP operation.
         const {zipId, totalBytes} = await new Promise(
             (resolve, reject) => chrome.fileManagerPrivate.zipSelection(
@@ -1203,8 +1199,15 @@ fileOperationUtil.ZipTask = class extends fileOperationUtil.Task {
         this.totalBytes = totalBytes;
         this.speedometer_.setTotalBytes(this.totalBytes);
 
-        // Set up cancellation callback.
-        this.cancelCallback_ = () => chrome.fileManagerPrivate.cancelZip(zipId);
+        if (this.cancelRequested_) {
+          // Cancellation was requested while fileManagerPrivate.zipSelection()
+          // was running.
+          chrome.fileManagerPrivate.cancelZip(zipId);
+        } else {
+          // Set up cancellation callback.
+          this.cancelCallback_ = () =>
+              chrome.fileManagerPrivate.cancelZip(zipId);
+        }
 
         // Monitor progress.
         while (true) {
@@ -1401,139 +1404,91 @@ fileOperationUtil.EventRouter = class extends EventTarget {
 };
 
 /**
- * Class to calculate transfer speed and remaining time. Each update from
- * transfer task stores the last speed in a ring buffer and recalculates the
- * cumulative moving average (CMA).
+ * Class to calculate transfer speed and remaining time.
  *
- * Current speed (average of window) and remaining time is calculated per calls
- * from progress updater in the task.
+ * Each update from the transfer task stores a sample in a queue.
  *
- * The length of buffer specifies the moving window length.
+ * Current speed and remaining time are calculated using a linear interpolation
+ * of the kept samples.
  */
 fileOperationUtil.Speedometer = class {
   /**
-   * @param {number} bufferLength Max number of recent data used in
-   * calculation as time window.
+   * @param {number} maxSamples Max number of samples to keep.
    */
-  constructor(bufferLength) {
-    /***
-     * The buffer length controlling average window length.
-     * @type {number}
-     * @private
+  constructor(maxSamples = 20) {
+    /**
+     * @private @const {number} Max number of samples to keep.
      */
-    this.length_ = bufferLength;
+    this.maxSamples_ = maxSamples;
 
     /**
-     * @private {!Array} internal buffer to track recent data.
+     * @private @const {!Array<!{time: number, bytes: number}>} Recent samples.
+     *     |time| is in milliseconds.
      */
-    this.buffer_ = [];
+    this.samples_ = [];
 
     /**
-     * @private {number} index of current position in buffer.
+     * @private {?{time: number, bytes: number}} First sample.
+     *     |time| is in milliseconds.
      */
-    this.index_ = 0;
+    this.first_ = null;
 
     /**
-     * @private {number} Count of how many updates have been processed.
-     * It helps to update CMA speed without keeping all data.
-     */
-    this.count_ = 0;
-
-    /**
-     * @private {number} Current cumulative moving average speed in bytes per
-     *     second.
-     */
-    this.cma_ = 0;
-
-    /**
-     * @private {number} Last timestamp the speed calculated in millisecond.
-     */
-    this.lastTimestamp_ = 0;
-
-    /**
-     * @private {number} Last reported processed bytes.
-     */
-    this.lastProcessedBytes_ = 0;
-
-    /**
-     *
-     * @private {number} Total bytes to be processed by the task.
+     * @private {number} Total number of bytes to be processed by the task.
      */
     this.totalBytes_ = 0;
   }
 
   /**
-   * Pushes the new speed into the internal queue and call to update CMA.
-   * @param {number} speed The last calculated speed to track.
+   * @returns {number} Number of kept samples.
    */
-  push_(speed) {
-    this.buffer_[this.index_] = speed;
-    this.index_ = (this.index_ + 1) % this.length_;
+  getSampleCount() {
+    return this.samples_.length;
   }
 
   /**
-   * Updates cumulative average speed and count.
-   *
-   * It updates cma progressively using this formula:
-   * CMAnew = (CMAprev * count_ + SPEEDcurr) / (count_ + 1)
-   *
-   * @param {number} speed The last speed added to the ring.
-   */
-  updateCMA_(speed) {
-    this.count_++;
-    this.cma_ = Math.floor((this.cma_ * this.count_ + speed) / (this.count_));
-  }
-
-  /**
-   * Returns internal buffer for unit testing purposes.
-   *
-   * @returns {!Array} The internal buffer.
-   */
-  getBufferForTesting() {
-    return this.buffer_;
-  }
-
-  /**
-   * Calculates and returns the current speed in bytes per second.
+   * @returns {number} Current speed in bytes per second, or NaN if there aren't
+   *     enough samples.
    */
   getCurrentSpeed() {
-    if (this.buffer_.length == 0) {
-      return 0;
-    }
-
-    const sum =
-        this.buffer_.reduce((accumulated, current) => accumulated + current, 0);
-    return Math.floor(sum / this.buffer_.length);
+    const a = this.interpolate_();
+    return a ? 1000 * a.speed : NaN;
   }
 
   /**
-   * @returns {number} Returns calculated cumulative average speed in bytes per
-   *     second.
+   * @returns {number} Average speed in bytes per second, or NaN if there aren't
+   *     enough samples.
    */
   getAverageSpeed() {
-    return this.cma_;
-  }
-
-  /**
-   * Calculates the remaining time of the task based on remaining bytes and
-   * current speed.
-   *
-   * @returns {number} The remaining time in seconds.
-   */
-  getRemainingTime() {
-    // Return zero if no data added yet or the last calculated speed was zero.
-    // It is mapped in UI to show unknown remaining time.
-    const currentSpeed = this.getCurrentSpeed();
-    if (currentSpeed == 0) {
-      return 0;
+    const first = this.first_;
+    if (!first) {
+      return NaN;
     }
 
-    return Math.ceil(
-        (this.totalBytes_ - this.lastProcessedBytes_) / currentSpeed);
+    const last = this.samples_[this.samples_.length - 1];
+    return 1000 * (last.bytes - first.bytes) / (last.time - first.time);
   }
 
   /**
-   *
+   * @returns {number} Remaining time in seconds, or NaN if there aren't enough
+   *     samples.
+   */
+  getRemainingTime() {
+    const a = this.interpolate_();
+    if (!a) {
+      return NaN;
+    }
+
+    // Compute remaining time in milliseconds.
+    const targetTime =
+        (this.totalBytes_ - a.averageBytes) / a.speed + a.averageTime;
+    const remainingTime = targetTime - Date.now();
+
+    // Convert remaining time from milliseconds to seconds.
+    return remainingTime / 1000;
+  }
+
+  /**
    * @param {number} totalBytes Number of total bytes task handles.
    */
   setTotalBytes(totalBytes) {
@@ -1541,24 +1496,83 @@ fileOperationUtil.Speedometer = class {
   }
 
   /**
-   * Update speedometer with the latest status.
-   *
-   * It calculates speed using the processed bytes reported in the status and
-   * previous status.
-   * @param {number} processedBytes Number of processed bytes calculated by the
-   *     task.
-   * processed bytes.
+   * Adds a sample with the current timestamp and the given number of |bytes|
+   * if the previous sample was received more than a second ago.
+   * Does nothing if the previous sample was received less than a second ago.
+   * @param {number} bytes Total number of bytes processed by the task so far.
    */
-  update(processedBytes) {
-    const currentTime = Date.now();
-    const currSpeed = Math.floor(
-        (processedBytes - this.lastProcessedBytes_) /
-        ((currentTime - this.lastTimestamp_) / 1000));
-    this.push_(currSpeed);
-    this.updateCMA_(currSpeed);
+  update(bytes) {
+    const time = Date.now();
+    const sample = {time, bytes};
 
-    this.lastProcessedBytes_ = processedBytes;
-    this.lastTimestamp_ = currentTime;
+    // Is this the first sample?
+    if (this.first_ == null) {
+      // Remember this sample as the first one.
+      this.first_ = sample;
+    } else {
+      // Drop this sample if we already received one less than a second ago.
+      const last = this.samples_[this.samples_.length - 1];
+      if (sample.time - last.time < 1000) {
+        return;
+      }
+    }
+
+    // Queue this sample.
+    if (this.samples_.push(sample) > this.maxSamples_) {
+      // Remove old sample.
+      this.samples_.shift();
+    }
+  }
+
+  /**
+   * Computes a linear interpolation of the samples stored in |this.samples_|.
+   * @private
+   * @returns {?{speed: number, averageTime: number, averageBytes: number}} null
+   *     if there aren't enough samples, or the result of the linear
+   *     interpolation. |speed| is the slope of the linear interpolation in
+   *     bytes per millisecond. The linear interpolation goes through the point
+   *     |(averageTime, averageBytes)|.
+   */
+  interpolate_() {
+    // Don't even try to compute the linear interpolation unless we have enough
+    // samples.
+    const n = this.samples_.length;
+    if (n < 2) {
+      return null;
+    }
+
+    // First pass to compute averages.
+    let averageTime = 0;
+    let averageBytes = 0;
+
+    for (const {time, bytes} of this.samples_) {
+      averageTime += time;
+      averageBytes += bytes;
+    }
+
+    averageTime /= n;
+    averageBytes /= n;
+
+    // Second pass to compute variances.
+    let varianceTime = 0;
+    let covarianceTimeBytes = 0;
+
+    for (const {time, bytes} of this.samples_) {
+      const timeDiff = time - averageTime;
+      varianceTime += timeDiff * timeDiff;
+      covarianceTimeBytes += timeDiff * (bytes - averageBytes);
+    }
+
+    // Strictly speaking, both varianceTime and covarianceTimeBytes should be
+    // scaled down by the number of samples n. But since we're only interested
+    // in the ratio of these two quantities, we can avoid these two divisions.
+    //
+    // varianceTime /= n;
+    // covarianceTimeBytes /= n;
+
+    // Compute speed.
+    const speed = covarianceTimeBytes / varianceTime;
+    return {speed, averageTime, averageBytes};
   }
 };
 

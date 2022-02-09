@@ -53,8 +53,11 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.toolbar.top.TabSwitcherActionMenuCoordinator;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.vivaldi.browser.common.VivaldiUtils;
 
+import android.support.v4.graphics.ColorUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -117,6 +120,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
     private float mViewportHeightOffset;
     private boolean mShouldHideOverlay;
     private final Context mContext;
+    private LayerTitleCache mLayerTitleCache;
+    private boolean mIsStackStrip;
 
     private class TabStripEventHandler implements GestureHandler {
         @Override
@@ -237,14 +242,6 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_Y_OFFSET_DP);
 
         Resources res = context.getResources();
-
-        // Note(david@vivaldi.com): In order to avoid a line between tab strip and address-bar we
-        // apply a margin.
-        if (ChromeApplicationImpl.isVivaldi()) {
-            final int tabStripMargin = 2;
-            mHeight = (res.getDimension(R.dimen.tab_strip_height) + tabStripMargin)
-                    / res.getDisplayMetrics().density;
-        } else
         mHeight = res.getDimension(R.dimen.tab_strip_height) / res.getDisplayMetrics().density;
         mModelSelectorButton.setAccessibilityDescription(
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
@@ -308,6 +305,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
         if (!VivaldiUtils.isTopToolbarOn() && !mShouldHideOverlay) {
             mViewportHeightOffset = viewport.height() * dpToPx;
             yOffset += mViewportHeightOffset - mHeight;
+            // Place the stack strip above the main strip.
+            if (mIsStackStrip) yOffset = -getHeight();
         } else {
             mViewportHeightOffset = 0;
             // Add vertical offset when there is an active panel.
@@ -317,11 +316,21 @@ public class StripLayoutHelperManager implements SceneOverlay {
                 if (panel != null) yOffset += panel.getBasePageY();
             }
             yOffset += mActivity.getBrowserControlsManager().getTopControlsMinHeight() * dpToPx;
+            // Place the stack strip under the main strip.
+            if (mIsStackStrip) yOffset = getHeight();
         }
 
         Tab selectedTab = mTabModelSelector.getCurrentModel().getTabAt(
                 mTabModelSelector.getCurrentModel().index());
         int selectedTabId = selectedTab == null ? TabModel.INVALID_TAB_INDEX : selectedTab.getId();
+        // Note(david@vivaldi.com): Make sure we update the title/fav icon and push all information
+        // the appropriate TabStripSceneLayer.
+        if (ChromeApplicationImpl.isVivaldi() && selectedTab != null) {
+            mLayerTitleCache.getUpdatedTitle(selectedTab, selectedTab.getTitle());
+            mTabStripTreeProvider.pushAndUpdateStrip(this, mLayerTitleCache, resourceManager,
+                    getActiveStripLayoutHelper().getStripLayoutTabsToRender(), yOffset,
+                    selectedTabId);
+        } else
         mTabStripTreeProvider.pushAndUpdateStrip(this, mLayerTitleCacheSupplier.get(),
                 resourceManager, getActiveStripLayoutHelper().getStripLayoutTabsToRender(), yOffset,
                 selectedTabId);
@@ -361,6 +370,19 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mIncognitoHelper.onSizeChanged(mWidth, mHeight);
         }
 
+        // Note(david@vivaldi.com): Apply the correct clicking area for all possible scenarios.
+        if (ChromeApplicationImpl.isVivaldi()) {
+            if (VivaldiUtils.isTopToolbarOn()) {
+                float top = mIsStackStrip ? getHeight() : 0;
+                mStripFilterArea.set(0, top, mWidth, mIsStackStrip ? getHeight() * 2 : getHeight());
+            } else {
+                mStripFilterArea.set(0,
+                        mIsStackStrip ? getHeight() : height - getHeight(), mWidth,
+                        mIsStackStrip ? getHeight() * 2 : height);
+                if (!VivaldiUtils.isTabStackVisible())
+                    mStripFilterArea.set(0, 0, mWidth, getHeight());
+            }
+        } else
         mStripFilterArea.set(0, 0, mWidth, Math.min(getHeight(), visibleViewportOffsetY));
         mEventFilter.setEventArea(mStripFilterArea);
     }
@@ -457,7 +479,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         // strip will be recreated when themes has been changed (see VAB-2809).
         if (modelSelector.getCurrentTab() != null)
             mTabStripTreeProvider.setTabStripBackgroundColor(
-                    modelSelector.getCurrentTab().getThemeColor());
+                    getBackgroundStripColor(modelSelector.getCurrentTab().getThemeColor()));
 
         mNormalHelper.setTabModel(mTabModelSelector.getModel(false),
                 tabCreatorManager.getTabCreator(false));
@@ -566,7 +588,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
             @Override
             public void onDidChangeThemeColor(Tab tab, int color) {
                 if (mTabModelSelector.getCurrentTab() == tab)
-                    mTabStripTreeProvider.setTabStripBackgroundColor(color);
+                    mTabStripTreeProvider.setTabStripBackgroundColor(
+                            getBackgroundStripColor(color));
             }
         };
 
@@ -575,11 +598,20 @@ public class StripLayoutHelperManager implements SceneOverlay {
             @Override
             public void onObservingDifferentTab(Tab tab, boolean hint) {
                 if (tab != null && !tab.isBeingRestored() && mTabStripTreeProvider != null)
-                    mTabStripTreeProvider.setTabStripBackgroundColor(tab.getThemeColor());
+                    mTabStripTreeProvider.setTabStripBackgroundColor(
+                            getBackgroundStripColor(tab.getThemeColor()));
             }
         };
 
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
+
+        // Note(david@vivaldi.com): Since we can have more tab strips this class needs it's own
+        // |LayerTitleCache|. We also pass the tab model selector to the strip layout helper.
+        mLayerTitleCache =
+                new LayerTitleCache(mContext, mActivity.getLayoutManager().getResourceManager());
+        mLayerTitleCache.setTabModelSelector(mTabModelSelector);
+        mNormalHelper.setTabModelSelector(mTabModelSelector);
+        mIncognitoHelper.setTabModelSelector(mTabModelSelector);
     }
 
     private void updateTitleForTab(Tab tab) {
@@ -680,35 +712,70 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     /** Vivaldi **/
+    public void setIsStackStrip(boolean isStackStrip) {
+        mIsStackStrip = isStackStrip;
+        mTabStripTreeProvider.setIsStackStrip(mIsStackStrip);
+        mNormalHelper.setIsStackStrip(mIsStackStrip);
+        mIncognitoHelper.setIsStackStrip(mIsStackStrip);
+    }
+
+    /** Vivaldi **/
     private void createNewTab() {
         TabModel currentTabModel = mTabModelSelector.getCurrentModel();
         if (currentTabModel == null) return;
         if (!currentTabModel.isIncognito()) currentTabModel.commitAllTabClosures();
-        mActivity.getTabCreator(currentTabModel.isIncognito()).launchNTP();
+        // Open tab within a group.
+        if (mIsStackStrip) {
+            List<Tab> relatedTabs = mTabModelSelector.getTabModelFilterProvider()
+                                            .getCurrentTabModelFilter()
+                                            .getRelatedTabList(mTabModelSelector.getCurrentTabId());
+            assert relatedTabs.size() > 0;
+            Tab parentTabToAttach = relatedTabs.get(relatedTabs.size() - 1);
+            mActivity.getTabCreator(currentTabModel.isIncognito())
+                    .createNewTab(new LoadUrlParams(UrlConstants.NTP_URL),
+                            TabLaunchType.FROM_TAB_GROUP_UI, parentTabToAttach);
+        } else // Open a normal one.
+            mActivity.getTabCreator(currentTabModel.isIncognito()).launchNTP();
     }
 
     /** Vivaldi **/
     public boolean isSceneOffScreen() {
-        return mActivity.getBrowserControlsManager().areBrowserControlsAtMinHeight()
+        boolean isOffScreen = mActivity.getBrowserControlsManager().areBrowserControlsAtMinHeight()
                 || !VivaldiUtils.isTabStripOn();
+        if (mActivity.isInOverviewMode()) return true;
+        if (mIsStackStrip && !VivaldiUtils.isTabStackVisible()) return true;
+        return isOffScreen;
     }
 
     /** Vivaldi **/
     private boolean isNewTabButtonClicked(float x, float y) {
-        if (!VivaldiUtils.isTopToolbarOn())
+        if (VivaldiUtils.isTopToolbarOn()) {
+            if (mIsStackStrip) y -= getHeight();
+        } else {
+            y += mIsStackStrip ? getHeight() : 0;
             y = mViewportHeightOffset - y; // consider the offset in case of bottom address bar
+        }
 
         return mModelSelectorButton.checkClicked(x, y);
     }
 
     /** Vivaldi - Handling long click event on + button in tab strip **/
     private void showTabSwitcherPopupMenu() {
+        // For now we don't show the popup on the stack strip.
+        if (mIsStackStrip) return;
         TabSwitcherActionMenuCoordinator menu = new TabSwitcherActionMenuCoordinator();
         View anchorView = mActivity.findViewById(R.id.tab_switcher_menu_helper_button);
         // Note(nagamani@vivaldi.com): We are using dummy button with 0dp width and 0dp height as
         // anchorView
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(0, 0);
         params.gravity = Gravity.TOP | Gravity.END;
+        // Apply correct margin when we have double tab bar.
+        int margin =
+                !mIsStackStrip && VivaldiUtils.isTabStackVisible() ? -((int) getHeight() * 2) : 0;
+        if (VivaldiUtils.isTopToolbarOn())
+            params.topMargin = margin;
+        else
+            params.bottomMargin = margin;
 
         // Note(nagamani@vivaldi.com): change layout gravity according to address bar location
         if (!VivaldiUtils.isTopToolbarOn()) {
@@ -722,8 +789,20 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     /** Vivaldi - Function to return value of y with correct offset value **/
     private float getValueOfY(float y) {
-        if (!VivaldiUtils.isTopToolbarOn()) return mViewportHeightOffset - y;
+        if (!VivaldiUtils.isTopToolbarOn()) {
+            y += mIsStackStrip ? getHeight() : 0;
+            return mViewportHeightOffset - y;
+        }
         float dpToPx = (1.f / mActivity.getResources().getDisplayMetrics().density);
+        if (mIsStackStrip) y -= getHeight();
         return y - (mActivity.getBrowserControlsManager().getTopControlsMinHeight() *dpToPx);
+    }
+
+    /** Vivaldi - Get the right background color for the current strip **/
+    private int getBackgroundStripColor(int color) {
+        int newColor = color;
+        // The stack strip color is slightly darker.
+        if (mIsStackStrip) newColor = ColorUtils.blendARGB(color, 0xFF000000, 0.2f);
+        return newColor;
     }
 }

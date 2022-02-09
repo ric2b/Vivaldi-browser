@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/focus_cycler.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
@@ -217,9 +218,14 @@ class LoginShelfButton : public views::LabelButton {
         icon_(icon) {
     SetAccessibleName(GetText());
     AshColorProvider* color_provider = AshColorProvider::Get();
-    color_provider->DecoratePillButton(this, &icon);
+    const SkColor enabled_text_color = color_provider->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kButtonLabelColor);
+    SetEnabledTextColors(enabled_text_color);
+    SetTextColor(views::Button::STATE_DISABLED,
+                 AshColorProvider::GetDisabledColor(enabled_text_color));
 
     SetFocusBehavior(FocusBehavior::ALWAYS);
+    set_suppress_default_focus_handling();
     SetInstallFocusRingOnFocus(true);
     views::InstallRoundRectHighlightPathGenerator(
         this, GetButtonInsets(), ShelfConfig::Get()->control_border_radius());
@@ -248,6 +254,9 @@ class LoginShelfButton : public views::LabelButton {
     label()->SetFontList(views::Label::GetDefaultFontList().Derive(
         1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
   }
+
+  LoginShelfButton(const LoginShelfButton&) = delete;
+  LoginShelfButton& operator=(const LoginShelfButton&) = delete;
 
   ~LoginShelfButton() override = default;
 
@@ -291,8 +300,6 @@ class LoginShelfButton : public views::LabelButton {
  private:
   const int text_resource_id_;
   const gfx::VectorIcon& icon_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoginShelfButton);
 };
 
 bool ShutdownButtonHidden(OobeDialogState state) {
@@ -320,6 +327,7 @@ class KioskAppsButton : public views::MenuButton,
                    l10n_util::GetStringUTF16(IDS_ASH_SHELF_APPS_BUTTON)),
         ui::SimpleMenuModel(this) {
     SetFocusBehavior(FocusBehavior::ALWAYS);
+    set_suppress_default_focus_handling();
     SetInstallFocusRingOnFocus(true);
     views::InstallRoundRectHighlightPathGenerator(
         this, GetButtonInsets(), ShelfConfig::Get()->control_border_radius());
@@ -348,6 +356,9 @@ class KioskAppsButton : public views::MenuButton,
     label()->SetFontList(views::Label::GetDefaultFontList().Derive(
         1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
   }
+
+  KioskAppsButton(const KioskAppsButton&) = delete;
+  KioskAppsButton& operator=(const KioskAppsButton&) = delete;
 
   bool LaunchAppForTesting(const std::string& app_id) {
     for (size_t i = 0; i < kiosk_apps_.size(); ++i) {
@@ -446,8 +457,6 @@ class KioskAppsButton : public views::MenuButton,
   std::vector<KioskAppMenuEntry> kiosk_apps_;
 
   bool is_launch_enabled_ = true;
-
-  DISALLOW_COPY_AND_ASSIGN(KioskAppsButton);
 };
 
 // Class that temporarily disables Guest login buttin on shelf.
@@ -549,11 +558,19 @@ LoginShelfView::LoginShelfView(
                  },
                  this),
              IDS_ASH_SHELF_CANCEL_BUTTON, kShelfCancelButtonIcon);
-  add_button(kBrowseAsGuest,
-             base::BindRepeating(
-                 &LoginScreenController::LoginAsGuest,
-                 base::Unretained(Shell::Get()->login_screen_controller())),
-             IDS_ASH_BROWSE_AS_GUEST_BUTTON, kShelfBrowseAsGuestButtonIcon);
+  if (chromeos::features::IsOobeConsolidatedConsentEnabled()) {
+    add_button(kBrowseAsGuest,
+               base::BindRepeating(
+                   &LoginScreenController::ShowGuestTosScreen,
+                   base::Unretained(Shell::Get()->login_screen_controller())),
+               IDS_ASH_BROWSE_AS_GUEST_BUTTON, kShelfBrowseAsGuestButtonIcon);
+  } else {
+    add_button(kBrowseAsGuest,
+               base::BindRepeating(
+                   &LoginScreenController::LoginAsGuest,
+                   base::Unretained(Shell::Get()->login_screen_controller())),
+               IDS_ASH_BROWSE_AS_GUEST_BUTTON, kShelfBrowseAsGuestButtonIcon);
+  }
   add_button(kAddUser,
              base::BindRepeating(
                  &LoginScreenController::ShowGaiaSignin,

@@ -1,12 +1,14 @@
-// Copyright (c) 2016-2019 Vivaldi Technologies. All Rights Reserved.
+// Copyright (c) 2016-2021 Vivaldi Technologies AS. All Rights Reserved.
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "prefs/native_settings_observer_win.h"
 #include "prefs/vivaldi_pref_names.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+#include "prefs/native_settings_helper_win.h"
+#include "prefs/native_settings_observer_win.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -21,9 +23,9 @@ NativeSettingsObserverWin::~NativeSettingsObserverWin() {
 NativeSettingsObserverWin::NativeSettingsObserverWin(Profile* profile)
     : NativeSettingsObserver(profile) {
   theme_key_.reset(new base::win::RegKey(
-    HKEY_CURRENT_USER,
-    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-    KEY_READ));
+      HKEY_CURRENT_USER,
+      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+      KEY_READ));
   if (theme_key_->Valid()) {
     OnThemeColorUpdated();
   }
@@ -44,10 +46,16 @@ void NativeSettingsObserverWin::OnThemeColorUpdated() {
 
   // Watch for future changes. base::Unretained(this) because theme_key_
   // is valid as long as |this| is.
-  if (!theme_key_->StartWatching(base::BindOnce(
-    &NativeSettingsObserverWin::OnThemeColorUpdated, base::Unretained(this)))) {
+  if (!theme_key_->StartWatching(
+          base::BindOnce(&NativeSettingsObserverWin::OnThemeColorUpdated,
+                         base::Unretained(this)))) {
     theme_key_.reset();
   }
+}
+
+void NativeSettingsObserverWin::OnSysColorChange() {
+  SetPref(vivaldiprefs::kSystemAccentColor, GetSystemAccentColor());
+  SetPref(vivaldiprefs::kSystemHighlightColor, GetSystemHighlightColor());
 }
 
 }  // namespace vivaldi

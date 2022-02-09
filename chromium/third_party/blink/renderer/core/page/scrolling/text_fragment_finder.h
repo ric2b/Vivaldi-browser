@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAGE_SCROLLING_TEXT_FRAGMENT_FINDER_H_
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/finder/find_buffer_runner.h"
@@ -30,7 +31,7 @@ class CORE_EXPORT TextFragmentFinder
   class Client {
    public:
     virtual void DidFindMatch(
-        const EphemeralRangeInFlatTree& range,
+        const RangeInFlatTree& range,
         const TextFragmentAnchorMetrics::Match match_metrics,
         bool is_unique) = 0;
     virtual void NoMatchFound() = 0;

@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.webauth.authenticator;
 
 import android.app.Activity;
 import android.app.PendingIntent;
-import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
@@ -37,7 +36,6 @@ import com.google.android.gms.fido.fido2.api.common.PublicKeyCredentialType;
 import com.google.android.gms.fido.fido2.api.common.PublicKeyCredentialUserEntity;
 import com.google.android.gms.tasks.Task;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
@@ -67,13 +65,6 @@ class CableAuthenticator {
     private static final int CTAP2_ERR_NO_CREDENTIALS = 0x2E;
     private static final int CTAP2_ERR_OTHER = 0x7F;
 
-    // sOwnBluetooth is true if this class owns the fact that Bluetooth is enabled and needs to
-    // disable it once complete.
-    private static boolean sOwnBluetooth;
-    // sInstanceCount is the number of instances of this class that have been created and not
-    // closed.
-    private static int sInstanceCount;
-
     private final Context mContext;
     private final CableAuthenticatorUI mUi;
     private final SingleThreadTaskRunner mTaskRunner;
@@ -83,6 +74,11 @@ class CableAuthenticator {
     // mServerLinkData contains the information passed from GMS Core in the event that
     // this is a SERVER_LINK connection.
     private final byte[] mServerLinkData;
+    // mQRURI contains the contents of a QR code ("FIDO:/234"...), or null if
+    // this is not a QR transaction.
+    private final String mQRURI;
+    // mLinkQR stores whether a QR transaction should send linking information.
+    private boolean mLinkQR;
 
     // mHandle is the opaque ID returned by the native code to ensure that
     // |stop| doesn't apply to a transaction that this instance didn't create.
@@ -103,13 +99,12 @@ class CableAuthenticator {
 
     public CableAuthenticator(Context context, CableAuthenticatorUI ui, long networkContext,
             long registration, byte[] secret, boolean isFcmNotification, UsbAccessory accessory,
-            byte[] serverLink, byte[] fcmEvent) {
-        sInstanceCount++;
-
+            byte[] serverLink, byte[] fcmEvent, String qrURI) {
         mContext = context;
         mUi = ui;
         mFCMEvent = fcmEvent;
         mServerLinkData = serverLink;
+        mQRURI = qrURI;
 
         // networkContext can only be used from the UI thread, therefore all
         // short-lived work is done on that thread.
@@ -124,7 +119,7 @@ class CableAuthenticator {
                     this, new USBHandler(context, mTaskRunner, accessory));
         }
 
-        // Otherwise wait for |onQRCode| or |onBluetoothReady|.
+        // Otherwise wait for |onBluetoothReady|.
     }
 
     // Calls from native code.
@@ -437,29 +432,19 @@ class CableAuthenticator {
 
     // Calls from UI.
 
-    /**
-     * Called to indicate that a QR code was scanned by the user.
-     *
-     * @param value contents of the QR code, which will be a valid caBLE
-     *              URL, i.e. "fido://"...
-     */
-    void onQRCode(String value, boolean link) {
-        assert mTaskRunner.belongsToCurrentThread();
-        mHandle = CableAuthenticatorJni.get().startQR(this, getName(), value, link);
-        // TODO: show the user an error if that returned zero.
-        // that indicates that the QR code was invalid.
+    void setQRLinking(boolean link) {
+        mLinkQR = link;
     }
 
     /**
      * Called to indicate that Bluetooth is now enabled and a cloud message can be processed.
-     *
-     * @param needToDisable true if BLE needs to be disabled afterwards
      */
-    void onBluetoothReady(boolean needToDisable) {
+    void onBluetoothReady() {
         assert mTaskRunner.belongsToCurrentThread();
-        sOwnBluetooth |= needToDisable;
         if (mServerLinkData != null) {
             mHandle = CableAuthenticatorJni.get().startServerLink(this, mServerLinkData);
+        } else if (mQRURI != null) {
+            mHandle = CableAuthenticatorJni.get().startQR(this, getName(), mQRURI, mLinkQR);
         } else {
             mHandle = CableAuthenticatorJni.get().startCloudMessage(this, mFCMEvent);
         }
@@ -473,28 +458,6 @@ class CableAuthenticator {
     void close() {
         assert mTaskRunner.belongsToCurrentThread();
         CableAuthenticatorJni.get().stop(mHandle);
-
-        // If Bluetooth was enabled by CableAuthenticatorUI then |sOwnBluetooth| will be true.
-        // However, if another instance has already been created (because the user pressed another
-        // notification while this was still outstanding) then don't disable it yet.
-        sInstanceCount--;
-        if (sOwnBluetooth) {
-            if (sInstanceCount == 0) {
-                if (BuildInfo.isAtLeastS()) {
-                    // It's not possible to disable Bluetooth on Android 12 without another
-                    // permission prompt.
-                    Log.i(TAG, "not trying to disable Bluetooth on Android 12");
-                } else {
-                    Log.i(TAG, "disabling Bluetooth");
-                    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-                    adapter.disable();
-                }
-
-                sOwnBluetooth = false;
-            } else {
-                Log.i(TAG, "not disabling Bluetooth yet because other instances exist");
-            }
-        }
     }
 
     String getName() {
@@ -512,6 +475,14 @@ class CableAuthenticator {
      */
     static int validateServerLinkData(byte[] serverLinkData) {
         return CableAuthenticatorJni.get().validateServerLinkData(serverLinkData);
+    }
+
+    /**
+     * validateQRURI returns zero if |uri| is a valid FIDO QR code or else an error value from
+     * cablev2::authenticator::Platform::Error.
+     */
+    static int validateQRURI(String uri) {
+        return CableAuthenticatorJni.get().validateQRURI(uri);
     }
 
     @NativeMethods
@@ -532,11 +503,10 @@ class CableAuthenticator {
         /**
          * Called to instruct the C++ code to start a new transaction based on the contents of a QR
          * code. The given name will be transmitted to the peer in order to identify this device, it
-         * should be human-meaningful. The qrUrl must be a caBLE URL, i.e. starting with
-         * "fido://c1/". Returns an opaque value that can be passed to |stop| to cancel this
-         * transaction.
+         * should be human-meaningful. The qrURI must be a fido: URI. Returns an opaque value that
+         * can be passed to |stop| to cancel this transaction.
          */
-        long startQR(CableAuthenticator cableAuthenticator, String authenticatorName, String qrUrl,
+        long startQR(CableAuthenticator cableAuthenticator, String authenticatorName, String qrURI,
                 boolean link);
 
         /**
@@ -571,6 +541,12 @@ class CableAuthenticator {
          * |startServerLink| or else an error value from cablev2::authenticator::Platform::Error.
          */
         int validateServerLinkData(byte[] serverLinkData);
+
+        /**
+         * validateQRURI returns zero if |qrURI| is a valid fido: URI or else an error value from
+         * cablev2::authenticator::Platform::Error.
+         */
+        int validateQRURI(String qrURI);
 
         /**
          * onActivityStop is called when onStop() is called on the Activity. This is done

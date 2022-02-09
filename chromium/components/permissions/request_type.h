@@ -49,6 +49,9 @@ enum class RequestType {
   kSecurityAttestation,
 #endif
   kStorageAccess,
+#if !defined(OS_ANDROID)
+  kU2fApiRequest,
+#endif
   kVrSession,
 #if !defined(OS_ANDROID)
   kWindowPlacement,
@@ -65,6 +68,8 @@ using IconId = int;
 // On desktop, we use a vector icon.
 typedef const gfx::VectorIcon& IconId;
 #endif
+
+bool IsRequestablePermissionType(ContentSettingsType content_settings_type);
 
 RequestType ContentSettingsTypeToRequestType(
     ContentSettingsType content_settings_type);

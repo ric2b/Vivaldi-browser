@@ -15,7 +15,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/win/registry.h"
-#include "base/path_service.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
@@ -66,7 +65,8 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
       profile_path = app_data_path.AppendASCII("Vivaldi\\User Data");
       break;
     case importer::TYPE_BRAVE:
-      profile_path = app_data_path.AppendASCII("BraveSoftware\\Brave-Browser\\User Data");
+      profile_path =
+          app_data_path.AppendASCII("BraveSoftware\\Brave-Browser\\User Data");
       break;
     case importer::TYPE_EDGE_CHROMIUM:
       profile_path = app_data_path.AppendASCII("Microsoft\\Edge\\User Data");

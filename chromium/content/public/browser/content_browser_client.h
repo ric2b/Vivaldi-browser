@@ -33,6 +33,7 @@
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/mojo_binder_policy_map.h"
 #include "content/public/browser/storage_partition_config.h"
+#include "content/public/browser/web_ui_browser_interface_broker_registry.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "device/vr/buildflags/buildflags.h"
@@ -48,8 +49,10 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/ip_address_space.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
+#include "services/network/public/mojom/network_param.mojom-forward.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-forward.h"
 #include "services/network/public/mojom/web_transport.mojom-forward.h"
 #include "services/network/public/mojom/websocket.mojom-forward.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -57,6 +60,7 @@
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/federated_learning/floc.mojom-forward.h"
+#include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -193,6 +197,7 @@ class FileSystemBackend;
 
 namespace content {
 enum class PermissionType;
+enum class SiteIsolationMode;
 enum class SmsFetchFailureType;
 class AuthenticatorRequestClientDelegate;
 class BluetoothDelegate;
@@ -215,7 +220,6 @@ class NavigationThrottle;
 class NavigationUIData;
 class OverlayWindow;
 class PictureInPictureWindowController;
-class PlatformNotificationService;
 class QuotaPermissionContext;
 class ReceiverPresentationServiceDelegate;
 class RenderFrameHost;
@@ -232,6 +236,7 @@ class VpnServiceProxy;
 class WebAuthenticationDelegate;
 class WebContents;
 class WebContentsViewDelegate;
+class WebUIBrowserInterfaceBrokerRegistry;
 class XrIntegrationClient;
 struct GlobalRenderFrameHostId;
 struct GlobalRequestID;
@@ -585,9 +590,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Allows the embedder to programmatically control whether Site Isolation
   // should be disabled.  Note that this takes precedence over
   // ShouldEnableStrictSiteIsolation() if both return true.
+  // `site_isolation_mode` specifies the site isolation mode to check; this
+  // allows strict site isolation and partial site isolation to be disabled
+  // according to different policies (e.g., different memory thresholds) on
+  // Android.
   //
   // Note that for correctness, the same value should be consistently returned.
-  virtual bool ShouldDisableSiteIsolation();
+  virtual bool ShouldDisableSiteIsolation(
+      SiteIsolationMode site_isolation_mode);
 
   // Retrieves names of any additional site isolation modes from the embedder.
   virtual std::vector<std::string> GetAdditionalSiteIsolationModes();
@@ -599,6 +609,19 @@ class CONTENT_EXPORT ContentBrowserClient {
       BrowserContext* context,
       const url::Origin& origin,
       ChildProcessSecurityPolicy::IsolatedOriginSource source) {}
+
+  // Returns true if the given URL needs be loaded with the "isolated
+  // application" isolation level. COOP/COEP headers must also be properly set
+  // in order to enable the application isolation level.
+  virtual bool ShouldUrlUseApplicationIsolationLevel(
+      BrowserContext* browser_context,
+      const GURL& url);
+
+  // Allow the embedder to control the maximum renderer process count. Only
+  // applies if it is set to a non-zero value.  Once this limit is exceeded,
+  // existing processes will be reused whenever possible, see
+  // `ShouldTryToUseExistingProcessHost()`.
+  virtual size_t GetMaxRendererProcessCountOverride();
 
   // Indicates whether a file path should be accessible via file URL given a
   // request from a browser context which lives within |profile_path|.
@@ -635,7 +658,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::string GetApplicationLocale();
 
   // Returns a comma-separate list of language codes, in order of preference.
-  // The value is used to report the "sec-ch-lang" to sites, if requested.
   // The legacy "accept-language" header is not affected by this setting (see
   // |ConfigureNetworkContextParams()| below).
   // (Not called GetAcceptLanguages so it doesn't clash with win32).
@@ -653,21 +675,21 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This is called on the UI thread.
   virtual bool AllowAppCache(
       const GURL& manifest_url,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<url::Origin>& top_frame_origin,
       BrowserContext* context);
 
   // Allows the embedder to control if a service worker is allowed at the given
-  // |scope| and can be accessed from |site_for_cookies| and |top_frame_origin|.
-  // |site_for_cookies| is used to determine whether the request is done in a
-  // third-party context. |top_frame_origin| is used to check if any
+  // `scope` and can be accessed from `site_for_cookies` and `top_frame_origin`.
+  // `site_for_cookies` is used to determine whether the request is done in a
+  // third-party context. `top_frame_origin` is used to check if any
   // content_setting affects this request. Only calls that are made within the
-  // context of a tab can provide a proper |top_frame_origin|, otherwise the
+  // context of a tab can provide a proper `top_frame_origin`, otherwise the
   // scope of the service worker is used.
   // This function is called whenever an attempt is made to create or access the
   // persistent state of the registration, or to start the service worker.
   //
-  // If non-empty, |script_url| is the script of the service worker that is
+  // If non-empty, `script_url` is the script of the service worker that is
   // attempted to be registered or started. If it's empty, an attempt is being
   // made to access the registration but there is no specific service worker in
   // the registration being acted on.
@@ -675,7 +697,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This is called on the UI thread.
   virtual AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
       BrowserContext* context);
@@ -685,7 +707,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This is called on the UI thread.
   virtual bool AllowSharedWorker(
       const GURL& worker_url,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<url::Origin>& top_frame_origin,
       const std::string& name,
       const blink::StorageKey& storage_key,
@@ -841,12 +863,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldUseGmsCoreGeolocationProvider();
 #endif
 
-  // Allow the embedder to specify a string version of the storage partition
-  // config with a site.
-  virtual StoragePartitionId GetStoragePartitionIdForSite(
-      BrowserContext* browser_context,
-      const GURL& site);
-
   // Allows the embedder to provide a storage partition configuration for a
   // site. A storage partition configuration includes a domain of the embedder's
   // choice, an optional name within that domain, and whether the partition is
@@ -905,13 +921,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // sequence.
   virtual FeatureObserverClient* GetFeatureObserverClient();
 
-  // Returns the platform notification service, capable of displaying Web
-  // Notifications to the user. The embedder can return a nullptr if they don't
-  // support this functionality. Must be called on the UI thread.
-  // TODO(knollr): move this to the BrowserContext.
-  virtual PlatformNotificationService* GetPlatformNotificationService(
-      BrowserContext* browser_context);
-
   // Returns true if the given page is allowed to open a window of the given
   // type. If true is returned, |no_javascript_access| will indicate whether
   // the window that is created should be scriptable/in the same process.
@@ -940,6 +949,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Allows the embedder to return a delegate for the TtsController.
   virtual TtsControllerDelegate* GetTtsControllerDelegate();
 #endif
+
+  // Applies policy-dictated changes to the manifest that was loaded from the
+  // provided render_frame_host.
+  virtual void MaybeOverrideManifest(RenderFrameHost* render_frame_host,
+                                     blink::mojom::ManifestPtr& manifest) {}
 
   // Allows the embedder to return a TTS platform implementation.
   virtual TtsPlatform* GetTtsPlatform();
@@ -981,6 +995,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns the path to the shader disk cache root for shaders generated by
   // skia.
   virtual base::FilePath GetGrShaderDiskCacheDirectory();
+
+  // Returns the path to the net log default directory.
+  virtual base::FilePath GetNetLogDefaultDirectory();
 
   // Notification that a pepper plugin has just been spawned. This allows the
   // embedder to add filters onto the host to implement interfaces.
@@ -1123,6 +1140,15 @@ class CONTENT_EXPORT ContentBrowserClient {
   // execution context.
   virtual void RegisterBrowserInterfaceBindersForServiceWorker(
       mojo::BinderMapWithContext<const ServiceWorkerVersionBaseInfo&>* map) {}
+
+  // Allows the embedder to register per-WebUI interface brokers that are used
+  // for handling Mojo.bindInterface in WebUI JavaScript.
+  //
+  // The exposed interfaces are grouped by the WebUI controller type. For any
+  // given WebUI page, only the interfaces corresponding to its controller type
+  // will be exposed.
+  virtual void RegisterWebUIInterfaceBrokers(
+      WebUIBrowserInterfaceBrokerRegistry& registry) {}
 
   // Content was unable to bind a receiver for this associated interface, so the
   // embedder should try. Returns true if the |handle| was actually taken and
@@ -1483,11 +1509,18 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allows the embedder to control if establishing a WebTransport connection is
   // allowed. When the connection is blocked, `callback` is called with `error`.
+  // `handshake_client` will be proxied to block the connection while
+  // handshaking.
   using WillCreateWebTransportCallback = base::OnceCallback<void(
+      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+          handshake_client,
       absl::optional<network::mojom::WebTransportErrorPtr> error)>;
-  virtual void WillCreateWebTransport(RenderFrameHost* frame,
-                                      const GURL& url,
-                                      WillCreateWebTransportCallback callback);
+  virtual void WillCreateWebTransport(
+      RenderFrameHost* frame,
+      const GURL& url,
+      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+          handshake_client,
+      WillCreateWebTransportCallback callback);
 
   // Allows the embedder to intercept or replace the mojo objects used for
   // preference-following access to cookies. This is primarily used for objects
@@ -1750,10 +1783,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Otherwise child_id will be the process id and |navigation_ui_data| will be
   // nullptr.
   //
-  // |initiating_origin| is the origin that initiated the navigation to the
-  // external protocol, and may be null, e.g. in the case of browser-initiated
-  // navigations. The initiating origin is intended to help users make security
-  // decisions about whether to allow an external application to launch.
+  // |initiating_origin| is the origin of the last redirecting server (falling
+  // back to the request initiator if there were no redirects / if the request
+  // goes straight to an external protocol, or null, e.g. in the case of
+  // browser-initiated navigations. The initiating origin is intended to help
+  // users make security decisions about whether to allow an external
+  // application to launch.
   virtual bool HandleExternalProtocol(
       const GURL& url,
       base::RepeatingCallback<WebContents*()> web_contents_getter,
@@ -1761,6 +1796,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       int frame_tree_node_id,
       NavigationUIData* navigation_data,
       bool is_main_frame,
+      network::mojom::WebSandboxFlags sandbox_flags,
       ui::PageTransition page_transition,
       bool has_user_gesture,
       const absl::optional<url::Origin>& initiating_origin,
@@ -1807,6 +1843,10 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns true if the audio service should be sandboxed. false otherwise.
   virtual bool ShouldSandboxAudioService();
+
+  // Returns true if the network service should be sandboxed. false otherwise.
+  // This is called on the UI thread.
+  virtual bool ShouldSandboxNetworkService();
 
   // Asks the embedder for the PreviewsState which says which previews should
   // be enabled for the given navigation. The PreviewsState is a bitmask of
@@ -1897,7 +1937,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Possibly augment |download_policy| based on the status of |frame_host| as
   // well as |user_gesture|.
   virtual void AugmentNavigationDownloadPolicy(
-      WebContents* web_contents,
       RenderFrameHost* frame_host,
       bool user_gesture,
       blink::NavigationDownloadPolicy* download_policy);
@@ -1929,7 +1968,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ArePersistentMediaDeviceIDsAllowed(
       content::BrowserContext* browser_context,
       const GURL& scope,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<url::Origin>& top_frame_origin);
 
   // Requests an SMS from |origin_list| from a remote device with telephony

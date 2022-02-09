@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/values.h"
 #include "chrome/common/chromeos/extensions/api/telemetry.h"
+#include "extensions/common/permissions/permissions_data.h"
 
 namespace chromeos {
 
@@ -18,24 +19,20 @@ TelemetryApiFunctionBase::TelemetryApiFunctionBase()
     : probe_service_(remote_probe_service_.BindNewPipeAndPassReceiver()) {}
 TelemetryApiFunctionBase::~TelemetryApiFunctionBase() = default;
 
-// getVpdInfo ------------------------------------------------------------------
+// OsTelemetryGetVpdInfoFunction -----------------------------------------------
 
 OsTelemetryGetVpdInfoFunction::OsTelemetryGetVpdInfoFunction() = default;
 OsTelemetryGetVpdInfoFunction::~OsTelemetryGetVpdInfoFunction() = default;
 
-ExtensionFunction::ResponseAction OsTelemetryGetVpdInfoFunction::Run() {
-  // We don't need Unretained() or WeakPtr because ExtensionFunction is
-  // ref-counted.
+void OsTelemetryGetVpdInfoFunction::RunIfAllowed() {
   auto cb = base::BindOnce(&OsTelemetryGetVpdInfoFunction::OnResult, this);
 
   remote_probe_service_->ProbeTelemetryInfo(
-      {health::mojom::ProbeCategoryEnum::kCachedVpdData}, std::move(cb));
-
-  return RespondLater();
+      {ash::health::mojom::ProbeCategoryEnum::kCachedVpdData}, std::move(cb));
 }
 
 void OsTelemetryGetVpdInfoFunction::OnResult(
-    health::mojom::TelemetryInfoPtr ptr) {
+    ash::health::mojom::TelemetryInfoPtr ptr) {
   if (!ptr || !ptr->vpd_result || !ptr->vpd_result->is_vpd_info()) {
     Respond(Error("API internal error"));
     return;
@@ -52,34 +49,44 @@ void OsTelemetryGetVpdInfoFunction::OnResult(
     result.model_name =
         std::make_unique<std::string>(vpd_info->model_name.value());
   }
-  if (vpd_info->serial_number.has_value()) {
-    result.serial_number =
-        std::make_unique<std::string>(vpd_info->serial_number.value());
-  }
   if (vpd_info->sku_number.has_value()) {
     result.sku_number =
         std::make_unique<std::string>(vpd_info->sku_number.value());
   }
 
+  // Protect accessing the serial number by a runtime permission.
+  if (extension()->permissions_data()->HasAPIPermission(
+          extensions::mojom::APIPermissionID::kChromeOSTelemetrySerialNumber) &&
+      vpd_info->serial_number.has_value()) {
+    result.serial_number =
+        std::make_unique<std::string>(vpd_info->serial_number.value());
+  }
+
   Respond(ArgumentList(api::os_telemetry::GetVpdInfo::Results::Create(result)));
 }
 
-// getOemData ------------------------------------------------------------------
+// OsTelemetryGetOemDataFunction -----------------------------------------------
 
 OsTelemetryGetOemDataFunction::OsTelemetryGetOemDataFunction() = default;
 OsTelemetryGetOemDataFunction::~OsTelemetryGetOemDataFunction() = default;
 
-ExtensionFunction::ResponseAction OsTelemetryGetOemDataFunction::Run() {
-  // We don't need Unretained() or WeakPtr because ExtensionFunction is
-  // ref-counted.
+void OsTelemetryGetOemDataFunction::RunIfAllowed() {
+  // Protect accessing the serial number by a runtime permission.
+  if (!extension()->permissions_data()->HasAPIPermission(
+          extensions::mojom::APIPermissionID::kChromeOSTelemetrySerialNumber)) {
+    Respond(
+        Error("Unauthorized access to chrome.os.telemetry.getOemData. Extension"
+              " doesn't have the permission."));
+    return;
+  }
+
   auto cb = base::BindOnce(&OsTelemetryGetOemDataFunction::OnResult, this);
 
   remote_probe_service_->GetOemData(std::move(cb));
-
-  return RespondLater();
 }
 
-void OsTelemetryGetOemDataFunction::OnResult(health::mojom::OemDataPtr ptr) {
+void OsTelemetryGetOemDataFunction::OnResult(
+    ash::health::mojom::OemDataPtr ptr) {
   if (!ptr || !ptr->oem_data.has_value()) {
     Respond(Error("API internal error"));
     return;

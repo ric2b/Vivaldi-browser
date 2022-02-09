@@ -20,6 +20,7 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.WindowInsets;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
@@ -31,10 +32,14 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.R;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxTheme;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 // Vivaldi
 import org.chromium.base.Callback;
@@ -48,6 +53,8 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView.LayoutMargins;
 
 /** A widget for showing a list of omnibox suggestions. */
 public class OmniboxSuggestionsDropdown extends RecyclerView {
+    private static final long DEFERRED_INITIAL_SHRINKING_LAYOUT_FROM_IME_DURATION_MS = 300;
+
     private final int mStandardBgColor;
     private final int mIncognitoBgColor;
 
@@ -66,8 +73,22 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     private int mListViewMaxHeight;
     private int mLastBroadcastedListViewMaxHeight;
 
+    @IntDef({InitialResizeState.WAITING_FOR_FIRST_MEASURE, InitialResizeState.WAITING_FOR_SHRINKING,
+            InitialResizeState.IGNORING_SHRINKING, InitialResizeState.HANDLED_INITIAL_SIZING})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface InitialResizeState {
+        int WAITING_FOR_FIRST_MEASURE = 0;
+        int WAITING_FOR_SHRINKING = 1;
+        int IGNORING_SHRINKING = 2;
+        int HANDLED_INITIAL_SIZING = 3;
+    }
+
+    @InitialResizeState
+    private int mInitialResizeState = InitialResizeState.WAITING_FOR_FIRST_MEASURE;
+    private int mWidthMeasureSpec;
+    private int mHeightMeasureSpec;
+
     // Vivaldi
-    private int mBottomControlsHeight;
     private LocationBarLayout mLocationBarLayout;
     private static Callback mSearchEngineSuggestionCallback;
     private LayoutMargins layoutMargins = new LayoutMargins(0,0,0,0);
@@ -156,9 +177,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
         mScrollListener = new SuggestionScrollListener();
         setOnScrollListener(mScrollListener);
-
-        // Vivaldi
-        LinearLayoutManager layoutManager = new LinearLayoutManager(context) {
+        setLayoutManager(new LinearLayoutManager(context) {
             @Override
             public int scrollVerticallyBy(
                     int deltaY, RecyclerView.Recycler recycler, RecyclerView.State state) {
@@ -168,14 +187,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
                 }
                 return scrollY;
             }
-        };
-        // Note(nagamani@vivaldi.com): Reverse the list when the address bar is at bottom for better
-        // reachability of suggestions UI
-        if (shouldAnchorToBottom()) {
-            layoutManager.setReverseLayout(true);
-            layoutManager.setStackFromEnd(true);
-        }
-        setLayoutManager(layoutManager);
+        });
 
         final Resources resources = context.getResources();
         int paddingBottom =
@@ -250,9 +262,12 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         mSearchEngineSuggestionCallback = null;
     }
 
-    /** Update the suggestion popup background to reflect the current state. */
-    public void refreshPopupBackground(boolean isIncognito) {
-        int color = isIncognito ? mIncognitoBgColor : mStandardBgColor;
+    /**
+     * Update the suggestion popup background to reflect the current state.
+     * @param omniboxTheme The {@link @OmniboxTheme}.
+     */
+    public void refreshPopupBackground(@OmniboxTheme int omniboxTheme) {
+        int color = omniboxTheme == OmniboxTheme.INCOGNITO ? mIncognitoBgColor : mStandardBgColor;
         if (!isHardwareAccelerated()) {
             // When HW acceleration is disabled, changing mSuggestionList' items somehow erases
             // mOmniboxResultsContainer' background from the area not covered by
@@ -275,6 +290,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
+        mInitialResizeState = InitialResizeState.WAITING_FOR_FIRST_MEASURE;
         mAnchorView.getViewTreeObserver().addOnGlobalLayoutListener(mAnchorViewLayoutListener);
         if (mAlignmentView != null) {
             adjustSidePadding();
@@ -302,16 +318,52 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
             int availableViewportHeight =
                     calculateAvailableViewportHeight(anchorBottomRelativeToContent);
+            int desiredWidth = mAnchorView.getMeasuredWidth();
+            // Suppress the initial requests to shrink the viewport of the omnibox suggestion
+            // dropdown. The viewport will decrease when the keyboard is triggered, but the request
+            // to resize happens when the keyboard starts showing before it has had the chance to
+            // animate in. Because the resizing is triggered early, the dropdown shrinks earlier
+            // then the keyboard is fully visible, which leaves a hole in the UI showing the content
+            // where the keyboard will eventually go.
+            //
+            // The work around is to suppress these initial shrinking layout requests and defer them
+            // for enough time for the keyboard to hopefully be visible.
+            //
+            // This does not use getMeasuredHeight() as a means of comparison against the available
+            // viewport because on tablets the measured height can be smaller than the viewport as
+            // tablets use AT_MOST for the measure spec vs EXACTLY on phones.
+            if ((mInitialResizeState == InitialResizeState.WAITING_FOR_SHRINKING
+                        || mInitialResizeState == InitialResizeState.IGNORING_SHRINKING)
+                    && availableViewportHeight < mListViewMaxHeight
+                    && getMeasuredWidth() == desiredWidth) {
+                super.onMeasure(mWidthMeasureSpec, mHeightMeasureSpec);
+                if (mInitialResizeState == InitialResizeState.IGNORING_SHRINKING) return;
+
+                mInitialResizeState = InitialResizeState.IGNORING_SHRINKING;
+                PostTask.postDelayedTask(UiThreadTaskTraits.USER_BLOCKING, () -> {
+                    if (mInitialResizeState != InitialResizeState.IGNORING_SHRINKING) return;
+                    requestLayout();
+                    mInitialResizeState = InitialResizeState.HANDLED_INITIAL_SIZING;
+                }, DEFERRED_INITIAL_SHRINKING_LAYOUT_FROM_IME_DURATION_MS);
+                return;
+            } else if (mInitialResizeState == InitialResizeState.IGNORING_SHRINKING) {
+                // The dimensions changed in an unexpected way (either by increasing height or
+                // a change in width), so just mark the initial sizing as completed and accept
+                // the new measurements and suppress the pending posted layout request.
+                mInitialResizeState = InitialResizeState.HANDLED_INITIAL_SIZING;
+            }
             notifyObserversIfViewportHeightChanged(availableViewportHeight);
 
-            int newWidthMeasureSpec = MeasureSpec.makeMeasureSpec(
-                    mAnchorView.getMeasuredWidth(), MeasureSpec.EXACTLY);
+            mWidthMeasureSpec = MeasureSpec.makeMeasureSpec(desiredWidth, MeasureSpec.EXACTLY);
             // Note(nagamani@vivaldi.com): Use MeasureSpec.AT_MOST when the address bar is at
             // bottom to anchor the suggestion drop down to the bottom
             int heightParam = shouldAnchorToBottom() ? MeasureSpec.AT_MOST : MeasureSpec.EXACTLY;
-            int newHeightMeasureSpec = MeasureSpec.makeMeasureSpec(availableViewportHeight,
+            mHeightMeasureSpec = MeasureSpec.makeMeasureSpec(availableViewportHeight,
                     mEmbedder.isTablet() ? MeasureSpec.AT_MOST : heightParam);
-            super.onMeasure(newWidthMeasureSpec, newHeightMeasureSpec);
+            super.onMeasure(mWidthMeasureSpec, mHeightMeasureSpec);
+            if (mInitialResizeState == InitialResizeState.WAITING_FOR_FIRST_MEASURE) {
+                mInitialResizeState = InitialResizeState.WAITING_FOR_SHRINKING;
+            }
 
             // Note(nagamani@vivaldi.com):  Return the calculated margin value to properly anchor
             // the search engine suggestion layout
@@ -548,7 +600,8 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     /** Vivaldi: Returns the total occupied height on the screen (Like Address bar, Bottom toolbar,
      * Search engine suggestion bar) */
     private int getTotalOccupiedHeight() {
-        int totalOccupiedHeight = getBottomControlsHeight();
+        int totalOccupiedHeight = mAnchorView.getMeasuredHeight()
+                + (int) getResources().getDimension(R.dimen.tab_strip_height);
         // Note(nagamani@vivaldi.com): Search Engine suggestion layout height should be available
         // for the viewport when the option is not enabled
         if (!showSearchEngineSuggestionBar())
@@ -571,16 +624,29 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
     /** Vivaldi: Returns the bottom controls height including address bar, tab strip(if enabled) */
     public int getBottomControlsHeight() {
-        mBottomControlsHeight = mAnchorView.getMeasuredHeight();
+        int bottomControlsHeight = mAnchorView.getMeasuredHeight();
         boolean isTabStripOn = SharedPreferencesManager.getInstance().readBoolean(
                 "show_tab_strip", true);
+        boolean isTabStackToolbarOn = SharedPreferencesManager.getInstance().readBoolean(
+                "tab_stack_toolbar_visible", false);
+        boolean isTabStackActive = SharedPreferencesManager.getInstance().readBoolean(
+                "tab_stack_visible", false);
         if (isTabStripOn)
-            mBottomControlsHeight += (int) getResources().getDimension(R.dimen.tab_strip_height);
-        return mBottomControlsHeight;
+            bottomControlsHeight += (int) getResources().getDimension(R.dimen.tab_strip_height);
+        if (isTabStackActive || isTabStackToolbarOn)
+            bottomControlsHeight += (int) getResources().getDimension(R.dimen.tab_strip_height);
+        return bottomControlsHeight;
     }
 
     /** Vivaldi: Helps acquiring instance of LocationBarLayout to check if the search is from widget */
     public void setLocationBarModel(ViewGroup locationBarLayout) {
         mLocationBarLayout = (LocationBarLayout)locationBarLayout;
+        final LinearLayoutManager layoutManager = (LinearLayoutManager)getLayoutManager();
+        // Note(nagamani@vivaldi.com): Reverse the list when the address bar is at bottom for better
+        // reachability of suggestions UI
+        if (shouldAnchorToBottom() && layoutManager != null) {
+            layoutManager.setReverseLayout(true);
+            layoutManager.setStackFromEnd(true);
+        }
     }
 }

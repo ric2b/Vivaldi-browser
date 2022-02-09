@@ -5,7 +5,7 @@
 import logging
 import os
 import sys
-import SimpleXMLRPCServer
+import xmlrpc.server
 
 import pywintypes
 import servicemanager
@@ -13,28 +13,36 @@ import win32api
 import win32service
 import win32serviceutil
 
+import rpc_handler
 
 # TODO(crbug.com/1233612): Use portpick to choose an available port, and
 # propagate the port to clients (for example, via a pre-defined registry key).
 _XML_RPC_SERVER_PORT = 9090
 
 
-class UpdaterTestRequestHanlder():
+class UpdaterTestRequestHandler(xmlrpc.server.SimpleXMLRPCRequestHandler):
 
-  # TODO(crbug.com/1233612): Replace this placeholder function with real ones to
-  # serve test requests. Also consider to move this class into a separate
-  # module.
-  def echo(self, message):
-    return message
+  def log_message(self, format, *args):
+    # Overrides base class's implementation which writes the messages to
+    # sys.stderr.
+    # When XML RPC server runs within the service, sys.stderr is None. This
+    # crashes the server and aborts connection. Workaround this issue by using
+    # python logging.
+    logging.error(format, *args)
 
 
-class UpdaterTestXmlRpcServer(SimpleXMLRPCServer.SimpleXMLRPCServer):
+class UpdaterTestXmlRpcServer(xmlrpc.server.SimpleXMLRPCServer):
   """Customized XML-RPC server for updater tests."""
+
+  def __init__(self):
+    super().__init__(('localhost', _XML_RPC_SERVER_PORT),
+                     requestHandler=UpdaterTestRequestHandler,
+                     allow_none=True)
 
   def run(self):
     """xml-rpc server main loop."""
     self.register_introspection_functions()
-    self.register_instance(UpdaterTestRequestHanlder())
+    self.register_instance(rpc_handler.UpdaterTestRPCHandler())
     self.serve_forever()
 
 
@@ -63,8 +71,7 @@ class UpdaterTestService(win32serviceutil.ServiceFramework):
                             servicemanager.PYS_SERVICE_STARTED,
                             (self._svc_name_, ''))
       self.ReportServiceStatus(win32service.SERVICE_RUNNING)
-      self._xmlrpc_server = UpdaterTestXmlRpcServer(
-          ('localhost', _XML_RPC_SERVER_PORT))
+      self._xmlrpc_server = UpdaterTestXmlRpcServer()
       self._xmlrpc_server.run()
       servicemanager.LogInfoMsg(self._svc_name_ + ' - Ended')
     except pywintypes.error as err:

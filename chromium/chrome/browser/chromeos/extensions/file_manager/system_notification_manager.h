@@ -24,6 +24,20 @@ namespace file_manager_private = extensions::api::file_manager_private;
 
 class DriveFsEventRouter;
 
+// Status of mounted removable devices.
+enum SystemNotificationManagerMountStatus {
+  // Initial state.
+  MOUNT_STATUS_NO_RESULT,
+  // No errors on the device.
+  MOUNT_STATUS_SUCCESS,
+  // Parent errors exist that may be overridden by child partitions.
+  MOUNT_STATUS_ONLY_PARENT_ERROR,
+  // A single child partition error.
+  MOUNT_STATUS_CHILD_ERROR,
+  // Multiple child partitions with at least one in error.
+  MOUNT_STATUS_MULTIPART_ERROR,
+};
+
 // Manages creation/deletion and update of system notifications on behalf
 // of the File Manager application.
 class SystemNotificationManager {
@@ -59,6 +73,15 @@ class SystemNotificationManager {
       const std::string& notification_id,
       int title_id,
       int message_id,
+      const scoped_refptr<message_center::NotificationDelegate>& delegate);
+
+  /**
+   *  Returns an instance of an 'ash' Notification with a bound click delegate.
+   */
+  std::unique_ptr<message_center::Notification> CreateNotification(
+      const std::string& notification_id,
+      const std::u16string& title,
+      const std::u16string& message,
       const scoped_refptr<message_center::NotificationDelegate>& delegate);
 
   /**
@@ -105,6 +128,14 @@ class SystemNotificationManager {
                        file_manager_private::CopyOrMoveProgressStatus& status);
 
   /**
+   * Stores and updates the state of a device based on mount events for the top
+   * level or any child partitions.
+   */
+  enum SystemNotificationManagerMountStatus UpdateDeviceMountStatus(
+      file_manager_private::MountCompletedEvent& event,
+      const Volume& volume);
+
+  /**
    * Processes volume mount completed events.
    */
   void HandleMountCompletedEvent(
@@ -142,6 +173,16 @@ class SystemNotificationManager {
                                      base::Value::ListView& event_arguments);
 
   /**
+   * Update/remove Drive sync progress notification.
+   * |event| is the event object delivered from EventRouter and
+   * |event_arguments| contains ListView serialized version of
+   * file_manager_private::FileTransferStatus.
+   */
+  std::unique_ptr<message_center::Notification> UpdateDriveSyncNotification(
+      const extensions::Event& event,
+      base::Value::ListView& event_arguments);
+
+  /**
    * Click handler for the removable device notification.
    */
   void HandleRemovableNotificationClick(const std::string& path,
@@ -177,9 +218,24 @@ class SystemNotificationManager {
    */
   std::map<int, double> required_copy_space_;
 
+  /**
+   * Maps device paths to their mount status.
+   * This is used for removable devices with single/multiple partitions.
+   * e.g. the same device path could have 2 partitions that each generate a
+   * mount event. One partition could have a known file system and the other an
+   *      unknown file system. Different combinations of known/unknown file
+   *      systems on a multi-partition devices require this map to generate
+   *      the correct system notification when errors occur.
+   */
+  std::map<std::string, enum SystemNotificationManagerMountStatus>
+      mount_status_;
+
   Profile* const profile_;
   // Reference to non-owned DriveFS event router.
   DriveFsEventRouter* drivefs_event_router_;
+
+  // Cache the application name (used for notification display source).
+  std::u16string app_name_;
 
   // Caches the SWA feature flag.
   bool swa_enabled_;

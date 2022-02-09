@@ -4,9 +4,9 @@
 #define COMPONENTS_PAGE_ACTIONS_PAGE_ACTIONS_DIRECTORY_WATCHER_H_
 
 #include <map>
-#include <unordered_map>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 #include "base/callback.h"
 #include "base/files/file_path_watcher.h"

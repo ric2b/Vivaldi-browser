@@ -10,8 +10,8 @@
 
 #include "base/synchronization/waitable_event.h"
 #include "content/public/browser/notification_observer.h"
-#include "ui/base/models/tree_node_model.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/models/tree_node_model.h"
 
 class Profile;
 
@@ -36,12 +36,22 @@ struct Menu_Control {
 
 class Menu_Node : public ui::TreeNode<Menu_Node> {
  public:
-  enum Type { UNKNOWN = 0, MENU, COMMAND, CHECKBOX, RADIO, FOLDER, SEPARATOR,
-              CONTAINER };
-  enum Origin {BUNDLE = 0, MODIFIED_BUNDLE, USER};
+  enum Type {
+    UNKNOWN = 0,
+    MENU,
+    COMMAND,
+    CHECKBOX,
+    RADIO,
+    FOLDER,
+    SEPARATOR,
+    CONTAINER
+  };
+  enum Origin { BUNDLE = 0, MODIFIED_BUNDLE, USER };
 
   Menu_Node(const std::string& guid, int64_t id);
   ~Menu_Node() override;
+  Menu_Node(const Menu_Node&) = delete;
+  Menu_Node& operator=(const Menu_Node&) = delete;
 
   void DumpTree(int indent = 0);
 
@@ -71,19 +81,22 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   const std::string& radioGroup() const { return radio_group_; }
 
   void SetContainerMode(std::string container_mode) {
-      container_mode_ = container_mode; }
+    container_mode_ = container_mode;
+  }
   const std::string& containerMode() const { return container_mode_; }
 
   void SetContainerEdge(std::string container_edge) {
-      container_edge_ = container_edge; }
+    container_edge_ = container_edge;
+  }
   const std::string& containerEdge() const { return container_edge_; }
 
-  void SetHasCustomTitle(bool has_custom_title)
-      {has_custom_title_ = has_custom_title;}
-  bool hasCustomTitle() const { return has_custom_title_;}
+  void SetHasCustomTitle(bool has_custom_title) {
+    has_custom_title_ = has_custom_title;
+  }
+  bool hasCustomTitle() const { return has_custom_title_; }
 
   void SetShowShortcut(absl::optional<bool> show_shortcut);
-  absl::optional<bool> showShortcut() const { return show_shortcut_;}
+  absl::optional<bool> showShortcut() const { return show_shortcut_; }
 
   // Returns the node in the tree of nodes that match the id.
   Menu_Node* GetById(int64_t id);
@@ -106,7 +119,7 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   static std::string mainmenu_node_guid() { return kMainmenuNodeGuid; }
   static int64_t root_node_id() { return kRootNodeId; }
   static int64_t mainmenu_node_id() { return kMainmenuNodeId; }
-  static int64_t GetNewId() {return ++id_counter;}
+  static int64_t GetNewId() { return ++id_counter; }
 
  private:
   friend class Menu_Model;
@@ -132,8 +145,6 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
 
   // Next available id is copied from this value.
   static int64_t id_counter;
-
-  DISALLOW_COPY_AND_ASSIGN(Menu_Node);
 };
 
 }  // namespace menus

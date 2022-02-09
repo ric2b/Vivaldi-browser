@@ -21,7 +21,8 @@ NSString* const kWebViewShellAddressFieldAccessibilityLabel = @"Address field";
 NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
     @"WebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier";
 
-@interface ShellViewController () <CWVDownloadTaskDelegate,
+@interface ShellViewController () <CWVAutofillDataManagerObserver,
+                                   CWVDownloadTaskDelegate,
                                    CWVNavigationDelegate,
                                    CWVUIDelegate,
                                    CWVScriptCommandHandler,
@@ -258,13 +259,14 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
   ]];
 
   [CWVWebView setUserAgentProduct:@"Dummy/1.0"];
-  CWVWebView.chromeLongPressAndForceTouchHandlingEnabled = NO;
+  CWVWebView.chromeContextMenuEnabled = YES;
 
   _authService = [[ShellAuthService alloc] init];
   CWVSyncController.dataSource = _authService;
 
   CWVWebViewConfiguration* configuration =
       [CWVWebViewConfiguration defaultConfiguration];
+  [configuration.autofillDataManager addObserver:self];
   configuration.syncController.delegate = self;
   self.webView = [self createWebViewWithConfiguration:configuration];
 }
@@ -594,24 +596,23 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
 
   // Developers can choose to use system or Chrome context menu in the shell
   // app. This will also recreate the web view.
-  BOOL chromeContextMenuEnabled =
-      CWVWebView.chromeLongPressAndForceTouchHandlingEnabled;
+  BOOL chromeContextMenuEnabled = CWVWebView.chromeContextMenuEnabled;
   NSString* contextMenuSwitchActionTitle = [NSString
-      stringWithFormat:@"Use %@ context menu",
-                       chromeContextMenuEnabled ? @"system" : @"Chrome"];
+      stringWithFormat:@"%@ Chrome context menu",
+                       chromeContextMenuEnabled ? @"Disable" : @"Enable"];
   [alertController
       addAction:[UIAlertAction
                     actionWithTitle:contextMenuSwitchActionTitle
                               style:UIAlertActionStyleDefault
                             handler:^(UIAlertAction* action) {
-                              CWVWebView
-                                  .chromeLongPressAndForceTouchHandlingEnabled =
+                              CWVWebView.chromeContextMenuEnabled =
                                   !chromeContextMenuEnabled;
                               NSLog(@"Chrome context menu is %@ now.",
                                     !chromeContextMenuEnabled ? @"OFF" : @"ON");
                               CWVWebViewConfiguration* configuration =
                                   weakSelf.webView.configuration;
                               [weakSelf removeWebView];
+                              weakSelf.field.text = @"";
                               weakSelf.webView = [weakSelf
                                   createWebViewWithConfiguration:configuration];
                             }]];
@@ -830,51 +831,15 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
 }
 
 - (void)webView:(CWVWebView*)webView
-    runContextMenuWithTitle:(NSString*)menuTitle
-             forHTMLElement:(CWVHTMLElement*)element
-                     inView:(UIView*)view
-        userGestureLocation:(CGPoint)location {
-  if (!element.hyperlink) {
-    return;
-  }
-
-  UIAlertController* alert = [UIAlertController
-      alertControllerWithTitle:menuTitle
-                       message:nil
-                preferredStyle:UIAlertControllerStyleActionSheet];
-  alert.popoverPresentationController.sourceView = view;
-  alert.popoverPresentationController.sourceRect =
-      CGRectMake(location.x, location.y, 1.0, 1.0);
-
-  void (^copyHandler)(UIAlertAction*) = ^(UIAlertAction* action) {
-    NSDictionary* item = @{
-      (NSString*)(kUTTypeURL) : element.hyperlink,
-      (NSString*)(kUTTypeUTF8PlainText) : [[element.hyperlink absoluteString]
-          dataUsingEncoding:NSUTF8StringEncoding],
-    };
-    [[UIPasteboard generalPasteboard] setItems:@[ item ]];
-  };
-  [alert addAction:[UIAlertAction actionWithTitle:@"Copy Link"
-                                            style:UIAlertActionStyleDefault
-                                          handler:copyHandler]];
-
-  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                            style:UIAlertActionStyleCancel
-                                          handler:nil]];
-
-  [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)webView:(CWVWebView*)webView
-    contextMenuConfigurationForLinkWithURL:(NSURL*)linkURL
-                         completionHandler:
-                             (void (^)(UIContextMenuConfiguration*))
-                                 completionHandler API_AVAILABLE(ios(13.0)) {
+    contextMenuConfigurationForElement:(CWVHTMLElement*)element
+                     completionHandler:(void (^)(UIContextMenuConfiguration*))
+                                           completionHandler
+    API_AVAILABLE(ios(13.0)) {
   void (^copyHandler)(UIAction*) = ^(UIAction* action) {
     NSDictionary* item = @{
-      (NSString*)(kUTTypeURL) : linkURL.absoluteString,
-      (NSString*)(kUTTypeUTF8PlainText) :
-          [linkURL.absoluteString dataUsingEncoding:NSUTF8StringEncoding],
+      (NSString*)(kUTTypeURL) : element.hyperlink.absoluteString,
+      (NSString*)(kUTTypeUTF8PlainText) : [element.hyperlink.absoluteString
+          dataUsingEncoding:NSUTF8StringEncoding],
     };
     [[UIPasteboard generalPasteboard] setItems:@[ item ]];
   };
@@ -901,8 +866,9 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                             handler:^(id _){
                             }]
         ];
-        NSString* menuTitle = [NSString
-            stringWithFormat:@"iOS13 Context Menu: %@", linkURL.absoluteString];
+        NSString* menuTitle =
+            [NSString stringWithFormat:@"iOS13 Context Menu: %@",
+                                       element.hyperlink.absoluteString];
         return [UIMenu menuWithTitle:menuTitle children:actions];
       }];
 
@@ -1078,23 +1044,6 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
   NSLog(@"%@", NSStringFromSelector(_cmd));
 }
 
-- (BOOL)webView:(CWVWebView*)webView
-    shouldPreviewElement:(CWVPreviewElementInfo*)elementInfo {
-  NSLog(@"%@", NSStringFromSelector(_cmd));
-  return YES;
-}
-
-- (UIViewController*)webView:(CWVWebView*)webView
-    previewingViewControllerForElement:(CWVPreviewElementInfo*)elementInfo {
-  NSLog(@"%@", NSStringFromSelector(_cmd));
-  return nil;
-}
-
-- (void)webView:(CWVWebView*)webView
-    commitPreviewingViewController:(UIViewController*)previewingViewController {
-  NSLog(@"%@", NSStringFromSelector(_cmd));
-}
-
 - (void)webView:(CWVWebView*)webView
     didRequestDownloadWithTask:(CWVDownloadTask*)task {
   NSLog(@"%@", NSStringFromSelector(_cmd));
@@ -1114,6 +1063,22 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
           fromMainFrame:(BOOL)fromMainFrame {
   NSLog(@"%@ command.content=%@", NSStringFromSelector(_cmd), command.content);
   return YES;
+}
+
+#pragma mark CWVAutofillDataManagerObserver
+
+- (void)autofillDataManagerDataDidChange:
+    (CWVAutofillDataManager*)autofillDataManager {
+  NSLog(@"%@", NSStringFromSelector(_cmd));
+}
+
+- (void)autofillDataManager:(CWVAutofillDataManager*)autofillDataManager
+    didChangePasswordsByAdding:(NSArray<CWVPassword*>*)added
+                      updating:(NSArray<CWVPassword*>*)updated
+                      removing:(NSArray<CWVPassword*>*)removed {
+  NSLog(@"%@: added %@, updated %@, and removed %@ passwords",
+        NSStringFromSelector(_cmd), @(added.count), @(updated.count),
+        @(removed.count));
 }
 
 #pragma mark CWVDownloadTaskDelegate

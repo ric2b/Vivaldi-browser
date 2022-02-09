@@ -10,6 +10,8 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/bubble/info_bubble.h"
@@ -28,6 +30,7 @@ TooltipIcon::TooltipIcon(const std::u16string& tooltip, int tooltip_icon_size)
       bubble_(nullptr),
       preferred_width_(0) {
   SetFocusBehavior(PlatformStyle::kDefaultFocusBehavior);
+  set_suppress_default_focus_handling();
   FocusRing::Install(this);
   SetBorder(CreateEmptyBorder(
       LayoutProvider::Get()->GetInsetsMetric(INSETS_VECTOR_IMAGE_BUTTON)));
@@ -42,7 +45,7 @@ TooltipIcon::~TooltipIcon() {
 
 void TooltipIcon::OnMouseEntered(const ui::MouseEvent& event) {
   mouse_inside_ = true;
-  show_timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(150), this,
+  show_timer_.Start(FROM_HERE, base::Milliseconds(150), this,
                     &TooltipIcon::ShowBubble);
 }
 
@@ -75,7 +78,13 @@ void TooltipIcon::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void TooltipIcon::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kTooltip;
+  // The tooltip icon, despite visually being an icon with no text, actually
+  // opens a bubble whenever the user mouses over it or focuses it, so it's
+  // essentially a text control that hides itself when not in view without
+  // altering the bubble's layout when shown. As such, have it behave like
+  // static text for screenreader users, since that's the role it serves here
+  // anyway.
+  node_data->role = ax::mojom::Role::kStaticText;
   node_data->SetName(tooltip_);
 }
 
@@ -105,9 +114,8 @@ void TooltipIcon::RemoveObserver(Observer* observer) {
 void TooltipIcon::SetDrawAsHovered(bool hovered) {
   SetImage(gfx::CreateVectorIcon(
       vector_icons::kInfoOutlineIcon, tooltip_icon_size_,
-      GetNativeTheme()->GetSystemColor(
-          hovered ? ui::NativeTheme::kColorId_TooltipIconHovered
-                  : ui::NativeTheme::kColorId_TooltipIcon)));
+      GetColorProvider()->GetColor(hovered ? ui::kColorHelpIconActive
+                                           : ui::kColorHelpIconInactive)));
 }
 
 void TooltipIcon::ShowBubble() {

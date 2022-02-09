@@ -171,6 +171,10 @@ gfx::NativeWindow PasswordGenerationControllerImpl::top_level_native_window()
   return web_contents_->GetTopLevelNativeWindow();
 }
 
+content::WebContents* PasswordGenerationControllerImpl::web_contents() const {
+  return web_contents_;
+}
+
 // static
 void PasswordGenerationControllerImpl::CreateForWebContentsForTesting(
     content::WebContents* web_contents,
@@ -245,4 +249,4 @@ void PasswordGenerationControllerImpl::ResetState() {
   manual_generation_requested_ = false;
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(PasswordGenerationControllerImpl)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PasswordGenerationControllerImpl);

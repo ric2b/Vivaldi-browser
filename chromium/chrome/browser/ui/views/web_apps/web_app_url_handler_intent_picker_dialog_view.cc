@@ -30,8 +30,8 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/web_apps/web_app_url_handler_hover_button.h"
-#include "chrome/browser/web_applications/components/url_handler_launch_params.h"
-#include "chrome/browser/web_applications/components/url_handler_prefs.h"
+#include "chrome/browser/web_applications/url_handler_launch_params.h"
+#include "chrome/browser/web_applications/url_handler_prefs.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/grit/generated_resources.h"
@@ -44,10 +44,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/color/color_id.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/checkbox.h"
@@ -171,9 +171,6 @@ WebAppUrlHandlerIntentPickerView::WebAppUrlHandlerIntentPickerView(
   SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_URL_HANDLER_INTENT_PICKER_OK_BUTTON_TEXT));
-  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
-                 l10n_util::GetStringUTF16(
-                     IDS_URL_HANDLER_INTENT_PICKER_CANCEL_BUTTON_TEXT));
 
   SetAcceptCallback(base::BindOnce(
       &WebAppUrlHandlerIntentPickerView::OnAccepted, base::Unretained(this)));
@@ -248,7 +245,6 @@ void WebAppUrlHandlerIntentPickerView::Initialize() {
   scrollable_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
 
-  web_app::WebAppProvider* provider;
   // size+1 for the browser entry.
   size_t total_buttons = launch_params_list_.size() + 1;
   hover_buttons_.reserve(total_buttons);
@@ -266,7 +262,9 @@ void WebAppUrlHandlerIntentPickerView::Initialize() {
   for (const auto& launch_params : launch_params_list_) {
     Profile* profile = g_browser_process->profile_manager()->GetProfileByPath(
         launch_params.profile_path);
-    provider = web_app::WebAppProvider::Get(profile);
+    web_app::WebAppProvider* const provider =
+        web_app::WebAppProvider::GetForWebApps(profile);
+    DCHECK(provider);
     web_app::WebAppRegistrar& registrar = provider->registrar();
 
     const std::u16string& profile_name =
@@ -284,22 +282,21 @@ void WebAppUrlHandlerIntentPickerView::Initialize() {
     const size_t button_index = hover_buttons_.size();
     // TODO(crbug.com/1072058): Make sure the UI is reasonable when
     // |app_title| is long.
-    auto app_button = std::make_unique<WebAppUrlHandlerHoverButton>(
+    auto button = std::make_unique<WebAppUrlHandlerHoverButton>(
         base::BindRepeating(
             &WebAppUrlHandlerIntentPickerView::SetSelectedAppIndex,
             base::Unretained(this), button_index),
         launch_params, provider, app_title,
         registrar.GetAppStartUrl(launch_params.app_id));
-    app_button->set_tag(button_index);
-    app_button->GetViewAccessibility().OverridePosInSet(button_index + 1,
-                                                        total_buttons);
-    hover_buttons_.push_back(app_button.get());
-    scrollable_view->AddChildViewAt(std::move(app_button), button_index);
+    button->set_tag(button_index);
+    button->GetViewAccessibility().OverridePosInSet(button_index + 1,
+                                                    total_buttons);
+    hover_buttons_.push_back(button.get());
+    scrollable_view->AddChildViewAt(std::move(button), button_index);
   }
 
   auto scroll_view = std::make_unique<views::ScrollView>();
-  scroll_view->SetBackgroundThemeColorId(
-      ui::NativeTheme::kColorId_BubbleBackground);
+  scroll_view->SetBackgroundThemeColorId(ui::kColorBubbleBackground);
   scroll_view->SetContents(std::move(scrollable_view));
   // This part gives the scroll a fixed width and height. The height depends on
   // how many app candidates we got and how many we actually want to show.
@@ -456,7 +453,8 @@ void ShowWebAppUrlHandlerIntentPickerDialog(
       base::BarrierClosure(profiles.size(), std::move(show_dialog_callback));
 
   for (Profile* profile : profiles) {
-    auto* provider = web_app::WebAppProvider::Get(profile);
+    web_app::WebAppProvider* const provider =
+        web_app::WebAppProvider::GetForWebApps(profile);
     DCHECK(provider);
 
     provider->on_registry_ready().Post(FROM_HERE, on_registrar_ready_callback);

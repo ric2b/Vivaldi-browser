@@ -878,6 +878,18 @@ public class TabGroupModelFilter extends TabModelFilter {
      */
     @Override
     protected boolean shouldNotifyObservers() {
-        return (SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", false));
+        return (SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", true));
+    }
+
+    /**
+     * Vivaldi: Get the last shown tab id within a group.
+     */
+    public int getLastShownTabId(Tab tab) {
+        if (tab != null) {
+            TabGroup actualGroup = mGroupIdToGroupMap.get(getRootId(tab));
+            if (actualGroup != null) return actualGroup.getLastShownTabId();
+        }
+        // By default we consider the first tab in the group as the last one being selected,
+        return 0;
     }
 }

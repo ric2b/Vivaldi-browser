@@ -1,0 +1,22 @@
+{
+  "key": "AAAAB3NzaC1yc2EAAAADAQABAAABAQCTRcu4gLK34YltRyhW7wYAYga9005PNG6Gp86PtK/OHSgye3JreU5cBoTZCmf9+zwhxVhCOB7GyDcSjqvy7o438Qa3gCgWVieSSZHogGf+fHsNcmw0uP688+O8kDy7VtZsDdPatkpCLOzTTF2dHnrewJeEz295+IplqSIitIBRQLZkEJuib71BonUw9vwANdNHV0Ky3tlSng0muKwyT+jdj+h0ODQW0GJGsKj4GIzuEwwPGVrkWq6qKwc0FynS3B/xRrvXl7RMAZtNexzbGSSo7VUvV3+P/LfNJsu1HtwED6DByqnGgoQRTyW/bRqgTgPUIuWoRpTz04UZj6aHvCTP",
+  "name": "Vivaldi Theme Store",
+  "version": "1.0",
+  "manifest_version": 2,
+  "incognito": "split",
+  "permissions": [
+    "themePrivate"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://vivnet-st-themes.viv.dc01/*",
+        "https://themes-staging.vivaldi.net/",
+        "https://themes.vivaldi.net/*"
+      ],
+      "js": ["theme-store.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ]
+}

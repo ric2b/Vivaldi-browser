@@ -54,8 +54,6 @@ class ContentBlockingEventRouter
 
  private:
   content::BrowserContext* browser_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingEventRouter);
 };
 
 class ContentBlockingAPI : public BrowserContextKeyedAPI,
@@ -106,8 +104,6 @@ class AdBlockFunction : public ExtensionFunction,
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AdBlockFunction);
 };
 
 class ContentBlockingSetRuleGroupEnabledFunction : public AdBlockFunction {
@@ -121,8 +117,6 @@ class ContentBlockingSetRuleGroupEnabledFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingSetRuleGroupEnabledFunction);
 };
 
 class ContentBlockingIsRuleGroupEnabledFunction : public AdBlockFunction {
@@ -136,8 +130,6 @@ class ContentBlockingIsRuleGroupEnabledFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingIsRuleGroupEnabledFunction);
 };
 
 class ContentBlockingAddKnownSourceFromURLFunction : public AdBlockFunction {
@@ -151,8 +143,6 @@ class ContentBlockingAddKnownSourceFromURLFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingAddKnownSourceFromURLFunction);
 };
 
 class ContentBlockingAddKnownSourceFromFileFunction : public AdBlockFunction {
@@ -166,8 +156,6 @@ class ContentBlockingAddKnownSourceFromFileFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingAddKnownSourceFromFileFunction);
 };
 
 class ContentBlockingEnableSourceFunction : public AdBlockFunction {
@@ -181,8 +169,6 @@ class ContentBlockingEnableSourceFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingEnableSourceFunction);
 };
 
 class ContentBlockingDisableSourceFunction : public AdBlockFunction {
@@ -196,8 +182,6 @@ class ContentBlockingDisableSourceFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingDisableSourceFunction);
 };
 
 class ContentBlockingFetchSourceNowFunction : public AdBlockFunction {
@@ -211,8 +195,6 @@ class ContentBlockingFetchSourceNowFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingFetchSourceNowFunction);
 };
 
 class ContentBlockingDeleteKnownSourceFunction : public AdBlockFunction {
@@ -226,8 +208,6 @@ class ContentBlockingDeleteKnownSourceFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingDeleteKnownSourceFunction);
 };
 
 class ContentBlockingResetPresetSourcesFunction : public AdBlockFunction {
@@ -241,8 +221,6 @@ class ContentBlockingResetPresetSourcesFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingResetPresetSourcesFunction);
 };
 
 class ContentBlockingGetRuleSourceFunction : public AdBlockFunction {
@@ -256,8 +234,6 @@ class ContentBlockingGetRuleSourceFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetRuleSourceFunction);
 };
 
 class ContentBlockingGetRuleSourcesFunction : public AdBlockFunction {
@@ -271,8 +247,6 @@ class ContentBlockingGetRuleSourcesFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetRuleSourcesFunction);
 };
 
 class ContentBlockingSetActiveExceptionsListFunction : public AdBlockFunction {
@@ -286,8 +260,6 @@ class ContentBlockingSetActiveExceptionsListFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingSetActiveExceptionsListFunction);
 };
 
 class ContentBlockingGetActiveExceptionsListFunction : public AdBlockFunction {
@@ -301,8 +273,6 @@ class ContentBlockingGetActiveExceptionsListFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetActiveExceptionsListFunction);
 };
 
 class ContentBlockingAddExceptionForDomainFunction : public AdBlockFunction {
@@ -316,8 +286,6 @@ class ContentBlockingAddExceptionForDomainFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingAddExceptionForDomainFunction);
 };
 
 class ContentBlockingRemoveExceptionForDomainFunction : public AdBlockFunction {
@@ -331,8 +299,6 @@ class ContentBlockingRemoveExceptionForDomainFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingRemoveExceptionForDomainFunction);
 };
 
 class ContentBlockingRemoveAllExceptionsFunction : public AdBlockFunction {
@@ -346,8 +312,6 @@ class ContentBlockingRemoveAllExceptionsFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingRemoveAllExceptionsFunction);
 };
 
 class ContentBlockingGetExceptionsFunction : public AdBlockFunction {
@@ -361,8 +325,6 @@ class ContentBlockingGetExceptionsFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetExceptionsFunction);
 };
 
 class ContentBlockingGetAllExceptionListsFunction : public AdBlockFunction {
@@ -376,8 +338,6 @@ class ContentBlockingGetAllExceptionListsFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetAllExceptionListsFunction);
 };
 
 class ContentBlockingGetBlockedUrlsInfoFunction : public AdBlockFunction {
@@ -391,8 +351,6 @@ class ContentBlockingGetBlockedUrlsInfoFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetBlockedUrlsInfoFunction);
 };
 
 class ContentBlockingGetBlockedDomainCountersFunction : public AdBlockFunction {
@@ -406,8 +364,6 @@ class ContentBlockingGetBlockedDomainCountersFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetBlockedDomainCountersFunction);
 };
 
 class ContentBlockingClearBlockedDomainCountersFunction
@@ -422,8 +378,6 @@ class ContentBlockingClearBlockedDomainCountersFunction
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingClearBlockedDomainCountersFunction);
 };
 
 class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {
@@ -437,8 +391,6 @@ class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentBlockingIsExemptOfFilteringFunction);
 };
 
 }  // namespace extensions

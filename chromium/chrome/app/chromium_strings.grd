@@ -584,6 +584,14 @@ Chromium is unable to recover your settings.
         <message name="IDS_EXTENSION_UNINSTALL_PROMPT_REMOVE_DATA_CHECKBOX" desc="Checkbox text to ask the user whether they want to remove associated data at uninstall time. Only used when uninstalling an app associated with a particular website.">
           Also clear data from Chromium (<ph name="URL">$1<ex>www.google.com</ex></ph>)
         </message>
+
+        <!-- Extension alerts. -->
+        <message name="IDS_EXTENSION_ALERT_ITEM_BLOCKLISTED_MALWARE" desc="A statement that an extension has been newly blocklisted for malware.">
+          Chromium found that "<ph name="EXTENSION_NAME">$1<ex>Gmail Checker</ex></ph>" contains malware
+        </message>
+        <message name="IDS_EXTENSIONS_ALERT_ITEM_BLOCKLISTED_MALWARE_TITLE" desc="A statement that multiple extension/apps have been newly blocklisted for malware.">
+          Chromium found that these items contain malware:
+        </message>
       </if>
 
       <!-- chrome://settings/extensions page -->
@@ -722,7 +730,7 @@ Chromium is unable to recover your settings.
       </if>
 
       <!-- about:browser-switch strings -->
-      <if expr="is_win or is_macosx or (is_linux and not chromeos)">
+      <if expr="is_win or is_macosx or is_fuchsia or (is_linux and not chromeos)">
         <message name="IDS_ABOUT_BROWSER_SWITCH_DESCRIPTION_UNKNOWN_BROWSER" desc="Description shown while waiting for an alternative browser to open, when the browser name is not auto-detected">
           Your system administrator has configured Chromium to open an alternative browser to access <ph name="TARGET_URL_HOSTNAME">$1<ex>example.com</ex></ph>.
         </message>
@@ -1084,6 +1092,25 @@ Chromium is unable to recover your settings.
         <message name="IDS_MISSING_STORAGE_PERMISSION_DOWNLOAD_EDUCATION_TEXT" desc="Text shown educating the user that Chrome is missing the Android storage permission, which is required to download files.">
           Chromium needs storage access to download files
         </message>
+
+        <message name="IDS_MESSAGE_MISSING_AR_CAMERA_PERMISSION_TEXT" desc="Text shown in a prompt ui when a website has requested access to augmented reality capabilities, but Chrome is missing the Android camera permission.">
+          Chromium needs camera permission to create a 3D map of your surroundings
+        </message>
+        <message name="IDS_MESSAGE_MISSING_CAMERA_PERMISSION_TEXT" desc="Text shown in a prompt ui when a website has requested access to the camera capabilities, but Chrome is missing the Android camera permission.">
+          Chromium needs camera permission for this site
+        </message>
+        <message name="IDS_MESSAGE_MISSING_MICROPHONE_PERMISSION_TEXT" desc="Text shown in a prompt ui when a website has requested access to the microphone capabilities, but Chrome is missing the Android microphone permission.">
+          Chromium needs microphone permission for this site
+        </message>
+        <message name="IDS_MESSAGE_MISSING_MICROPHONE_CAMERA_PERMISSIONS_TEXT" desc="Text shown in a prompt ui when a website has requested access to the microphone and camera capabilities, but Chrome is missing the Android microphone and camera permissions.">
+          Chromium needs camera and microphone permissions for this site
+        </message>
+        <message name="IDS_MESSAGE_MISSING_LOCATION_PERMISSION_TEXT" desc="Text shown in a prompt ui when a website has requested access to the location capabilities, but Chrome is missing the Android location permission.">
+          Chromium needs location permission for this site
+        </message>
+        <message name="IDS_MESSAGE_STORAGE_ACCESS_PERMISSION_TEXT" desc="Text shown educating the user that Chrome is missing the Android storage permission, which is required to download files.">
+          Chromium needs storage access permission to download files
+        </message>
       </if>
 
       <if  expr="is_macosx">
@@ -1099,49 +1126,6 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_EULA_SCREEN_ACCESSIBLE_TITLE" desc="Title to be spoken on opening the OOBE EULA screen">
           Chromium OS terms
-        </message>
-        <message name="IDS_OOBE_WELCOME_START_OS_INSTALL" desc="Label for button shown on the OOBE welcome screen to show the OS installation screens">
-          Install Chromium OS
-        </message>
-
-        <!-- OS install screen -->
-        <message name="IDS_OS_INSTALL_SCREEN_INTRO_TITLE" desc="Title of the introduction page in the OS install screen">
-          Install Chromium OS
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_INTRO_SUBTITLE" desc="Subtitle text of the OS install screen's introduction step">
-          Installing Chromium OS will overwrite all data on your device.
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_INTRO_BODY" desc="Body text of the OS install screen's introduction step">
-          <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Before we get started, please ensure that you have an up-to-date backup of your data. Installing Chromium OS will overwrite all data on your hard drive.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-          <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>Google is not responsible for any data loss, and makes no guarantee that Chromium OS will work on uncertified models. Please visit [TBD] to learn more about certified models.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
-          <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Learn more about installing Chromium OS and data erasure: [TBD URL]<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-          <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If you are ready to proceed, click “Install Chromium OS” and we'll guide you through the installation in just a couple easy steps. You'll have another chance to confirm before we make any changes to your computer.<ph name="END_PARAGRAPH4">&lt;/p&gt;</ph>
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_INTRO_NEXT_BUTTON" desc="Text of the next button on the introduction page of the OS install screen">
-          Install Chromium OS
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_CONFIRM_TITLE" desc="Title of the confirmation page of the OS install screen">
-          Ready to install Chromium OS
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_CONFIRM_BODY" desc="Body text of the OS install screen's confirmation step">
-          <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>We’re ready to install Chromium OS! Once you proceed:
-          <ph name="BEGIN_LIST">&lt;ul&gt;</ph>
-          <ph name="LIST_ITEM">&lt;li&gt;</ph>Files, data, and your current operating system will be erased.
-          <ph name="LIST_ITEM">&lt;li&gt;</ph>Chromium OS will be installed.
-          <ph name="LIST_ITEM">&lt;li&gt;</ph>Your device will shut down once the installation is complete.
-          <ph name="END_LIST">&lt;/ul&gt;</ph>
-          <ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-          <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>One last reminder: installation will erase your entire hard drive. Please make sure you have any data you care about backed up.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
-          <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Once installation starts it cannot be canceled.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_CONFIRM_NEXT_BUTTON" desc="Text of the next button on the confirmation page of the OS install screen">
-          Erase Hard Drive &amp; Install Chromium OS
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_IN_PROGRESS_TITLE" desc="Title of the in-progress page of the OS install screen">
-          Chromium OS installation in progress
-        </message>
-        <message name="IDS_OS_INSTALL_SCREEN_IN_PROGRESS_SUBTITLE" desc="Subtitle of the in-progress page of the OS install screen">
-          Installation is in progress. Don't turn off the device. Install should take no longer than twenty minutes. The machine will automatically shut down after installing.
         </message>
       </if>
 

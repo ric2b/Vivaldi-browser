@@ -306,9 +306,11 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
         line = "  |--";
       else
         line = "  +--";
-      for (FrameTreeNode* up = node->parent()->frame_tree_node(); up != root;
-           up = FrameTreeNode::From(up->parent())) {
-        if (up->parent()->child_at(up->parent()->child_count() - 1) != up)
+      for (RenderFrameHostImpl* up = node->parent();
+           up != root->current_frame_host(); up = up->GetParent()) {
+        if (up->GetParent()
+                ->child_at(up->GetParent()->child_count() - 1)
+                ->current_frame_host() != up)
           line = "  |  " + line;
         else
           line = "     " + line;
@@ -546,8 +548,10 @@ blink::mojom::PopupWidgetHost* ShowPopupWidgetWaiter::GetForwardingInterface() {
 }
 
 void ShowPopupWidgetWaiter::ShowPopup(const gfx::Rect& initial_rect,
+                                      const gfx::Rect& initial_anchor_rect,
                                       ShowPopupCallback callback) {
-  GetForwardingInterface()->ShowPopup(initial_rect, std::move(callback));
+  GetForwardingInterface()->ShowPopup(initial_rect, initial_anchor_rect,
+                                      std::move(callback));
   initial_rect_ = initial_rect;
   run_loop_.Quit();
 }

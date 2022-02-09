@@ -76,8 +76,8 @@ class EnrollmentCertificateUploaderTest : public ::testing::Test {
     settings_helper_.ReplaceDeviceSettingsProviderWithStub();
     policy_client_.SetDMToken("fake_dm_token");
 
-    uploader_.set_retry_limit(kRetryLimit);
-    uploader_.set_retry_delay(base::TimeDelta());
+    uploader_.set_retry_limit_for_testing(kRetryLimit);
+    uploader_.set_retry_delay_for_testing(base::TimeDelta());
   }
 
  protected:
@@ -134,6 +134,24 @@ TEST_F(EnrollmentCertificateUploaderTest, GetCertificateBadRequestFailure) {
   Run(/*expected_status=*/CertStatus::kFailedToFetch);
 }
 
+TEST_F(EnrollmentCertificateUploaderTest,
+       GetCertificateFailureWithUnregisteredClientOnRetry) {
+  InSequence s;
+
+  // Shall fail on |CloudPolicyClient::is_registered()| check and not retry.
+  EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _, _))
+      .Times(1)
+      .WillOnce(WithArgs<5>(
+          Invoke([this](AttestationFlow::CertificateCallback callback) {
+            policy_client_.SetDMToken("");
+            CertCallbackUnspecifiedFailure(std::move(callback));
+          })));
+
+  EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _, _)).Times(0);
+
+  Run(/*expected_status=*/CertStatus::kFailedToFetch);
+}
+
 TEST_F(EnrollmentCertificateUploaderTest, UploadCertificateFailure) {
   InSequence s;
 
@@ -163,6 +181,33 @@ TEST_F(EnrollmentCertificateUploaderTest, UploadCertificateFailure) {
   }
 
   Run(/*expected_status=*/CertStatus::kFailedToUpload);
+}
+
+TEST_F(EnrollmentCertificateUploaderTest,
+       UploadCertificateFailureWithUnregisteredClientOnRetry) {
+  InSequence s;
+
+  // Shall fail on |CloudPolicyClient::is_registered()| check and not retry.
+  EXPECT_CALL(attestation_flow_,
+              GetCertificate(PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
+                             /*force_new_key=*/false, _, _))
+      .Times(1)
+      .WillOnce(WithArgs<5>(Invoke(CertCallbackSuccess)));
+  EXPECT_CALL(policy_client_,
+              UploadEnterpriseEnrollmentCertificate("fake_cert", _))
+      .Times(1)
+      .WillOnce(WithArgs<1>(
+          Invoke([this](policy::CloudPolicyClient::StatusCallback callback) {
+            policy_client_.SetDMToken("");
+            StatusCallbackFailure(std::move(callback));
+          })));
+
+  EXPECT_CALL(attestation_flow_,
+              GetCertificate(PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
+                             /*force_new_key=*/false, _, _))
+      .Times(0);
+
+  Run(/*expected_status=*/CertStatus::kFailedToFetch);
 }
 
 TEST_F(EnrollmentCertificateUploaderTest, UploadCertificateSuccessWithNewKey) {

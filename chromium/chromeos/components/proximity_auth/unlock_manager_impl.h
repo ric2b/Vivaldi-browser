@@ -5,6 +5,7 @@
 #ifndef CHROMEOS_COMPONENTS_PROXIMITY_AUTH_UNLOCK_MANAGER_IMPL_H_
 #define CHROMEOS_COMPONENTS_PROXIMITY_AUTH_UNLOCK_MANAGER_IMPL_H_
 
+#include "ash/public/cpp/smartlock_state.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -17,7 +18,6 @@
 #include "chromeos/components/proximity_auth/remote_status_update.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
-#include "chromeos/components/proximity_auth/smartlock_state.h"
 #include "chromeos/components/proximity_auth/unlock_manager.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/services/secure_channel/public/mojom/secure_channel.mojom.h"
@@ -46,6 +46,10 @@ class UnlockManagerImpl : public UnlockManager,
   // unlock manager.
   UnlockManagerImpl(ProximityAuthSystem::ScreenlockType screenlock_type,
                     ProximityAuthClient* proximity_auth_client);
+
+  UnlockManagerImpl(const UnlockManagerImpl&) = delete;
+  UnlockManagerImpl& operator=(const UnlockManagerImpl&) = delete;
+
   ~UnlockManagerImpl() override;
 
   // UnlockManager:
@@ -156,7 +160,7 @@ class UnlockManagerImpl : public UnlockManager,
   void OnGotSignInChallenge(const std::string& challenge);
 
   // Returns the current state for the Smart Lock UI.
-  SmartLockState GetSmartLockState();
+  ash::SmartLockState GetSmartLockState();
 
   // Updates the lock screen based on the manager's current state.
   void UpdateLockScreen();
@@ -277,7 +281,7 @@ class UnlockManagerImpl : public UnlockManager,
   bool has_user_been_shown_first_status_ = false;
 
   // The state of the current screen lock UI.
-  SmartLockState smartlock_state_ = SmartLockState::kInactive;
+  ash::SmartLockState smartlock_state_ = ash::SmartLockState::kInactive;
 
   // The timestamp of when the lock or login screen is shown to the user. Begins
   // when the screen is locked, the system is rebooted, the clamshell lid is
@@ -315,8 +319,6 @@ class UnlockManagerImpl : public UnlockManager,
 
   // Used to vend all other weak pointers.
   base::WeakPtrFactory<UnlockManagerImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(UnlockManagerImpl);
 };
 
 }  // namespace proximity_auth

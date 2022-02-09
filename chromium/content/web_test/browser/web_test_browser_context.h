@@ -23,14 +23,20 @@ class WebTestBackgroundFetchDelegate;
 class WebTestPermissionManager;
 class WebTestPushMessagingService;
 class WebTestStorageAccessManager;
+class MockPlatformNotificationService;
 
 class WebTestBrowserContext final : public ShellBrowserContext {
  public:
   explicit WebTestBrowserContext(bool off_the_record);
+
+  WebTestBrowserContext(const WebTestBrowserContext&) = delete;
+  WebTestBrowserContext& operator=(const WebTestBrowserContext&) = delete;
+
   ~WebTestBrowserContext() override;
 
   // ShellBrowserContext overrides.
   DownloadManagerDelegate* GetDownloadManagerDelegate() override;
+  PlatformNotificationService* GetPlatformNotificationService() override;
   PushMessagingService* GetPushMessagingService() override;
   PermissionControllerDelegate* GetPermissionControllerDelegate() override;
   BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
@@ -41,6 +47,8 @@ class WebTestBrowserContext final : public ShellBrowserContext {
   WebTestStorageAccessManager* GetWebTestStorageAccessManager();
 
  private:
+  std::unique_ptr<MockPlatformNotificationService>
+      platform_notification_service_;
   std::unique_ptr<WebTestPushMessagingService> push_messaging_service_;
   std::unique_ptr<PermissionControllerDelegate> permission_manager_;
   std::unique_ptr<WebTestBackgroundFetchDelegate> background_fetch_delegate_;
@@ -49,8 +57,6 @@ class WebTestBrowserContext final : public ShellBrowserContext {
   std::unique_ptr<ClientHintsControllerDelegate>
       client_hints_controller_delegate_;
   std::unique_ptr<WebTestStorageAccessManager> storage_access_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebTestBrowserContext);
 };
 
 }  // namespace content

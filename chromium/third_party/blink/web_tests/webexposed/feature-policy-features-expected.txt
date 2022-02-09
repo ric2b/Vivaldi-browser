@@ -10,7 +10,6 @@ ch-device-memory
 ch-downlink
 ch-dpr
 ch-ect
-ch-lang
 ch-prefers-color-scheme
 ch-rtt
 ch-ua
@@ -21,7 +20,7 @@ ch-ua-mobile
 ch-ua-model
 ch-ua-platform
 ch-ua-platform-version
-ch-ua-reduced
+ch-viewport-height
 ch-viewport-width
 ch-width
 clipboard-read

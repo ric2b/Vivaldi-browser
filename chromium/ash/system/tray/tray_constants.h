@@ -27,7 +27,7 @@ extern const float kTrayItemCornerRadius;
 constexpr int kTrayImageItemPadding = 3;
 
 // The width of the tray menu.
-extern const int kTrayMenuWidth;
+constexpr int kTrayMenuWidth = 360;
 
 extern const int kTrayPopupAutoCloseDelayInSeconds;
 extern const int kTrayPopupAutoCloseDelayInSecondsWithSpokenFeedback;
@@ -93,8 +93,6 @@ extern const int kTrayPopupInkDropInset;
 // The radius used to draw the corners of the rounded rect style ink drops.
 extern const int kTrayPopupInkDropCornerRadius;
 
-constexpr float kUnifiedMenuBackgroundBlur = 30.f;
-
 // Threshold to ignore update on the slider value.
 constexpr float kAudioSliderIgnoreUpdateThreshold = 0.01;
 
@@ -123,8 +121,10 @@ constexpr int kUnifiedSliderViewSpacing = 12;
 constexpr int kUnifiedMenuPadding = 8;
 constexpr int kUnifiedMessageCenterBubbleSpacing = 8;
 constexpr int kUnifiedNotificationCenterSpacing = 16;
+constexpr int kUnifiedTrayBatteryIconSize = 20;
 constexpr int kUnifiedTrayIconSize = 18;
-constexpr int kUnifiedTrayTextTopPadding = 2;
+constexpr int kUnifiedTraySubIconSize = 15;
+constexpr int kUnifiedTrayTextTopPadding = 1;
 constexpr int kUnifiedTrayTextRightPadding = 1;
 constexpr int kUnifiedTrayTimeLeftPadding = 1;
 constexpr int kUnifiedTraySpacingBetweenIcons = 6;
@@ -167,10 +167,8 @@ constexpr int kNotificationIconAnimationOutDurationMs = 67;
 constexpr double kNotificationCenterDragExpandThreshold = 0.8;
 
 // Constants used in FeaturePodsView of UnifiedSystemTray.
-constexpr gfx::Size kUnifiedFeaturePodIconSize(46, 46);
 constexpr gfx::Size kUnifiedFeaturePodSize(112, 94);
 constexpr gfx::Size kUnifiedFeaturePodCollapsedSize(46, 46);
-constexpr gfx::Insets kUnifiedFeaturePodIconPadding(5);
 constexpr gfx::Insets kUnifiedFeaturePodHoverPadding(2);
 constexpr int kUnifiedFeaturePodVectorIconSize = 18;
 constexpr int kUnifiedFeaturePodLabelWidth = 85;

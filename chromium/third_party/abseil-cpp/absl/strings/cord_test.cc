@@ -1385,6 +1385,59 @@ TEST_P(CordTest, DiabolicalGrowth) {
                cord.EstimatedMemoryUsage());
 }
 
+// The following tests check support for >4GB cords in 64-bit binaries, and
+// 2GB-4GB cords in 32-bit binaries.  This function returns the large cord size
+// that's appropriate for the binary.
+
+// Construct a huge cord with the specified valid prefix.
+static absl::Cord MakeHuge(absl::string_view prefix) {
+  absl::Cord cord;
+  if (sizeof(size_t) > 4) {
+    // In 64-bit binaries, test 64-bit Cord support.
+    const size_t size =
+        static_cast<size_t>(std::numeric_limits<uint32_t>::max()) + 314;
+    cord.Append(absl::MakeCordFromExternal(
+        absl::string_view(prefix.data(), size),
+        [](absl::string_view s) { DoNothing(s, nullptr); }));
+  } else {
+    // Cords are limited to 32-bit lengths in 32-bit binaries.  The following
+    // tests check for use of "signed int" to represent Cord length/offset.
+    // However absl::string_view does not allow lengths >= (1u<<31), so we need
+    // to append in two parts;
+    const size_t s1 = (1u << 31) - 1;
+    // For shorter cord, `Append` copies the data rather than allocating a new
+    // node. The threshold is currently set to 511, so `s2` needs to be bigger
+    // to not trigger the copy.
+    const size_t s2 = 600;
+    cord.Append(absl::MakeCordFromExternal(
+        absl::string_view(prefix.data(), s1),
+        [](absl::string_view s) { DoNothing(s, nullptr); }));
+    cord.Append(absl::MakeCordFromExternal(
+        absl::string_view("", s2),
+        [](absl::string_view s) { DoNothing(s, nullptr); }));
+  }
+  return cord;
+}
+
+TEST_P(CordTest, HugeCord) {
+  absl::Cord cord = MakeHuge("huge cord");
+  EXPECT_LE(cord.size(), cord.EstimatedMemoryUsage());
+  EXPECT_GE(cord.size() + 100, cord.EstimatedMemoryUsage());
+}
+
+// Tests that Append() works ok when handed a self reference
+TEST_P(CordTest, AppendSelf) {
+  // We run the test until data is ~16K
+  // This guarantees it covers small, medium and large data.
+  std::string control_data = "Abc";
+  absl::Cord data(control_data);
+  while (control_data.length() < 0x4000) {
+    data.Append(data);
+    control_data.append(control_data);
+    ASSERT_EQ(control_data, data);
+  }
+}
+
 TEST_P(CordTest, MakeFragmentedCordFromInitializerList) {
   absl::Cord fragmented =
       absl::MakeFragmentedCord({"A ", "fragmented ", "Cord"});
@@ -1538,7 +1591,7 @@ TEST_P(CordTest, CordChunkIteratorOperations) {
   VerifyChunkIterator(subcords, 128);
 }
 
-TEST(CordCharIterator, Traits) {
+TEST_P(CordTest, CharIteratorTraits) {
   static_assert(std::is_copy_constructible<absl::Cord::CharIterator>::value,
                 "");
   static_assert(std::is_copy_assignable<absl::Cord::CharIterator>::value, "");
@@ -1647,7 +1700,7 @@ static void VerifyCharIterator(const absl::Cord& cord) {
   }
 }
 
-TEST(CordCharIterator, Operations) {
+TEST_P(CordTest, CharIteratorOperations) {
   absl::Cord empty_cord;
   VerifyCharIterator(empty_cord);
 
@@ -1674,6 +1727,41 @@ TEST(CordCharIterator, Operations) {
   absl::Cord subcords;
   for (int i = 0; i < 4; ++i) subcords.Prepend(flat_cord.Subcord(16 * i, 128));
   VerifyCharIterator(subcords);
+}
+
+TEST_P(CordTest, CharIteratorAdvanceAndRead) {
+  // Create a Cord holding 6 flats of 2500 bytes each, and then iterate over it
+  // reading 150, 1500, 2500 and 3000 bytes. This will result in all possible
+  // partial, full and straddled read combinations including reads below
+  // kMaxBytesToCopy. b/197776822 surfaced a bug for a specific partial, small
+  // read 'at end' on Cord which caused a failure on attempting to read past the
+  // end in CordRepBtreeReader which was not covered by any existing test.
+  constexpr int kBlocks = 6;
+  constexpr size_t kBlockSize = 2500;
+  constexpr size_t kChunkSize1 = 1500;
+  constexpr size_t kChunkSize2 = 2500;
+  constexpr size_t kChunkSize3 = 3000;
+  constexpr size_t kChunkSize4 = 150;
+  RandomEngine rng;
+  std::string data = RandomLowercaseString(&rng, kBlocks * kBlockSize);
+  absl::Cord cord;
+  for (int i = 0; i < kBlocks; ++i) {
+    const std::string block = data.substr(i * kBlockSize, kBlockSize);
+    cord.Append(absl::Cord(block));
+  }
+
+  for (size_t chunk_size :
+       {kChunkSize1, kChunkSize2, kChunkSize3, kChunkSize4}) {
+    absl::Cord::CharIterator it = cord.char_begin();
+    size_t offset = 0;
+    while (offset < data.length()) {
+      const size_t n = std::min<size_t>(data.length() - offset, chunk_size);
+      absl::Cord chunk = cord.AdvanceAndRead(&it, n);
+      ASSERT_EQ(chunk.size(), n);
+      ASSERT_EQ(chunk.Compare(data.substr(offset, n)), 0);
+      offset += n;
+    }
+  }
 }
 
 TEST_P(CordTest, StreamingOutput) {
@@ -1725,7 +1813,7 @@ TEST_P(CordTest, Format) {
   EXPECT_EQ(c, "There were 0003 little pigs.And 1   bad wolf!");
 }
 
-TEST(CordDeathTest, Hardening) {
+TEST_P(CordTest, Hardening) {
   absl::Cord cord("hello");
   // These statement should abort the program in all builds modes.
   EXPECT_DEATH_IF_SUPPORTED(cord.RemovePrefix(6), "");

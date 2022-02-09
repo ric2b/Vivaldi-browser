@@ -13,7 +13,6 @@
 #include "media/base/status.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_frame.h"
-#include "media/mojo/clients/mojo_media_log_service.h"
 #include "media/mojo/mojom/video_decoder.mojom.h"
 #include "media/video/video_decode_accelerator.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -55,6 +54,10 @@ class MojoVideoDecoder final : public VideoDecoder,
       mojo::PendingRemote<mojom::VideoDecoder> pending_remote_decoder,
       RequestOverlayInfoCB request_overlay_info_cb,
       const gfx::ColorSpace& target_color_space);
+
+  MojoVideoDecoder(const MojoVideoDecoder&) = delete;
+  MojoVideoDecoder& operator=(const MojoVideoDecoder&) = delete;
+
   ~MojoVideoDecoder() final;
 
   // Decoder implementation
@@ -97,7 +100,16 @@ class MojoVideoDecoder final : public VideoDecoder,
   void OnDecodeDone(uint64_t decode_id, const Status& status);
   void OnResetDone();
 
-  void BindRemoteDecoder();
+  void InitAndBindRemoteDecoder(base::OnceClosure complete_cb);
+  void OnChannelTokenReady(media::mojom::CommandBufferIdPtr command_buffer_id,
+                           base::OnceClosure complete_cb,
+                           const base::UnguessableToken& channel_token);
+  void InitAndConstructRemoteDecoder(
+      media::mojom::CommandBufferIdPtr command_buffer_id,
+      base::OnceClosure complete_cb);
+  void InitializeRemoteDecoder(const VideoDecoderConfig& config,
+                               bool low_delay,
+                               absl::optional<base::UnguessableToken> cdm_id);
 
   // Forwards |overlay_info| to the remote decoder.
   void OnOverlayInfoChanged(const OverlayInfo& overlay_info);
@@ -120,6 +132,10 @@ class MojoVideoDecoder final : public VideoDecoder,
 
   GpuVideoAcceleratorFactories* gpu_factories_ = nullptr;
 
+  // Raw pointer is safe since both `this` and the `media_log` are owned by
+  // WebMediaPlayerImpl with the correct declaration order.
+  MediaLog* media_log_ = nullptr;
+
   InitCB init_cb_;
   OutputCB output_cb_;
   WaitingCB waiting_cb_;
@@ -139,8 +155,6 @@ class MojoVideoDecoder final : public VideoDecoder,
   bool remote_decoder_bound_ = false;
   bool has_connection_error_ = false;
   mojo::AssociatedReceiver<mojom::VideoDecoderClient> client_receiver_{this};
-  MojoMediaLogService media_log_service_;
-  mojo::AssociatedReceiver<mojom::MediaLog> media_log_receiver_;
   RequestOverlayInfoCB request_overlay_info_cb_;
   bool overlay_info_requested_ = false;
   gfx::ColorSpace target_color_space_;
@@ -158,8 +172,6 @@ class MojoVideoDecoder final : public VideoDecoder,
 
   base::WeakPtr<MojoVideoDecoder> weak_this_;
   base::WeakPtrFactory<MojoVideoDecoder> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(MojoVideoDecoder);
 };
 
 }  // namespace media

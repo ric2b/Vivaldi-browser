@@ -80,7 +80,7 @@ class CC_EXPORT PictureLayerImpl
   const PaintWorkletRecordMap& GetPaintWorkletRecords() const override;
   bool IsDirectlyCompositedImage() const override;
   bool ScrollInteractionInProgress() const override;
-  bool CurrentScrollDidCheckerboardLargeArea() const override;
+  bool CurrentScrollCheckerboardsDueToNoRecording() const override;
 
   // ImageAnimationController::AnimationDriver overrides.
   bool ShouldAnimate(PaintImage::Id paint_image_id) const override;
@@ -179,7 +179,7 @@ class CC_EXPORT PictureLayerImpl
   PictureLayerImpl(LayerTreeImpl* tree_impl, int id);
   PictureLayerTiling* AddTiling(const gfx::AxisTransform2d& contents_transform);
   void RemoveAllTilings();
-  bool CanRecreateHighResTilingForLCDTextAndRasterTranslation(
+  bool CanRecreateHighResTilingForLCDTextAndRasterTransform(
       const PictureLayerTiling& high_res) const;
   void UpdateTilingsForRasterScaleAndTranslation(bool adjusted_raster_scale);
   void AddLowResolutionTilingIfNeeded();

@@ -30,13 +30,13 @@ class BFCachePolicy : public GraphOwned,
   BFCachePolicy& operator=(BFCachePolicy&&) = delete;
   ~BFCachePolicy() override;
 
-  static base::TimeDelta
-  GetDelayBeforeFlushingBFCacheAfterBackgroundForTesting();
-
  protected:
   // Try to flush the BFCache associated with |page_node|. This will be a no-op
   // if there's a pending navigation.
   virtual void MaybeFlushBFCache(const PageNode* page_node);
+
+  bool flush_on_moderate_pressure_;
+  base::TimeDelta delay_to_flush_background_tab_;
 
  private:
   // GraphOwned implementation:
@@ -51,6 +51,8 @@ class BFCachePolicy : public GraphOwned,
   // SystemNodeObserver:
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel new_level) override;
+
+  void MaybeFlushBFCacheLater(const PageNode* page_node);
 
   // PageNodes that become non visible will have their BFcache after a small
   // amount of time spent in that state, this map stores the timers for that

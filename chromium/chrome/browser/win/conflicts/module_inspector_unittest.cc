@@ -33,6 +33,9 @@ class CrashingUtilWinImpl : public chrome::mojom::UtilWin {
  private:
   // chrome::mojom::UtilWin:
   void IsPinnedToTaskbar(IsPinnedToTaskbarCallback callback) override {}
+  void UnpinShortcuts(const std::vector<base::FilePath>& shortcuts,
+                      UnpinShortcutsCallback result_callback) override {}
+
   void CallExecuteSelectFile(ui::SelectFileDialog::Type type,
                              uint32_t owner,
                              const std::u16string& title,
@@ -81,6 +84,9 @@ class ModuleInspectorTest : public testing::Test {
  public:
   ModuleInspectorTest()
       : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+
+  ModuleInspectorTest(const ModuleInspectorTest&) = delete;
+  ModuleInspectorTest& operator=(const ModuleInspectorTest&) = delete;
 
   std::unique_ptr<ModuleInspector> CreateModuleInspector() {
     auto module_inspector =
@@ -149,8 +155,6 @@ class ModuleInspectorTest : public testing::Test {
   }
 
   std::vector<ModuleInspectionResult> inspected_modules_;
-
-  DISALLOW_COPY_AND_ASSIGN(ModuleInspectorTest);
 };
 
 }  // namespace

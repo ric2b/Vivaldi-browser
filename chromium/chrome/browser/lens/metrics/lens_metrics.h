@@ -10,7 +10,7 @@ namespace lens {
 // Histogram for recording the capture result of Lens Region Search. See enum
 // below for types of results.
 constexpr char kLensRegionSearchCaptureResultHistogramName[] =
-    "Search.RegionsSearch.Lens.Result";
+    "Search.RegionSearch.Lens.Result";
 
 // Histogram for recording the viewport proportion in relation to region
 // selected for the Lens Region Search feature.
@@ -27,7 +27,10 @@ enum class LensRegionSearchCaptureResult {
   SUCCESS = 0,
   FAILED_TO_OPEN_TAB = 1,
   ERROR_CAPTURING_REGION = 2,
-  kMaxValue = ERROR_CAPTURING_REGION
+  USER_EXITED_CAPTURE_ESCAPE = 3,
+  USER_EXITED_CAPTURE_CLOSE_BUTTON = 4,
+  USER_NAVIGATED_FROM_CAPTURE = 5,
+  kMaxValue = USER_NAVIGATED_FROM_CAPTURE
 };
 
 // This should be kept in sync with the LensRegionSearchAspectRatio enum

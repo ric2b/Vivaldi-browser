@@ -68,6 +68,10 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
     // One of the trustSettings dictionaries contained a
     // kSecTrustSettingsAllowedError key.
     TRUST_SETTINGS_DICT_CONTAINS_ALLOWED_ERROR = 1 << 10,
+
+    // SecTrustSettingsCopyTrustSettings returned a value other than
+    // errSecSuccess or errSecItemNotFound.
+    COPY_TRUST_SETTINGS_ERROR = 1 << 11,
   };
 
   enum class TrustImplType {
@@ -108,6 +112,10 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
   // settings, and the interpretation of |cache_size| varies depending on
   // |impl|.
   TrustStoreMac(CFStringRef policy_oid, TrustImplType impl, size_t cache_size);
+
+  TrustStoreMac(const TrustStoreMac&) = delete;
+  TrustStoreMac& operator=(const TrustStoreMac&) = delete;
+
   ~TrustStoreMac() override;
 
   // Initializes the trust cache, if it isn't already initialized.
@@ -120,9 +128,8 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
   // TrustStore implementation:
   void SyncGetIssuersOf(const ParsedCertificate* cert,
                         ParsedCertificateList* issuers) override;
-  void GetTrust(const scoped_refptr<ParsedCertificate>& cert,
-                CertificateTrust* trust,
-                base::SupportsUserData* debug_data) const override;
+  CertificateTrust GetTrust(const ParsedCertificate* cert,
+                            base::SupportsUserData* debug_data) const override;
 
  private:
   class TrustImpl;
@@ -145,8 +152,6 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
       const ParsedCertificate* cert);
 
   std::unique_ptr<TrustImpl> trust_cache_;
-
-  DISALLOW_COPY_AND_ASSIGN(TrustStoreMac);
 };
 
 }  // namespace net

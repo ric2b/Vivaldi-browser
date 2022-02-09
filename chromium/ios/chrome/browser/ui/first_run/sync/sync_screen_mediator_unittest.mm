@@ -91,6 +91,8 @@ class SyncScreenMediatorTest : public PlatformTest {
         ConsentAuditorFactory::GetForBrowserState(browser_state_.get());
     SyncSetupService* sync_setup_service =
         SyncSetupServiceFactory::GetForBrowserState(browser_state_.get());
+    syncer::SyncService* sync_service =
+        SyncServiceFactory::GetForBrowserState(browser_state_.get());
 
     ChromeAccountManagerService* account_manager_service =
         ChromeAccountManagerServiceFactory::GetForBrowserState(
@@ -104,12 +106,14 @@ class SyncScreenMediatorTest : public PlatformTest {
                      syncSetupService:sync_setup_service
                 unifiedConsentService:UnifiedConsentServiceFactory::
                                           GetForBrowserState(
-                                              browser_state_.get())];
+                                              browser_state_.get())
+                          syncService:sync_service];
 
     consumer_ = [[FakeSyncScreenConsumer alloc] init];
 
     sync_setup_service_mock_ =
         static_cast<SyncSetupServiceMock*>(sync_setup_service);
+    sync_service_mock_ = static_cast<syncer::MockSyncService*>(sync_service);
   }
 
   void TearDown() override {
@@ -124,6 +128,7 @@ class SyncScreenMediatorTest : public PlatformTest {
   std::unique_ptr<Browser> browser_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   SyncSetupServiceMock* sync_setup_service_mock_;
+  syncer::MockSyncService* sync_service_mock_;
 };
 
 // Tests that the FirstSetupComplete flag is turned on after the mediator has
@@ -182,8 +187,8 @@ TEST_F(SyncScreenMediatorTest, TestAuthenticationFlow) {
   EXPECT_FALSE(consumer_.UIEnabled);
   ASSERT_NE(nil, completion);
 
-  OCMExpect([mock_delegate syncScreenMediator:mediator_
-                    didFinishSigninWithResult:SigninCoordinatorResultSuccess]);
+  OCMExpect(
+      [mock_delegate syncScreenMediatorDidSuccessfulyFinishSignin:mediator_]);
 
   EXPECT_FALSE(browser_state_->GetPrefs()->GetBoolean(
       unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled));

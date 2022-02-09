@@ -18,32 +18,32 @@ namespace vivaldi {
 
 ExtensionsMenuController::ExtensionsMenuController(
     VivaldiRenderViewContextMenu* rv_context_menu)
-  :rv_context_menu_(rv_context_menu) {
-}
+    : rv_context_menu_(rv_context_menu) {}
 
 ExtensionsMenuController::~ExtensionsMenuController() {}
 
-void ExtensionsMenuController::Populate(ui::SimpleMenuModel* menu_model,
+void ExtensionsMenuController::Populate(
+    ui::SimpleMenuModel* menu_model,
     ui::SimpleMenuModel::Delegate* delegate,
     const extensions::Extension* extension,
     content::WebContents* source_web_contents,
     std::u16string printable_selection_text,
-    base::RepeatingCallback<bool(const extensions::MenuItem*)> filter ) {
+    base::RepeatingCallback<bool(const extensions::MenuItem*)> filter) {
   extension_items_.reset(new extensions::ContextMenuMatcher(
-      rv_context_menu_->GetBrowserContext(), delegate, menu_model, std::move(filter)));
+      rv_context_menu_->GetBrowserContext(), delegate, menu_model,
+      std::move(filter)));
   AppendAllExtensionItems(printable_selection_text);
   AppendCurrentExtensionItems(extension, source_web_contents,
-      printable_selection_text);
+                              printable_selection_text);
 }
 
 void ExtensionsMenuController::AppendAllExtensionItems(
     std::u16string printable_selection_text) {
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(rv_context_menu_->GetBrowserContext());
 
-  extensions::ExtensionRegistry* registry = extensions::ExtensionRegistry::Get(
-      rv_context_menu_->GetBrowserContext());
-
-  extensions::MenuManager* menu_manager = extensions::MenuManager::Get(
-      rv_context_menu_->GetBrowserContext());
+  extensions::MenuManager* menu_manager =
+      extensions::MenuManager::Get(rv_context_menu_->GetBrowserContext());
   if (!menu_manager)
     return;
 
@@ -84,11 +84,11 @@ void ExtensionsMenuController::AppendAllExtensionItems(
       const extensions::MenuItem::ExtensionKey extension_key_w_webviewid =
           *iter++;
       bool has_webview = (extension_key_w_webviewid.webview_instance_id !=
-          guest_view::kInstanceIDNone);
-      extension_items_->AppendExtensionItems(has_webview ?
-                                    extension_key_w_webviewid : extension_key,
-                                    printable_selection_text, &index,
-                                    /*is_action_menu=*/false);
+                          guest_view::kInstanceIDNone);
+      extension_items_->AppendExtensionItems(
+          has_webview ? extension_key_w_webviewid : extension_key,
+          printable_selection_text, &index,
+          /*is_action_menu=*/false);
     }
   }
 }
@@ -107,12 +107,13 @@ void ExtensionsMenuController::AppendCurrentExtensionItems(
       extensions::WebViewGuest::FromWebContents(source_web_contents);
   extensions::MenuItem::ExtensionKey key;
   if (web_view_guest) {
-    key = extensions::MenuItem::ExtensionKey(extension->id(),
-                                 web_view_guest->owner_web_contents()
-                                     ->GetMainFrame()
-                                     ->GetProcess()
-                                     ->GetID(),
-                                 web_view_guest->view_instance_id());
+    key =
+        extensions::MenuItem::ExtensionKey(extension->id(),
+                                           web_view_guest->owner_web_contents()
+                                               ->GetMainFrame()
+                                               ->GetProcess()
+                                               ->GetID(),
+                                           web_view_guest->view_instance_id());
   } else {
     key = extensions::MenuItem::ExtensionKey(extension->id());
   }
@@ -120,7 +121,7 @@ void ExtensionsMenuController::AppendCurrentExtensionItems(
   // Only add extension items from this extension.
   int index = 0;
   extension_items_->AppendExtensionItems(key, printable_selection_text, &index,
-                                        /*is_action_menu=*/false);
+                                         /*is_action_menu=*/false);
 }
 
 }  // namespace vivaldi

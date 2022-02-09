@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Кэш изображений</translation>
 <translation id="1601560923496285236">Применить</translation>
 <translation id="1603914832182249871">(Приватный)</translation>
-<translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Дескрипторы файлов</translation>
 <translation id="1682548588986054654">Новое приватное окно</translation>
-<translation id="1706625117072057435">Масштабирование</translation>
 <translation id="1708338024780164500">(Неактивно)</translation>
 <translation id="1723824996674794290">&amp;Новое окно</translation>
-<translation id="1725149567830788547">Показать &amp;управление</translation>
 <translation id="1729533290416704613">Также расширение изменило поисковую систему по умолчанию в поле поиска.</translation>
 <translation id="174123615272205933">Добавить</translation>
 <translation id="1744108098763830590">фоновая страница</translation>
@@ -89,11 +86,9 @@
 <translation id="2445081178310039857">Требуется корневой каталог расширения.</translation>
 <translation id="2470702053775288986">Неподдерживаемые расширения отключены</translation>
 <translation id="2476578072172137802">Настройки для сайтов</translation>
-<translation id="2482878487686419369">Оповещения</translation>
 <translation id="2498539833203011245">Свернуть</translation>
 <translation id="2509495747794740764">Укажите значение от 10 до 200.</translation>
 <translation id="253557089021624350">Количество соединений keepalive</translation>
-<translation id="2546283357679194313">Cookie и данные сайтов</translation>
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2553440850688409052">Скрыть этот плагин</translation>
 <translation id="26224892172169984">Запретить обработку протоколов на всех сайтах</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">Кэш CSS</translation>
 <translation id="3008272652534848354">Сбросить всё</translation>
 <translation id="3012631534724231212">(фрейм)</translation>
-<translation id="3013291976881901233">MIDI-устройства</translation>
 <translation id="3021678814754966447">&amp;Просмотр кода фрейма</translation>
 <translation id="3036546437875325427">Включить флэш</translation>
 <translation id="3046910703532196514">Веб-страница полностью</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Открыть ссылку как</translation>
 <translation id="3154429428035006212">Не в сети больше месяца</translation>
 <translation id="3222066309010235055">Предварительная обработка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Микрофон</translation>
 <translation id="3241680850019875542">Выберите корневой каталог упаковываемого расширения. Для обновления расширения также укажите закрытый ключ.</translation>
 <translation id="3280237271814976245">Сохранить &amp;как...</translation>
 <translation id="3285322247471302225">Новая вкладка</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">Запретить закрытым сайтам завершать отправку и получение данных</translation>
 <translation id="3711931198657368127">Вс&amp;тавить и перейти на <ph name="URL" /></translation>
 <translation id="3727187387656390258">Инспектировать</translation>
-<translation id="3744111561329211289">Фоновая синхронизация</translation>
 <translation id="3760460896538743390">Исследовать &amp;фоновую страницу</translation>
 <translation id="3797900183766075808">&amp;Искать "<ph name="SEARCH_TERMS" />" в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3800806661949714323">Показывать все (рекомендуется)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Не в сети больше года</translation>
 <translation id="3905761538810670789">Восстановить приложение</translation>
 <translation id="3908501907586732282">Включить расширение</translation>
+<translation id="3909701002594999354">Показать все &amp;элементы управления</translation>
 <translation id="3909791450649380159">Вырезать</translation>
 <translation id="3927932062596804919">Отказать в доступе</translation>
 <translation id="3936390757709632190">&amp;Открыть аудио в новой вкладке</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Отключить</translation>
 <translation id="4409697491990005945">Поля</translation>
 <translation id="4423376891418188461">Восстановить настройки</translation>
-<translation id="4434045419905280838">Всплывающие окна и переадресация</translation>
 <translation id="4478664379124702289">Сохранить &amp;ссылку как...</translation>
 <translation id="4579581181964204535">Трансляция с сайта <ph name="HOST_NAME" /> невозможна.</translation>
 <translation id="4593021220803146968">&amp;Перейти к <ph name="URL" /></translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Журнал</translation>
 <translation id="5627086634964711283">Также расширение изменило домашнюю страницу по умолчанию.</translation>
 <translation id="563535393368633106">Спрашивать разрешение на доступ (рекомендуется)</translation>
-<translation id="5649053991847567735">Автоматическая загрузка</translation>
 <translation id="5677928146339483299">Заблокировано</translation>
-<translation id="5689516760719285838">Место события</translation>
 <translation id="5707185214361380026">Не удалась загрузка расширения с:</translation>
 <translation id="5715711091495208045">Посредник: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Сохранить как PDF</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">&amp;Перевести на <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Удаление данных сайтов</translation>
 <translation id="6042308850641462728">Подробнее</translation>
-<translation id="6059925163896151826">USB-устройства</translation>
 <translation id="6086846494333236931">Установлено администратором</translation>
 <translation id="6101226222197207147">Добавлено новое приложение (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Расширение изменило настройки прокси</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">Приложение: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">&amp;Копировать картинку</translation>
 <translation id="6550675742724504774">Параметры</translation>
-<translation id="6612358246767739896">Защищённый контент</translation>
+<translation id="6579369886355986318">Показать все &amp;элементы управления</translation>
 <translation id="6639554308659482635">Память SQLite</translation>
 <translation id="6686817083349815241">Сохранить пароль</translation>
 <translation id="6691936601825168937">&amp;Вперёд</translation>
@@ -359,8 +348,6 @@
 <translation id="7270858098575133036">Уведомлять меня о сайтах, пытающихся использовать системные сообщения для доступа к MIDI-устройствам</translation>
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">Показать &amp;управление</translation>
-<translation id="7374461526650987610">Обработчики протоколов</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память GPU</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>
@@ -368,7 +355,6 @@
 <translation id="7427348830195639090">Фоновая страница: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Выбирая этот принтер, вы предоставляете к нему доступ следующему расширению:</translation>
 <translation id="749028671485790643">Пользователь <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Завершить процесс</translation>
 <translation id="7576690715254076113">Разобрать по копиям</translation>
 <translation id="7629827748548208700">Вкладка: <ph name="TAB_NAME" /></translation>
@@ -419,7 +405,6 @@
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выполняется скачивание}one{Выполняется скачивание}few{Выполняется скачивание}many{Выполняется скачивание}other{Выполняется скачивание}}</translation>
 <translation id="8230134520748321204">Сохранить пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">В <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> нет сведений об этом расширении, оно могло быть установлено без вашего ведома.</translation>
-<translation id="8270242299912238708">PDF-файлы</translation>
 <translation id="8339059274628563283"><ph name="SITE" /> сохраняет данные локально</translation>
 <translation id="8351419472474436977">Расширение изменило настройки прокси. Теперь оно может отследить или изменить передаваемые вами данные, а также прервать интернет-соединение. Если вы не знали об этом, вам следует отключить расширение.</translation>
 <translation id="8382913212082956454">&amp;Копировать адрес электронной почты</translation>
@@ -467,8 +452,8 @@
 <translation id="9170848237812810038">&amp;Отменить</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" добавлено</translation>
 <translation id="9218430445555521422">Сделать браузером по умолчанию</translation>
-<translation id="9219103736887031265">Картинки</translation>
 <translation id="93766956588638423">Восстановить расширение</translation>
+<translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Альбомная</translation>
 <translation id="994289308992179865">&amp;Повтор</translation>
 <translation id="998747458861718449">Инспектировать</translation>

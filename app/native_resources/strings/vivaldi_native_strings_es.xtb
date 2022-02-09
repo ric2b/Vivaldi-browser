@@ -30,7 +30,7 @@
 <translation id="2441056087170876076">Monstruo 2</translation>
 <translation id="2444387452209867610">Ingresar nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
-<translation id="2612127540243995147">Listo para instalar. Vivaldi se cerrará y reiniciará.</translation>
+<translation id="2612127540243995147">La nueva versión está lista para ser instalada. Vivaldi se cerrará y luego se reiniciará automáticamente.</translation>
 <translation id="2613387515621326337">Mostrar el sitio web de actualizaciones</translation>
 <translation id="2647368062414805334">Lamentablemente tus preferencias de Edge no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Edge y luego clica en Continuar.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
@@ -50,18 +50,18 @@
 <translation id="3302905971452834934">Monstruo 1</translation>
 <translation id="3334610655141903168">(sin título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> es la versión más reciente disponible.</translation>
-<translation id="3383198080133834965">Vivaldi está actualizado</translation>
+<translation id="3383198080133834965">Vivaldi ha sido actualizado</translation>
 <translation id="3402602684546832928">Selecciona el archivo de marcadores de Opera</translation>
 <translation id="3451317331714872347">Paisaje 8</translation>
 <translation id="3457498675806041407">Confirmar salida</translation>
-<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ya está instalado, se activará después de reiniciar el navegador.</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ha sido instalado, se activará después que reinicies el navegador.</translation>
 <translation id="3516213908976398531">Paisaje 11</translation>
 <translation id="3521635864657970829">¿Estás seguro de cerrar esta ventana?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
 <translation id="3542768452570884558">Abrir enlace en una ventana nueva</translation>
 <translation id="3588820906588687999">Abrir imagen en una pestaña nueva</translation>
 <translation id="3601066750251199488">Monstruo 3</translation>
-<translation id="3680031241659195730">Nueva versión disponible de Vivaldi</translation>
+<translation id="3680031241659195730">¡Una nueva versión de Vivaldi está disponible!</translation>
 <translation id="3708982624815781692">La descarga fue cancelada.</translation>
 <translation id="3732157130969736834">Guardar en marcadores</translation>
 <translation id="3732388226447288666">Animal 2</translation>
@@ -98,7 +98,7 @@
 <translation id="527605719918376753">Silenciar pestaña</translation>
 <translation id="5305569355661722298">Confirmar cierre de ventana</translation>
 <translation id="5388358297987318779">Abrir imagen</translation>
-<translation id="5416008465899576639">Nueva versión disponible de Vivaldi</translation>
+<translation id="5416008465899576639">Una nueva versión de Vivaldi está disponible.</translation>
 <translation id="5497042274492038489">Confirmar cierre de ventana</translation>
 <translation id="5594602170491763400">Monstruo 5</translation>
 <translation id="5615637589913244581">Opera versión 15+ (beta)</translation>
@@ -125,7 +125,7 @@
 <translation id="6693585104974197539">Selecciona la carpeta del perfil de Edge a importar</translation>
 <translation id="6726279523566323394">Selecciona la carpeta del perfil de Brave a importar</translation>
 <translation id="6804831687363620480">Lamentablemente tus preferencias de Opera 15+ no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Opera 15+ y luego clica en Continuar.</translation>
-<translation id="6892812721183419409">Abrir enlace <ph name="USER" /></translation>
+<translation id="6892812721183419409">Abrir enlace como <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="7086554968911045110">Paisaje 7</translation>
 <translation id="7111492742514999492">Paisaje 9</translation>
@@ -143,11 +143,11 @@
 <translation id="8099620695029051217">Copiar dirección de la página</translation>
 <translation id="8197810018650377191">Guardar en marcadores</translation>
 <translation id="8261506727792406068">Eliminar</translation>
-<translation id="8331671104904436324">Abrir en una pestaña en segundo plano</translation>
+<translation id="8331671104904436324">Abrir en pestaña en segundo plano</translation>
 <translation id="8373293945112511707">Paisaje 1</translation>
 <translation id="8388552048012645975">Descargando actualización...</translation>
 <translation id="8427094907586191051">Paisaje 17</translation>
-<translation id="8439034818057146672">Nueva versión de Vivaldi lista para instalar.</translation>
+<translation id="8439034818057146672">Una nueva versión Vivaldi está lista para instalar.</translation>
 <translation id="8446668873108041390">La ejecución de JavaScript a través de AppleScript está desactivada. En Ajustes &gt; Privacidad &gt; Apple Events, hay una opción para permitir JavaScript desde Apple Events.</translation>
 <translation id="8539196077526389150">Paisaje 13</translation>
 <translation id="8562339533180097902">Cerrar Vivaldi e instalar ahora</translation>

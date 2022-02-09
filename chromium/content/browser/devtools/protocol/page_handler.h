@@ -66,6 +66,10 @@ class PageHandler : public DevToolsDomainHandler,
   PageHandler(EmulationHandler* emulation_handler,
               BrowserHandler* browser_handler,
               bool allow_file_access);
+
+  PageHandler(const PageHandler&) = delete;
+  PageHandler& operator=(const PageHandler&) = delete;
+
   ~PageHandler() override;
 
   static std::vector<PageHandler*> EnabledForWebContents(
@@ -136,23 +140,6 @@ class PageHandler : public DevToolsDomainHandler,
   void CaptureSnapshot(
       Maybe<std::string> format,
       std::unique_ptr<CaptureSnapshotCallback> callback) override;
-  void PrintToPDF(Maybe<bool> landscape,
-                  Maybe<bool> display_header_footer,
-                  Maybe<bool> print_background,
-                  Maybe<double> scale,
-                  Maybe<double> paper_width,
-                  Maybe<double> paper_height,
-                  Maybe<double> margin_top,
-                  Maybe<double> margin_bottom,
-                  Maybe<double> margin_left,
-                  Maybe<double> margin_right,
-                  Maybe<String> page_ranges,
-                  Maybe<bool> ignore_invalid_page_ranges,
-                  Maybe<String> header_template,
-                  Maybe<String> footer_template,
-                  Maybe<bool> prefer_css_page_size,
-                  Maybe<String> transfer_mode,
-                  std::unique_ptr<PrintToPDFCallback> callback) override;
   Response StartScreencast(Maybe<std::string> format,
                            Maybe<int> quality,
                            Maybe<int> max_width,
@@ -178,6 +165,8 @@ class PageHandler : public DevToolsDomainHandler,
 
   void GetManifestIcons(
       std::unique_ptr<GetManifestIconsCallback> callback) override;
+
+  void GetAppId(std::unique_ptr<GetAppIdCallback> callback) override;
 
   Response SetBypassCSP(bool enabled) override;
 
@@ -258,8 +247,6 @@ class PageHandler : public DevToolsDomainHandler,
   base::flat_set<download::DownloadItem*> pending_downloads_;
 
   base::WeakPtrFactory<PageHandler> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PageHandler);
 };
 
 }  // namespace protocol

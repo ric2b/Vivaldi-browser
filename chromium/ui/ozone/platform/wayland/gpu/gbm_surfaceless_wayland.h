@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/containers/small_map.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/gfx/native_widget_types.h"
@@ -32,17 +33,16 @@ class GbmSurfacelessWayland : public gl::SurfacelessEGL,
   GbmSurfacelessWayland(WaylandBufferManagerGpu* buffer_manager,
                         gfx::AcceleratedWidget widget);
 
+  GbmSurfacelessWayland(const GbmSurfacelessWayland&) = delete;
+  GbmSurfacelessWayland& operator=(const GbmSurfacelessWayland&) = delete;
+
   void QueueOverlayPlane(OverlayPlane plane, BufferId buffer_id);
 
   // gl::GLSurface:
-  bool ScheduleOverlayPlane(int z_order,
-                            gfx::OverlayTransform transform,
-                            gl::GLImage* image,
-                            const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect,
-                            bool enable_blend,
-                            const gfx::Rect& damage_rect,
-                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
+  bool ScheduleOverlayPlane(
+      gl::GLImage* image,
+      std::unique_ptr<gfx::GpuFence> gpu_fence,
+      const gfx::OverlayPlaneData& overlay_plane_data) override;
   bool IsOffscreen() override;
   bool SupportsAsyncSwap() override;
   bool SupportsPostSubBuffer() override;
@@ -65,6 +65,10 @@ class GbmSurfacelessWayland : public gl::SurfacelessEGL,
   bool SupportsOverridePlatformSize() const override;
   bool SupportsViewporter() const override;
   gfx::SurfaceOrigin GetOrigin() const override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              const gfx::ColorSpace& color_space,
+              bool has_alpha) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandSurfaceFactoryTest,
@@ -94,9 +98,10 @@ class GbmSurfacelessWayland : public gl::SurfacelessEGL,
     bool ready = false;
 
     // A region of the updated content in a corresponding frame. It's used to
-    // advice Wayland which part of a buffer is going to be updated. Passing {0,
-    // 0, 0, 0} results in a whole buffer update on the Wayland compositor side.
-    gfx::Rect damage_region_ = gfx::Rect();
+    // advise Wayland which part of a buffer is going to be updated. The absence
+    // of a value results in a whole buffer update on the Wayland compositor
+    // side.
+    absl::optional<gfx::Rect> damage_region_;
     // TODO(fangzhoug): This should be changed to support Vulkan.
     std::vector<gl::GLSurfaceOverlay> overlays;
     SwapCompletionCallback completion_callback;
@@ -141,9 +146,10 @@ class GbmSurfacelessWayland : public gl::SurfacelessEGL,
 
   bool no_gl_flush_for_tests_ = false;
 
-  base::WeakPtrFactory<GbmSurfacelessWayland> weak_factory_;
+  // Scale factor of the current surface.
+  float surface_scale_factor_ = 1.f;
 
-  DISALLOW_COPY_AND_ASSIGN(GbmSurfacelessWayland);
+  base::WeakPtrFactory<GbmSurfacelessWayland> weak_factory_;
 };
 
 }  // namespace ui

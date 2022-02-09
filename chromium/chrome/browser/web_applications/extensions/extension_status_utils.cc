@@ -6,15 +6,16 @@
 
 #include "base/one_shot_event.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/preinstalled_apps.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
+#include "extensions/browser/pref_names.h"
 #include "extensions/common/constants.h"
 
 namespace {
@@ -78,6 +79,13 @@ bool IsExternalExtensionUninstalled(content::BrowserContext* context,
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
 bool IsExtensionUnsupportedDeprecatedApp(content::BrowserContext* context,
                                          const std::string& extension_id) {
+  if (!base::FeatureList::IsEnabled(features::kChromeAppsDeprecation))
+    return false;
+
+  const auto* prefs = Profile::FromBrowserContext(context)->GetPrefs();
+  if (prefs->GetBoolean(pref_names::kChromeAppsEnabled))
+    return false;
+
   auto* registry = ExtensionRegistry::Get(context);
   // May be nullptr in unit tests.
   if (!registry)
@@ -90,8 +98,7 @@ bool IsExtensionUnsupportedDeprecatedApp(content::BrowserContext* context,
 
   // TODO(crbug.com/1235894): Figure out if "hosted apps" should be checked as
   // well.
-  return base::FeatureList::IsEnabled(features::kChromeAppsDeprecation) &&
-         (app->is_platform_app() || app->is_legacy_packaged_app()) &&
+  return (app->is_platform_app() || app->is_legacy_packaged_app()) &&
          !IsExtensionForceInstalled(context, extension_id, nullptr);
 }
 #endif
@@ -102,12 +109,12 @@ void OnExtensionSystemReady(content::BrowserContext* context,
 }
 
 bool DidPreinstalledAppsPerformNewInstallation(Profile* profile) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !defined(OS_CHROMEOS)
   return preinstalled_apps::Provider::DidPerformNewInstallationForProfile(
       profile);
 #else
   return false;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // defined(OS_CHROMEOS)
 }
 
 bool IsPreinstalledAppId(const std::string& app_id) {
@@ -115,9 +122,11 @@ bool IsPreinstalledAppId(const std::string& app_id) {
       app_id == g_preinstalled_app_for_testing)
     return true;
 
-  return app_id == extension_misc::kGmailAppId ||
+  // Also update the duplicated function in extensions/common/constants.cc when
+  // changing the logic here.
+  return app_id == extension_misc::kGMailAppId ||
          app_id == extension_misc::kGoogleDocAppId ||
-         app_id == extension_misc::kDriveHostedAppId ||
+         app_id == extension_misc::kGoogleDriveAppId ||
          app_id == extension_misc::kGoogleSheetsAppId ||
          app_id == extension_misc::kGoogleSlidesAppId ||
          app_id == extension_misc::kYoutubeAppId;

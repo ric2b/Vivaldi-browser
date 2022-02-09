@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 //------------------------------------------------------------------------------
-// Description of the life cycle of a instance of MetricsService.
+// Description of a MetricsService instance's life cycle.
 //
-//  OVERVIEW
+// OVERVIEW
 //
 // A MetricsService instance is typically created at application startup.  It is
 // the central controller for the acquisition of log data, and the automatic
@@ -17,7 +17,7 @@
 // results for transmission.  Transmission includes submitting a compressed log
 // as data in a URL-post, and retransmitting (or retaining at process
 // termination) if the attempted transmission failed.  Retention across process
-// terminations is done using the the PrefServices facilities. The retained logs
+// terminations is done using the PrefServices facilities. The retained logs
 // (the ones that never got transmitted) are compressed and base64-encoded
 // before being persisted.
 //
@@ -143,6 +143,7 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/metrics/clean_exit_beacon.h"
 #include "components/metrics/environment_recorder.h"
 #include "components/metrics/field_trials_provider.h"
@@ -159,6 +160,10 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/variations/entropy_provider.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "components/metrics/structured/neutrino_logging.h"  // nogncheck
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace metrics {
 
@@ -223,8 +228,7 @@ MetricsService::~MetricsService() {
 }
 
 void MetricsService::InitializeMetricsRecordingState() {
-  // TODO(crbug.com/1176977): Downgrade to a DCHECK once bug is fixed.
-  CHECK_EQ(CONSTRUCTED, state_);
+  DCHECK_EQ(CONSTRUCTED, state_);
 
   // The FieldTrialsProvider should be registered last. This ensures that
   // studies whose features are checked when providers add their information to
@@ -269,7 +273,7 @@ void MetricsService::StartUpdatingLastLiveTimestamp() {
       FROM_HERE,
       base::BindOnce(&MetricsService::UpdateLastLiveTimestampTask,
                      self_ptr_factory_.GetWeakPtr()),
-      base::TimeDelta::FromSeconds(kUpdateAliveTimestampSeconds));
+      base::Seconds(kUpdateAliveTimestampSeconds));
 }
 
 void MetricsService::Stop() {
@@ -315,11 +319,19 @@ void MetricsService::EnableRecording() {
     OpenNewLog();
 
   delegating_provider_.OnRecordingEnabled();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // This must be after OnRecordingEnabled() to ensure that the structured
+  // logging has been enabled.
+  metrics::structured::NeutrinoDevicesLogWithClientId(
+      state_manager_->client_id(),
+      metrics::structured::NeutrinoDevicesLocation::kEnableRecording);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  // Fill in the system profile in the log and persist it (to prefs, .pma and
-  // crashpad). This includes running the providers so that information like
-  // field trials and hardware info is provided. If Chrome crashes before this
-  // log is completed, the .pma file will have this system profile.
+  // Fill in the system profile in the log and persist it (to prefs, .pma
+  // and crashpad). This includes running the providers so that information
+  // like field trials and hardware info is provided. If Chrome crashes
+  // before this log is completed, the .pma file will have this system
+  // profile.
   RecordCurrentEnvironment(log_manager_.current_log(), /*complete=*/false);
 
   base::RemoveActionCallback(action_callback_);
@@ -498,9 +510,25 @@ void MetricsService::InitializeMetricsState() {
   if (!state_manager_->clean_exit_beacon()->exited_cleanly()) {
     provider.LogCrash(
         state_manager_->clean_exit_beacon()->browser_last_live_timestamp());
-    // Reset flag, and wait until we call LogNeedForCleanShutdown() before
-    // monitoring.
-    state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
+#if defined(OS_ANDROID)
+    if (!state_manager_->is_foreground_session()) {
+      // Android can have background sessions in which the app may not come to
+      // the foreground, so signal that Chrome should stop watching for crashes
+      // here. This ensures that the termination of such sessions is not
+      // considered a crash. If and when the app enters the foreground, Chrome
+      // starts watching for crashes via MetricsService::OnAppEnterForeground().
+      //
+      // TODO(crbug/1232027): Such sessions do not yet exist on iOS. When they
+      // do, it may not be possible to know at this point whether a session is a
+      // background session.
+      //
+      // TODO(crbug/1245347): On WebLayer, it is not possible to know whether
+      // it's a background session at this point.
+      //
+      // TODO(crbug/1245676): Ditto for WebView.
+      state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
+    }
+#endif  // defined(OS_ANDROID)
   }
 
   // HasPreviousSessionData is called first to ensure it is never bypassed.
@@ -539,22 +567,8 @@ void MetricsService::InitializeMetricsState() {
   // Update session ID.
   ++session_id_;
   local_state_->SetInteger(prefs::kMetricsSessionID, session_id_);
-  // Log the session id to diagnose crbug.com/1176977.
-  // Mod the value with 1000 to limit the number of unique values reported.
-  base::UmaHistogramSparse("Stability.Experimental.SessionId",
-                           session_id_ % 1000);
-
-  // Log a random number to diagnose crbug.com/1176977.
-  base::UmaHistogramSparse("Stability.Experimental.RandInt",
-                           base::RandInt(0, 999));
-
-  // Log the process id to diagnose crbug.com/1176977.
-  // Mod the value with 1000 to limit the number of unique values reported.
-  base::UmaHistogramSparse("Stability.Experimental.ProcessId",
-                           base::GetCurrentProcId() % 1000);
 
   // Notify stability metrics providers about the launch.
-  UMA_HISTOGRAM_BOOLEAN("UMA.MetricsService.Initialize", true);
   provider.LogLaunch();
   provider.CheckLastSessionEndCompleted();
 
@@ -613,13 +627,12 @@ void MetricsService::OpenNewLog() {
   log_manager_.BeginLoggingWithLog(CreateLog(MetricsLog::ONGOING_LOG));
   delegating_provider_.OnDidCreateMetricsLog();
 
-  // TODO(crbug.com/1176977): Downgrade to a DCHECK once bug is fixed.
-  CHECK_NE(CONSTRUCTED, state_);
+  DCHECK_NE(CONSTRUCTED, state_);
   if (state_ == INITIALIZED) {
     // We only need to schedule that run once.
     state_ = INIT_TASK_SCHEDULED;
 
-    base::TimeDelta initialization_delay = base::TimeDelta::FromSeconds(
+    base::TimeDelta initialization_delay = base::Seconds(
         client_->ShouldStartUpFastForTesting() ? 0
                                                : kInitializationDelaySeconds);
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
@@ -957,8 +970,7 @@ bool MetricsService::PrepareProviderMetricsLog() {
 void MetricsService::PrepareProviderMetricsTask() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool found = PrepareProviderMetricsLog();
-  base::TimeDelta next_check = found ? base::TimeDelta::FromSeconds(5)
-                                     : base::TimeDelta::FromMinutes(15);
+  base::TimeDelta next_check = found ? base::Seconds(5) : base::Minutes(15);
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&MetricsService::PrepareProviderMetricsTask,

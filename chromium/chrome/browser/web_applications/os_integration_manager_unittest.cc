@@ -14,14 +14,18 @@
 #include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 namespace web_app {
 namespace {
@@ -30,6 +34,13 @@ class MockOsIntegrationManager : public OsIntegrationManager {
  public:
   MockOsIntegrationManager()
       : OsIntegrationManager(nullptr, nullptr, nullptr, nullptr, nullptr) {}
+  explicit MockOsIntegrationManager(
+      std::unique_ptr<WebAppProtocolHandlerManager> protocol_handler_manager)
+      : OsIntegrationManager(nullptr,
+                             nullptr,
+                             nullptr,
+                             std::move(protocol_handler_manager),
+                             nullptr) {}
   ~MockOsIntegrationManager() override = default;
 
   // Installation:
@@ -126,7 +137,9 @@ class MockOsIntegrationManager : public OsIntegrationManager {
               (override));
   MOCK_METHOD(void,
               UpdateShortcuts,
-              (const AppId& app_id, base::StringPiece old_name),
+              (const AppId& app_id,
+               base::StringPiece old_name,
+               base::OnceClosure callback),
               (override));
   MOCK_METHOD(void,
               UpdateShortcutsMenu,
@@ -137,7 +150,12 @@ class MockOsIntegrationManager : public OsIntegrationManager {
               (const AppId& app_id,
                base::OnceCallback<void(bool success)> callback),
               (override));
-  MOCK_METHOD(void, UpdateProtocolHandlers, (const AppId& app_id), (override));
+  MOCK_METHOD(void,
+              UpdateProtocolHandlers,
+              (const AppId& app_id,
+               bool force_shortcut_updates_if_needed,
+               base::OnceClosure update_finished_callback),
+              (override));
 
   // Utility methods:
   MOCK_METHOD(std::unique_ptr<ShortcutInfo>,
@@ -184,10 +202,10 @@ class OsIntegrationManagerTest : public testing::Test {
 TEST_F(OsIntegrationManagerTest, InstallOsHooksOnlyShortcuts) {
   base::RunLoop run_loop;
 
-  OsHooksResults install_results;
+  OsHooksErrors install_errors;
   InstallOsHooksCallback callback =
-      base::BindLambdaForTesting([&](OsHooksResults results) {
-        install_results = results;
+      base::BindLambdaForTesting([&](OsHooksErrors errors) {
+        install_errors = errors;
         run_loop.Quit();
       });
 
@@ -199,20 +217,19 @@ TEST_F(OsIntegrationManagerTest, InstallOsHooksOnlyShortcuts) {
       .WillOnce(base::test::RunOnceCallback<2>(true));
 
   InstallOsHooksOptions options;
-  options.os_hooks = OsHooksResults{false};
   options.os_hooks[OsHookType::kShortcuts] = true;
   manager.InstallOsHooks(app_id, std::move(callback), nullptr, options);
   run_loop.Run();
-  EXPECT_TRUE(install_results[OsHookType::kShortcuts]);
+  EXPECT_FALSE(install_errors[OsHookType::kShortcuts]);
 }
 
 TEST_F(OsIntegrationManagerTest, InstallOsHooksEverything) {
   base::RunLoop run_loop;
 
-  OsHooksResults install_results;
+  OsHooksErrors install_errors;
   InstallOsHooksCallback callback =
-      base::BindLambdaForTesting([&](OsHooksResults results) {
-        install_results = results;
+      base::BindLambdaForTesting([&](OsHooksErrors errors) {
+        install_errors = errors;
         run_loop.Quit();
       });
 
@@ -240,25 +257,25 @@ TEST_F(OsIntegrationManagerTest, InstallOsHooksEverything) {
   options.os_hooks.set();
   manager.InstallOsHooks(app_id, std::move(callback), nullptr, options);
   run_loop.Run();
-  EXPECT_TRUE(install_results[OsHookType::kShortcuts]);
-  EXPECT_TRUE(install_results[OsHookType::kFileHandlers]);
-  EXPECT_TRUE(install_results[OsHookType::kProtocolHandlers]);
-  EXPECT_TRUE(install_results[OsHookType::kUrlHandlers]);
-  EXPECT_TRUE(install_results[OsHookType::kRunOnOsLogin]);
+  EXPECT_FALSE(install_errors[OsHookType::kShortcuts]);
+  EXPECT_FALSE(install_errors[OsHookType::kFileHandlers]);
+  EXPECT_FALSE(install_errors[OsHookType::kProtocolHandlers]);
+  EXPECT_FALSE(install_errors[OsHookType::kUrlHandlers]);
+  EXPECT_FALSE(install_errors[OsHookType::kRunOnOsLogin]);
   // Note: We asked for these to be installed, but their methods were not
   // called. This is because the features are turned off. We only set these
-  // results to false if there is an unexpected error, so they remain true.
-  EXPECT_TRUE(install_results[OsHookType::kShortcutsMenu]);
-  EXPECT_TRUE(install_results[OsHookType::kUninstallationViaOsSettings]);
+  // results to true if there is an unexpected error, so they remain false.
+  EXPECT_FALSE(install_errors[OsHookType::kShortcutsMenu]);
+  EXPECT_FALSE(install_errors[OsHookType::kUninstallationViaOsSettings]);
 }
 
 TEST_F(OsIntegrationManagerTest, UninstallOsHooksEverything) {
   base::RunLoop run_loop;
 
-  OsHooksResults uninstall_results;
+  OsHooksErrors uninstall_errors;
   UninstallOsHooksCallback callback =
-      base::BindLambdaForTesting([&](OsHooksResults results) {
-        uninstall_results = results;
+      base::BindLambdaForTesting([&](OsHooksErrors errors) {
+        uninstall_errors = errors;
         run_loop.Quit();
       });
 
@@ -289,13 +306,13 @@ TEST_F(OsIntegrationManagerTest, UninstallOsHooksEverything) {
 
   manager.UninstallAllOsHooks(app_id, std::move(callback));
   run_loop.Run();
-  EXPECT_TRUE(uninstall_results[OsHookType::kShortcuts]);
-  EXPECT_TRUE(uninstall_results[OsHookType::kFileHandlers]);
-  EXPECT_TRUE(uninstall_results[OsHookType::kProtocolHandlers]);
-  EXPECT_TRUE(uninstall_results[OsHookType::kUrlHandlers]);
-  EXPECT_TRUE(uninstall_results[OsHookType::kRunOnOsLogin]);
-  EXPECT_TRUE(uninstall_results[OsHookType::kShortcutsMenu]);
-  EXPECT_TRUE(uninstall_results[OsHookType::kUninstallationViaOsSettings]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kShortcuts]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kFileHandlers]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kProtocolHandlers]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kUrlHandlers]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kRunOnOsLogin]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kShortcutsMenu]);
+  EXPECT_FALSE(uninstall_errors[OsHookType::kUninstallationViaOsSettings]);
 }
 
 TEST_F(OsIntegrationManagerTest, UpdateOsHooksEverything) {
@@ -308,13 +325,54 @@ TEST_F(OsIntegrationManagerTest, UpdateOsHooksEverything) {
   EXPECT_CALL(manager,
               UpdateFileHandlers(app_id, FileHandlerUpdateAction::kUpdate))
       .Times(1);
-  EXPECT_CALL(manager, UpdateShortcuts(app_id, old_name)).Times(1);
+  EXPECT_CALL(manager, UpdateShortcuts(app_id, old_name, testing::_)).Times(1);
   EXPECT_CALL(manager, UpdateShortcutsMenu(app_id, testing::_)).Times(1);
   EXPECT_CALL(manager, UpdateUrlHandlers(app_id, testing::_)).Times(1);
-  EXPECT_CALL(manager, UpdateProtocolHandlers(app_id)).Times(1);
+  EXPECT_CALL(manager, UpdateProtocolHandlers(app_id, false, testing::_))
+      .Times(1);
 
   manager.UpdateOsHooks(app_id, old_name, FileHandlerUpdateAction::kUpdate,
                         web_app_info);
+}
+
+TEST_F(OsIntegrationManagerTest, UpdateProtocolHandlers) {
+#if defined(OS_WIN)
+  // UpdateProtocolHandlers is a no-op on Win7
+  if (base::win::GetVersion() == base::win::Version::WIN7)
+    return;
+#endif
+
+  const AppId app_id = "test";
+  testing::StrictMock<MockOsIntegrationManager> manager(
+      std::make_unique<WebAppProtocolHandlerManager>(nullptr));
+  base::RunLoop run_loop;
+
+#if !defined(OS_WIN)
+  EXPECT_CALL(manager, UpdateShortcuts(app_id, base::StringPiece(), testing::_))
+      .WillOnce([](const AppId& app_id, base::StringPiece old_name,
+                   base::OnceClosure update_finished_callback) {
+        std::move(update_finished_callback).Run();
+      });
+#endif
+
+  EXPECT_CALL(manager, UnregisterProtocolHandlers(app_id, testing::_))
+      .WillOnce([](const AppId& app_id,
+                   base::OnceCallback<void(bool)> update_finished_callback) {
+        std::move(update_finished_callback).Run(true);
+      });
+
+  EXPECT_CALL(manager, RegisterProtocolHandlers(app_id, testing::_))
+      .WillOnce([](const AppId& app_id,
+                   base::OnceCallback<void(bool)> update_finished_callback) {
+        std::move(update_finished_callback).Run(true);
+      });
+
+  auto update_finished_callback =
+      base::BindLambdaForTesting([&]() { run_loop.Quit(); });
+
+  manager.OsIntegrationManager::UpdateProtocolHandlers(
+      app_id, true, update_finished_callback);
+  run_loop.Run();
 }
 
 }  // namespace

@@ -53,7 +53,7 @@ const int kExtraPassingMargin = 2;
 const int kMinNumClicksToDecay = 30;
 
 // Time between two consecutive decays (assuming enough clicks).
-constexpr auto kTimeBetweenDecays = base::TimeDelta::FromDays(1);
+constexpr auto kTimeBetweenDecays = base::Days(1);
 
 // Decay factor as a fraction. The current value approximates the seventh root
 // of 0.5. This yields a 50% decay per seven decays. Seven weak decays are used
@@ -349,7 +349,7 @@ bool ClickBasedCategoryRanker::ReadOrderFromPrefs(
   result_categories->clear();
   const base::ListValue* list =
       pref_service_->GetList(prefs::kClickBasedCategoryRankerOrderWithClicks);
-  if (!list || list->GetSize() == 0) {
+  if (!list || list->GetList().size() == 0) {
     return false;
   }
 

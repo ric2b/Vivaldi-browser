@@ -126,7 +126,7 @@ void BindURLToStatement(const TemplateURLData& data,
   // See: crbug.com/153520
   base::ListValue alternate_urls_value;
   for (size_t i = 0; i < data.alternate_urls.size(); ++i)
-    alternate_urls_value.AppendString(data.alternate_urls[i]);
+    alternate_urls_value.Append(data.alternate_urls[i]);
   std::string alternate_urls;
   base::JSONWriter::Write(alternate_urls_value, &alternate_urls);
 
@@ -492,10 +492,8 @@ bool KeywordTable::GetKeywordDataFromStatement(sql::Statement& s,
   data->input_encodings = base::SplitString(
       s.ColumnString(9), ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   data->id = s.ColumnInt64(0);
-  data->date_created =
-      base::Time() + base::TimeDelta::FromMicroseconds(s.ColumnInt64(7));
-  data->last_modified =
-      base::Time() + base::TimeDelta::FromMicroseconds(s.ColumnInt64(13));
+  data->date_created = base::Time() + base::Microseconds(s.ColumnInt64(7));
+  data->last_modified = base::Time() + base::Microseconds(s.ColumnInt64(13));
   data->created_by_policy = s.ColumnBool(12);
   data->created_from_play_api = s.ColumnBool(22);
   data->usage_count = s.ColumnInt(8);
@@ -505,17 +503,15 @@ bool KeywordTable::GetKeywordDataFromStatement(sql::Statement& s,
 
   data->alternate_urls.clear();
   absl::optional<base::Value> value(base::JSONReader::Read(s.ColumnString(15)));
-  base::ListValue* alternate_urls_value;
-  if (value && value->GetAsList(&alternate_urls_value)) {
-    std::string alternate_url;
-    for (size_t i = 0; i < alternate_urls_value->GetSize(); ++i) {
-      if (alternate_urls_value->GetString(i, &alternate_url))
-        data->alternate_urls.push_back(alternate_url);
+  if (value && value->is_list()) {
+    for (const base::Value& alternate_url : value->GetList()) {
+      if (alternate_url.is_string()) {
+        data->alternate_urls.push_back(alternate_url.GetString());
+      }
     }
   }
 
-  data->last_visited =
-      base::Time() + base::TimeDelta::FromMicroseconds(s.ColumnInt64(21));
+  data->last_visited = base::Time() + base::Microseconds(s.ColumnInt64(21));
 
   return true;
 }

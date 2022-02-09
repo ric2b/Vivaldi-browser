@@ -31,6 +31,10 @@ namespace ash {
 class OverviewGridTest : public AshTestBase {
  public:
   OverviewGridTest() = default;
+
+  OverviewGridTest(const OverviewGridTest&) = delete;
+  OverviewGridTest& operator=(const OverviewGridTest&) = delete;
+
   ~OverviewGridTest() override = default;
 
   void InitializeGrid(const std::vector<aura::Window*>& windows) {
@@ -89,8 +93,6 @@ class OverviewGridTest : public AshTestBase {
 
  private:
   std::unique_ptr<OverviewGrid> grid_;
-
-  DISALLOW_COPY_AND_ASSIGN(OverviewGridTest);
 };
 
 // Tests that with only one window, we always animate.
@@ -225,7 +227,7 @@ TEST_F(OverviewGridTest, WindowWithBackdrop) {
 }
 
 TEST_F(OverviewGridTest, PartiallyOffscreenWindow) {
-  UpdateDisplay("400x400");
+  UpdateDisplay("500x400");
   auto window1 = CreateTestWindow(gfx::Rect(100, 100));
   auto window2 = CreateTestWindow(gfx::Rect(100, 100));
 
@@ -245,7 +247,7 @@ TEST_F(OverviewGridTest, PartiallyOffscreenWindow) {
 
 // Tests that windows whose destination is fully offscreen never animate.
 TEST_F(OverviewGridTest, FullyOffscreenWindow) {
-  UpdateDisplay("400x400");
+  UpdateDisplay("500x400");
   auto window1 = CreateTestWindow(gfx::Rect(100, 100));
   auto window2 = CreateTestWindow(gfx::Rect(100, 100));
 

@@ -22,6 +22,7 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/autofill/core/common/autofill_util.h"
 #include "components/version_info/channel.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_context.h"
@@ -57,15 +58,6 @@ bool ShouldEnableHeavyFormDataScraping(const version_info::Channel channel) {
   }
   NOTREACHED();
   return false;
-}
-
-GURL StripAuthAndParams(const GURL& gurl) {
-  GURL::Replacements rep;
-  rep.ClearUsername();
-  rep.ClearPassword();
-  rep.ClearQuery();
-  rep.ClearRef();
-  return gurl.ReplaceComponents(rep);
 }
 
 }  // namespace
@@ -170,7 +162,7 @@ bool ContentAutofillDriver::RendererIsAvailable() {
   return render_frame_host_->GetRenderViewHost() != nullptr;
 }
 
-InternalAuthenticator*
+webauthn::InternalAuthenticator*
 ContentAutofillDriver::GetOrCreateCreditCardInternalAuthenticator() {
   if (!authenticator_impl_ && browser_autofill_manager_ &&
       browser_autofill_manager_->client()) {
@@ -349,8 +341,10 @@ void ContentAutofillDriver::RendererShouldSetSuggestionAvailability(
                                                               state);
 }
 
-void ContentAutofillDriver::FormsSeenImpl(const std::vector<FormData>& forms) {
-  autofill_manager_->OnFormsSeen(forms);
+void ContentAutofillDriver::FormsSeenImpl(
+    const std::vector<FormData>& updated_forms,
+    const std::vector<FormGlobalId>& removed_forms) {
+  autofill_manager_->OnFormsSeen(updated_forms, removed_forms);
 }
 
 void ContentAutofillDriver::SetFormToBeProbablySubmittedImpl(
@@ -477,13 +471,22 @@ void ContentAutofillDriver::SetFormToBeProbablySubmitted(
                  : absl::nullopt);
 }
 
-void ContentAutofillDriver::FormsSeen(const std::vector<FormData>& raw_forms) {
+void ContentAutofillDriver::FormsSeen(
+    const std::vector<FormData>& raw_updated_forms,
+    const std::vector<FormRendererId>& raw_removed_forms) {
   if (!bad_message::CheckFrameNotPrerendering(render_frame_host_))
     return;
-  std::vector<FormData> forms = raw_forms;
-  for (FormData& form : forms)
+  std::vector<FormData> updated_forms = raw_updated_forms;
+  for (FormData& form : updated_forms)
     SetFrameAndFormMetaData(form, nullptr);
-  GetAutofillRouter().FormsSeen(this, forms);
+
+  LocalFrameToken frame_token(render_frame_host_->GetFrameToken().value());
+  std::vector<FormGlobalId> removed_forms;
+  removed_forms.reserve(raw_removed_forms.size());
+  for (FormRendererId form_id : raw_removed_forms)
+    removed_forms.push_back({frame_token, form_id});
+
+  GetAutofillRouter().FormsSeen(this, updated_forms, removed_forms);
 }
 
 void ContentAutofillDriver::FormSubmitted(const FormData& raw_form,
@@ -638,7 +641,11 @@ void ContentAutofillDriver::DidNavigateFrame(
     return;
   }
 
+  // The driver's RenderFrameHost may be used for the page we're navigating to.
+  // Therefore, we need to forget all forms of the page we're navigating from.
   submitted_forms_.clear();
+  if (autofill_router_)  // Can be nullptr only in tests.
+    autofill_router_->UnregisterDriver(this);
   autofill_manager_->Reset();
 }
 

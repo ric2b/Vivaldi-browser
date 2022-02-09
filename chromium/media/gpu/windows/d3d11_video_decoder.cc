@@ -168,17 +168,17 @@ HRESULT D3D11VideoDecoder::InitializeAcceleratedDecoder(
     return hr;
 
   profile_ = config.profile();
-  if (config.codec() == kCodecVP9) {
+  if (config.codec() == VideoCodec::kVP9) {
     accelerated_video_decoder_ = std::make_unique<VP9Decoder>(
         std::make_unique<D3D11VP9Accelerator>(
             this, media_log_.get(), video_device_, std::move(video_context)),
         profile_, config.color_space_info());
-  } else if (config.codec() == kCodecH264) {
+  } else if (config.codec() == VideoCodec::kH264) {
     accelerated_video_decoder_ = std::make_unique<H264Decoder>(
         std::make_unique<D3D11H264Accelerator>(
             this, media_log_.get(), video_device_, std::move(video_context)),
         profile_, config.color_space_info());
-  } else if (config.codec() == kCodecAV1) {
+  } else if (config.codec() == VideoCodec::kAV1) {
     accelerated_video_decoder_ = std::make_unique<AV1Decoder>(
         std::make_unique<D3D11AV1Accelerator>(
             this, media_log_.get(), video_device_, std::move(video_context)),
@@ -206,11 +206,16 @@ StatusOr<ComD3D11VideoDecoder> D3D11VideoDecoder::CreateD3D11Decoder() {
                  ? 10
                  : 8);
 
-  // TODO: supported check?
+  // OS prevent read any content from encrypted video frame. No need to support
+  // shared handle and keyed_mutex system for the encrypted frame.
+  const bool use_shared_handle =
+      base::FeatureList::IsEnabled(kD3D11VideoDecoderUseSharedHandle) &&
+      !config_.is_encrypted();
 
-  decoder_configurator_ =
-      D3D11DecoderConfigurator::Create(gpu_preferences_, gpu_workarounds_,
-                                       config_, bit_depth_, media_log_.get());
+  // TODO: supported check?
+  decoder_configurator_ = D3D11DecoderConfigurator::Create(
+      gpu_preferences_, gpu_workarounds_, config_, bit_depth_, media_log_.get(),
+      use_shared_handle);
   if (!decoder_configurator_)
     return StatusCode::kDecoderUnsupportedProfile;
 
@@ -231,7 +236,8 @@ StatusOr<ComD3D11VideoDecoder> D3D11VideoDecoder::CreateD3D11Decoder() {
       decoder_configurator_->TextureFormat(),
       is_hdr_supported_ ? TextureSelector::HDRMode::kSDROrHDR
                         : TextureSelector::HDRMode::kSDROnly,
-      &format_checker, video_device_, device_context_, media_log_.get());
+      &format_checker, video_device_, device_context_, media_log_.get(),
+      use_shared_handle);
   if (!texture_selector_)
     return StatusCode::kCreateTextureSelectorFailed;
 
@@ -257,14 +263,16 @@ StatusOr<ComD3D11VideoDecoder> D3D11VideoDecoder::CreateD3D11Decoder() {
           .AddCause(HresultToStatus(hr));
     }
 
-    if ((config_.codec() == kCodecVP9 || config_.codec() == kCodecAV1) &&
+    if ((config_.codec() == VideoCodec::kVP9 ||
+         config_.codec() == VideoCodec::kAV1) &&
         dec_config.ConfigBitstreamRaw == 1) {
       // DXVA VP9 and AV1 specifications say ConfigBitstreamRaw "shall be 1".
       found = true;
       break;
     }
 
-    if (config_.codec() == kCodecH264 && dec_config.ConfigBitstreamRaw == 2) {
+    if (config_.codec() == VideoCodec::kH264 &&
+        dec_config.ConfigBitstreamRaw == 2) {
       // ConfigBitstreamRaw == 2 means the decoder uses DXVA_Slice_H264_Short.
       found = true;
       break;
@@ -287,8 +295,13 @@ StatusOr<ComD3D11VideoDecoder> D3D11VideoDecoder::CreateD3D11Decoder() {
   // For more information, please see:
   // https://download.microsoft.com/download/9/2/A/92A4E198-67E0-4ABD-9DB7-635D711C2752/DXVA_VPx.pdf
   // https://download.microsoft.com/download/5/f/c/5fc4ec5c-bd8c-4624-8034-319c1bab7671/DXVA_H264.pdf
+  //
+  // When creating output texture with shared handle supports, we can't use a
+  // texture array. Because the keyed mutex applies on the entire texture array
+  // causing a deadlock when multiple threads try to use different slots of the
+  // array. More info here: https://crbug.com/1238943
   use_single_video_decoder_texture_ =
-      !!(dec_config.ConfigDecoderSpecific & (1 << 14));
+      !!(dec_config.ConfigDecoderSpecific & (1 << 14)) || use_shared_handle;
   if (use_single_video_decoder_texture_)
     MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using single textures";
   else
@@ -388,20 +401,14 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
   // TODO(liberato): Handle cleanup better.  Also consider being less chatty in
   // the logs, since this will fall back.
 
-  // TODO(liberato): dxva does this.  don't know if we need to.
-  if (!base::FeatureList::IsEnabled(kD3D11VideoDecoderSkipMultithreaded)) {
-    ComD3D11Multithread multi_threaded;
-    hr = device_->QueryInterface(IID_PPV_ARGS(&multi_threaded));
-    if (FAILED(hr)) {
-      NotifyError(Status(StatusCode::kQueryID3D11MultithreadFailed)
-                      .AddCause(HresultToStatus(hr)));
-      return;
-    }
-    // TODO(liberato): This is a hack, since the unittest returns
-    // success without providing |multi_threaded|.
-    if (multi_threaded)
-      multi_threaded->SetMultithreadProtected(TRUE);
+  ComD3D11Multithread multi_threaded;
+  hr = device_->QueryInterface(IID_PPV_ARGS(&multi_threaded));
+  if (FAILED(hr)) {
+    return NotifyError(Status(StatusCode::kQueryID3D11MultithreadFailed)
+                           .AddCause(HresultToStatus(hr)));
   }
+
+  multi_threaded->SetMultithreadProtected(TRUE);
 
   hr = device_.As(&video_device_);
   if (!SUCCEEDED(hr)) {
@@ -742,7 +749,8 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
           device_, size,
           use_single_video_decoder_texture_
               ? 1
-              : D3D11DecoderConfigurator::BUFFER_COUNT);
+              : D3D11DecoderConfigurator::BUFFER_COUNT,
+          texture_selector_->DoesDecoderOutputUseSharedHandle());
       if (result.has_value()) {
         in_texture = std::move(result).value();
       } else {
@@ -863,23 +871,21 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   frame->SetReleaseMailboxCB(
       base::BindOnce(release_mailbox_cb_, std::move(wait_complete_cb)));
 
-  frame->metadata().power_efficient = true;
   // For NV12, overlay is allowed by default. If the decoder is going to support
   // non-NV12 textures, then this may have to be conditionally set. Also note
   // that ALLOW_OVERLAY is required for encrypted video path.
   //
-  // Since all of our picture buffers allow overlay, we just use the finch
-  // feature.  However, we may choose to set ALLOW_OVERLAY to false even if
+  // Since all of our picture buffers allow overlay, we just set this to true.
+  // However, we may choose to set ALLOW_OVERLAY to false even if
   // the finch flag is enabled.  We may not choose to set ALLOW_OVERLAY if the
   // flag is off, however.
   //
   // Also note that, since we end up binding textures with GLImageDXGI, it's
   // probably okay just to allow overlay always, and let the swap chain
   // presenter decide if it wants to.
-  const bool allow_overlay =
-      base::FeatureList::IsEnabled(kD3D11VideoDecoderAllowOverlay);
-  frame->metadata().allow_overlay = allow_overlay;
+  frame->metadata().allow_overlay = true;
 
+  frame->metadata().power_efficient = true;
   frame->set_color_space(output_color_space);
   frame->set_hdr_metadata(config_.hdr_metadata());
   output_cb_.Run(frame);

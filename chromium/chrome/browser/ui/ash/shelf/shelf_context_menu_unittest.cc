@@ -38,10 +38,12 @@
 #include "chrome/browser/ui/ash/shelf/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/shelf/browser_shortcut_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
+#include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
+#include "chrome/browser/ui/ash/shelf/chrome_shelf_item_factory.h"
 #include "chrome/browser/ui/ash/shelf/extension_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/shelf/shelf_controller_helper.h"
 #include "chrome/browser/web_applications/system_web_apps/test/test_system_web_app_manager.h"
-#include "chrome/browser/web_applications/test/test_web_app_provider.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
@@ -92,6 +94,10 @@ std::string GetAppNameInShelfGroup(uint32_t task_id) {
 }
 
 class ShelfContextMenuTest : public ChromeAshTestBase {
+ public:
+  ShelfContextMenuTest(const ShelfContextMenuTest&) = delete;
+  ShelfContextMenuTest& operator=(const ShelfContextMenuTest&) = delete;
+
  protected:
   ShelfContextMenuTest() = default;
   ~ShelfContextMenuTest() override = default;
@@ -126,8 +132,9 @@ class ShelfContextMenuTest : public ChromeAshTestBase {
 
     session_manager_ = std::make_unique<session_manager::SessionManager>();
     model_ = std::make_unique<ash::ShelfModel>();
-    shelf_controller_ =
-        std::make_unique<ChromeShelfController>(profile(), model_.get());
+    shelf_item_factory_ = std::make_unique<ChromeShelfItemFactory>();
+    shelf_controller_ = std::make_unique<ChromeShelfController>(
+        profile(), model_.get(), shelf_item_factory_.get());
     shelf_controller_->SetProfileForTest(profile());
     shelf_controller_->SetShelfControllerHelperForTest(
         std::make_unique<ShelfControllerHelper>(profile()));
@@ -190,6 +197,7 @@ class ShelfContextMenuTest : public ChromeAshTestBase {
 
   void TearDown() override {
     shelf_controller_.reset();
+    shelf_item_factory_.reset();
 
     arc_test_.TearDown();
 
@@ -240,10 +248,9 @@ class ShelfContextMenuTest : public ChromeAshTestBase {
   apps::AppServiceTest app_service_test_;
   std::unique_ptr<session_manager::SessionManager> session_manager_;
   std::unique_ptr<ash::ShelfModel> model_;
+  std::unique_ptr<ChromeShelfItemFactory> shelf_item_factory_;
   std::unique_ptr<ChromeShelfController> shelf_controller_;
   extensions::ExtensionService* extension_service_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(ShelfContextMenuTest);
 };
 
 // Verifies that "New Incognito window" menu item in the launcher context
@@ -260,8 +267,8 @@ TEST_F(ShelfContextMenuTest,
       shelf_context_menu->IsCommandIdEnabled(ash::MENU_NEW_INCOGNITO_WINDOW));
 
   // Disable Incognito mode.
-  IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
-                                      IncognitoModePrefs::DISABLED);
+  IncognitoModePrefs::SetAvailability(
+      profile()->GetPrefs(), IncognitoModePrefs::Availability::kDisabled);
   shelf_context_menu =
       CreateShelfContextMenu(ash::TYPE_BROWSER_SHORTCUT, display_id);
   menu = GetMenuModel(shelf_context_menu.get());
@@ -283,8 +290,8 @@ TEST_F(ShelfContextMenuTest, NewWindowMenuIsDisabledWhenIncognitoModeForced) {
   EXPECT_TRUE(shelf_context_menu->IsCommandIdEnabled(ash::MENU_NEW_WINDOW));
 
   // Disable Incognito mode.
-  IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
-                                      IncognitoModePrefs::FORCED);
+  IncognitoModePrefs::SetAvailability(
+      profile()->GetPrefs(), IncognitoModePrefs::Availability::kForced);
   shelf_context_menu =
       CreateShelfContextMenu(ash::TYPE_BROWSER_SHORTCUT, display_id);
   menu = GetMenuModel(shelf_context_menu.get());
@@ -312,7 +319,7 @@ TEST_F(ShelfContextMenuTest, ArcLauncherMenusCheck) {
   const std::string app_id = ArcAppTest::GetAppId(arc_test().fake_apps()[0]);
   const std::string app_name = arc_test().fake_apps()[0].name;
 
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
 
   const ash::ShelfID shelf_id(app_id);
   const ash::ShelfItem* item = controller()->GetItem(shelf_id);
@@ -449,7 +456,7 @@ TEST_F(ShelfContextMenuTest, ArcLauncherSuspendAppMenu) {
   SendRefreshAppList({app});
   const std::string app_id = ArcAppTest::GetAppId(app);
 
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
 
   const ash::ShelfID shelf_id(app_id);
   const ash::ShelfItem* item = controller()->GetItem(shelf_id);
@@ -477,7 +484,7 @@ TEST_F(ShelfContextMenuTest, ArcDeferredShelfContextMenuItemCheck) {
   const std::string app_id1 = ArcAppTest::GetAppId(arc_test().fake_apps()[0]);
   const std::string app_id2 = ArcAppTest::GetAppId(arc_test().fake_apps()[1]);
 
-  controller()->PinAppWithID(app_id1);
+  PinAppWithIDToShelf(app_id1);
 
   arc_test().StopArcInstance();
 
@@ -543,7 +550,7 @@ TEST_F(ShelfContextMenuTest, ArcContextMenuOptions) {
   const std::string app_id = ArcAppTest::GetAppId(arc_test().fake_apps()[0]);
   const ash::ShelfID shelf_id(app_id);
 
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
   const ash::ShelfItem* item = controller()->GetItem(shelf_id);
   ASSERT_TRUE(item);
   ash::ShelfItemDelegate* item_delegate =
@@ -568,7 +575,7 @@ TEST_F(ShelfContextMenuTest, InternalAppShelfContextMenu) {
     const std::string app_id = internal_app.app_id;
     const ash::ShelfID shelf_id(app_id);
     // Pin internal app.
-    controller()->PinAppWithID(app_id);
+    PinAppWithIDToShelf(app_id);
     const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
     ASSERT_TRUE(item);
     EXPECT_EQ(l10n_util::GetStringUTF16(internal_app.name_string_resource_id),
@@ -597,7 +604,7 @@ TEST_F(ShelfContextMenuTest, InternalAppShelfContextMenuOptionsNumber) {
     const std::string app_id = internal_app.app_id;
     const ash::ShelfID shelf_id(app_id);
     // Pin internal app.
-    controller()->PinAppWithID(app_id);
+    PinAppWithIDToShelf(app_id);
     const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
     ASSERT_TRUE(item);
 
@@ -620,7 +627,7 @@ TEST_F(ShelfContextMenuTest, CrostiniTerminalApp) {
   crostini::CrostiniManager::GetForProfile(profile())->AddRunningVmForTesting(
       crostini::kCrostiniDefaultVmName);
 
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
   const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
   ASSERT_TRUE(item);
 
@@ -652,7 +659,7 @@ TEST_F(ShelfContextMenuTest, CrostiniNormalApp) {
   guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile())
       ->AppLaunched(app_id);
 
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
   const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
   ASSERT_TRUE(item);
 
@@ -678,7 +685,6 @@ TEST_F(ShelfContextMenuTest, CrostiniNormalApp) {
               IsItemEnabledInMenu(menu.get(), ash::CROSTINI_USE_HIGH_DENSITY));
   EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::UNINSTALL));
   EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::SHOW_APP_INFO));
-  EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::UNINSTALL));
 }
 
 // Confirms the menu items for unregistered crostini apps (i.e. apps that do not
@@ -688,7 +694,7 @@ TEST_F(ShelfContextMenuTest, CrostiniUnregisteredApps) {
   const std::string fake_window_startup_id = "bar";
   const std::string app_id = crostini::GetCrostiniShelfAppId(
       profile(), &fake_window_app_id, &fake_window_startup_id);
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
   const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
   ASSERT_TRUE(item);
 
@@ -711,7 +717,7 @@ TEST_F(ShelfContextMenuTest, WebApp) {
   const web_app::AppId app_id = web_app::test::InstallDummyWebApp(
       profile(), kWebAppName, GURL(kWebAppUrl));
 
-  controller()->PinAppWithID(app_id);
+  PinAppWithIDToShelf(app_id);
   const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
   ASSERT_TRUE(item);
 
@@ -726,9 +732,9 @@ TEST_F(ShelfContextMenuTest, WebApp) {
   for (int i = 0; i < menu->GetItemCount(); ++i)
     EXPECT_FALSE(menu->GetIconAt(i).IsEmpty());
 
-  EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::UNINSTALL));
-  EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::SHOW_APP_INFO));
-  EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::UNINSTALL));
+  EXPECT_TRUE(IsItemEnabledInMenu(menu.get(), ash::UNINSTALL));
+  EXPECT_TRUE(IsItemEnabledInMenu(menu.get(), ash::SHOW_APP_INFO));
+  EXPECT_TRUE(IsItemEnabledInMenu(menu.get(), ash::MENU_PIN));
 }
 
 }  // namespace

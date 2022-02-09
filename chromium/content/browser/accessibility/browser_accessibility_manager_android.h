@@ -46,15 +46,20 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
       base::WeakPtr<WebContentsAccessibilityAndroid> web_contents_accessibility,
       BrowserAccessibilityDelegate* delegate);
 
+  BrowserAccessibilityManagerAndroid(
+      const BrowserAccessibilityManagerAndroid&) = delete;
+  BrowserAccessibilityManagerAndroid& operator=(
+      const BrowserAccessibilityManagerAndroid&) = delete;
+
   ~BrowserAccessibilityManagerAndroid() override;
 
   static ui::AXTreeUpdate GetEmptyDocument();
 
-  // Helper methods to set/check if this is running as part of a WebView.
-  void set_is_running_as_webview(bool is_webview) {
-    is_running_as_webview_ = is_webview;
+  // Helper methods to set/check if image descriptions are allowed.
+  void set_allow_image_descriptions(bool allow_image_descriptions) {
+    allow_image_descriptions_ = allow_image_descriptions;
   }
-  bool IsRunningAsWebView() { return is_running_as_webview_; }
+  bool AllowImageDescriptions() { return allow_image_descriptions_; }
 
   // By default, the tree is pruned for a better screen reading experience,
   // including:
@@ -155,8 +160,8 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   // See docs for set_prune_tree_for_screen_reader, above.
   bool prune_tree_for_screen_reader_;
 
-  // Whether this manager is running as part of a WebView.
-  bool is_running_as_webview_ = false;
+  // Whether this manager allows image descriptions.
+  bool allow_image_descriptions_ = false;
 
   // Only set on the root BrowserAccessibilityManager. Keeps track of if
   // any node uses touch passthrough in any frame. See comment next to
@@ -167,8 +172,6 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   // with each atomic update to prevent superfluous cache clear calls.
   std::unordered_set<int32_t> nodes_already_cleared_ =
       std::unordered_set<int32_t>();
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityManagerAndroid);
 };
 
 }  // namespace content

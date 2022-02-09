@@ -18,9 +18,11 @@ import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
+import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingSwitchPreference;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.privacy.secure_dns.SecureDnsSettings;
-import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridge;
+import org.chromium.chrome.browser.privacy_review.PrivacyReviewDialog;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxReferrer;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsFragment;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -62,6 +64,8 @@ public class PrivacySettings
     private static final String PREF_SYNC_AND_SERVICES_LINK = "sync_and_services_link";
     private static final String PREF_CLEAR_BROWSING_DATA = "clear_browsing_data";
     private static final String PREF_PRIVACY_SANDBOX = "privacy_sandbox";
+    private static final String PREF_PRIVACY_REVIEW = "privacy_review";
+    private static final String PREF_INCOGNITO_LOCK = "incognito_lock";
 
     // Vivaldi
     private static final String PREF_CLEAR_SESSION_BROWSING_DATA = "clear_session_browsing_data";
@@ -93,22 +97,32 @@ public class PrivacySettings
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_preferences);
         getActivity().setTitle(R.string.prefs_privacy_security);
 
-        if (PrivacySandboxBridge.isPrivacySandboxSettingsFunctional()) {
-            findPreference(PREF_PRIVACY_SANDBOX)
-                    .setSummary(PrivacySandboxSettingsFragment.getStatusString(getContext()));
-            // Overwrite the click listener to pass a correct referrer to the fragment.
-            findPreference(PREF_PRIVACY_SANDBOX).setOnPreferenceClickListener(preference -> {
-                Bundle fragmentArgs = new Bundle();
-                fragmentArgs.putInt(PrivacySandboxSettingsFragment.PRIVACY_SANDBOX_REFERRER,
-                        PrivacySandboxReferrer.PRIVACY_SETTINGS);
-                new SettingsLauncherImpl().launchSettingsActivity(
-                        getContext(), PrivacySandboxSettingsFragment.class, fragmentArgs);
+        if (!ChromeApplicationImpl.isVivaldi()) {
+        findPreference(PREF_PRIVACY_SANDBOX)
+                .setSummary(PrivacySandboxSettingsFragment.getStatusString(getContext()));
+        // Overwrite the click listener to pass a correct referrer to the fragment.
+        findPreference(PREF_PRIVACY_SANDBOX).setOnPreferenceClickListener(preference -> {
+            Bundle fragmentArgs = new Bundle();
+            fragmentArgs.putInt(PrivacySandboxSettingsFragment.PRIVACY_SANDBOX_REFERRER,
+                    PrivacySandboxReferrer.PRIVACY_SETTINGS);
+            new SettingsLauncherImpl().launchSettingsActivity(
+                    getContext(), PrivacySandboxSettingsFragment.class, fragmentArgs);
+            return true;
+        });
+        } // Vivaldi
+
+        Preference privacyReviewPreference = findPreference(PREF_PRIVACY_REVIEW);
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_REVIEW)) {
+            getPreferenceScreen().removePreference(privacyReviewPreference);
+        } else {
+            privacyReviewPreference.setOnPreferenceClickListener(preference -> {
+                PrivacyReviewDialog dialog = new PrivacyReviewDialog(getContext());
+                dialog.show();
                 return true;
             });
-        } else {
-            // Remove Privacy Sandbox settings if the corresponding flag is disabled.
-            getPreferenceScreen().removePreference(findPreference(PREF_PRIVACY_SANDBOX));
         }
+
+        setUpIncognitoReauthPreference();
 
         Preference safeBrowsingPreference = findPreference(PREF_SAFE_BROWSING);
         safeBrowsingPreference.setSummary(
@@ -174,7 +188,7 @@ public class PrivacySettings
                     R.string.prefs_vivaldi_webrtc_broadcast_ip_toggle_off_label);
         }
 
-        updateSummaries();
+        updatePreferences();
     }
 
     private SpannableString buildSyncAndServicesLink() {
@@ -201,6 +215,35 @@ public class PrivacySettings
                 new SpanApplier.SpanInfo("<link2>", "</link2>", servicesLink));
     }
 
+    private void setUpIncognitoReauthPreference() {
+        IncognitoReauthSettingSwitchPreference incognitoReauthPreference =
+                (IncognitoReauthSettingSwitchPreference) findPreference(PREF_INCOGNITO_LOCK);
+        if (!IncognitoReauthManager.shouldShowSetting()) {
+            incognitoReauthPreference.setVisible(false);
+            return;
+        }
+        incognitoReauthPreference.setLinkClickDelegate(() -> {
+            getActivity().startActivity(IncognitoReauthManager.getSystemLocationSettingsIntent());
+        });
+        incognitoReauthPreference.setOnPreferenceChangeListener(this);
+
+        updateIncognitoReauthPreference();
+    }
+
+    private void updateIncognitoReauthPreference() {
+        if (!IncognitoReauthManager.shouldShowSetting()) return;
+        IncognitoReauthSettingSwitchPreference incognitoReauthPreference =
+                (IncognitoReauthSettingSwitchPreference) findPreference(PREF_INCOGNITO_LOCK);
+        incognitoReauthPreference.setSummary(
+                IncognitoReauthManager.getSummaryString(getActivity()));
+        incognitoReauthPreference.setPreferenceInteractable(
+                IncognitoReauthManager.isDeviceScreenLockEnabled());
+
+        boolean lastPrefValue = UserPrefs.get(Profile.getLastUsedRegularProfile())
+                                        .getBoolean(Pref.INCOGNITO_REAUTHENTICATION_FOR_ANDROID);
+        incognitoReauthPreference.setChecked(lastPrefValue);
+    }
+
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         String key = preference.getKey();
@@ -213,6 +256,9 @@ public class PrivacySettings
         } else if (PREF_HTTPS_FIRST_MODE.equals(key)) {
             UserPrefs.get(Profile.getLastUsedRegularProfile())
                     .setBoolean(Pref.HTTPS_ONLY_MODE_ENABLED, (boolean) newValue);
+        } else if (PREF_INCOGNITO_LOCK.equals(key)) {
+            UserPrefs.get(Profile.getLastUsedRegularProfile())
+                    .setBoolean(Pref.INCOGNITO_REAUTHENTICATION_FOR_ANDROID, (boolean) newValue);
         }
         // Vivaldi
         else if (PREF_WEBRTC_BROADCAST_IP.equals(key)) {
@@ -228,13 +274,13 @@ public class PrivacySettings
     @Override
     public void onResume() {
         super.onResume();
-        updateSummaries();
+        updatePreferences();
     }
 
     /**
-     * Updates the summaries for several preferences.
+     * Updates the preferences.
      */
-    public void updateSummaries() {
+    public void updatePreferences() {
         PrefService prefService = UserPrefs.get(Profile.getLastUsedRegularProfile());
 
         ChromeSwitchPreference canMakePaymentPref =
@@ -270,7 +316,7 @@ public class PrivacySettings
                             .create(getActivity(), true,
                                     (didConfirm) -> {
                                         if (didConfirm) {
-                                            updateSummaries();
+                                            updatePreferences();
                                         }
                                     })
                             .show();
@@ -281,11 +327,15 @@ public class PrivacySettings
             }
         }
 
+        if (!ChromeApplicationImpl.isVivaldi()) {
         Preference privacySandboxPreference = findPreference(PREF_PRIVACY_SANDBOX);
         if (privacySandboxPreference != null) {
             privacySandboxPreference.setSummary(
                     PrivacySandboxSettingsFragment.getStatusString(getContext()));
         }
+        } // Vivaldi
+
+        updateIncognitoReauthPreference();
 
         // Vivaldi
         Preference contextualPref = findPreference(PREF_CONTEXTUAL_SEARCH);

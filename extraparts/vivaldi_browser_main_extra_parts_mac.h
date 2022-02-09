@@ -11,12 +11,14 @@ class VivaldiBrowserMainExtraPartsMac : public VivaldiBrowserMainExtraParts {
  public:
   VivaldiBrowserMainExtraPartsMac();
   ~VivaldiBrowserMainExtraPartsMac() override;
+  VivaldiBrowserMainExtraPartsMac(const VivaldiBrowserMainExtraPartsMac&) =
+      delete;
+  VivaldiBrowserMainExtraPartsMac& operator=(
+      const VivaldiBrowserMainExtraPartsMac&) = delete;
 
   // Overridden from ChromeBrowserMainExtraParts:
   void PostEarlyInitialization() override;
   void PreProfileInit() override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraPartsMac);
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_MAC_H_

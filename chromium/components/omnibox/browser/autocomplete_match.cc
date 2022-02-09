@@ -23,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
+#include "base/trace_event/trace_event.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/document_provider.h"
@@ -922,11 +923,13 @@ void AutocompleteMatch::ComputeStrippedDestinationURL(
 
 void AutocompleteMatch::GetKeywordUIState(
     TemplateURLService* template_url_service,
-    std::u16string* keyword,
+    std::u16string* keyword_out,
     bool* is_keyword_hint) const {
   *is_keyword_hint = associated_keyword != nullptr;
-  keyword->assign(*is_keyword_hint ? associated_keyword->keyword :
-      GetSubstitutingExplicitlyInvokedKeyword(template_url_service));
+  keyword_out->assign(
+      *is_keyword_hint
+          ? associated_keyword->keyword
+          : GetSubstitutingExplicitlyInvokedKeyword(template_url_service));
 }
 
 std::u16string AutocompleteMatch::GetSubstitutingExplicitlyInvokedKeyword(
@@ -1411,6 +1414,14 @@ bool AutocompleteMatch::TryRichAutocompletion(
 bool AutocompleteMatch::IsEmptyAutocompletion() const {
   return inline_autocompletion.empty() && prefix_autocompletion.empty() &&
          split_autocompletion.Empty();
+}
+
+void AutocompleteMatch::WriteIntoTrace(perfetto::TracedValue context) const {
+  perfetto::TracedDictionary dict = std::move(context).WriteDictionary();
+  dict.Add("fill_into_edit", fill_into_edit);
+  dict.Add("additional_text", additional_text);
+  dict.Add("destination_url", destination_url);
+  dict.Add("keyword", keyword);
 }
 
 #if DCHECK_IS_ON()

@@ -28,7 +28,7 @@ struct SameSizeAsNGFragmentItem {
   } type_data;
   PhysicalRect rect;
   NGInkOverflow ink_overflow;
-  void* pointer;
+  UntracedMember<void*> members[1];
   wtf_size_t sizes[2];
   unsigned flags;
 };
@@ -331,6 +331,14 @@ bool NGFragmentItem::IsListMarker() const {
   return layout_object_ && layout_object_->IsLayoutNGOutsideListMarker();
 }
 
+LayoutBlock& NGFragmentItem::BlockInInline() const {
+  DCHECK(IsBlockInInline());
+  auto* const block =
+      To<LayoutBlock>(To<LayoutNGBlockFlow>(GetLayoutObject())->FirstChild());
+  DCHECK(block) << this;
+  return *block;
+}
+
 void NGFragmentItem::ConvertToSvgText(std::unique_ptr<NGSvgFragmentData> data,
                                       const PhysicalRect& unscaled_rect,
                                       bool is_hidden) {
@@ -349,14 +357,26 @@ void NGFragmentItem::SetSvgLineLocalRect(const PhysicalRect& unscaled_rect) {
   rect_ = unscaled_rect;
 }
 
-FloatRect NGFragmentItem::ObjectBoundingBox() const {
-  if (Type() != kSvgText)
-    return FloatRect(rect_);
-  FloatRect item_rect = SvgFragmentData()->rect;
+FloatRect NGFragmentItem::ObjectBoundingBox(
+    const NGFragmentItems& items) const {
+  DCHECK_EQ(Type(), kSvgText);
+  const Font scaled_font = ScaledFont();
+  FloatRect ink_bounds = scaled_font.TextInkBounds(TextPaintInfo(items));
+  if (const auto* font_data = scaled_font.PrimaryFont())
+    ink_bounds.Move(0.0f, font_data->GetFontMetrics().FloatAscent());
+  ink_bounds.Scale(SvgFragmentData()->length_adjust_scale, 1.0f);
+  const FloatRect& scaled_rect = SvgFragmentData()->rect;
+  if (!IsHorizontal()) {
+    ink_bounds =
+        FloatRect(scaled_rect.Width() - ink_bounds.MaxY(), ink_bounds.X(),
+                  ink_bounds.Height(), ink_bounds.Width());
+  }
+  ink_bounds.MoveBy(scaled_rect.Location());
+  ink_bounds.Unite(scaled_rect);
   if (HasSvgTransformForBoundingBox())
-    item_rect = BuildSvgTransformForBoundingBox().MapRect(item_rect);
-  item_rect.Scale(1 / SvgScalingFactor());
-  return item_rect;
+    ink_bounds = BuildSvgTransformForBoundingBox().MapRect(ink_bounds);
+  ink_bounds.Scale(1 / SvgScalingFactor());
+  return ink_bounds;
 }
 
 FloatQuad NGFragmentItem::SvgUnscaledQuad() const {
@@ -457,8 +477,10 @@ inline const LayoutBox* NGFragmentItem::InkOverflowOwnerBox() const {
 }
 
 inline LayoutBox* NGFragmentItem::MutableInkOverflowOwnerBox() {
-  if (Type() == kBox)
-    return DynamicTo<LayoutBox>(const_cast<LayoutObject*>(layout_object_));
+  if (Type() == kBox) {
+    return DynamicTo<LayoutBox>(
+        const_cast<LayoutObject*>(layout_object_.Get()));
+  }
   return nullptr;
 }
 
@@ -699,6 +721,13 @@ float NGFragmentItem::SvgScalingFactor() const {
   return scaling_factor;
 }
 
+const Font& NGFragmentItem::ScaledFont() const {
+  if (const auto* svg_inline_text =
+          DynamicTo<LayoutSVGInlineText>(GetLayoutObject()))
+    return svg_inline_text->ScaledFont();
+  return Style().GetFont();
+}
+
 String NGFragmentItem::ToString() const {
   // TODO(yosin): Once |NGPaintFragment| is removed, we should get rid of
   // following if-statements.
@@ -809,6 +838,14 @@ void NGFragmentItem::RecalcInkOverflow(
 
     NGTextFragmentPaintInfo paint_info = TextPaintInfo(cursor.Items());
     if (paint_info.shape_result) {
+      if (Type() == kSvgText) {
+        ink_overflow_type_ = ink_overflow_.SetSvgTextInkOverflow(
+            InkOverflowType(), paint_info, Style(), ScaledFont(),
+            SvgFragmentData()->rect, SvgScalingFactor(),
+            SvgFragmentData()->length_adjust_scale,
+            BuildSvgTransformForBoundingBox(), self_and_contents_rect_out);
+        return;
+      }
       ink_overflow_type_ = ink_overflow_.SetTextInkOverflow(
           InkOverflowType(), paint_info, Style(), Size(),
           self_and_contents_rect_out);
@@ -1030,7 +1067,7 @@ unsigned NGFragmentItem::TextOffsetForPoint(
     // TODO(layout-dev): Move caret logic out of ShapeResult into separate
     // support class for code health and to avoid this copy.
     return shape_result->CreateShapeResult()->CaretOffsetForHitTest(
-               scaled_offset, Text(items), BreakGlyphs) +
+               scaled_offset, Text(items), BreakGlyphsOption(true)) +
            StartOffset();
   }
 

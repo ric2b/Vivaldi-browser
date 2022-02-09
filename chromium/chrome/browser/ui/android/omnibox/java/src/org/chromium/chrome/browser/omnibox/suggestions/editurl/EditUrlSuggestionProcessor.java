@@ -124,6 +124,27 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
                         .build());
 
         setCustomActions(model,
+                // Vivaldi
+                BuildConfig.IS_OEM_AUTOMOTIVE_BUILD ?
+                Arrays.asList(new Action(mContext,
+                                SuggestionDrawableState.Builder
+                                        .forDrawableRes(
+                                                getContext(), R.drawable.ic_content_copy_black)
+                                        .setLarge(true)
+                                        .setAllowTint(true)
+                                        .build(),
+                                R.string.copy_link, () -> onCopyLink(suggestion)),
+                        // TODO(https://crbug.com/1090187): do not re-use bookmark_item_edit here.
+                        new Action(mContext,
+                                SuggestionDrawableState.Builder
+                                        .forDrawableRes(
+                                                getContext(), R.drawable.bookmark_edit_active)
+                                        .setLarge(true)
+                                        .setAllowTint(true)
+                                        .build(),
+                                R.string.bookmark_item_edit, () -> onEditLink(suggestion)))
+
+                :
                 Arrays.asList(new Action(mContext,
                                       SuggestionDrawableState.Builder
                                               .forDrawableRes(

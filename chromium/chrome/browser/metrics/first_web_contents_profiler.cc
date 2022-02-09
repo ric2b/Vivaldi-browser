@@ -66,6 +66,9 @@ class FirstWebContentsProfiler : public content::WebContentsObserver {
  public:
   explicit FirstWebContentsProfiler(content::WebContents* web_contents);
 
+  FirstWebContentsProfiler(const FirstWebContentsProfiler&) = delete;
+  FirstWebContentsProfiler& operator=(const FirstWebContentsProfiler&) = delete;
+
  private:
   ~FirstWebContentsProfiler() override = default;
 
@@ -87,8 +90,6 @@ class FirstWebContentsProfiler : public content::WebContentsObserver {
   // Memory pressure listener that will be used to check if memory pressure has
   // an impact on startup.
   base::MemoryPressureListener memory_pressure_listener_;
-
-  DISALLOW_COPY_AND_ASSIGN(FirstWebContentsProfiler);
 };
 
 FirstWebContentsProfiler::FirstWebContentsProfiler(
@@ -107,10 +108,7 @@ FirstWebContentsProfiler::FirstWebContentsProfiler(
 
 void FirstWebContentsProfiler::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  // Ignore subframe navigations and same-document navigations.
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
+  // The profiler is concerned with the primary main frame navigation only.
   if (!navigation_handle->IsInPrimaryMainFrame() ||
       navigation_handle->IsSameDocument()) {
     return;
@@ -130,10 +128,7 @@ void FirstWebContentsProfiler::DidFinishNavigation(
     return;
   }
 
-  // Ignore subframe navigations and same-document navigations.
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
+  // Ignore subframe navigations, pre-rendering, and same-document navigations.
   if (!navigation_handle->IsInPrimaryMainFrame() ||
       navigation_handle->IsSameDocument()) {
     return;

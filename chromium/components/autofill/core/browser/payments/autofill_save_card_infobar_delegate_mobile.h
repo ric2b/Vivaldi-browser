@@ -18,7 +18,6 @@
 #include "ui/gfx/image/image.h"
 
 struct AccountInfo;
-class PrefService;
 
 namespace autofill {
 
@@ -47,8 +46,12 @@ class AutofillSaveCardInfoBarDelegateMobile : public ConfirmInfoBarDelegate {
           upload_save_card_prompt_callback,
       AutofillClient::LocalSaveCardPromptCallback
           local_save_card_prompt_callback,
-      PrefService* pref_service,
       const AccountInfo& displayed_target_account);
+
+  AutofillSaveCardInfoBarDelegateMobile(
+      const AutofillSaveCardInfoBarDelegateMobile&) = delete;
+  AutofillSaveCardInfoBarDelegateMobile& operator=(
+      const AutofillSaveCardInfoBarDelegateMobile&) = delete;
 
   ~AutofillSaveCardInfoBarDelegateMobile() override;
 
@@ -141,9 +144,6 @@ class AutofillSaveCardInfoBarDelegateMobile : public ConfirmInfoBarDelegate {
   // local credit card offer-to-save prompt (if |upload_| is false).
   AutofillClient::LocalSaveCardPromptCallback local_save_card_prompt_callback_;
 
-  // Weak reference to read & write |kAutofillAcceptSaveCreditCardPromptState|,
-  PrefService* pref_service_;
-
   // Did the user ever explicitly accept or dismiss this infobar?
   bool had_user_interaction_;
 
@@ -177,8 +177,6 @@ class AutofillSaveCardInfoBarDelegateMobile : public ConfirmInfoBarDelegate {
   // shouldn't appear.
   std::u16string displayed_target_account_email_;
   gfx::Image displayed_target_account_avatar_;
-
-  DISALLOW_COPY_AND_ASSIGN(AutofillSaveCardInfoBarDelegateMobile);
 };
 
 }  // namespace autofill

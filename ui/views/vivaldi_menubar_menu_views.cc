@@ -13,28 +13,24 @@
 
 namespace vivaldi {
 
-VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
-    content::WebContents* web_contents,
-    MenubarMenuParams& params,
-    int id) {
+VivaldiMenubarMenu* CreateVivaldiMenubarMenu(content::WebContents* web_contents,
+                                             MenubarMenuParams& params,
+                                             int id) {
   return new VivaldiMenubarMenuViews(web_contents, params, id);
 }
 
-void ConvertMenubarButtonRectToScreen(
-    content::WebContents* web_contents,
-    MenubarMenuParams& params) {
-
+void ConvertMenubarButtonRectToScreen(content::WebContents* web_contents,
+                                      MenubarMenuParams& params) {
   views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
       VivaldiMenu::GetActiveNativeViewFromWebContents(web_contents));
   gfx::Point screen_loc;
   views::View::ConvertPointToScreen(widget->GetContentsView(), &screen_loc);
-  for (::vivaldi::MenubarMenuEntry& e: params.siblings) {
+  for (::vivaldi::MenubarMenuEntry& e : params.siblings) {
     gfx::Point point(e.rect.origin());
     point.Offset(screen_loc.x(), screen_loc.y());
     e.rect.set_origin(point);
   }
 }
-
 
 VivaldiMenubarMenuViews::VivaldiMenubarMenuViews(
     content::WebContents* web_contents,
@@ -43,8 +39,8 @@ VivaldiMenubarMenuViews::VivaldiMenubarMenuViews(
     : web_contents_(web_contents) {
   Browser* browser = vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
   if (browser) {
-    menubar_.reset(new Menubar(browser,
-        params, views::MenuRunner::SHOULD_SHOW_MNEMONICS));
+    menubar_.reset(
+        new Menubar(browser, params, views::MenuRunner::SHOULD_SHOW_MNEMONICS));
     menubar_->SetActiveMenu(id);
   }
 }
@@ -59,4 +55,4 @@ void VivaldiMenubarMenuViews::Show() {
   menubar_->RunMenu(GetTopLevelWidgetFromWebContents(web_contents_));
 }
 
-}  // namespace vivialdi
+}  // namespace vivaldi

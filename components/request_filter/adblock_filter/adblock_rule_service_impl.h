@@ -39,6 +39,8 @@ class RuleServiceImpl : public RuleService {
  public:
   explicit RuleServiceImpl(content::BrowserContext* context);
   ~RuleServiceImpl() override;
+  RuleServiceImpl(const RuleServiceImpl&) = delete;
+  RuleServiceImpl& operator=(const RuleServiceImpl&) = delete;
 
   void Load();
   Delegate* delegate() { return delegate_; }
@@ -136,8 +138,6 @@ class RuleServiceImpl : public RuleService {
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   base::ObserverList<Observer> observers_;
-
-  DISALLOW_COPY_AND_ASSIGN(RuleServiceImpl);
 };
 
 }  // namespace adblock_filter

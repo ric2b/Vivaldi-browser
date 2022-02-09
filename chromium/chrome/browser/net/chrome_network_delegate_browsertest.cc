@@ -25,6 +25,12 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 class ChromeNetworkDelegateBrowserTest : public InProcessBrowserTest {
+ public:
+  ChromeNetworkDelegateBrowserTest(const ChromeNetworkDelegateBrowserTest&) =
+      delete;
+  ChromeNetworkDelegateBrowserTest& operator=(
+      const ChromeNetworkDelegateBrowserTest&) = delete;
+
  protected:
   ChromeNetworkDelegateBrowserTest() {}
 
@@ -41,9 +47,6 @@ class ChromeNetworkDelegateBrowserTest : public InProcessBrowserTest {
   }
 
   base::ScopedTempDir scoped_temp_dir_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeNetworkDelegateBrowserTest);
 };
 
 // Ensure that access to a test file, that is not in an accessible location,
@@ -60,7 +63,7 @@ IN_PROC_BROWSER_TEST_F(ChromeNetworkDelegateBrowserTest, AccessToFile) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::TestNavigationObserver observer(web_contents);
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_EQ(net::ERR_ACCESS_DENIED, observer.last_net_error_code());
 }
 
@@ -86,7 +89,7 @@ IN_PROC_BROWSER_TEST_F(ChromeNetworkDelegateBrowserTest, AccessToSymlink) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::TestNavigationObserver observer(web_contents);
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_EQ(net::ERR_ACCESS_DENIED, observer.last_net_error_code());
 }
 

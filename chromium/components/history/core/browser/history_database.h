@@ -73,6 +73,9 @@ class HistoryDatabase : public DownloadDatabase,
   HistoryDatabase(DownloadInterruptReason download_interrupt_reason_none,
                   DownloadInterruptReason download_interrupt_reason_crash);
 
+  HistoryDatabase(const HistoryDatabase&) = delete;
+  HistoryDatabase& operator=(const HistoryDatabase&) = delete;
+
   ~HistoryDatabase() override;
 
   // Call before Init() to set the error callback to be used for the
@@ -204,8 +207,6 @@ class HistoryDatabase : public DownloadDatabase,
   sql::MetaTable meta_table_;
 
   base::Time cached_early_expiration_threshold_;
-
-  DISALLOW_COPY_AND_ASSIGN(HistoryDatabase);
 };
 
 }  // namespace history

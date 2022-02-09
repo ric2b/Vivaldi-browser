@@ -51,8 +51,6 @@ extern const char kVivaldiThumbURL[];
 
 extern const char kWindowExtDataKey[];
 
-extern const wchar_t kUpdateNotifierAutorunName[];
-
 extern const char kSparkleAutoInstallSettingName[];
 extern const char kSparkleLastCheckTimeSettingName[];
 

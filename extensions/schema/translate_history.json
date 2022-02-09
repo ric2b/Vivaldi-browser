@@ -1,0 +1,180 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
+[
+  {
+    "namespace": "translateHistory",
+    "description": "Use <code>vivaldi.translateHistory</code> API fetch and save translate history elements.",
+    "types": [
+      {
+        "id": "TextItem",
+        "type": "object",
+        "description": "",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Language code."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text."
+          }
+        }
+      },
+      {
+        "id": "HistoryItem",
+        "type": "object",
+        "description": "",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier."
+          },
+          "srcItem": {
+            "$ref": "TextItem",
+            "description": "Text and language code of original (non-translated) data."
+          },
+          "translatedItem": {
+            "$ref": "TextItem",
+            "description": "Text and language code of translated data."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "get",
+        "type": "function",
+        "description": "Retrieves the full history.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "item",
+              "type": "array",
+              "items": { "$ref": "HistoryItem" }
+            }
+          ]
+        }
+      },
+      {
+        "name": "add",
+        "type": "function",
+        "description": "Adds an item to the list. If item already exists that item is returned without adding a duplicate. The returned item's id it set up in the call.",
+        "parameters": [
+          {
+            "name": "item",
+            "$ref": "HistoryItem",
+            "description": "Data to add. Note, the id element is ignored."
+          },
+          {
+            "name": "index",
+            "type": "number",
+            "description": "Where to add element. -1 indicates end of list."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "item",
+              "$ref": "HistoryItem"
+            }
+          ]
+        }
+      },
+      {
+        "name": "remove",
+        "type": "function",
+        "description": "Removes one or more items.",
+        "parameters": [
+          {
+            "name": "ids",
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of identifiers representing items to be removed."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "reset",
+        "type": "function",
+        "description": "Removes items with matching timestamp.",
+        "parameters": [
+          {
+            "name": "since",
+            "type": "number",
+            "description": "In milliseconds since epoch. Remove all items with a timestamp greater or equal to this value."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    ],
+    "events": [
+      {
+        "name": "onAdded",
+        "type": "function",
+        "description": "Fires when elements have been appended to the list.",
+        "parameters": [
+          {
+            "name": "items",
+            "type": "array",
+            "items": { "$ref": "HistoryItem" },
+            "description": "Elements in the order they have been added"
+          },
+          {
+            "name": "index",
+            "type": "number",
+            "description": "Index where the elements are located."
+          }
+        ]
+      },{
+        "name": "onMoved",
+        "type": "function",
+        "description": "Fires when an element has been moved within the list.",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string",
+            "description": "Identifier of element that has been moved."
+          },
+          {
+            "name": "index",
+            "type": "number",
+            "description": "Index to where element has been moved."
+          }
+        ]
+      },
+      {
+        "name": "onRemoved",
+        "type": "function",
+        "description": "Fires when elements have been appended to the list.",
+        "parameters": [
+          {
+            "name": "ids",
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "A list of ids that have been removed. An empty list means all."
+          }
+        ]
+      }
+    ]
+  }
+]

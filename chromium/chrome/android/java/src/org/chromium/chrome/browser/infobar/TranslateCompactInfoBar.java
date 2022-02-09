@@ -12,8 +12,6 @@ import android.view.View.OnLayoutChangeListener;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
-import androidx.core.content.ContextCompat;
-
 import com.google.android.material.tabs.TabLayout;
 
 import org.chromium.base.annotations.CalledByNative;
@@ -28,6 +26,7 @@ import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManagerProvider;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarCompactLayout;
 import org.chromium.components.translate.TranslateFeatureList;
@@ -84,8 +83,6 @@ public class TranslateCompactInfoBar
     private static final String INFOBAR_HISTOGRAM_NEVER_TRANSLATE_LANGUAGE =
             "Translate.CompactInfobar.Language.NeverTranslate";
     private static final String INFOBAR_HISTOGRAM = "Translate.CompactInfobar.Event";
-    private static final String INFOBAR_HISTOGRAM_TRANSLATION_COUNT =
-            "Translate.CompactInfobar.TranslationsPerPage";
 
     // Need 2 instances of TranslateMenuHelper to prevent a race condition bug which happens when
     // showing language menu after dismissing overflow menu.
@@ -232,9 +229,9 @@ public class TranslateCompactInfoBar
 
         mTabLayout = (TranslateTabLayout) content.findViewById(R.id.translate_infobar_tabs);
         if (mDefaultTextColor > 0) {
-            mTabLayout.setTabTextColors(
-                    ContextCompat.getColor(getContext(), R.color.default_text_color),
-                    ContextCompat.getColor(getContext(), R.color.tab_layout_selected_tab_color));
+            mTabLayout.setTabTextColors(SemanticColorUtils.getDefaultTextColor(getContext()),
+                    SemanticColorUtils.getDefaultTextColorAccent1(
+                            getContext()) /*tab_layout_selected_tab_color*/);
         }
         mTabLayout.addTabs(mOptions.sourceLanguageName(), mOptions.targetLanguageName());
 
@@ -346,7 +343,6 @@ public class TranslateCompactInfoBar
     @CalledByNative
     private boolean onPageTranslated(int errorType) {
         boolean errorUIShown = false;
-        incrementAndRecordTranslationsPerPageCount();
         if (mTabLayout != null) {
             mTabLayout.hideProgressBar();
             if (errorType != 0) {
@@ -437,7 +433,6 @@ public class TranslateCompactInfoBar
     public void onTabSelected(TabLayout.Tab tab) {
         switch (tab.getPosition()) {
             case SOURCE_TAB_INDEX:
-                incrementAndRecordTranslationsPerPageCount();
                 recordInfobarAction(InfobarEvent.INFOBAR_REVERT);
                 mUserInteracted = true;
                 onButtonClicked(ActionType.TRANSLATE_SHOW_ORIGINAL);
@@ -719,11 +714,6 @@ public class TranslateCompactInfoBar
         if (hashCode != null) {
             RecordHistogram.recordSparseHistogram(histogram, hashCode);
         }
-    }
-
-    private void incrementAndRecordTranslationsPerPageCount() {
-        RecordHistogram.recordCountHistogram(
-                INFOBAR_HISTOGRAM_TRANSLATION_COUNT, ++mTotalTranslationCount);
     }
 
     // Return the width of parent in pixels.  Return 0 if there is no parent.

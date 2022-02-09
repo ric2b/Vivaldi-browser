@@ -14,7 +14,7 @@
 namespace extensions {
 class ContextMenuMatcher;
 class Extension;
-}
+}  // namespace extensions
 
 namespace vivaldi {
 
@@ -25,7 +25,8 @@ class ExtensionsMenuController {
   ExtensionsMenuController(VivaldiRenderViewContextMenu* rv_context_menu);
   ~ExtensionsMenuController();
 
-  void Populate(ui::SimpleMenuModel* menu_model,
+  void Populate(
+      ui::SimpleMenuModel* menu_model,
       ui::SimpleMenuModel::Delegate* delegate,
       const extensions::Extension* extension,
       content::WebContents* source_web_contents,
@@ -34,7 +35,8 @@ class ExtensionsMenuController {
   extensions::ContextMenuMatcher* get_extension_items() const {
     return extension_items_.get();
   }
-private:
+
+ private:
   VivaldiRenderViewContextMenu* rv_context_menu_;
   std::unique_ptr<extensions::ContextMenuMatcher> extension_items_;
 

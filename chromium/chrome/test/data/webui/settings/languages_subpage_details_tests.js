@@ -10,7 +10,7 @@ import {CrSettingsPrefs} from 'chrome://settings/settings.js';
 import {getFakeLanguagePrefs} from 'chrome://test/settings/fake_language_settings_private.js';
 import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.js';
 import {TestLanguagesBrowserProxy} from 'chrome://test/settings/test_languages_browser_proxy.js';
-import {eventToPromise, fakeDataBind} from 'chrome://test/test_util.m.js';
+import {eventToPromise, fakeDataBind} from 'chrome://test/test_util.js';
 
 // clang-format on
 
@@ -55,7 +55,7 @@ suite('languages subpage detailed settings', function() {
     return CrSettingsPrefs.initialized.then(function() {
       // Set up test browser proxy.
       browserProxy = new TestLanguagesBrowserProxy();
-      LanguagesBrowserProxyImpl.instance_ = browserProxy;
+      LanguagesBrowserProxyImpl.setInstance(browserProxy);
 
       // Set up fake languageSettingsPrivate API.
       const languageSettingsPrivate = browserProxy.getLanguageSettingsPrivate();

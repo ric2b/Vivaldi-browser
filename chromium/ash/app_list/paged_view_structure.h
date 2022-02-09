@@ -130,6 +130,7 @@ class ASH_EXPORT PagedViewStructure {
     return pages_[page_index].size();
   }
 
+  Mode mode() const { return mode_; }
   const Pages& pages() const { return pages_; }
 
  private:
@@ -149,7 +150,7 @@ class ASH_EXPORT PagedViewStructure {
   void ClearEmptyPages();
 
   // Returns TilesPerPage() from `apps_grid_view_`.
-  int TilesPerPage() const;
+  int TilesPerPage(int page) const;
 
   // Not const for tests.
   Mode mode_ = Mode::kPartialPages;

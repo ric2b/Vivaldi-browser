@@ -37,6 +37,10 @@ class ExternalProcessImporterHost
  public:
   ExternalProcessImporterHost();
 
+  ExternalProcessImporterHost(const ExternalProcessImporterHost&) = delete;
+  ExternalProcessImporterHost& operator=(const ExternalProcessImporterHost&) =
+      delete;
+
   void Cancel();
 
   // Starts the process of importing the settings and data depending on what the
@@ -171,8 +175,6 @@ class ExternalProcessImporterHost
 
   // Vends weak pointers for the importer to call us back.
   base::WeakPtrFactory<ExternalProcessImporterHost> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ExternalProcessImporterHost);
 };
 
 #endif  // CHROME_BROWSER_IMPORTER_EXTERNAL_PROCESS_IMPORTER_HOST_H_

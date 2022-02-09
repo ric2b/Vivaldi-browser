@@ -45,6 +45,10 @@ extern const int kCompatibleVersionNumber;
 class LoginDatabase : public PasswordStoreSync::MetadataStore {
  public:
   LoginDatabase(const base::FilePath& db_path, IsAccountStore is_account_store);
+
+  LoginDatabase(const LoginDatabase&) = delete;
+  LoginDatabase& operator=(const LoginDatabase&) = delete;
+
   ~LoginDatabase() override;
 
   // Returns whether this is the profile-scoped or the account-scoped storage:
@@ -58,10 +62,8 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   // should be called.
   virtual bool Init();
 
-  // Reports usage metrics to UMA.
-  void ReportMetrics(const std::string& sync_username,
-                     bool custom_passphrase_sync_enabled,
-                     BulkCheckDone bulk_check_done);
+  // Reports metrics regarding inaccessible passwords and bubble usages to UMA.
+  void ReportMetrics();
 
   // Adds |form| to the list of remembered password forms. Returns the list of
   // changes applied ({}, {ADD}, {REMOVE, ADD}). If it returns {REMOVE, ADD}
@@ -227,10 +229,6 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   std::string GetEncryptedPasswordById(int id) const;
 #endif
 
-  // Returns a suffix (infix, really) to be used in histogram names to
-  // differentiate the profile store from the account store.
-  base::StringPiece GetMetricsSuffixForStore() const;
-
   void ReportNumberOfAccountsMetrics(bool custom_passphrase_sync_enabled);
   void ReportTimesPasswordUsedMetrics(bool custom_passphrase_sync_enabled);
   void ReportSyncingAccountStateMetrics(const std::string& sync_username);
@@ -374,8 +372,6 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   // PasswordStoreSync::MetadataStore::SetDeletionsHaveSyncedCallback for more
   // details.
   base::RepeatingCallback<void(bool)> deletions_have_synced_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoginDatabase);
 };
 
 }  // namespace password_manager

@@ -27,10 +27,9 @@ class Service : public KeyedService {
     ~Observer() override;
     virtual void OnServiceLoaded(Service* service) {}
     virtual void OnScriptPathsChanged() {}
-    virtual void OnScriptOverridesChanged(
-        content::WebContents* tab_contents,
-        const base::FilePath& script_path,
-        ScriptOverride script_override) {}
+    virtual void OnScriptOverridesChanged(content::WebContents* tab_contents,
+                                          const base::FilePath& script_path,
+                                          ScriptOverride script_override) {}
   };
 
   Service();

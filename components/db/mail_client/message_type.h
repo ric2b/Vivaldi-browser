@@ -41,11 +41,11 @@ typedef std::vector<MessageRow> MessageRows;
 class MessageResult {
  public:
   MessageResult() = default;
+  MessageResult(const MessageResult&) = delete;
+  MessageResult& operator=(const MessageResult&) = delete;
+
   bool success;
   std::string message;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MessageResult);
 };
 
 }  // namespace mail_client

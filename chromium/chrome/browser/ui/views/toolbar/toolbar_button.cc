@@ -64,8 +64,7 @@ SkColor GetDefaultTextColor(const ui::ThemeProvider* theme_provider) {
 }
 
 // Cycle duration of ink drop pulsing animation used for in-product help.
-constexpr base::TimeDelta kFeaturePromoPulseDuration =
-    base::TimeDelta::FromMilliseconds(800);
+constexpr base::TimeDelta kFeaturePromoPulseDuration = base::Milliseconds(800);
 
 // Max inset for pulsing animation.
 constexpr float kFeaturePromoPulseInsetDip = 3.0f;
@@ -480,7 +479,7 @@ bool ToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
         base::BindOnce(&ToolbarButton::ShowDropDownMenu,
                        show_menu_factory_.GetWeakPtr(),
                        ui::GetMenuSourceTypeForEvent(event)),
-        base::TimeDelta::FromMilliseconds(500));
+        base::Milliseconds(500));
   }
 
   return LabelButton::OnMousePressed(event);
@@ -575,7 +574,8 @@ void ToolbarButton::SetHasInProductHelpPromo(bool has_in_product_help_promo) {
   views::InkDrop::Get(this)->GetInkDrop()->HostSizeChanged(size());
 
   views::InkDropState next_state;
-  if (has_in_product_help_promo_ || GetVisible()) {
+  if (has_in_product_help_promo_ ||
+      (ShouldShowInkdropAfterIphInteraction() && GetVisible())) {
     // If we are showing a promo, we must use the ACTIVATED state to show the
     // highlight. Otherwise, if the menu is currently showing, we need to keep
     // the ink drop in the ACTIVATED state.
@@ -636,6 +636,10 @@ SkColor ToolbarButton::GetDefaultBorderColor(views::View* host_view) {
 
 bool ToolbarButton::ShouldShowMenu() {
   return model_ != nullptr;
+}
+
+bool ToolbarButton::ShouldShowInkdropAfterIphInteraction() {
+  return true;
 }
 
 void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
@@ -712,8 +716,7 @@ namespace {
 // to make a big contrast difference.
 // TODO(crbug.com/967317): This needs to be consistent with the duration of the
 // border animation in ToolbarIconContainerView.
-constexpr base::TimeDelta kHighlightAnimationDuration =
-    base::TimeDelta::FromMilliseconds(300);
+constexpr base::TimeDelta kHighlightAnimationDuration = base::Milliseconds(300);
 constexpr SkAlpha kBackgroundBaseLayerAlpha = 204;
 
 SkColor FadeWithAnimation(SkColor color, const gfx::Animation& animation) {

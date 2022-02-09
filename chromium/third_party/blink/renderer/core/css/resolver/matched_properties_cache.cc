@@ -88,6 +88,10 @@ bool CachedMatchedProperties::DependenciesEqual(
   }
   if (parent_computed_style->Direction() != state.ParentStyle()->Direction())
     return false;
+  if (parent_computed_style->UsedColorScheme() !=
+      state.ParentStyle()->UsedColorScheme()) {
+    return false;
+  }
   if (computed_style->HasVariableReferenceFromNonInheritedProperty()) {
     if (parent_computed_style->InheritedVariables() !=
         state.ParentStyle()->InheritedVariables()) {
@@ -141,8 +145,14 @@ bool CachedMatchedProperties::operator==(
     if (properties[i].types_.tree_order !=
         matched_properties_types[i].tree_order)
       return false;
+    if (properties[i].types_.layer_order !=
+        matched_properties_types[i].layer_order)
+      return false;
     if (properties[i].types_.valid_property_filter !=
         matched_properties_types[i].valid_property_filter)
+      return false;
+    if (properties[i].types_.is_inline_style !=
+        matched_properties_types[i].is_inline_style)
       return false;
   }
   return true;
@@ -199,10 +209,6 @@ bool MatchedPropertiesCache::IsStyleCacheable(const ComputedStyle& style) {
   if (style.Zoom() != ComputedStyleInitialValues::InitialZoom())
     return false;
   if (style.TextAutosizingMultiplier() != 1)
-    return false;
-  // -internal-light-dark() values in UA sheets have different computed values
-  // based on the used value of color-scheme.
-  if (style.HasNonInheritedLightDarkValue())
     return false;
   if (style.HasContainerRelativeUnits())
     return false;

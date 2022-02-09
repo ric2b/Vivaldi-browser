@@ -101,6 +101,25 @@ void PerfettoTracedProcess::DataSourceBase::StopTracing(
       std::move(stop_complete_callback)));
 }
 
+void PerfettoTracedProcess::DataSourceBase::StartTracingImpl(
+    PerfettoProducer* producer,
+    const perfetto::DataSourceConfig& data_source_config) {}
+
+void PerfettoTracedProcess::DataSourceBase::StopTracingImpl(
+    base::OnceClosure stop_complete_callback) {
+  if (stop_complete_callback)
+    std::move(stop_complete_callback).Run();
+}
+
+void PerfettoTracedProcess::DataSourceBase::Flush(
+    base::RepeatingClosure flush_complete_callback) {
+#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+  perfetto::TrackEvent::Flush();
+#endif  // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+  if (flush_complete_callback)
+    std::move(flush_complete_callback).Run();
+}
+
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 base::SequencedTaskRunner*
 PerfettoTracedProcess::DataSourceBase::GetTaskRunner() {
@@ -422,7 +441,7 @@ bool PerfettoTracedProcess::CanStartTracing(
     }
   } else if (producer == system_producer_.get()) {
     if (producer_client_->IsTracingActive()) {
-      system_producer_->DisconnectWithReply(base::DoNothing().Once());
+      system_producer_->DisconnectWithReply(base::DoNothing());
       return false;
     }
   } else {

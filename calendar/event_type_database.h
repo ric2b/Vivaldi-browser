@@ -35,6 +35,9 @@ class EventTypeDatabase {
   // happening to avoid thread-safety problems.
   virtual ~EventTypeDatabase() = default;
 
+  EventTypeDatabase(const EventTypeDatabase&) = delete;
+  EventTypeDatabase& operator=(const EventTypeDatabase&) = delete;
+
   EventTypeID CreateEventType(calendar::EventTypeRow ev);
 
   bool CreateEventTypeTable();
@@ -47,9 +50,6 @@ class EventTypeDatabase {
  protected:
   virtual sql::Database& GetDB() = 0;
   void FillEventTypeRow(sql::Statement& statement, EventTypeRow* event);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(EventTypeDatabase);
 };
 
 // This is available BOTH as a macro and a static string (kURLRowFields). Use

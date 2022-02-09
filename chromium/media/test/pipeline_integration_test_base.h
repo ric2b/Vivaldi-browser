@@ -64,6 +64,11 @@ class PipelineIntegrationTestBase : public Pipeline::Client
 {
  public:
   PipelineIntegrationTestBase();
+
+  PipelineIntegrationTestBase(const PipelineIntegrationTestBase&) = delete;
+  PipelineIntegrationTestBase& operator=(const PipelineIntegrationTestBase&) =
+      delete;
+
   virtual ~PipelineIntegrationTestBase();
 
   // Test types for advanced testing and benchmarking (e.g., underflow is
@@ -284,8 +289,6 @@ class PipelineIntegrationTestBase : public Pipeline::Client
 
   base::OnceClosure on_ended_closure_;
   base::OnceClosure on_error_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(PipelineIntegrationTestBase);
 };
 
 }  // namespace media

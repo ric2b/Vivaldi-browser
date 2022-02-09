@@ -13,6 +13,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
+#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
@@ -27,6 +28,7 @@
 #include "chrome/updater/policy/service.h"
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/registration_data.h"
+#include "chrome/updater/update_block_check.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_version.h"
 #include "components/prefs/pref_service.h"
@@ -141,6 +143,7 @@ std::vector<absl::optional<update_client::CrxComponent>> GetComponents(
     scoped_refptr<Configurator> config,
     scoped_refptr<PersistedData> persisted_data,
     bool foreground,
+    bool update_blocked,
     const std::vector<std::string>& ids) {
   std::vector<absl::optional<update_client::CrxComponent>> components;
   for (const auto& id : ids) {
@@ -169,7 +172,9 @@ std::vector<absl::optional<update_client::CrxComponent>> GetComponents(
                          ? rollback_allowed
                          : false;
             }(),
-            [&config, &id, &foreground]() {
+            [&config, &id, &foreground, update_blocked]() {
+              if (update_blocked)
+                return true;
               int policy = kPolicyEnabled;
               return config->GetPolicyService()
                          ->GetEffectivePolicyForAppUpdates(id, nullptr,
@@ -195,6 +200,7 @@ UpdateServiceImpl::UpdateServiceImpl(scoped_refptr<Configurator> config)
 
 void UpdateServiceImpl::GetVersion(
     base::OnceCallback<void(const base::Version&)> callback) const {
+  VLOG(1) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   main_task_runner_->PostTask(
       FROM_HERE,
@@ -204,6 +210,7 @@ void UpdateServiceImpl::GetVersion(
 void UpdateServiceImpl::RegisterApp(
     const RegistrationRequest& request,
     base::OnceCallback<void(const RegistrationResponse&)> callback) {
+  VLOG(1) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback),
@@ -225,6 +232,7 @@ int UpdateServiceImpl::DoRegistration(const RegistrationRequest& request) {
 }
 
 void UpdateServiceImpl::RunPeriodicTasks(base::OnceClosure callback) {
+  VLOG(1) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // The installer should make an updater registration, but in case it halts
@@ -260,30 +268,51 @@ void UpdateServiceImpl::TaskDone(base::OnceClosure callback) {
 
 void UpdateServiceImpl::UpdateAll(StateChangeCallback state_update,
                                   Callback callback) {
+  VLOG(1) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const auto app_ids = persisted_data_->GetAppIds();
   DCHECK(base::Contains(app_ids, kUpdaterAppId));
 
-  update_client_->Update(
-      app_ids, base::BindOnce(&GetComponents, config_, persisted_data_, false),
-      MakeUpdateClientCrxStateChangeCallback(config_, state_update), false,
-      MakeUpdateClientCallback(std::move(callback)));
+  const Priority priority = Priority::kBackground;
+  ShouldBlockUpdateForMeteredNetwork(
+      priority,
+      base::BindOnce(&UpdateServiceImpl::OnShouldBlockUpdateForMeteredNetwork,
+                     this, state_update, std::move(callback), app_ids,
+                     priority));
 }
 
 void UpdateServiceImpl::Update(const std::string& app_id,
                                Priority priority,
                                StateChangeCallback state_update,
                                Callback callback) {
+  VLOG(1) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  update_client_->Update(
-      {app_id},
-      base::BindOnce(&GetComponents, config_, persisted_data_,
-                     priority == Priority::kForeground),
-      MakeUpdateClientCrxStateChangeCallback(config_, state_update),
-      priority == Priority::kForeground,
-      MakeUpdateClientCallback(std::move(callback)));
+  std::vector<std::string> ids = {app_id};
+  ShouldBlockUpdateForMeteredNetwork(
+      priority,
+      base::BindOnce(&UpdateServiceImpl::OnShouldBlockUpdateForMeteredNetwork,
+                     this, state_update, std::move(callback), ids, priority));
+}
+
+void UpdateServiceImpl::OnShouldBlockUpdateForMeteredNetwork(
+    StateChangeCallback state_update,
+    Callback callback,
+    const std::vector<std::string>& ids,
+    Priority priority,
+    bool update_blocked) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  main_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &update_client::UpdateClient::Update, update_client_, ids,
+          base::BindOnce(&GetComponents, config_, persisted_data_, false,
+                         update_blocked),
+          MakeUpdateClientCrxStateChangeCallback(config_, state_update),
+          priority == Priority::kForeground,
+          MakeUpdateClientCallback(std::move(callback))));
 }
 
 void UpdateServiceImpl::Uninitialize() {

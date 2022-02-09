@@ -46,7 +46,7 @@ gcc_toolchain("arm64") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -67,7 +67,7 @@ gcc_toolchain("arm") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -123,7 +123,7 @@ gcc_toolchain("x86") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -166,6 +166,14 @@ clang_toolchain("clang_x64_v8_riscv64") {
   toolchain_args = {
     current_cpu = "x64"
     v8_current_cpu = "riscv64"
+    current_os = "linux"
+  }
+}
+
+clang_toolchain("clang_x64_v8_loong64") {
+  toolchain_args = {
+    current_cpu = "x64"
+    v8_current_cpu = "loong64"
     current_os = "linux"
   }
 }
@@ -219,7 +227,7 @@ gcc_toolchain("x64") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -254,7 +262,7 @@ gcc_toolchain("mipsel") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
     use_goma = false
   }
@@ -276,7 +284,7 @@ gcc_toolchain("mips64el") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
     use_goma = false
   }
@@ -322,7 +330,7 @@ gcc_toolchain("s390x") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -341,7 +349,7 @@ gcc_toolchain("ppc64") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -362,7 +370,7 @@ gcc_toolchain("mips") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
     is_clang = false
   }
 }
@@ -383,7 +391,32 @@ gcc_toolchain("mips64") {
     current_os = "linux"
 
     # reclient does not support gcc.
-    use_rbe = false
+    use_remoteexec = false
+    is_clang = false
+  }
+}
+
+clang_toolchain("clang_loong64") {
+  toolchain_args = {
+    current_cpu = "loong64"
+    current_os = "linux"
+  }
+}
+
+gcc_toolchain("loong64") {
+  toolprefix = "loongarch64-linux-gnu"
+
+  cc = "${toolprefix}-gcc"
+  cxx = "${toolprefix}-g++"
+
+  readelf = "${toolprefix}-readelf"
+  nm = "${toolprefix}-nm"
+  ar = "${toolprefix}-ar"
+  ld = cxx
+
+  toolchain_args = {
+    current_cpu = "loong64"
+    current_os = "linux"
     is_clang = false
   }
 }

@@ -22,7 +22,7 @@
 #include "remoting/codec/webrtc_video_encoder_vpx.h"
 #include "remoting/protocol/video_channel_state_observer.h"
 #include "remoting/protocol/webrtc_video_frame_adapter.h"
-#include "third_party/webrtc/media/base/vp9_profile.h"
+#include "third_party/webrtc/api/video_codecs/vp9_profile.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
 #include "third_party/webrtc/modules/video_coding/include/video_error_codes.h"
@@ -37,7 +37,7 @@ namespace protocol {
 namespace {
 
 constexpr base::TimeDelta kTargetFrameInterval =
-    base::TimeDelta::FromMilliseconds(1000 / kTargetFrameRate);
+    base::Milliseconds(1000 / kTargetFrameRate);
 
 // Maximum quantizer at which to encode frames. Lowering this value will
 // improve image quality (in cases of low-bandwidth or large frames) at the
@@ -70,7 +70,7 @@ const int kEstimatedBytesPerMegapixel = 100000;
 // 3-second period. This is effectively a minimum frame-rate, so the value
 // should not be too small, otherwise the client may waste CPU cycles on
 // processing and rendering lots of identical frames.
-constexpr base::TimeDelta kKeepAliveInterval = base::TimeDelta::FromSeconds(2);
+constexpr base::TimeDelta kKeepAliveInterval = base::Seconds(2);
 
 std::string EncodeResultToString(WebrtcVideoEncoder::EncodeResult result) {
   using EncodeResult = WebrtcVideoEncoder::EncodeResult;
@@ -323,7 +323,7 @@ void WebrtcVideoEncoderWrapper::OnRttUpdate(int64_t rtt_ms) {
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&VideoChannelStateObserver::OnRttUpdate,
                                 video_channel_state_observer_,
-                                base::TimeDelta::FromMilliseconds(rtt_ms)));
+                                base::Milliseconds(rtt_ms)));
 }
 
 webrtc::VideoEncoder::EncoderInfo WebrtcVideoEncoderWrapper::GetEncoderInfo()
@@ -497,8 +497,8 @@ bool WebrtcVideoEncoderWrapper::ShouldDropQualityForLargeFrame(
   if (updated_area - updated_region_area_.Max() > kBigFrameThresholdPixels) {
     int expected_frame_size =
         updated_area * kEstimatedBytesPerMegapixel / kPixelsPerMegapixel;
-    base::TimeDelta expected_send_delay = base::TimeDelta::FromSecondsD(
-        expected_frame_size * 8 / (bitrate_kbps_ * 1000.0));
+    base::TimeDelta expected_send_delay =
+        base::Seconds(expected_frame_size * 8 / (bitrate_kbps_ * 1000.0));
     if (expected_send_delay > kTargetFrameInterval) {
       should_drop_quality = true;
     }

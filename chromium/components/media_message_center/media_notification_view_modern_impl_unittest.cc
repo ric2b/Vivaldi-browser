@@ -40,6 +40,7 @@ using media_session::mojom::MediaSessionAction;
 using testing::_;
 using testing::Expectation;
 using testing::Invoke;
+using testing::Return;
 
 namespace {
 
@@ -605,8 +606,8 @@ TEST_F(MAYBE_MediaNotificationViewModernImplTest, UpdateArtworkFromItem) {
 
 TEST_F(MAYBE_MediaNotificationViewModernImplTest, UpdateProgressBar) {
   media_session::MediaPosition media_position(
-      /*playback_rate=*/1.0, /*duration=*/base::TimeDelta::FromSeconds(600),
-      /*position=*/base::TimeDelta::FromSeconds(0), /*end_of_media=*/false);
+      /*playback_rate=*/1.0, /*duration=*/base::Seconds(600),
+      /*position=*/base::Seconds(0), /*end_of_media=*/false);
   view()->UpdateWithMediaPosition(media_position);
   EXPECT_EQ(progress_view()->duration_for_testing(), u"10:00");
 }
@@ -618,6 +619,21 @@ TEST_F(MAYBE_MediaNotificationViewModernImplTest, AccessibleNodeData) {
   EXPECT_TRUE(
       data.HasStringAttribute(ax::mojom::StringAttribute::kRoleDescription));
   EXPECT_EQ(u"title - artist", accessible_name());
+}
+
+class MediaNotificationViewModernImplCastTest
+    : public MediaNotificationViewModernImplTest {
+ public:
+  void SetUp() override {
+    EXPECT_CALL(item(), SourceType())
+        .WillRepeatedly(Return(media_message_center::SourceType::kCast));
+    MediaNotificationViewModernImplTest::SetUp();
+  }
+};
+
+TEST_F(MediaNotificationViewModernImplCastTest, PictureInPictureButton) {
+  // We should not create picture-in-picture button for cast session.
+  EXPECT_EQ(picture_in_picture_button(), nullptr);
 }
 
 }  // namespace media_message_center

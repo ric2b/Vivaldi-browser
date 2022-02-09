@@ -95,9 +95,7 @@ class TestIPCDemuxer : public IPCDemuxer {
 
 PlatformPipelineTestBase::PlatformPipelineTestBase()
     : mock_video_accelerator_factories_(
-          new MockGpuVideoAcceleratorFactories(nullptr)) {
-  IPCPipelineTestSetup::InitStatics();
-}
+          new MockGpuVideoAcceleratorFactories(nullptr)) {}
 
 PlatformPipelineTestBase::~PlatformPipelineTestBase() {}
 
@@ -122,8 +120,10 @@ void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
 #if defined(OS_MAC)
   audio_decoders.push_back(std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
-  audio_decoders.push_back(
-      std::make_unique<WMFAudioDecoder>(media_task_runner));
+  if (WMFAudioDecoder::IsEnabled()) {
+    audio_decoders.push_back(
+        std::make_unique<WMFAudioDecoder>(media_task_runner));
+  }
 #endif
 }
 

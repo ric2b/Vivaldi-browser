@@ -11,6 +11,7 @@ import android.graphics.Color;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.ColorRes;
+import androidx.annotation.DimenRes;
 import androidx.annotation.StyleRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.ContextCompat;
@@ -78,9 +79,11 @@ public class TabUiThemeProvider {
     public static int getTabGroupNumberTextColor(
             Context context, boolean isIncognito, boolean isSelected) {
         if (!themeRefactorEnabled()) {
-            return ApiCompatibilityUtils.getColor(context.getResources(),
-                    isIncognito ? R.color.tab_group_number_text_color_incognito
-                                : R.color.tab_group_number_text_color);
+            return AppCompatResources
+                    .getColorStateList(context,
+                            isIncognito ? R.color.tab_group_number_text_color_incognito
+                                        : R.color.tab_group_number_text_color)
+                    .getDefaultColor();
         }
         if (isIncognito) {
             @ColorRes
@@ -88,9 +91,8 @@ public class TabUiThemeProvider {
                                       : R.color.incognito_tab_tile_number_color;
             return ApiCompatibilityUtils.getColor(context.getResources(), colorRes);
         } else {
-            return isSelected
-                    ? MaterialColors.getColor(context, R.attr.colorOnPrimaryContainer, TAG)
-                    : MaterialColors.getColor(context, R.attr.colorOnSurface, TAG);
+            return isSelected ? MaterialColors.getColor(context, R.attr.colorOnPrimary, TAG)
+                              : MaterialColors.getColor(context, R.attr.colorOnSurface, TAG);
         }
     }
 
@@ -104,9 +106,11 @@ public class TabUiThemeProvider {
     @ColorInt
     public static int getTitleTextColor(Context context, boolean isIncognito, boolean isSelected) {
         if (!themeRefactorEnabled()) {
-            return ApiCompatibilityUtils.getColor(context.getResources(),
-                    isIncognito ? R.color.tab_grid_card_title_text_color_incognito
-                                : R.color.tab_grid_card_title_text_color);
+            return AppCompatResources
+                    .getColorStateList(context,
+                            isIncognito ? R.color.tab_grid_card_title_text_color_incognito
+                                        : R.color.tab_grid_card_title_text_color)
+                    .getDefaultColor();
         }
 
         if (isIncognito) {
@@ -567,7 +571,7 @@ public class TabUiThemeProvider {
      * @return The text appearance for the message card description.
      */
     public static int getMessageCardDescriptionTextAppearance(boolean isIncognito) {
-        return isIncognito ? R.style.TextAppearance_TextMedium_Primary_Light
+        return isIncognito ? R.style.TextAppearance_TextMedium_Primary_Baseline_Light
                            : R.style.TextAppearance_TextMedium_Primary;
     }
 
@@ -614,20 +618,41 @@ public class TabUiThemeProvider {
      */
     public static float getTabCardPaddingDimension(Context context) {
         return context.getResources().getDimension(themeRefactorEnabled()
+                        ? R.dimen.tab_grid_card_between_card_padding
+                        : R.dimen.tab_list_card_padding);
+    }
+
+    /**
+     * Return the space represented by dimension for spaces between mini thumbnails in a group tab.
+     * @param context {@link Context} to retrieve dimension.
+     * @return The padding between between mini thumbnails in float number.
+     */
+    public static float getTabMiniThumbnailPaddingDimension(Context context) {
+        return context.getResources().getDimension(themeRefactorEnabled()
                         ? R.dimen.tab_grid_card_thumbnail_margin
                         : R.dimen.tab_list_card_padding);
     }
 
     /**
-     * Return the insect dimension around the selection button for tab grid card.
-     * @param context {@link Context} to retrieve dimension.
+     * Get the margin space from tab grid cards outline to its outbound represented by dimension.
+     * This space is used to calculate the starting point for the tab grid dialog.
      *
-     * @return The insect dimension around the selection button for tab grid card.
+     * @param context {@link Context} to retrieve dimension.
+     * @return The margin between tab cards in float number.
      */
-    public static float getTabGridCardSelectButtonInsectDimension(Context context) {
-        return context.getResources().getDimension(themeRefactorEnabled()
-                        ? R.dimen.tab_grid_card_toggle_button_background_inset
-                        : R.dimen.selection_tab_grid_toggle_button_inset);
+    public static float getTabGridCardMarginForDialogAnimation(Context context) {
+        if (!themeRefactorEnabled()) {
+            return context.getResources().getDimension(R.dimen.tab_list_card_padding);
+        }
+
+        int[] attrs = {R.attr.tabGridMargin};
+
+        TypedArray ta = context.obtainStyledAttributes(getThemeOverlayStyleResourceId(), attrs);
+        @DimenRes
+        int marginResourceId = ta.getResourceId(0, -1);
+        ta.recycle();
+
+        return context.getResources().getDimension(marginResourceId);
     }
 
     /**

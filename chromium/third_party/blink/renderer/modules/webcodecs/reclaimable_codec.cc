@@ -15,10 +15,9 @@ const base::Feature kReclaimInactiveWebCodecs{"ReclaimInactiveWebCodecs",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 
 namespace {
-constexpr base::TimeDelta kInactivityReclamationThreshold =
-    base::TimeDelta::FromMinutes(1);
+constexpr base::TimeDelta kInactivityReclamationThreshold = base::Minutes(1);
 
-constexpr base::TimeDelta kTimerPeriod = base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kTimerPeriod = base::Seconds(30);
 }  // namespace
 
 ReclaimableCodec::ReclaimableCodec()
@@ -26,13 +25,29 @@ ReclaimableCodec::ReclaimableCodec()
       activity_timer_(Thread::Current()->GetTaskRunner(),
                       this,
                       &ReclaimableCodec::ActivityTimerFired) {
-  if (base::FeatureList::IsEnabled(kReclaimInactiveWebCodecs))
-    activity_timer_.StartRepeating(kTimerPeriod, FROM_HERE);
 }
 
 void ReclaimableCodec::MarkCodecActive() {
   last_activity_ = base::TimeTicks::Now();
   last_tick_was_inactive_ = false;
+  StartTimer();
+}
+
+void ReclaimableCodec::SimulateCodecReclaimedForTesting() {
+  OnCodecReclaimed(MakeGarbageCollected<DOMException>(
+      DOMExceptionCode::kQuotaExceededError, "Codec reclaimed for testing."));
+}
+
+void ReclaimableCodec::PauseCodecReclamation() {
+  activity_timer_.Stop();
+}
+
+void ReclaimableCodec::StartTimer() {
+  if (activity_timer_.IsActive())
+    return;
+
+  if (base::FeatureList::IsEnabled(kReclaimInactiveWebCodecs))
+    activity_timer_.StartRepeating(kTimerPeriod, FROM_HERE);
 }
 
 void ReclaimableCodec::ActivityTimerFired(TimerBase*) {

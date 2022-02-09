@@ -57,6 +57,10 @@
       dark: "$google_grey_400",
       debug: "$google_yellow_700",
     },
+    text_color_disabled: {
+      light: "$google_grey_600",
+      dark: "$google_grey_500",
+    },
     text_color_alert: {
       light: "$google_red_600",
       dark: "$google_red_300",
@@ -69,24 +73,36 @@
       light: "$google_green_600",
       dark: "$google_green_300",
     },
+    text_color_prominent: "$icon_color_prominent",
+    text_color_selection: {
+      light: "$google_blue_700",
+      dark: "$google_blue_200",
+      debug: "$google_red_700",
+    },
 
+    dark_icon_color_primary: "$google_grey_900",
     icon_color_primary: {
-      light: "$google_grey_900",
+      light: "$dark_icon_color_primary",
       dark: "$google_grey_200",
       debug: "#ff00ff",
     },
     icon_color_secondary: {
-      light: "$google_grey_500",
-      dark: "$google_grey_500",
+      light: "$google_grey_700",
+      dark: "$google_grey_400",
       debug: "#00ffff",
+    },
+    icon_color_disabled: {
+      light: "$google_grey_600",
+      dark: "$google_grey_500",
     },
     icon_color_alert: {
       light: "$google_red_600",
       dark: "$google_red_300",
     },
+    light_icon_color_warning: "$google_yellow_300",
     icon_color_warning: {
       light: "$google_yellow_600",
-      dark: "$google_yellow_300",
+      dark: "$light_icon_color_warning",
     },
     icon_color_positive: {
       light: "$google_green_600",
@@ -97,6 +113,11 @@
       dark: "$google_blue_300",
       debug: "$google_red_600",
     },
+    icon_color_selection: {
+      light: "$google_blue_700",
+      dark: "$google_blue_200",
+      debug: "$google_yellow_500",
+    },
 
     highlight_color: {
       light: "$google_blue_50",
@@ -104,11 +125,13 @@
       debug: "rgba($google_red_300_rgb, 0.3)",
     },
 
-    dark_ink_ripple_color: "rgba($black_rgb, 0.06)",
-    light_ink_ripple_color: "rgba($white_rgb, 0.08)",
-    ink_ripple_color: {
-      light: "$dark_ink_ripple_color",
-      dark: "$light_ink_ripple_color",
+    ripple_color: {
+      light: "rgba($black_rgb, 0.06)",
+      dark: "rgba($white_rgb, 0.08)",
+    },
+    ripple_color_prominent: {
+      light: "rgba($icon_color_prominent_rgb, 0.06)",
+      dark: "rgba($icon_color_prominent_rgb, 0.08)",
     },
 
     focus_ring_color: "$icon_color_prominent",
@@ -121,22 +144,11 @@
       dark: "rgba($white_rgb, 0.1)",
     },
 
-    tab_bg_color_active: "$highlight_color",
-    tab_bg_color_hover: "$ink_ripple_color",
-    tab_label_color_prominent: "$icon_color_prominent",
-    tab_label_color: {
-      light: "$text_color_secondary",
-      dark: "$text_color_primary",
-    },
-
     menu_item_bg_color_focus: {
       light: "rgba($black_rgb, 0.06)",
       dark: "rgba($white_rgb, 0.08)",
     },
-    menu_item_ripple_color: {
-      light: "rgba($black_rgb, 0.06)",
-      dark: "rgba($white_rgb, 0.08)",
-    },
+    menu_item_ripple_color: "$ripple_color",
 
     toggle_color: "$icon_color_prominent",
     toggle_bg_color_inactive: "$google_grey_400",
@@ -158,9 +170,6 @@
       light: "$google_blue_700",
       dark: "$google_blue_300",
     },
-
-    /* button common */
-    button_focus_ring_color: "$icon_color_prominent",
 
     /* button-primary */
     button_background_color_primary: "$icon_color_prominent",
@@ -228,6 +237,66 @@
       light: "$google_grey_100",
       dark: "$google_grey_800",
     },
+    /* button-icon */
+    button_icon_color_primary: {
+      light: "$google_grey_200",
+      dark: "$google_grey_900",
+    },
+    button_icon_color_primary_disabled: {
+      light: "$google_grey_600",
+      dark: "$google_grey_500",
+    },
+    button_icon_color_secondary: {
+      light: "$google_blue_600",
+      dark: "$google_blue_300",
+    },
+    button_icon_color_secondary_disabled: {
+      light: "$google_grey_200",
+      dark: "$google_grey_900",
+    },
+
+    /* icon-button */
+    icon_button_background_color: {
+      light: "rgba($black_rgb, 0.05)",
+      dark: "rgba($white_rgb, 0.1)",
+    },
+
+    /* menu */
+    menu_label_color: {
+      light: "$google_grey_900",
+      dark: "$google_grey_200",
+    },
+    menu_icon_color: {
+      light: "$google_grey_900",
+      dark: "$google_grey_200",
+    },
+    menu_shortcut_color: {
+      light: "$google_grey_700",
+      dark: "$google_grey_500",
+    },
+    menu_item_background_hover: "$ripple_color",
+
+    /* tab */
+    tab_label_color_active: {
+      light: "$google_blue_600",
+      dark: "$google_blue_300",
+    },
+    tab_label_color_inactive: {
+      light: "$google_grey_600",
+      dark: "$google_grey_500",
+    },
+    tab_icon_color_active: {
+      light: "$google_blue_600",
+      dark: "$google_blue_300",
+    },
+    tab_icon_color_inactive: {
+      light: "$google_grey_600",
+      dark: "$google_grey_500",
+    },
+    tab_slider_track_color: {
+      light: "rgba($black_rgb, 0.06)",
+      dark: "rgba($white_rgb, 0.1)",
+    },
 
     /* textfield */
     textfield_background_color: {
@@ -269,6 +338,22 @@
       dark:"rgba($white_rgb, 0.8)",
     },
     tooltip_label_color: {
+      light:"$google_grey_100",
+      dark:"$google_grey_900",
+    },
+
+    /* shortcut */
+    shortcut_background_color: {
+      light:"$google_grey_200",
+      dark:"$google_grey_900",
+    },
+    shortcut_background_gradient_color: {
+      light:"rgba($white_rgb, 0)",
+      dark:"rgba($white_rgb, 0.12)"
+    },
+
+    /* dialog */
+    dialog_title_background_color: {
       light:"$google_grey_100",
       dark:"$google_grey_900",
     },

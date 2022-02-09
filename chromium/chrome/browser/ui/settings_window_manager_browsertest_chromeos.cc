@@ -53,10 +53,14 @@ class SettingsWindowManagerTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     // Install the Settings App.
-    web_app::WebAppProvider::Get(browser()->profile())
+    web_app::WebAppProvider::GetForTest(browser()->profile())
         ->system_web_app_manager()
         .InstallSystemAppsForTesting();
   }
+
+  SettingsWindowManagerTest(const SettingsWindowManagerTest&) = delete;
+  SettingsWindowManagerTest& operator=(const SettingsWindowManagerTest&) =
+      delete;
 
   ~SettingsWindowManagerTest() override = default;
 
@@ -80,8 +84,6 @@ class SettingsWindowManagerTest : public InProcessBrowserTest {
 
  protected:
   chrome::SettingsWindowManager* settings_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(SettingsWindowManagerTest);
 };
 
 IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, OpenSettingsWindow) {
@@ -210,7 +212,7 @@ class SettingsWindowManagerLoginTest : public MixinBasedInProcessBrowserTest {
   ~SettingsWindowManagerLoginTest() override = default;
 
  private:
-  LoginManagerMixin login_manager_{&mixin_host_, {}};
+  ash::LoginManagerMixin login_manager_{&mixin_host_, {}};
 };
 
 // Regression test for crash. https://crbug.com/1174525

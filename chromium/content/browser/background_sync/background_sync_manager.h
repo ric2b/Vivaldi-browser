@@ -75,6 +75,10 @@ class CONTENT_EXPORT BackgroundSyncManager
   static std::unique_ptr<BackgroundSyncManager> Create(
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       scoped_refptr<DevToolsBackgroundServicesContextImpl> devtools_context);
+
+  BackgroundSyncManager(const BackgroundSyncManager&) = delete;
+  BackgroundSyncManager& operator=(const BackgroundSyncManager&) = delete;
+
   ~BackgroundSyncManager() override;
 
   // Stores the given background sync registration and adds it to the scheduling
@@ -191,6 +195,10 @@ class CONTENT_EXPORT BackgroundSyncManager
 
   // Revive any pending periodic Background Sync registrations for |origin|.
   void RevivePeriodicSyncRegistrations(url::Origin origin);
+
+  const scoped_refptr<ServiceWorkerContextWrapper>& service_worker_context() {
+    return service_worker_context_;
+  }
 
  protected:
   BackgroundSyncManager(
@@ -506,8 +514,6 @@ class CONTENT_EXPORT BackgroundSyncManager
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<BackgroundSyncManager> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BackgroundSyncManager);
 };
 
 }  // namespace content

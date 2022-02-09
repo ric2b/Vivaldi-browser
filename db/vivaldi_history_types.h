@@ -30,7 +30,8 @@ class UrlVisitCount {
 
   typedef std::vector<UrlVisitCount> TopUrlsPerDayList;
   // Callback for value asynchronously returned by TopUrlsPerDay().
-  typedef base::OnceCallback<void(const TopUrlsPerDayList&)> TopUrlsPerDayCallback;
+  typedef base::OnceCallback<void(const TopUrlsPerDayList&)>
+      TopUrlsPerDayCallback;
 
  private:
   std::string date_;

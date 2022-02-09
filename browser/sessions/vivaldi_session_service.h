@@ -41,6 +41,8 @@ class VivaldiSessionService {
   explicit VivaldiSessionService(Profile* profile);
   VivaldiSessionService();
   ~VivaldiSessionService();
+  VivaldiSessionService(const VivaldiSessionService&) = delete;
+  VivaldiSessionService& operator=(const VivaldiSessionService&) = delete;
 
   bool ShouldTrackWindow(Browser* browser, Profile* profile);
   void ScheduleCommand(std::unique_ptr<sessions::SessionCommand> command);
@@ -130,8 +132,6 @@ class VivaldiSessionService {
 
   // Session open options
   SessionOptions opts_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSessionService);
 };
 
 }  // namespace vivaldi

@@ -32,11 +32,11 @@ void TrySubset(hb_face_t* face,
   hb_set_t* codepoints = hb_subset_input_unicode_set(input.get());
 
   if (!drop_layout) {
-    hb_set_del(hb_subset_input_drop_tables_set(input.get()),
+    hb_set_del(hb_subset_input_set(input.get(), HB_SUBSET_SETS_DROP_TABLE_TAG),
                HB_TAG('G', 'S', 'U', 'B'));
-    hb_set_del(hb_subset_input_drop_tables_set(input.get()),
+    hb_set_del(hb_subset_input_set(input.get(), HB_SUBSET_SETS_DROP_TABLE_TAG),
                HB_TAG('G', 'P', 'O', 'S'));
-    hb_set_del(hb_subset_input_drop_tables_set(input.get()),
+    hb_set_del(hb_subset_input_set(input.get(), HB_SUBSET_SETS_DROP_TABLE_TAG),
                HB_TAG('G', 'D', 'E', 'F'));
   }
 
@@ -45,6 +45,10 @@ void TrySubset(hb_face_t* face,
   }
 
   HbScoped<hb_face_t> result(hb_subset_or_fail(face, input.get()));
+  if (!result) {
+    // Subset failed, so nothing to check.
+    return;
+  }
   HbScoped<hb_blob_t> blob(hb_face_reference_blob(result.get()));
   uint32_t length;
   const char* data = hb_blob_get_data(blob.get(), &length);

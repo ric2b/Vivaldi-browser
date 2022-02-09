@@ -30,6 +30,12 @@ namespace {
 class SiteInstanceRenderProcessHostFactory : public RenderProcessHostFactory {
  public:
   SiteInstanceRenderProcessHostFactory() = default;
+
+  SiteInstanceRenderProcessHostFactory(
+      const SiteInstanceRenderProcessHostFactory&) = delete;
+  SiteInstanceRenderProcessHostFactory& operator=(
+      const SiteInstanceRenderProcessHostFactory&) = delete;
+
   ~SiteInstanceRenderProcessHostFactory() override = default;
 
   RenderProcessHost* CreateRenderProcessHost(
@@ -52,8 +58,6 @@ class SiteInstanceRenderProcessHostFactory : public RenderProcessHostFactory {
  private:
   mutable std::vector<std::unique_ptr<MockRenderProcessHost>> processes_;
   mutable SiteInstance* last_site_instance_used_;
-
-  DISALLOW_COPY_AND_ASSIGN(SiteInstanceRenderProcessHostFactory);
 };
 
 }  // namespace
@@ -132,7 +136,7 @@ TEST_F(ServiceWorkerProcessManagerTest,
   EXPECT_EQ(host->GetID(), process_info.process_id);
   EXPECT_EQ(ServiceWorkerMetrics::StartSituation::EXISTING_UNREADY_PROCESS,
             process_info.start_situation);
-  EXPECT_EQ(1u, host->GetKeepAliveRefCount());
+  EXPECT_EQ(1u, host->GetWorkerRefCount());
   EXPECT_EQ(1u, processes.size());
   auto found = processes.find(kEmbeddedWorkerId);
   ASSERT_TRUE(found != processes.end());
@@ -140,7 +144,7 @@ TEST_F(ServiceWorkerProcessManagerTest,
 
   // Release the process.
   process_manager_->ReleaseWorkerProcess(kEmbeddedWorkerId);
-  EXPECT_EQ(0u, host->GetKeepAliveRefCount());
+  EXPECT_EQ(0u, host->GetWorkerRefCount());
   EXPECT_TRUE(processes.empty());
 
   RenderProcessHostImpl::RemoveFrameWithSite(browser_context_.get(), host.get(),
@@ -176,7 +180,7 @@ TEST_F(ServiceWorkerProcessManagerTest,
   EXPECT_NE(host->GetID(), process_info.process_id);
   EXPECT_EQ(ServiceWorkerMetrics::StartSituation::NEW_PROCESS,
             process_info.start_situation);
-  EXPECT_EQ(0u, host->GetKeepAliveRefCount());
+  EXPECT_EQ(0u, host->GetWorkerRefCount());
   EXPECT_EQ(1u, processes.size());
   auto found = processes.find(kEmbeddedWorkerId);
   ASSERT_TRUE(found != processes.end());

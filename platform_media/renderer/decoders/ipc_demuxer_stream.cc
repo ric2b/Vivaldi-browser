@@ -107,7 +107,7 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
   // information, which is normally read from the data stream.
   AudioDecoderConfig audio_config;
   audio_config.Initialize(
-      AudioCodec::kCodecPCM, platform_audio_config.format,
+      AudioCodec::kPCM, platform_audio_config.format,
       GuessChannelLayout(platform_audio_config.channel_count),
       platform_audio_config.samples_per_second, EmptyExtraData(),
       EncryptionScheme::kUnencrypted, base::TimeDelta(), 0);
@@ -129,14 +129,14 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
   DCHECK(platform_video_config.is_valid());
 
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Creating VideoDecoderConfig : VideoCodec::kCodecH264 with "
+          << " Creating VideoDecoderConfig : VideoCodec::kH264 with "
              "HARDCODED values";
   // This demuxer stream is different from "normal" demuxers in that it outputs
   // decoded data.  To fit into existing media pipeline we hard code some
   // information, which is normally read from the data stream.
   VideoDecoderConfig video_config;
   video_config.Initialize(
-      VideoCodec::kCodecH264, VideoCodecProfile::H264PROFILE_MAIN,
+      VideoCodec::kH264, VideoCodecProfile::H264PROFILE_MAIN,
       VideoDecoderConfig::AlphaMode::kIsOpaque,
       VideoColorSpace(VideoColorSpace::PrimaryID::UNSPECIFIED,
                       VideoColorSpace::TransferID::UNSPECIFIED,

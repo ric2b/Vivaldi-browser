@@ -90,6 +90,7 @@
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+#include "url/url_constants.h"
 
 namespace blink {
 
@@ -235,7 +236,6 @@ class ResourceLoader::CodeCacheRequest {
         should_use_source_hash_(
             SchemeRegistry::SchemeSupportsCodeCacheWithHashing(
                 url.Protocol())) {
-    DCHECK(RuntimeEnabledFeatures::IsolatedCodeCacheEnabled());
   }
 
   ~CodeCacheRequest() = default;
@@ -482,9 +482,6 @@ void ResourceLoader::Trace(Visitor* visitor) const {
 }
 
 bool ResourceLoader::ShouldFetchCodeCache() {
-  if (!RuntimeEnabledFeatures::IsolatedCodeCacheEnabled())
-    return false;
-
   // Since code cache requests use a per-frame interface, don't fetch cached
   // code for keep-alive requests. These are only used for beaconing and we
   // don't expect code cache to help there.
@@ -777,7 +774,8 @@ bool ResourceLoader::WillFollowRedirect(
     const WebString& new_method,
     const WebURLResponse& passed_redirect_response,
     bool& has_devtools_request_id,
-    std::vector<std::string>* removed_headers) {
+    std::vector<std::string>* removed_headers,
+    bool insecure_scheme_was_upgraded) {
   DCHECK(!passed_redirect_response.IsNull());
 
   if (passed_redirect_response.HasAuthorizationCoveredByWildcardOnPreflight()) {
@@ -840,10 +838,17 @@ bool ResourceLoader::WillFollowRedirect(
         unused_preload ? ReportingDisposition::kSuppressReporting
                        : ReportingDisposition::kReport;
 
+    // The network stack might have upgraded to https an http URL. Report-only
+    // CSP must be checked with the url prior to that upgrade.
+    KURL new_url_prior_upgrade = new_url;
+    if (insecure_scheme_was_upgraded && new_url.ProtocolIs(url::kHttpsScheme)) {
+      new_url_prior_upgrade.SetProtocol(url::kHttpScheme);
+    }
+
     // CanRequest() checks only enforced CSP, so check report-only here to
     // ensure that violations are sent.
     Context().CheckCSPForRequest(
-        request_context, request_destination, new_url, options,
+        request_context, request_destination, new_url_prior_upgrade, options,
         reporting_disposition, url_before_redirects,
         ResourceRequest::RedirectStatus::kFollowedRedirect);
 
@@ -1089,6 +1094,9 @@ void ResourceLoader::DidReceiveResponseInternal(
       return;
   }
 
+  scheduler_->SetConnectionInfo(scheduler_client_id_,
+                                response.ConnectionInfo());
+
   // A response should not serve partial content if it was not requested via a
   // Range header: https://fetch.spec.whatwg.org/#main-fetch
   if (response.GetType() == network::mojom::FetchResponseType::kOpaque &&
@@ -1298,7 +1306,8 @@ void ResourceLoader::HandleError(const ResourceError& error) {
         cors::GetErrorString(
             *error.CorsErrorStatus(), resource_->GetResourceRequest().Url(),
             resource_->LastResourceRequest().Url(), *resource_->GetOrigin(),
-            resource_->GetType(), resource_->Options().initiator_info.name));
+            resource_->GetType(), resource_->Options().initiator_info.name),
+        false /* discard_duplicates */, mojom::ConsoleMessageCategory::Cors);
   }
 
   Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule,

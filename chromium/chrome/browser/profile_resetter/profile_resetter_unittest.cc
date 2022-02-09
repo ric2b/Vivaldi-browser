@@ -29,7 +29,8 @@
 #include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
 #include "chrome/browser/profile_resetter/profile_resetter_test_base.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
-#include "chrome/browser/search/instant_service.h"
+#include "chrome/browser/search/background/ntp_custom_background_service.h"
+#include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/themes/test/theme_service_changed_waiter.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -232,6 +233,10 @@ std::unique_ptr<BrandcodeConfigFetcher> ConfigParserTest::WaitForRequest(
 class ShortcutHandler {
  public:
   ShortcutHandler();
+
+  ShortcutHandler(const ShortcutHandler&) = delete;
+  ShortcutHandler& operator=(const ShortcutHandler&) = delete;
+
   ~ShortcutHandler();
 
   static bool IsSupported();
@@ -246,7 +251,6 @@ class ShortcutHandler {
 #if defined(OS_WIN)
   base::FilePath shortcut_path_;
 #endif
-  DISALLOW_COPY_AND_ASSIGN(ShortcutHandler);
 };
 
 #if defined(OS_WIN)
@@ -337,15 +341,6 @@ bool ShortcutHandler::IsFileHidden() const {
   return false;
 }
 #endif  // defined(OS_WIN)
-
-// MockInstantService
-class MockInstantService : public InstantService {
- public:
-  explicit MockInstantService(Profile* profile) : InstantService(profile) {}
-  ~MockInstantService() override = default;
-
-  MOCK_METHOD0(ResetToDefault, void());
-};
 
 // helper functions -----------------------------------------------------------
 
@@ -797,9 +792,9 @@ TEST_F(ConfigParserTest, ParseConfig) {
   EXPECT_TRUE(startup_list);
   std::vector<std::string> startup_pages;
   for (const auto& entry : startup_list->GetList()) {
-    std::string url;
-    EXPECT_TRUE(entry.GetAsString(&url));
-    startup_pages.push_back(url);
+    std::string url_str;
+    EXPECT_TRUE(entry.GetAsString(&url_str));
+    startup_pages.push_back(url_str);
   }
   ASSERT_EQ(2u, startup_pages.size());
   EXPECT_EQ("http://goo.gl", startup_pages[0]);
@@ -992,7 +987,7 @@ TEST_F(ProfileResetterTest, GetReadableFeedback) {
   ASSERT_TRUE(list);
   bool checked_extensions = false;
   bool checked_shortcuts = false;
-  for (size_t i = 0; i < list->GetSize(); ++i) {
+  for (size_t i = 0; i < list->GetList().size(); ++i) {
     base::DictionaryValue* dict = NULL;
     ASSERT_TRUE(list->GetDictionary(i, &dict));
     std::string value;
@@ -1026,11 +1021,20 @@ TEST_F(ProfileResetterTest, DestroySnapshotFast) {
 }
 
 TEST_F(ProfileResetterTest, ResetNTPCustomizationsTest) {
-  MockInstantService mock_ntp_service(profile());
-  resetter_->ntp_service_ = &mock_ntp_service;
-
-  EXPECT_CALL(mock_ntp_service, ResetToDefault());
+  auto* ntp_custom_background_service =
+      NtpCustomBackgroundServiceFactory::GetForProfile(profile());
+  ntp_custom_background_service->AddValidBackdropUrlForTesting(
+      GURL("https://background.com"));
+  ntp_custom_background_service->SetCustomBackgroundInfo(
+      /*background_url=*/GURL("https://background.com"),
+      /*attribution_line_1=*/"line 1",
+      /*attribution_line_2=*/"line 2",
+      /*action_url=*/GURL("https://action.com"),
+      /*collection_id=*/"");
+  EXPECT_TRUE(ntp_custom_background_service->GetCustomBackground().has_value());
   ResetAndWait(ProfileResetter::NTP_CUSTOMIZATIONS);
+  EXPECT_FALSE(
+      ntp_custom_background_service->GetCustomBackground().has_value());
 }
 
 }  // namespace

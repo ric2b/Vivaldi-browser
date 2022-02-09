@@ -34,16 +34,16 @@ Menu_Model::~Menu_Model() {
 std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
     const std::string& menu) {
   Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
-    Menu_Node::mainmenu_node_id());
+                                      Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
-  return base::WrapUnique(new MenuLoadDetails(mainmenu, control, menu,
-      loaded_));
+  return base::WrapUnique(
+      new MenuLoadDetails(mainmenu, control, menu, loaded_));
 }
 
 std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(int64_t id) {
   Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
-    Menu_Node::mainmenu_node_id());
+                                      Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
   return base::WrapUnique(new MenuLoadDetails(mainmenu, control, id, loaded_));
@@ -83,7 +83,7 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
           root_.Remove(index);
           break;
         }
-        index ++;
+        index++;
       }
 
       // Add new content
@@ -114,13 +114,13 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
         // menu and folder in it. This works as long the target is a folder. We
         // can have multiple nodes with the same action, but folders will always
         // have a unique action in a menu.
-        Menu_Node* loaded_menu = details->mainmenu_node()->GetByAction(
-            target_menu->action());
-        Menu_Node* loaded = loaded_menu ?
-            loaded_menu->GetByAction(target->action()) : nullptr;
+        Menu_Node* loaded_menu =
+            details->mainmenu_node()->GetByAction(target_menu->action());
+        Menu_Node* loaded =
+            loaded_menu ? loaded_menu->GetByAction(target->action()) : nullptr;
         if (loaded && loaded->parent()) {
           // Remove old content
-           Menu_Node* target_parent = target->parent();
+          Menu_Node* target_parent = target->parent();
           int target_index = target_parent->GetIndexOf(target);
           target_parent->Remove(target_index);
           // Add new content
@@ -143,7 +143,7 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
           // top element so that JS can use this to select the element.
           for (auto& observer : observers_)
             observer.MenuModelChanged(this, loaded->id(),
-                target_menu->action());
+                                      target_menu->action());
         }
       }
     }
@@ -165,7 +165,8 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
   }
 }
 
-bool Menu_Model::Move(const Menu_Node* node, const Menu_Node* new_parent,
+bool Menu_Model::Move(const Menu_Node* node,
+                      const Menu_Node* new_parent,
                       size_t index) {
   if (!loaded_ || !node || !IsValidIndex(new_parent, index)) {
     NOTREACHED();
@@ -210,7 +211,8 @@ bool Menu_Model::Move(const Menu_Node* node, const Menu_Node* new_parent,
   return true;
 }
 
-Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
+Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node,
+                           Menu_Node* parent,
                            size_t index) {
   const Menu_Node* menu = parent->GetMenu();
   if (!menu) {
@@ -252,7 +254,6 @@ bool Menu_Model::SetTitle(Menu_Node* node, const std::u16string& title) {
 
   return true;
 }
-
 
 bool Menu_Model::SetParameter(Menu_Node* node, const std::string& parameter) {
   if (node->parameter() == parameter) {
@@ -464,7 +465,7 @@ void Menu_Model::RemoveGuidDuplication(const Menu_Node* node) {
 
 bool Menu_Model::IsValidIndex(const Menu_Node* parent, size_t index) {
   return (parent && (parent->is_folder() || parent->is_menu())) &&
-          (index >= 0 && (index <= parent->children().size()));
+         (index >= 0 && (index <= parent->children().size()));
 }
 
 void Menu_Model::AddObserver(MenuModelObserver* observer) {

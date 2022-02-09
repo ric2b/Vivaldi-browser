@@ -36,12 +36,14 @@ typedef std::vector<RecurrenceExceptionRow> RecurrenceExceptionRows;
 class CreateRecurrenceExceptionResult {
  public:
   CreateRecurrenceExceptionResult() = default;
+  CreateRecurrenceExceptionResult(const CreateRecurrenceExceptionResult&) =
+      delete;
+  CreateRecurrenceExceptionResult& operator=(
+      const CreateRecurrenceExceptionResult&) = delete;
+
   bool success;
   std::string message;
   RecurrenceExceptionRow createdRow;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CreateRecurrenceExceptionResult);
 };
 
 }  // namespace calendar

@@ -5,11 +5,11 @@
 
 #include <string>
 #include "components/datasource/vivaldi_data_source.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_image_store.h"
 
 class LocalImageDataClassHandler : public VivaldiDataClassHandler {
  public:
-  LocalImageDataClassHandler(VivaldiDataSourcesAPI::UrlKind url_kind);
+  LocalImageDataClassHandler(VivaldiImageStore::UrlKind url_kind);
 
   ~LocalImageDataClassHandler() override;
 
@@ -18,7 +18,7 @@ class LocalImageDataClassHandler : public VivaldiDataClassHandler {
                content::URLDataSource::GotDataCallback callback) override;
 
  private:
-  const VivaldiDataSourcesAPI::UrlKind url_kind_;
+  const VivaldiImageStore::UrlKind url_kind_;
 };
 
 #endif  // COMPONENTS_DATASOURCE_LOCAL_IMAGE_DATA_SOURCE_H_

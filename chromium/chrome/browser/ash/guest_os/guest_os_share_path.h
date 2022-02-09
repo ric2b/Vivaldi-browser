@@ -10,6 +10,7 @@
 #include <set>
 #include <vector>
 
+#include "ash/components/drivefs/drivefs_host_observer.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
@@ -19,7 +20,6 @@
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/file_manager/volume_manager_observer.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/components/drivefs/drivefs_host_observer.h"
 #include "chromeos/dbus/seneschal/seneschal_service.pb.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -64,6 +64,10 @@ class GuestOsSharePath : public KeyedService,
 
   static GuestOsSharePath* GetForProfile(Profile* profile);
   explicit GuestOsSharePath(Profile* profile);
+
+  GuestOsSharePath(const GuestOsSharePath&) = delete;
+  GuestOsSharePath& operator=(const GuestOsSharePath&) = delete;
+
   ~GuestOsSharePath() override;
 
   // KeyedService:
@@ -178,8 +182,6 @@ class GuestOsSharePath : public KeyedService,
   std::map<base::FilePath, SharedPathInfo> shared_paths_;
 
   base::WeakPtrFactory<GuestOsSharePath> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(GuestOsSharePath);
 };  // class
 
 }  // namespace guest_os

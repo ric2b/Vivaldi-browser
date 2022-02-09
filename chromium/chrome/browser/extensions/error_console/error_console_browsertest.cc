@@ -153,6 +153,10 @@ class ErrorConsoleBrowserTest : public ExtensionBrowserTest {
           error_console_(error_console) {
       error_console_->AddObserver(this);
     }
+
+    ErrorObserver(const ErrorObserver&) = delete;
+    ErrorObserver& operator=(const ErrorObserver&) = delete;
+
     virtual ~ErrorObserver() {
       if (error_console_)
         error_console_->RemoveObserver(this);
@@ -184,8 +188,6 @@ class ErrorConsoleBrowserTest : public ExtensionBrowserTest {
     bool waiting_;
 
     ErrorConsole* error_console_;
-
-    DISALLOW_COPY_AND_ASSIGN(ErrorObserver);
   };
 
   // The type of action which we take after we load an extension in order to
@@ -236,7 +238,7 @@ class ErrorConsoleBrowserTest : public ExtensionBrowserTest {
 
     switch (action) {
       case ACTION_NAVIGATE: {
-        ui_test_utils::NavigateToURL(browser(), GetTestURL());
+        ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestURL()));
         break;
       }
       case ACTION_BROWSER_ACTION: {
@@ -246,8 +248,8 @@ class ErrorConsoleBrowserTest : public ExtensionBrowserTest {
         break;
       }
       case ACTION_NEW_TAB: {
-        ui_test_utils::NavigateToURL(browser(),
-                                     GURL(chrome::kChromeUINewTabURL));
+        ASSERT_TRUE(ui_test_utils::NavigateToURL(
+            browser(), GURL(chrome::kChromeUINewTabURL)));
         break;
       }
       case ACTION_NONE:

@@ -92,8 +92,7 @@ void SessionService::OnExtDataUpdated(content::WebContents* web_contents) {
     return;
 
   SetTabExtData(session_tab_helper->window_id(),
-                session_tab_helper->session_id(),
-                web_contents->GetExtData());
+                session_tab_helper->session_id(), web_contents->GetExtData());
 }
 
 /* static */

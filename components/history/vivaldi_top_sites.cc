@@ -41,7 +41,7 @@ bool TopSitesDatabase::ConvertThumbnailData(
         callback.Run(path, bookmark_id, std::move(thumbnail));
       } else {
         LOG(ERROR) << "Did not find valid thumbnail id in url: "
-                         << statement.ColumnString(1);
+                   << statement.ColumnString(1);
       }
     }
   }
@@ -57,6 +57,5 @@ void TopSitesBackend::SetThumbnailConvertCallback(
     ConvertThumbnailDataCallback callback) {
   db_->SetThumbnailConvertCallback(std::move(callback));
 }
-
 
 }  // namespace history

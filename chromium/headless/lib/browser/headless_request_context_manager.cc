@@ -121,6 +121,10 @@ class HeadlessProxyConfigMonitor
                                   base::Unretained(this)));
   }
 
+  HeadlessProxyConfigMonitor(const HeadlessProxyConfigMonitor&) = delete;
+  HeadlessProxyConfigMonitor& operator=(const HeadlessProxyConfigMonitor&) =
+      delete;
+
   ~HeadlessProxyConfigMonitor() override {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
     proxy_config_service_->RemoveObserver(this);
@@ -174,8 +178,6 @@ class HeadlessProxyConfigMonitor
   mojo::Receiver<::network::mojom::ProxyConfigPollerClient> poller_receiver_{
       this};
   mojo::Remote<::network::mojom::ProxyConfigClient> proxy_config_client_;
-
-  DISALLOW_COPY_AND_ASSIGN(HeadlessProxyConfigMonitor);
 };
 
 // static
@@ -286,8 +288,11 @@ void HeadlessRequestContextManager::ConfigureNetworkContextParamsInternal(
 
   if (!user_data_path_.empty()) {
     context_params->enable_encrypted_cookies = cookie_encryption_enabled_;
-    context_params->cookie_path =
-        user_data_path_.Append(FILE_PATH_LITERAL("Cookies"));
+    context_params->file_paths =
+        ::network::mojom::NetworkContextFilePaths::New();
+    context_params->file_paths->data_path = user_data_path_;
+    context_params->file_paths->cookie_database_name =
+        base::FilePath(FILE_PATH_LITERAL("Cookies"));
   }
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kDiskCacheDir)) {

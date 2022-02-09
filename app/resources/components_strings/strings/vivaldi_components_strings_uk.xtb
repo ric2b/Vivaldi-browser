@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Про версію</translation>
 <translation id="139305205187523129">Хост <ph name="HOST_NAME" /> не надіслав дані.</translation>
 <translation id="1559528461873125649">Такого файла або каталогу немає</translation>
-<translation id="1620510694547887537">Камера</translation>
 <translation id="1640244768702815859">Спробуйте <ph name="BEGIN_LINK" />відвідати домашню сторінку цього сайту<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Протокол не підтримується</translation>
 <translation id="1710259589646384581">ОС</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Спробуйте запустити засоби діагностики мережі Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Цей сайт містить шкідливі програми</translation>
 <translation id="1916770123977586577">Щоб застосувати оновлені налаштування на цьому сайті, оновіть сторінку</translation>
-<translation id="1919345977826869612">Реклама</translation>
 <translation id="1974060860693918893">Детальніше</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Перевірити проксі-сервер і брандмауер<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Звук</translation>
 <translation id="2119505898009119320">Кому видано: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Фонова синхронізація</translation>
 <translation id="2166378884831602661">Цей сайт не може забезпечити захищене з’єднання</translation>
 <translation id="2187317261103489799">Визначати (за умовчанням)</translation>
 <translation id="2224337661447660594">Немає інтернету</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">Ваш доступ до Інтернету заблоковано</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> вимагає ім’я користувача та пароль.</translation>
 <translation id="2337852623177822836">Налаштуванням керує ваш адміністратор</translation>
-<translation id="2344028582131185878">Автоматичні завантаження</translation>
 <translation id="2355395290879513365">Зловмисники можуть бачити зображення, які ви переглядаєте на цьому сайті, і змінювати їх із метою ошукати вас.</translation>
 <translation id="2356070529366658676">Запитати</translation>
 <translation id="2359808026110333948">Продовжити</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Виконати діагностику мережі<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Сповіщення</translation>
 <translation id="2491414235131909199">Розширення заблокувало цю сторінку</translation>
 <translation id="2501278716633472235">Повернутися</translation>
 <translation id="2539524384386349900">Визначити</translation>
 <translation id="255002559098805027">Хост <ph name="HOST_NAME" /> надіслав недійсну відповідь.</translation>
-<translation id="2586657967955657006">Буфер обміну</translation>
 <translation id="2609632851001447353">Різновиди</translation>
 <translation id="2634124572758952069">IP-адресу сервера <ph name="HOST_NAME" /> не знайдено.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
       використовувати проксі-сервер, виконайте вказані нижче дії.
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Щоб повторно надіслати дані, потрібні для завантаження сторінки, перезавантажте сторінку.</translation>
-<translation id="3227137524299004712">Мікрофон</translation>
 <translation id="3234666976984236645">Завжди виявляти важливий вміст на цьому сайті</translation>
 <translation id="3308738399950580893">рекламу</translation>
 <translation id="3422472998109090673">Хост <ph name="HOST_NAME" /> зараз недоступний.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Деталі</translation>
 <translation id="4558551763791394412">Спробуйте вимкнути розширення.</translation>
 <translation id="4592951414987517459">З’єднання з доменом <ph name="DOMAIN" /> шифрується за допомогою сучасного набору шифрів.</translation>
-<translation id="4690462567478992370">Припинити використання недійсного сертифіката</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">З’єднання розірвано</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запустити засоби діагностики мережі Windows<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">Шлях до виконуваного файлу</translation>
 <translation id="4750917950439032686">Ваша інформація (наприклад, паролі або номери кредитних карток) залишається конфіденційною, коли надсилається на цей сайт.</translation>
 <translation id="4764776831041365478">Веб-сторінка за адресою <ph name="URL" /> може бути тимчасово недоступною або її назавжди переміщено на нову веб-адресу.</translation>
+<translation id="483241715238664915">Увімкнути попередження</translation>
 <translation id="4943872375798546930">Немає результатів</translation>
-<translation id="4974590756084640048">Відновити застереження</translation>
 <translation id="5023310440958281426">Перегляньте правила свого адміністратора</translation>
 <translation id="5039804452771397117">Дозволити</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(використовується 1 файл cookie)}one{(використовується # файл cookie)}few{(використовуються # файли cookie)}many{(використовуються # файлів cookie)}other{(використовуються # файлу cookie)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">Перевірити наявність з’єднання</translation>
 <translation id="5617949217645503996">Хост <ph name="HOST_NAME" /> переспрямував вас забагато разів.</translation>
 <translation id="5675650730144413517">Сторінка не працює</translation>
-<translation id="5689516760719285838">Місцезнаходження</translation>
-<translation id="5710435578057952990">Ідентифікаційну інформацію цього веб-сайта не було перевірено.</translation>
-<translation id="5778550464785688721">Повний контроль пристроїв MIDI</translation>
 <translation id="5785756445106461925">Окрім цього, сторінка містить незахищені ресурси. Інші особи можуть переглядати їх під час передавання даних, а зловмисники можуть змінювати вигляд сторінки.</translation>
 <translation id="5799902971440853357">Зараз не можна перейти на сторінку <ph name="SITE" />, оскільки веб-сайт надіслав зашифровані облікові дані, які Vivaldi не може обробити. Помилки мережі й атаки зазвичай є тимчасовими, тому ця сторінка може запрацювати пізніше.</translation>
 <translation id="5810442152076338065">З’єднання з доменом <ph name="DOMAIN" /> шифрується за допомогою застарілого набору шифрів.</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">Ваше з’єднання з цим сайтом не захищене</translation>
 <translation id="6203231073485539293">Перевірте з’єднання з Інтернетом</translation>
 <translation id="6225522625585012689">Перейдіть на сторінку &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, щоб переглянути список заблокованих URL-адрес та інші правила, які ввімкнув ваш системний адміністратор.</translation>
-<translation id="625755898061068298">Ви вимкнули показ застережень про небезпеку для цього сайту.</translation>
 <translation id="6264485186158353794">Повернутися до безпечного режиму</translation>
 <translation id="6305205051461490394">Сторінка <ph name="URL" /> недоступна.</translation>
 <translation id="6321917430147971392">Перевірте налаштування DNS</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">Агент користувача</translation>
 <translation id="7053983685419859001">Блокувати</translation>
 <translation id="7079718277001814089">Цей сайт містить зловмисне програмне забезпечення</translation>
+<translation id="7096937462164235847">Ідентифікаційні дані цього веб-сайту не підтверджено.</translation>
 <translation id="7108819624672055576">Дозволено розширенням</translation>
 <translation id="7111012039238467737">(Дійсний)</translation>
 <translation id="7113310725918019676">Дозволити <ph name="BLOCKED_TYPE" /> з сервера <ph name="DOMAIN" /></translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">Ідентифікацію сервера, з яким ви з'єднані, не можна повністю підтвердити. Ви з'єднані із сервером за допомогою імені, дійсного лише у вашій мережі, і зовнішній центр сертифікації не має способів підтвердити право власності на це ім'я. Хоча деякі центри сертифікації, попри все, видають сертифікати на такі імена, неможливо цілком упевнитися, що ви з'єднані з безпечним сайтом, а не зі зловмисником.</translation>
 <translation id="7455133967321480974">Використовувати глобальне налаштування за умовчанням (Блокувати)</translation>
 <translation id="7518003948725431193">Не знайдено веб-сторінок для веб-адреси <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Для належного відображення цій веб-сторінці потрібні введені вами раніше дані. Можна ще раз надіслати дані, однак зробивши це, ви повторите всі дії, які ця сторінка виконувала раніше.</translation>
 <translation id="759889825892636187">Хост <ph name="HOST_NAME" /> зараз не може обробити цей запит.</translation>
 <translation id="7662298039739062396">Налаштуванням керує розширення</translation>
@@ -227,11 +214,11 @@
 <translation id="9039213469156557790">Окрім цього, сторінка містить незахищені ресурси. Інші особи можуть переглядати їх під час передавання даних, а зловмисники можуть змінювати роботу сторінки.</translation>
 <translation id="9062620674789239642">Можливо, його було переміщено, змінено або видалено.</translation>
 <translation id="9069693763241529744">Заблоковано розширенням</translation>
+<translation id="9073799351042754113">Ви вимкнули попередження про небезпеку для цього сайту.</translation>
 <translation id="910924428752220542">Паролі Vivaldi</translation>
 <translation id="9169664750068251925">Завжди блокувати на цьому сайті</translation>
 <translation id="9180553614777056266">Блокувальник реклами</translation>
 <translation id="9183425211371246419">Протокол, який використовує хост <ph name="HOST_NAME" />, не підтримується.</translation>
-<translation id="9219103736887031265">Зображення</translation>
 <translation id="936602727769022409">Ви можете втратити доступ до облікового запису Google. Chromium радить змінити пароль. Вам буде запропоновано ввійти в обліковий запис.</translation>
 <translation id="969892804517981540">Офіційна збірка</translation>
 <translation id="988159990683914416">Конструкція розробника</translation>

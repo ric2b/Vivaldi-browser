@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, NativeLayerCros, NativeLayerCrosImpl, PrinterState, PrinterStatusReason, PrinterStatusSeverity, PrintPreviewDestinationListItemElement} from 'chrome://print/print_preview.js';
+import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, NativeLayerCrosImpl, PrinterState, PrinterStatusReason, PrinterStatusSeverity, PrintPreviewDestinationListItemElement} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertEquals} from '../chai_assert.js';
-import {waitBeforeNextRender} from '../test_util.m.js';
+import {waitBeforeNextRender} from '../test_util.js';
 
 import {NativeLayerCrosStub} from './native_layer_cros_stub.js';
 
@@ -56,7 +56,7 @@ suite(destination_item_test_cros.suiteName, function() {
 
     // Stub out native layer.
     nativeLayerCros = new NativeLayerCrosStub();
-    NativeLayerCrosImpl.instance_ = nativeLayerCros;
+    NativeLayerCrosImpl.setInstance(nativeLayerCros);
     setNativeLayerPrinterStatusMap();
 
     listItem = /** @type {!PrintPreviewDestinationListItemElement} */ (

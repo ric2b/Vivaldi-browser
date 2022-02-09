@@ -48,6 +48,8 @@ DecorationTitle::DecorationTitle(ui::ResourceManager* resource_manager,
   layer_->AddChild(layer_favicon_);
   layer_->AddChild(layer_opaque_);
   layer_->AddChild(layer_fade_);
+  // Vivaldi
+  show_only_favicon_ = false;
 }
 
 DecorationTitle::~DecorationTitle() {
@@ -166,6 +168,14 @@ void DecorationTitle::setBounds(const gfx::Size& bounds) {
   if (title_size_.width() <= title_space + fade_space)
     title_space += fade_space;
 
+  // Note(david@vivaldi.com): In Vivaldi we have a little bit more space for the
+  // title. Only update the offset when we show the full tab.
+  if (!show_only_favicon_) {
+    int offset = !sys_rtl ? title_offset_ : 0;
+    offset += !is_close_button_visible_ ? offset : 0;
+    title_space += offset;
+  }
+
   if (title_size_.width() <= title_space)
     fade_space = 0.f;
 
@@ -177,6 +187,10 @@ void DecorationTitle::setBounds(const gfx::Size& bounds) {
   if (sys_rtl) {
     favicon_x = bounds.width() - favicon_size_.width() - favicon_start_padding_;
   }
+  // Note(david@vivaldi.com): Shift the favicon when we don't show the title.
+  if (show_only_favicon_ && !is_close_button_visible_)
+    favicon_x += title_offset_ / 2;
+
   layer_favicon_->SetIsDrawable(true);
   layer_favicon_->SetBounds(favicon_size_);
   layer_favicon_->SetPosition(gfx::PointF(favicon_x, favicon_offset_y));
@@ -235,4 +249,17 @@ scoped_refptr<cc::Layer> DecorationTitle::layer() {
   return layer_;
 }
 
+/** Vivaldi **/
+void DecorationTitle::SetTitleOffset(float offset) {
+  title_offset_ = offset;
+}
+
+/** Vivaldi **/
+void DecorationTitle::ShowOnlyFavicon(bool show_only_favicon) {
+  show_only_favicon_ = show_only_favicon;
+}
+
+void DecorationTitle::SetIsCloseButtonVisible(float is_visible) {
+  is_close_button_visible_ = is_visible;
+}
 }  // namespace android

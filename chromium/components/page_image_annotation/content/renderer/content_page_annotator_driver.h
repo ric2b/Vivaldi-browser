@@ -27,6 +27,10 @@ class ContentPageAnnotatorDriver
     : public content::RenderFrameObserver,
       public content::RenderFrameObserverTracker<ContentPageAnnotatorDriver> {
  public:
+  ContentPageAnnotatorDriver(const ContentPageAnnotatorDriver&) = delete;
+  ContentPageAnnotatorDriver& operator=(const ContentPageAnnotatorDriver&) =
+      delete;
+
   ~ContentPageAnnotatorDriver() override;
 
   static ContentPageAnnotatorDriver* GetOrCreate(
@@ -55,7 +59,7 @@ class ContentPageAnnotatorDriver
   ContentPageAnnotatorDriver(content::RenderFrame* render_frame);
 
   // content::RenderFrameObserver:
-  void DidFinishDocumentLoad() override;
+  void DidDispatchDOMContentLoadedEvent() override;
   void OnDestruct() override;
 
   // Traverse the DOM starting at the given node, and add all elements with
@@ -79,8 +83,6 @@ class ContentPageAnnotatorDriver
   PageAnnotator page_annotator_;
 
   base::WeakPtrFactory<ContentPageAnnotatorDriver> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ContentPageAnnotatorDriver);
 };
 
 }  // namespace page_image_annotation

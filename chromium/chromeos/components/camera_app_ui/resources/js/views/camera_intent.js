@@ -22,8 +22,10 @@ import {VideoSaver} from '../models/video_saver.js';
 // eslint-disable-next-line no-unused-vars
 import {PerfLogger} from '../perf.js';
 import * as state from '../state.js';
-import {scaleImage} from '../thumbnailer.js';
+import {scale} from '../thumbnailer.js';
 import * as toast from '../toast.js';
+// eslint-disable-next-line no-unused-vars
+import {Mode} from '../type.js';
 import * as util from '../util.js';
 
 import {Camera} from './camera.js';
@@ -48,16 +50,18 @@ export class CameraIntent extends Camera {
    * @param {!DeviceInfoUpdater} infoUpdater
    * @param {!PhotoConstraintsPreferrer} photoPreferrer
    * @param {!VideoConstraintsPreferrer} videoPreferrer
+   * @param {!Mode} mode
    * @param {!PerfLogger} perfLogger
    */
-  constructor(intent, infoUpdater, photoPreferrer, videoPreferrer, perfLogger) {
+  constructor(
+      intent, infoUpdater, photoPreferrer, videoPreferrer, mode, perfLogger) {
     const resultSaver = /** @type {!ResultSaver} */ ({
       savePhoto: async (blob) => {
         if (intent.shouldDownScale) {
           const image = await util.blobToImage(blob);
           const ratio = Math.sqrt(
               DOWNSCALE_INTENT_MAX_PIXEL_NUM / (image.width * image.height));
-          blob = await scaleImage(
+          blob = await scale(
               blob, Math.floor(image.width * ratio),
               Math.floor(image.height * ratio));
         }
@@ -72,8 +76,8 @@ export class CameraIntent extends Camera {
       },
     });
     super(
-        resultSaver, infoUpdater, photoPreferrer, videoPreferrer, intent.mode,
-        perfLogger);
+        resultSaver, infoUpdater, photoPreferrer, videoPreferrer, mode,
+        perfLogger, /* facing= */ null);
 
     /**
      * @type {!Intent}
@@ -135,12 +139,12 @@ export class CameraIntent extends Camera {
   /**
    * @override
    */
-  beginTake_(shutterType) {
+  beginTake(shutterType) {
     // TODO(inker): Clean unused photo result blob properly.
     this.photoResult_ = null;
     this.videoResult_ = null;
 
-    const take = super.beginTake_(shutterType);
+    const take = super.beginTake(shutterType);
     if (take === null) {
       return null;
     }

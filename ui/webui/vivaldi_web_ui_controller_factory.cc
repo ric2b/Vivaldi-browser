@@ -5,9 +5,9 @@
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
 #include "chrome/browser/profiles/profile.h"
-#include "content/public/common/url_constants.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
+#include "content/public/common/url_constants.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/buildflags.h"
@@ -24,13 +24,14 @@ using content::WebUIController;
 
 // A function for creating a new WebUI. The caller owns the return value, which
 // may be NULL (for example, if the URL refers to an non-existent extension).
-typedef std::unique_ptr<content::WebUIController>(*WebUIFactoryFunction)(WebUI* web_ui,
-                                                 const GURL& url);
+typedef std::unique_ptr<content::WebUIController> (
+    *WebUIFactoryFunction)(WebUI* web_ui, const GURL& url);
 namespace vivaldi {
 
 // Template for defining WebUIFactoryFunction.
 template <class T>
-std::unique_ptr<content::WebUIController> NewVivaldiWebUI(WebUI* web_ui, const GURL& url) {
+std::unique_ptr<content::WebUIController> NewVivaldiWebUI(WebUI* web_ui,
+                                                          const GURL& url) {
   return std::make_unique<T>(web_ui);
 }
 
@@ -107,9 +108,9 @@ VivaldiWebUIControllerFactory::~VivaldiWebUIControllerFactory() {}
 base::RefCountedMemory* VivaldiWebUIControllerFactory::GetFaviconResourceBytes(
     const GURL& page_url,
     ui::ResourceScaleFactor scale_factor) {
- if (page_url.host() == vivaldi::kVivaldiGameHost) {
-    return ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-      IDR_VIVALDI_GAME_FAVICON, scale_factor);
+  if (page_url.host() == vivaldi::kVivaldiGameHost) {
+    return ui::ResourceBundle::GetSharedInstance()
+        .LoadDataResourceBytesForScale(IDR_VIVALDI_GAME_FAVICON, scale_factor);
   }
   return nullptr;
 }

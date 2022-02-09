@@ -69,6 +69,7 @@ const service_manager::Manifest& GetBrowserManifest() {
                            .Build())
           .RequireCapability("*", "app")
           .RequireCapability("*", "multizone")
+          .RequireCapability("*", "reconnect")
           .Build()};
   return *manifest;
 }
@@ -105,6 +106,12 @@ class ContentChildServiceProcessHost
     : public service_manager::ServiceProcessHost {
  public:
   ContentChildServiceProcessHost() = default;
+
+  ContentChildServiceProcessHost(const ContentChildServiceProcessHost&) =
+      delete;
+  ContentChildServiceProcessHost& operator=(
+      const ContentChildServiceProcessHost&) = delete;
+
   ~ContentChildServiceProcessHost() override = default;
 
   // service_manager::ServiceProcessHost:
@@ -121,9 +128,6 @@ class ContentChildServiceProcessHost
         std::move(callback));
     return remote;
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContentChildServiceProcessHost);
 };
 
 // A ServiceProcessHost implementation which uses the Service Manager's builtin
@@ -134,6 +138,11 @@ class ServiceExecutableProcessHost
  public:
   explicit ServiceExecutableProcessHost(const base::FilePath& executable_path)
       : launcher_(nullptr, executable_path) {}
+
+  ServiceExecutableProcessHost(const ServiceExecutableProcessHost&) = delete;
+  ServiceExecutableProcessHost& operator=(const ServiceExecutableProcessHost&) =
+      delete;
+
   ~ServiceExecutableProcessHost() override = default;
 
   // service_manager::ServiceProcessHost:
@@ -149,8 +158,6 @@ class ServiceExecutableProcessHost
 
  private:
   service_manager::ServiceProcessLauncher launcher_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceExecutableProcessHost);
 };
 
 using ServiceRequestHandler = base::RepeatingCallback<void(
@@ -170,6 +177,11 @@ class BrowserServiceManagerDelegate
       ServiceRequestHandler main_thread_request_handler)
       : main_thread_task_runner_(main_thread_task_runner),
         main_thread_request_handler_(std::move(main_thread_request_handler)) {}
+
+  BrowserServiceManagerDelegate(const BrowserServiceManagerDelegate&) = delete;
+  BrowserServiceManagerDelegate& operator=(
+      const BrowserServiceManagerDelegate&) = delete;
+
   ~BrowserServiceManagerDelegate() override = default;
 
   // service_manager::ServiceManager::Delegate:
@@ -203,8 +215,6 @@ class BrowserServiceManagerDelegate
  private:
   const scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_;
   const ServiceRequestHandler main_thread_request_handler_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserServiceManagerDelegate);
 };
 
 }  // namespace
@@ -219,6 +229,11 @@ class ServiceManagerContext::InProcessServiceManagerContext
                                      service_manager_thread_task_runner)
       : service_manager_thread_task_runner_(
             service_manager_thread_task_runner) {}
+
+  InProcessServiceManagerContext(const InProcessServiceManagerContext&) =
+      delete;
+  InProcessServiceManagerContext& operator=(
+      const InProcessServiceManagerContext&) = delete;
 
   void Start(std::vector<service_manager::Manifest> manifests,
              mojo::PendingRemote<service_manager::mojom::Service> system_remote,
@@ -284,8 +299,6 @@ class ServiceManagerContext::InProcessServiceManagerContext
   const scoped_refptr<base::SingleThreadTaskRunner>
       service_manager_thread_task_runner_;
   std::unique_ptr<service_manager::ServiceManager> service_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(InProcessServiceManagerContext);
 };
 
 ServiceManagerContext::ServiceManagerContext(

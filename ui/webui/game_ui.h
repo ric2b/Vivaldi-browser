@@ -11,13 +11,13 @@ namespace vivaldi {
 
 // The WebUI handler for chrome://game.
 class GameUI : public content::WebUIController {
-public:
+ public:
   explicit GameUI(content::WebUI* web_ui);
   ~GameUI() override;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(GameUI);
+  GameUI(const GameUI&) = delete;
+  GameUI& operator=(const GameUI&) = delete;
 };
+
 }  // namespace vivaldi
 
 #endif  // UI_WEBUI_GAME_UI_H_

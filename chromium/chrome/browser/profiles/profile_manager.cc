@@ -41,6 +41,8 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -84,6 +86,7 @@
 #include "components/account_id/account_id.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browsing_data/core/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
 #include "components/prefs/pref_service.h"
@@ -103,6 +106,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -130,15 +134,13 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/accessibility/live_caption_controller.h"
 #include "chrome/browser/accessibility/live_caption_controller_factory.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "components/browsing_data/core/pref_names.h"
+#include "components/live_caption/live_caption_controller.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -163,6 +165,11 @@
 #if defined(OS_WIN) && BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/signin/signin_util_win.h"
 #endif  // defined(OS_WIN) && BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
+#include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
+#endif
 
 using base::UserMetricsAction;
 using content::BrowserThread;
@@ -317,7 +324,7 @@ void NukeProfileFromDiskImpl(const base::FilePath& profile_path,
   // LockTable, and/or fire events when locks are released. That way we could
   // wait for all the locks in |profile_path| to be released, rather than having
   // this retry logic.
-  const base::TimeDelta kRetryDelay = base::TimeDelta::FromSeconds(1);
+  const base::TimeDelta kRetryDelay = base::Seconds(1);
 
   // Delete both the profile directory and its corresponding cache.
   base::FilePath cache_path;
@@ -427,7 +434,7 @@ void RemoveFromLastActiveProfilesPrefList(base::FilePath path) {
   DCHECK(local_state);
   ListPrefUpdate update(local_state, prefs::kProfilesLastActive);
   base::ListValue* profile_list = update.Get();
-  base::Value entry_value = base::Value(path.BaseName().MaybeAsASCII());
+  base::Value entry_value = base::Value(path.BaseName().AsUTF8Unsafe());
   profile_list->EraseListValue(entry_value);
 }
 
@@ -469,20 +476,19 @@ std::ostream& operator<<(
   return out;
 }
 
-std::string GetLastUsedProfileBaseName() {
+base::FilePath GetLastUsedProfileBaseName() {
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
-  std::string last_used_profile_base_name =
-      local_state->GetString(prefs::kProfileLastUsed);
+  base::FilePath last_used_profile_base_name =
+      local_state->GetFilePath(prefs::kProfileLastUsed);
   // Make sure the system profile can't be the one marked as the last one used
   // since it shouldn't get a browser.
   if (!last_used_profile_base_name.empty() &&
-      last_used_profile_base_name !=
-          base::FilePath(chrome::kSystemProfileDir).AsUTF8Unsafe()) {
+      last_used_profile_base_name.value() != chrome::kSystemProfileDir) {
     return last_used_profile_base_name;
   }
 
-  return chrome::kInitialProfile;
+  return base::FilePath::FromASCII(chrome::kInitialProfile);
 }
 
 }  // namespace
@@ -614,10 +620,9 @@ Profile* ProfileManager::GetLastUsedProfileAllowedByPolicy() {
 
 // static
 bool ProfileManager::IsOffTheRecordModeForced(Profile* profile) {
-  return profile->IsGuestSession() ||
-         profile->IsSystemProfile() ||
+  return profile->IsGuestSession() || profile->IsSystemProfile() ||
          IncognitoModePrefs::GetAvailability(profile->GetPrefs()) ==
-             IncognitoModePrefs::FORCED;
+             IncognitoModePrefs::Availability::kForced;
 }
 
 // static
@@ -641,8 +646,9 @@ std::vector<Profile*> ProfileManager::GetLastOpenedProfiles() {
         LOG(WARNING) << "Invalid entry in " << prefs::kProfilesLastActive;
         continue;
       }
-      Profile* profile = profile_manager->GetProfile(
-          profile_manager->user_data_dir().AppendASCII(*profile_base_name));
+      Profile* profile =
+          profile_manager->GetProfile(profile_manager->user_data_dir().Append(
+              base::FilePath::FromUTF8Unsafe(*profile_base_name)));
       if (profile) {
         // crbug.com/823338 -> CHECK that the profiles aren't guest or
         // incognito, causing a crash during session restore.
@@ -741,11 +747,10 @@ size_t ProfileManager::GetNumberOfProfiles() {
   return GetProfileAttributesStorage().GetNumberOfProfiles();
 }
 
-bool ProfileManager::LoadProfile(const std::string& profile_base_name,
+bool ProfileManager::LoadProfile(const base::FilePath& profile_base_name,
                                  bool incognito,
                                  ProfileLoadedCallback callback) {
-  const base::FilePath profile_path =
-      user_data_dir().AppendASCII(profile_base_name);
+  const base::FilePath profile_path = user_data_dir().Append(profile_base_name);
   return LoadProfileByPath(profile_path, incognito, std::move(callback));
 }
 
@@ -842,7 +847,16 @@ base::FilePath ProfileManager::GetInitialProfileDir() {
 }
 
 base::FilePath ProfileManager::GetLastUsedProfileDir() {
-  return user_data_dir_.AppendASCII(GetLastUsedProfileBaseName());
+  return user_data_dir_.Append(GetLastUsedProfileBaseName());
+}
+
+base::FilePath ProfileManager::GetProfileDirForEmail(const std::string& email) {
+  for (const auto* entry :
+       GetProfileAttributesStorage().GetAllProfilesAttributes()) {
+    if (gaia::AreEmailsSame(base::UTF16ToUTF8(entry->GetUserName()), email))
+      return entry->GetPath();
+  }
+  return base::FilePath();
 }
 
 std::vector<Profile*> ProfileManager::GetLoadedProfiles() const {
@@ -1003,6 +1017,17 @@ ProfileShortcutManager* ProfileManager::profile_shortcut_manager() {
   return profile_shortcut_manager_.get();
 }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+AccountProfileMapper* ProfileManager::GetAccountProfileMapper() {
+  if (!account_profile_mapper_) {
+    account_profile_mapper_ = std::make_unique<AccountProfileMapper>(
+        GetAccountManagerFacade(/*profile_path=*/std::string()),
+        &GetProfileAttributesStorage());
+  }
+  return account_profile_mapper_.get();
+}
+#endif
+
 #if !defined(OS_ANDROID)
 void ProfileManager::MaybeScheduleProfileForDeletion(
     const base::FilePath& profile_dir,
@@ -1076,7 +1101,8 @@ void ProfileManager::AutoloadProfiles() {
 }
 
 void ProfileManager::CleanUpEphemeralProfiles() {
-  const std::string last_used_profile_base_name = GetLastUsedProfileBaseName();
+  const base::FilePath last_used_profile_base_name =
+      GetLastUsedProfileBaseName();
   bool last_active_profile_deleted = false;
   base::FilePath new_profile_path;
   std::vector<base::FilePath> profiles_to_delete;
@@ -1088,7 +1114,7 @@ void ProfileManager::CleanUpEphemeralProfiles() {
     if (entry->IsEphemeral()) {
       profiles_to_delete.push_back(profile_path);
       RemoveFromLastActiveProfilesPrefList(profile_path);
-      if (profile_path.BaseName().MaybeAsASCII() == last_used_profile_base_name)
+      if (profile_path.BaseName() == last_used_profile_base_name)
         last_active_profile_deleted = true;
     } else if (new_profile_path.empty()) {
       new_profile_path = profile_path;
@@ -1103,7 +1129,7 @@ void ProfileManager::CleanUpEphemeralProfiles() {
     if (new_profile_path.empty())
       new_profile_path = GenerateNextProfileDirectoryPath();
 
-    profiles::SetLastUsedProfile(new_profile_path.BaseName().MaybeAsASCII());
+    profiles::SetLastUsedProfile(new_profile_path.BaseName());
   }
 
   for (const base::FilePath& profile_path : profiles_to_delete) {
@@ -1463,8 +1489,10 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
   // The caret browsing command-line switch toggles caret browsing on
   // initially, but the user can still toggle it from there.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableCaretBrowsing))
+          switches::kEnableCaretBrowsing)) {
     profile->GetPrefs()->SetBoolean(prefs::kCaretBrowsingEnabled, true);
+  }
+#endif  // !defined(OS_ANDROID)
 
   // Delete browsing data specified by the ClearBrowsingDataOnExitList policy
   // if they were not properly deleted on the last browser shutdown.
@@ -1476,7 +1504,6 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
     browsing_data_lifetime_manager->ClearBrowsingDataForOnExitPolicy(
         /*keep_browser_alive=*/false);
   }
-#endif
 }
 
 void ProfileManager::DoFinalInitForServices(Profile* profile,
@@ -1581,7 +1608,7 @@ void ProfileManager::DoFinalInitLogging(Profile* profile) {
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&ProfileSizeTask, profile->GetPath(), enabled_app_count),
-      base::TimeDelta::FromSeconds(112));
+      base::Seconds(112));
 }
 
 ProfileManager::ProfileInfo::ProfileInfo() {
@@ -1915,14 +1942,10 @@ void ProfileManager::OnLoadProfileForProfileDeletion(
       sync_service->StopAndClear();
     }
 
-    ProfileAttributesEntry* entry =
-        storage.GetProfileAttributesWithPath(profile_dir);
-    DCHECK(entry);
-    ProfileMetrics::LogProfileDelete(entry->IsAuthenticated());
     // Some platforms store passwords in keychains. They should be removed.
     scoped_refptr<password_manager::PasswordStoreInterface> password_store =
-        PasswordStoreFactory::GetInterfaceForProfile(
-            profile, ServiceAccessType::EXPLICIT_ACCESS)
+        PasswordStoreFactory::GetForProfile(profile,
+                                            ServiceAccessType::EXPLICIT_ACCESS)
             .get();
     if (password_store.get()) {
       password_store->RemoveLoginsCreatedBetween(
@@ -1965,8 +1988,7 @@ void ProfileManager::FinishDeletingProfile(
     const base::FilePath& new_active_profile_dir) {
   // Update the last used profile pref before closing browser windows. This
   // way the correct last used profile is set for any notification observers.
-  profiles::SetLastUsedProfile(
-      new_active_profile_dir.BaseName().MaybeAsASCII());
+  profiles::SetLastUsedProfile(new_active_profile_dir.BaseName());
 
   // Attempt to load the profile before deleting it to properly clean up
   // profile-specific data stored outside the profile directory.
@@ -2180,7 +2202,7 @@ void ProfileManager::SaveActiveProfiles() {
   // GetBaseName(). In that case, we cannot restore both
   // profiles. Include each base name only once in the last active profile
   // list.
-  std::set<std::string> profile_paths;
+  std::set<base::FilePath> profile_paths;
   std::vector<Profile*>::const_iterator it;
   for (it = active_profiles_.begin(); it != active_profiles_.end(); ++it) {
     // crbug.com/823338 -> CHECK that the profiles aren't guest or incognito,
@@ -2189,16 +2211,15 @@ void ProfileManager::SaveActiveProfiles() {
         << "Guest profiles shouldn't be saved as active profiles";
     CHECK(!(*it)->IsOffTheRecord())
         << "OTR profiles shouldn't be saved as active profiles";
-    std::string profile_path = (*it)->GetBaseName().MaybeAsASCII();
+    base::FilePath profile_path = (*it)->GetBaseName();
     // Some profiles might become ephemeral after they are created.
     // Don't persist the System Profile as one of the last actives, it should
     // never get a browser.
     if (!IsEphemeral(*it) &&
         profile_paths.find(profile_path) == profile_paths.end() &&
-        profile_path !=
-            base::FilePath(chrome::kSystemProfileDir).AsUTF8Unsafe()) {
+        profile_path != base::FilePath(chrome::kSystemProfileDir)) {
       profile_paths.insert(profile_path);
-      profile_list->AppendString(profile_path);
+      profile_list->Append(profile_path.AsUTF8Unsafe());
     }
   }
 }
@@ -2240,9 +2261,9 @@ void ProfileManager::OnBrowserClosed(Browser* browser) {
 
   if (profile->IsGuestSession()) {
     auto duration = base::Time::Now() - profile->GetCreationTime();
-    base::UmaHistogramCustomCounts(
-        "Profile.Guest.OTR.Lifetime", duration.InMinutes(), 1,
-        base::TimeDelta::FromDays(28).InMinutes(), 100);
+    base::UmaHistogramCustomCounts("Profile.Guest.OTR.Lifetime",
+                                   duration.InMinutes(), 1,
+                                   base::Days(28).InMinutes(), 100);
 
     CleanUpGuestProfile();
   }
@@ -2260,7 +2281,6 @@ void ProfileManager::OnBrowserClosed(Browser* browser) {
     // Delete if the profile is an ephemeral profile.
     ScheduleForcedEphemeralProfileForDeletion(path);
   } else if (!profile->IsOffTheRecord()) {
-#if !defined(OS_ANDROID)
     auto* browsing_data_lifetime_manager =
         ChromeBrowsingDataLifetimeManagerFactory::GetForProfile(
             original_profile);
@@ -2269,7 +2289,6 @@ void ProfileManager::OnBrowserClosed(Browser* browser) {
       browsing_data_lifetime_manager->ClearBrowsingDataForOnExitPolicy(
           /*keep_browser_alive=*/true);
     }
-#endif
   }
 }
 
@@ -2285,7 +2304,7 @@ void ProfileManager::UpdateLastUser(Profile* last_active) {
   // Also never consider the SystemProfile as "active".
   if (profiles_info_.find(last_active->GetPath()) != profiles_info_.end() &&
       !last_active->IsSystemProfile()) {
-    std::string profile_path_base = last_active->GetBaseName().MaybeAsASCII();
+    base::FilePath profile_path_base = last_active->GetBaseName();
     if (profile_path_base != GetLastUsedProfileBaseName())
       profiles::SetLastUsedProfile(profile_path_base);
 

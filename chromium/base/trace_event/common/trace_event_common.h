@@ -144,12 +144,15 @@
 //   class MyData : public base::trace_event::ConvertableToTraceFormat {
 //    public:
 //     MyData() {}
+//
+//     MyData(const MyData&) = delete;
+//     MyData& operator=(const MyData&) = delete;
+//
 //     void AppendAsTraceFormat(std::string* out) const override {
 //       out->append("{\"foo\":1}");
 //     }
 //    private:
 //     ~MyData() override {}
-//     DISALLOW_COPY_AND_ASSIGN(MyData);
 //   };
 //
 //   TRACE_EVENT1("foo", "bar", "data",
@@ -203,6 +206,7 @@
 
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 // Export Perfetto symbols in the same way as //base symbols.
 #define PERFETTO_COMPONENT_EXPORT BASE_EXPORT
@@ -260,6 +264,11 @@ namespace legacy {
 template <>
 perfetto::ThreadTrack BASE_EXPORT
 ConvertThreadId(const ::base::PlatformThreadId& thread);
+
+#if defined(OS_WIN)
+template <>
+perfetto::ThreadTrack BASE_EXPORT ConvertThreadId(const int& thread);
+#endif  // defined(OS_WIN)
 
 }  // namespace legacy
 

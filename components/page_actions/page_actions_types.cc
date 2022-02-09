@@ -16,6 +16,5 @@ ScriptFile& ScriptFile::operator=(ScriptFile&& other) = default;
 ScriptDirectory::ScriptDirectory() = default;
 ScriptDirectory::~ScriptDirectory() = default;
 ScriptDirectory::ScriptDirectory(ScriptDirectory&& other) = default;
-ScriptDirectory& ScriptDirectory::operator=(ScriptDirectory&& other) =
-    default;
+ScriptDirectory& ScriptDirectory::operator=(ScriptDirectory&& other) = default;
 }  // namespace page_actions

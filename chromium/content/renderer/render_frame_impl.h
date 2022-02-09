@@ -68,6 +68,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
@@ -76,11 +77,11 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/unique_name/unique_name_helper.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
+#include "third_party/blink/public/mojom/browser_interface_broker.mojom.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
-#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/policy_container.mojom-shared.h"
@@ -110,6 +111,7 @@
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "v8/include/v8-forward.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/common/pepper_plugin.mojom.h"
@@ -261,6 +263,9 @@ class CONTENT_EXPORT RenderFrameImpl
   // Overwrites the given URL to use an HTML5 embed if possible.
   blink::WebURL OverrideFlashEmbedWithHTML(const blink::WebURL& url) override;
 
+  RenderFrameImpl(const RenderFrameImpl&) = delete;
+  RenderFrameImpl& operator=(const RenderFrameImpl&) = delete;
+
   ~RenderFrameImpl() override;
 
   // Returns the unique name of the RenderFrame.
@@ -360,7 +365,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void PluginDidStartLoading() override;
   void PluginDidStopLoading() override;
 #endif
-  bool IsFTPDirectoryListing() override;
   void SetSelectedText(const std::u16string& selection_text,
                        size_t offset,
                        const gfx::Range& range) override;
@@ -377,6 +381,8 @@ class CONTENT_EXPORT RenderFrameImpl
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
       blink::TaskType task_type) override;
   int GetEnabledBindings() override;
+  void EnableMojoJsBindingsWithBroker(
+      mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>) override;
   void SetAccessibilityModeForTest(ui::AXMode new_mode) override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   const RenderFrameMediaPlaybackOptions& GetRenderFrameMediaPlaybackOptions()
@@ -499,7 +505,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebString& fallback_name,
       const blink::FramePolicy& frame_policy,
       const blink::WebFrameOwnerProperties& frame_owner_properties,
-      blink::mojom::FrameOwnerElementType frame_owner_element_type,
+      blink::FrameOwnerElementType frame_owner_element_type,
       blink::WebPolicyContainerBindParams policy_container_bind_params)
       override;
   void InitializeAsChildFrame(blink::WebLocalFrame* parent) override;
@@ -513,7 +519,9 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::PortalToken& portal_token,
       const blink::WebElement& portal_element) override;
   blink::WebRemoteFrame* CreateFencedFrame(
-      const blink::WebElement& fenced_frame_element) override;
+      const blink::WebElement& fenced_frame_element,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::FencedFrameOwnerHostInterfaceBase> receiver) override;
   blink::WebFrame* FindFrame(const blink::WebString& name) override;
   void WillDetach() override;
   void FrameDetached() override;
@@ -545,7 +553,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidCreateDocumentElement() override;
   void RunScriptsAtDocumentElementAvailable() override;
   void DidReceiveTitle(const blink::WebString& title) override;
-  void DidFinishDocumentLoad() override;
+  void DidDispatchDOMContentLoadedEvent() override;
   void RunScriptsAtDocumentReady() override;
   void RunScriptsAtDocumentIdle() override;
   void DidHandleOnloadEvents() override;
@@ -574,6 +582,10 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebURLResponse& response) override;
   void DidChangePerformanceTiming() override;
   void DidObserveInputDelay(base::TimeDelta input_delay) override;
+  void DidObserveUserInteraction(
+      base::TimeDelta max_event_duration,
+      base::TimeDelta total_event_durtaion,
+      blink::UserInteractionType interaction_type) override;
   void DidChangeCpuTiming(base::TimeDelta time) override;
   void DidObserveLoadingBehavior(blink::LoadingBehaviorFlag behavior) override;
   void DidObserveNewFeatureUsage(
@@ -897,7 +909,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // that means we have got specified title. Because in most of webpages,
   // title tags will follow meta tags. In here we try to get encoding of
   // page if it has been specified in meta tag.
-  // c) function:DidFinishDocumentLoadForFrame. When this function is
+  // c) function:DidDispatchDOMContentLoadedEvent. When this function is
   // called, that means we have got whole html page. In here we should
   // finally get right encoding of page.
   void UpdateEncoding(blink::WebFrame* frame, const std::string& encoding_name);
@@ -1214,6 +1226,11 @@ class CONTENT_EXPORT RenderFrameImpl
 
   blink::BrowserInterfaceBrokerProxy browser_interface_broker_proxy_;
 
+  // If valid, the next ExecutionContext created will enable MojoJS bindings and
+  // use this broker to handle Mojo.bindInterface calls.
+  mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
+      mojo_js_interface_broker_;
+
   // Valid during the entire life time of the RenderFrame.
   std::unique_ptr<RenderAccessibilityManager> render_accessibility_manager_;
 
@@ -1469,8 +1486,6 @@ class CONTENT_EXPORT RenderFrameImpl
   bool send_content_state_immediately_ = false;
 
   base::WeakPtrFactory<RenderFrameImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(RenderFrameImpl);
 };
 
 }  // namespace content

@@ -83,6 +83,10 @@ const base::FeatureParam<std::string> kAndroidSurfaceControlModelBlocklist{
 const base::Feature kWebViewSurfaceControl{"WebViewSurfaceControl",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Use thread-safe media path on WebView.
+const base::Feature kWebViewThreadSafeMedia{"WebViewThreadSafeMedia",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Use AImageReader for MediaCodec and MediaPlyer on android.
 const base::Feature kAImageReader{"AImageReader",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
@@ -214,11 +218,13 @@ const base::Feature kEnableDrDc{"EnableDrDc",
 // before gpu service is enabled by default.
 const base::Feature kWebGPUService{"WebGPUService",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+// Enable raw draw for tiles.
+const base::Feature kRawDraw{"RawDraw", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 
 const base::FeatureParam<std::string> kVulkanBlockListByBrand{
-    &kVulkan, "BlockListByBrand", ""};
+    &kVulkan, "BlockListByBrand", "HONOR"};
 
 const base::FeatureParam<std::string> kVulkanBlockListByDevice{
     &kVulkan, "BlockListByDevice", "OP4863|OP4883"};
@@ -312,8 +318,8 @@ bool IsUsingVulkan() {
 
 bool IsDrDcEnabled() {
 #if defined(OS_ANDROID)
-  // Currently only supported on android P.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() !=
+  // Enabled on android P+.
+  if (base::android::BuildInfo::GetInstance()->sdk_int() <
       base::android::SDK_VERSION_P) {
     return false;
   }
@@ -327,10 +333,38 @@ bool IsDrDcEnabled() {
   if (!IsAImageReaderEnabled())
     return false;
 
+  // Currently not supported when passthrough command decoder is enabled.
+  if (UsePassthroughCommandDecoder())
+    return false;
+
   return base::FeatureList::IsEnabled(kEnableDrDc);
 #else
   return false;
 #endif
+}
+
+bool IsUsingThreadSafeMediaForWebView() {
+#if defined(OS_ANDROID)
+  // SurfaceTexture can't be thread-safe.
+  if (!IsAImageReaderEnabled())
+    return false;
+
+  // Not yet compatible with Vulkan.
+  if (IsUsingVulkan())
+    return false;
+
+  // Not yet compatible with SurfaceControl.
+  if (IsAndroidSurfaceControlEnabled())
+    return false;
+
+  return base::FeatureList::IsEnabled(kWebViewThreadSafeMedia);
+#else
+  return false;
+#endif
+}
+
+bool NeedThreadSafeAndroidMedia() {
+  return IsDrDcEnabled() || IsUsingThreadSafeMediaForWebView();
 }
 
 bool IsANGLEValidationEnabled() {
@@ -339,6 +373,10 @@ bool IsANGLEValidationEnabled() {
   }
 
   return base::FeatureList::IsEnabled(kDefaultEnableANGLEValidation);
+}
+
+bool IsUsingRawDraw() {
+  return base::FeatureList::IsEnabled(kRawDraw);
 }
 
 #if defined(OS_ANDROID)

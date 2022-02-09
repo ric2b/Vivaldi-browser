@@ -28,6 +28,7 @@
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/overlay_plane_data.h"
 #include "ui/ozone/public/platform_window_surface.h"
 
 namespace viz {
@@ -453,13 +454,15 @@ void OutputPresenterFuchsia::PresentNextFrame() {
       LOG(ERROR) << "Cannot access SysmemNativePixmap";
       continue;
     }
-    pixmap->ScheduleOverlayPlane(dependency_->GetSurfaceHandle(),
-                                 overlay.plane_z_order, overlay.transform,
-                                 gfx::ToRoundedRect(overlay.display_rect),
-                                 overlay.uv_rect, !overlay.is_opaque,
-                                 gfx::ToRoundedRect(overlay.damage_rect),
-                                 ZxEventsToGpuFences(frame.acquire_fences),
-                                 /*release_fences=*/{});
+    pixmap->ScheduleOverlayPlane(
+        dependency_->GetSurfaceHandle(),
+        gfx::OverlayPlaneData(overlay.plane_z_order, overlay.transform,
+                              gfx::ToRoundedRect(overlay.display_rect),
+                              overlay.uv_rect, !overlay.is_opaque,
+                              gfx::ToRoundedRect(overlay.damage_rect),
+                              overlay.opacity, overlay.priority_hint),
+        ZxEventsToGpuFences(frame.acquire_fences),
+        /*release_fences=*/{});
   }
 
   auto now = base::TimeTicks::Now();
@@ -473,7 +476,7 @@ void OutputPresenterFuchsia::PresentNextFrame() {
         frame.ordinal - presentation_state_->presented_frame_ordinal;
     present_time = presentation_state_->presentation_time +
                    presentation_state_->interval * relative_position -
-                   base::TimeDelta::FromMilliseconds(1);
+                   base::Milliseconds(1);
     present_time = std::max(present_time, now);
   }
 

@@ -75,8 +75,8 @@ mojom::PaymentAddressPtr RedactShippingAddress(
 PaymentRequest::PaymentRequest(
     content::RenderFrameHost* render_frame_host,
     std::unique_ptr<ContentPaymentRequestDelegate> delegate,
-    PaymentRequestWebContentsManager* manager,
-    PaymentRequestDisplayManager* display_manager,
+    base::WeakPtr<PaymentRequestWebContentsManager> manager,
+    base::WeakPtr<PaymentRequestDisplayManager> display_manager,
     mojo::PendingReceiver<mojom::PaymentRequest> receiver,
     base::WeakPtr<ObserverForTest> observer_for_testing)
     : initiator_frame_routing_id_(content::GlobalRenderFrameHostId(
@@ -292,7 +292,9 @@ void PaymentRequest::Show(bool is_user_gesture, bool wait_for_updated_details) {
   journey_logger_.SetTriggerTime();
 
   // A tab can display only one PaymentRequest UI at a time.
-  display_handle_ = display_manager_->TryShow(delegate_->GetContentWeakPtr());
+  if (display_manager_)
+    display_handle_ = display_manager_->TryShow(delegate_->GetContentWeakPtr());
+
   if (!display_handle_) {
     log_.Error(errors::kAnotherUiShowing);
     DCHECK(!has_recorded_completion_);
@@ -426,16 +428,18 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
     journey_logger_.RecordTransactionAmount(
         spec_->details().total->amount->currency,
         spec_->details().total->amount->value, false /*completed*/);
-    if (SatisfiesSkipUIConstraints()) {
-      Pay();
-    } else {
-      // If not skipping UI, then make sure that the browser payment sheet is
-      // being displayed.
-      if (!display_handle_->was_shown())
-        display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
+    if (is_requested_methods_supported_invoked_) {
+      if (SatisfiesSkipUIConstraints()) {
+        Pay();
+      } else {
+        // If not skipping UI, then make sure that the browser payment sheet is
+        // being displayed.
+        if (!display_handle_->was_shown())
+          display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
 
-      if (spec_->request_shipping())
-        state_->SelectDefaultShippingAddressAndNotifyObservers();
+        if (spec_->request_shipping())
+          state_->SelectDefaultShippingAddressAndNotifyObservers();
+      }
     }
   }
 }
@@ -631,6 +635,7 @@ bool PaymentRequest::ChangeShippingAddress(
 void PaymentRequest::AreRequestedMethodsSupportedCallback(
     bool methods_supported,
     const std::string& error_message) {
+  is_requested_methods_supported_invoked_ = true;
   if (is_show_called_ && spec_ && spec_->IsInitialized() &&
       observer_for_testing_) {
     observer_for_testing_->OnAppListReady(weak_ptr_factory_.GetWeakPtr());
@@ -638,9 +643,7 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
 
   if (web_contents() && spec_->IsSecurePaymentConfirmationRequested() &&
       state()->available_apps().empty() &&
-      base::FeatureList::IsEnabled(::features::kSecurePaymentConfirmation) &&
-      base::FeatureList::IsEnabled(
-          ::features::kSecurePaymentConfirmationAPIV3)) {
+      base::FeatureList::IsEnabled(::features::kSecurePaymentConfirmation)) {
     delegate_->ShowNoMatchingPaymentCredentialDialog(
         url_formatter::FormatUrlForSecurityDisplay(
             state_->GetTopOrigin(),
@@ -816,7 +819,9 @@ void PaymentRequest::OnUserCancelled() {
   payment_handler_host_->Disconnect();
   if (observer_for_testing_)
     observer_for_testing_->OnConnectionTerminated();
-  manager_->DestroyRequest(weak_ptr_factory_.GetWeakPtr());
+
+  if (manager_)
+    manager_->DestroyRequest(weak_ptr_factory_.GetWeakPtr());
 }
 
 void PaymentRequest::DidStartMainFrameNavigationToDifferentDocument(
@@ -854,7 +859,9 @@ void PaymentRequest::TerminateConnection() {
     observer_for_testing_->OnConnectionTerminated();
 
   RecordFirstAbortReason(JourneyLogger::ABORT_REASON_MOJO_CONNECTION_ERROR);
-  manager_->DestroyRequest(weak_ptr_factory_.GetWeakPtr());
+
+  if (manager_)
+    manager_->DestroyRequest(weak_ptr_factory_.GetWeakPtr());
 }
 
 void PaymentRequest::Pay() {

@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_base.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/instance_registry.h"
 #include "components/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -27,7 +28,7 @@ class ImageSkia;
 }  // namespace gfx
 
 namespace web_app {
-class WebAppsChromeOs;
+class WebApps;
 }  // namespace web_app
 
 namespace apps {
@@ -35,6 +36,8 @@ namespace apps {
 class AppPlatformMetrics;
 class AppPlatformMetricsService;
 class BorealisApps;
+class BrowserAppInstanceRegistry;
+class BrowserAppInstanceTracker;
 class BuiltInChromeOsApps;
 class CrostiniApps;
 class ExtensionAppsChromeOs;
@@ -52,7 +55,8 @@ struct PauseData {
 // OS.
 //
 // See components/services/app_service/README.md.
-class AppServiceProxyChromeOs : public AppServiceProxyBase {
+class AppServiceProxyChromeOs : public AppServiceProxyBase,
+                                public apps::AppRegistryCache::Observer {
  public:
   using OnPauseDialogClosedCallback = base::OnceCallback<void()>;
 
@@ -63,6 +67,9 @@ class AppServiceProxyChromeOs : public AppServiceProxyBase {
 
   apps::InstanceRegistry& InstanceRegistry();
   apps::AppPlatformMetrics* AppPlatformMetrics();
+
+  apps::BrowserAppInstanceTracker* BrowserAppInstanceTracker();
+  apps::BrowserAppInstanceRegistry* BrowserAppInstanceRegistry();
 
   // apps::AppServiceProxyBase overrides:
   void Uninstall(const std::string& app_id,
@@ -164,6 +171,8 @@ class AppServiceProxyChromeOs : public AppServiceProxyBase {
 
   // apps::AppRegistryCache::Observer overrides:
   void OnAppUpdate(const apps::AppUpdate& update) override;
+  void OnAppRegistryCacheWillBeDestroyed(
+      apps::AppRegistryCache* cache) override;
 
   void PerformPostLaunchTasks(apps::mojom::LaunchSource launch_source) override;
 
@@ -185,12 +194,17 @@ class AppServiceProxyChromeOs : public AppServiceProxyBase {
   std::unique_ptr<ExtensionAppsChromeOs> extension_apps_;
   std::unique_ptr<PluginVmApps> plugin_vm_apps_;
   std::unique_ptr<StandaloneBrowserApps> standalone_browser_apps_;
-  std::unique_ptr<web_app::WebAppsChromeOs> web_apps_;
+  std::unique_ptr<web_app::WebApps> web_apps_;
   std::unique_ptr<BorealisApps> borealis_apps_;
 
   bool arc_is_registered_ = false;
 
   apps::InstanceRegistry instance_registry_;
+
+  std::unique_ptr<apps::BrowserAppInstanceTracker>
+      browser_app_instance_tracker_;
+  std::unique_ptr<apps::BrowserAppInstanceRegistry>
+      browser_app_instance_registry_;
 
   // When PauseApps is called, the app is added to |pending_pause_requests|.
   // When the user clicks the OK from the pause app dialog, the pause status is

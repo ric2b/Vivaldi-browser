@@ -8,6 +8,8 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace prefs {
 
 const char kPrivacySandboxApisEnabled[] = "privacy_sandbox.apis_enabled";
@@ -30,9 +32,15 @@ extern const char kPrivacySandboxFlocEnabled[] = "privacy_sandbox.floc_enabled";
 namespace privacy_sandbox {
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  if (vivaldi::IsVivaldiRunning())
+    registry->RegisterBooleanPref(
+        prefs::kPrivacySandboxApisEnabled, false,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  else {
   registry->RegisterBooleanPref(
       prefs::kPrivacySandboxApisEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  }
   registry->RegisterBooleanPref(
       prefs::kPrivacySandboxManuallyControlled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);

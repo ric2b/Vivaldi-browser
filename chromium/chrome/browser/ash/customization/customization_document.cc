@@ -31,9 +31,9 @@
 #include "chrome/browser/ash/customization/customization_wallpaper_downloader.h"
 #include "chrome/browser/ash/customization/customization_wallpaper_util.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/net/delay_network_call.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/default_app_order.h"
-#include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/extensions/external_loader.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -186,6 +186,11 @@ class ServicesCustomizationExternalLoader
   explicit ServicesCustomizationExternalLoader(Profile* profile)
       : is_apps_set_(false), profile_(profile) {}
 
+  ServicesCustomizationExternalLoader(
+      const ServicesCustomizationExternalLoader&) = delete;
+  ServicesCustomizationExternalLoader& operator=(
+      const ServicesCustomizationExternalLoader&) = delete;
+
   Profile* profile() { return profile_; }
 
   // Used by the ServicesCustomizationDocument to update the current apps.
@@ -221,8 +226,6 @@ class ServicesCustomizationExternalLoader
   bool is_apps_set_;
   base::DictionaryValue apps_;
   Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServicesCustomizationExternalLoader);
 };
 
 // CustomizationDocument implementation. ---------------------------------------
@@ -322,7 +325,7 @@ void StartupCustomizationDocument::Init(
             chromeos::system::kHardwareClassKey, &hwid)) {
       base::ListValue* hwid_list = NULL;
       if (root_->GetList(kHwidMapAttr, &hwid_list)) {
-        for (size_t i = 0; i < hwid_list->GetSize(); ++i) {
+        for (size_t i = 0; i < hwid_list->GetList().size(); ++i) {
           base::DictionaryValue* hwid_dictionary = NULL;
           std::string hwid_mask;
           if (hwid_list->GetDictionary(i, &hwid_dictionary) &&
@@ -429,8 +432,7 @@ ServicesCustomizationDocument::ServicesCustomizationDocument()
     : CustomizationDocument(kAcceptedManifestVersion),
       num_retries_(0),
       load_started_(false),
-      network_delay_(
-          base::TimeDelta::FromMilliseconds(kDefaultNetworkRetryDelayMS)),
+      network_delay_(base::Milliseconds(kDefaultNetworkRetryDelayMS)),
       apply_tasks_started_(0),
       apply_tasks_finished_(0),
       apply_tasks_success_(0) {}
@@ -438,8 +440,7 @@ ServicesCustomizationDocument::ServicesCustomizationDocument()
 ServicesCustomizationDocument::ServicesCustomizationDocument(
     const std::string& manifest)
     : CustomizationDocument(kAcceptedManifestVersion),
-      network_delay_(
-          base::TimeDelta::FromMilliseconds(kDefaultNetworkRetryDelayMS)),
+      network_delay_(base::Milliseconds(kDefaultNetworkRetryDelayMS)),
       apply_tasks_started_(0),
       apply_tasks_finished_(0),
       apply_tasks_success_(0) {
@@ -647,7 +648,7 @@ void ServicesCustomizationDocument::OnSimpleLoaderComplete(
           FROM_HERE,
           base::BindOnce(&ServicesCustomizationDocument::StartFileFetch,
                          weak_ptr_factory_.GetWeakPtr()),
-          base::TimeDelta::FromSeconds(kRetriesDelayInSec));
+          base::Seconds(kRetriesDelayInSec));
       return;
     }
     // This doesn't stop fetching manifest on next restart.
@@ -703,7 +704,7 @@ ServicesCustomizationDocument::GetDefaultAppsInProviderFormat(
   std::unique_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
   const base::ListValue* apps_list = NULL;
   if (root.GetList(kDefaultAppsAttr, &apps_list)) {
-    for (size_t i = 0; i < apps_list->GetSize(); ++i) {
+    for (size_t i = 0; i < apps_list->GetList().size(); ++i) {
       std::string app_id;
       const base::DictionaryValue* app_entry = nullptr;
       std::unique_ptr<base::DictionaryValue> entry;
@@ -722,7 +723,7 @@ ServicesCustomizationDocument::GetDefaultAppsInProviderFormat(
         prefs->Clear();
         break;
       }
-      if (!entry->HasKey(
+      if (!entry->FindKey(
               extensions::ExternalProviderImpl::kExternalUpdateUrl)) {
         entry->SetString(extensions::ExternalProviderImpl::kExternalUpdateUrl,
                          extension_urls::GetWebstoreUpdateUrl().spec());

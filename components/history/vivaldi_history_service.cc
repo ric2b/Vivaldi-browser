@@ -21,7 +21,6 @@ base::CancelableTaskTracker::TaskId HistoryService::TopUrlsPerDay(
       base::BindOnce(&HistoryBackend::TopUrlsPerDay, history_backend_.get(),
                      num_hosts),
       std::move(callback));
-  return 0;
 }
 
 base::CancelableTaskTracker::TaskId HistoryService::VisitSearch(
@@ -36,7 +35,6 @@ base::CancelableTaskTracker::TaskId HistoryService::VisitSearch(
       base::BindOnce(&HistoryBackend::VisitSearch, history_backend_.get(),
                      options),
       std::move(callback));
-  return 0;
 }
 
 base::CancelableTaskTracker::TaskId HistoryService::QueryHistoryWStatement(
@@ -53,7 +51,6 @@ base::CancelableTaskTracker::TaskId HistoryService::QueryHistoryWStatement(
                      history_backend_.get(), sql_statement, search_string,
                      max_hits),
       std::move(callback));
-  return 0;
 }
 
 }  // namespace history

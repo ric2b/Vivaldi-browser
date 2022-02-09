@@ -19,7 +19,6 @@
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cors/cors.h"
-#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/header_util.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
@@ -31,7 +30,7 @@
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
 #include "services/network/url_loader.h"
 #include "services/network/url_loader_factory.h"
-#include "services/network/web_bundle_url_loader_factory.h"
+#include "services/network/web_bundle/web_bundle_url_loader_factory.h"
 #include "url/origin.h"
 
 namespace network {
@@ -174,6 +173,11 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
       trust_token_redemption_policy_(params->trust_token_redemption_policy),
       isolation_info_(params->isolation_info),
       debug_tag_(params->debug_tag),
+      cross_origin_embedder_policy_(
+          params->client_security_state
+              ? params->client_security_state->cross_origin_embedder_policy
+              : CrossOriginEmbedderPolicy()),
+      coep_reporter_(std::move(params->coep_reporter)),
       origin_access_list_(origin_access_list) {
   DCHECK(context_);
   DCHECK(origin_access_list_);
@@ -261,9 +265,12 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
         context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
             resource_request.url, *resource_request.web_bundle_token_params,
             process_id_, std::move(devtools_observer),
-            resource_request.devtools_request_id);
-    client =
-        web_bundle_url_loader_factory->WrapURLLoaderClient(std::move(client));
+            resource_request.devtools_request_id, cross_origin_embedder_policy_,
+            coep_reporter());
+    client = web_bundle_url_loader_factory->MaybeWrapURLLoaderClient(
+        std::move(client));
+    if (!client)
+      return;
   }
 
   mojom::URLLoaderFactory* const inner_url_loader_factory =
@@ -282,6 +289,7 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
         factory_override_ &&
             factory_override_->ShouldSkipCorsEnabledSchemeCheck(),
         std::move(client), traffic_annotation, inner_url_loader_factory,
+        factory_override_ ? nullptr : network_loader_factory_.get(),
         origin_access_list_, context_->cors_preflight_controller(),
         context_->cors_exempt_header_list(),
         GetAllowAnyCorsExemptHeaderForBrowser(), isolation_info_,
@@ -503,6 +511,18 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
        base::EqualsCaseInsensitiveASCII(
            request.method, net::HttpRequestHeaders::kConnectMethod))) {
     mojo::ReportBadMessage("CorsURLLoaderFactory: Forbidden method");
+    return false;
+  }
+
+  // |net_log_params| field is expected to be used within network service.
+  if (request.net_log_params.has_value()) {
+    mojo::ReportBadMessage(
+        "CorsURLLoaderFactory: net_log_params field is not expected.");
+  }
+
+  if (request.target_ip_address_space != mojom::IPAddressSpace::kUnknown) {
+    mojo::ReportBadMessage(
+        "CorsURLLoaderFactory: target_ip_address_space field is set");
     return false;
   }
 

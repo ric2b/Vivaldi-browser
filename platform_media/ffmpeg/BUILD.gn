@@ -1,0 +1,73 @@
+import("//third_party/ffmpeg/ffmpeg_options.gni")
+
+import("//build/config/features.gni")
+import("//vivaldi/gn/config/features.gni")
+
+assert(system_proprietary_codecs)
+
+ffmpeg_config_root =
+    "//third_party/ffmpeg/" +
+    "chromium/config/Chromium/$os_config/$ffmpeg_arch"
+
+generated_file("generate_parser_list") {
+  # Include AAC parser to the list of parsers ffmpeg uses.
+  parser_list_file = ffmpeg_config_root + "/libavcodec/parser_list.c"
+  parser_list_lines = read_file(parser_list_file, "list lines")
+  assert(
+      "static const AVCodecParser * const parser_list[] = {" ==
+          parser_list_lines[0],
+      "Unexpected format of $parser_list_file"
+  )
+  parser_list_lines[0] += "&ff_aac_parser,"
+
+  outputs = ["$target_gen_dir/libavcodec/parser_list.c"]
+  contents = parser_list_lines
+  output_conversion = "list lines"
+}
+
+generated_file("generate_demuxer_list") {
+  # Include AAC demuxer to the list of demuxers ffmpeg uses.
+  demuxer_list_file = ffmpeg_config_root  + "/libavformat/demuxer_list.c"
+  demuxer_list_lines = read_file(demuxer_list_file, "list lines")
+  assert(
+      "static const AVInputFormat * const demuxer_list[] = {" ==
+          demuxer_list_lines[0],
+      "Unexpected format of $demuxer_list_file"
+  )
+  demuxer_list_lines[0] += "&ff_aac_demuxer,"
+
+  outputs = ["$target_gen_dir/libavcodec/demuxer_list.c"]
+  contents = demuxer_list_lines
+  output_conversion = "list lines"
+}
+
+  # Include AAC decoders using platform API to the list of decoders.
+generated_file("generate_decoder_list") {
+  decoder_list_file = ffmpeg_config_root  + "/libavcodec/codec_list.c"
+  decoder_list_lines = read_file(decoder_list_file, "list lines")
+  assert(
+      "static const AVCodec * const codec_list[] = {" ==
+          decoder_list_lines[0],
+      "Unexpected format of $decoder_list_file"
+  )
+  if (is_mac) {
+    decoder_list_lines[0] += "&ff_aac_at_decoder,"
+  } else if (is_win) {
+    decoder_list_lines[0] = "extern const AVCodec ffwmf_aac_decoder;" +
+        decoder_list_lines[0] + "&ffwmf_aac_decoder,"
+  } else {
+    assert(false, "Unsupported platform")
+  }
+
+  outputs = ["$target_gen_dir/libavcodec/codec_list.c"]
+  contents = decoder_list_lines
+  output_conversion = "list lines"
+}
+
+group("generate_config") {
+  deps = [
+      ":generate_parser_list",
+      ":generate_demuxer_list",
+      ":generate_decoder_list",
+  ]
+}

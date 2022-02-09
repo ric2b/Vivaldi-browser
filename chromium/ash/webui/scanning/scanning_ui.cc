@@ -47,10 +47,12 @@ void SetUpWebUIDataSource(content::WebUIDataSource* source,
 
 void AddScanningAppStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"a3OptionText", IDS_SCANNING_APP_A3_OPTION_TEXT},
       {"a4OptionText", IDS_SCANNING_APP_A4_OPTION_TEXT},
       {"actionToolbarPageCountText",
        IDS_SCANNING_APP_ACTION_TOOLBAR_PAGE_COUNT_TEXT},
       {"appTitle", IDS_SCANNING_APP_TITLE},
+      {"b4OptionText", IDS_SCANNING_APP_B4_OPTION_TEXT},
       {"blackAndWhiteOptionText", IDS_SCANNING_APP_BLACK_AND_WHITE_OPTION_TEXT},
       {"cancelButtonText", IDS_SCANNING_APP_CANCEL_BUTTON_TEXT},
       {"cancelFailedToastText", IDS_SCANNING_APP_CANCEL_FAILED_TOAST_TEXT},
@@ -69,11 +71,19 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"grayscaleOptionText", IDS_SCANNING_APP_GRAYSCALE_OPTION_TEXT},
       {"jpgOptionText", IDS_SCANNING_APP_JPG_OPTION_TEXT},
       {"learnMoreButtonLabel", IDS_SCANNING_APP_LEARN_MORE_BUTTON_LABEL},
+      {"legalOptionText", IDS_SCANNING_APP_LEGAL_OPTION_TEXT},
       {"letterOptionText", IDS_SCANNING_APP_LETTER_OPTION_TEXT},
       {"moreSettings", IDS_SCANNING_APP_MORE_SETTINGS},
+      {"multiPageCancelingScanningText",
+       IDS_SCANNING_APP_MULTI_PAGE_CANCELING_SCANNING_TEXT},
+      {"multiPageCheckboxAriaLabel",
+       IDS_SCANNING_APP_MULTI_PAGE_CHECKBOX_ARIA_LABEL},
       {"multiPageCheckboxText", IDS_SCANNING_APP_MULTI_PAGE_CHECKBOX_TEXT},
+      {"multiPageImageAriaLabel", IDS_SCANNING_APP_MULTI_PAGE_IMAGE_ARIA_LABEL},
       {"multiPageScanInstructionsText",
        IDS_SCANNING_APP_MULTI_PAGE_SCAN_INSTRUCTIONS_TEXT},
+      {"multiPageScanProgressText",
+       IDS_SCANNING_APP_MULTI_PAGE_SCAN_PROGRESS_TEXT},
       {"myFilesSelectOption", IDS_SCANNING_APP_MY_FILES_SELECT_OPTION},
       {"noScannersText", IDS_SCANNING_APP_NO_SCANNERS_TEXT},
       {"noScannersSubtext", IDS_SCANNING_APP_NO_SCANNERS_SUBTEXT},
@@ -83,8 +93,10 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"pdfOptionText", IDS_SCANNING_APP_PDF_OPTION_TEXT},
       {"pngOptionText", IDS_SCANNING_APP_PNG_OPTION_TEXT},
       {"pageSizeDropdownLabel", IDS_SCANNING_APP_PAGE_SIZE_DROPDOWN_LABEL},
+      {"removePageButtonLabel", IDS_SCANNING_APP_REMOVE_PAGE_BUTTON_LABEL},
       {"removePageConfirmationText",
        IDS_SCANNING_APP_REMOVE_PAGE_CONFIRMATION_TEXT},
+      {"rescanPageButtonLabel", IDS_SCANNING_APP_RESCAN_PAGE_BUTTON_LABEL},
       {"rescanPageConfirmationText",
        IDS_SCANNING_APP_RESCAN_PAGE_CONFIRMATION_TEXT},
       {"resolutionDropdownLabel", IDS_SCANNING_APP_RESOLUTION_DROPDOWN_LABEL},
@@ -117,6 +129,7 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"showInFolderButtonLabel", IDS_SCANNING_APP_SHOW_IN_FOLDER_BUTTON_LABEL},
       {"sourceDropdownLabel", IDS_SCANNING_APP_SOURCE_DROPDOWN_LABEL},
       {"startScanFailedToast", IDS_SCANNING_APP_START_SCAN_FAILED_TOAST},
+      {"tabloidOptionText", IDS_SCANNING_APP_TABLOID_OPTION_TEXT},
       {"twoSidedDocFeederOptionText",
        IDS_SCANNING_APP_TWO_SIDED_DOC_FEEDER_OPTION_TEXT}};
 
@@ -128,8 +141,8 @@ void AddScanningAppPluralStrings(ScanningHandler* handler) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"editButtonLabel", IDS_SCANNING_APP_EDIT_BUTTON_LABEL},
       {"fileSavedText", IDS_SCANNING_APP_FILE_SAVED_TEXT},
-      {"removePageButtonLabel", IDS_SCANNING_APP_REMOVE_PAGE_BUTTON_LABEL},
-      {"rescanPageButtonLabel", IDS_SCANNING_APP_RESCAN_PAGE_BUTTON_LABEL},
+      {"removePageDialogTitle", IDS_SCANNING_APP_REMOVE_PAGE_DIALOG_TITLE},
+      {"rescanPageDialogTitle", IDS_SCANNING_APP_RESCAN_PAGE_DIALOG_TITLE},
       {"scanButtonText", IDS_SCANNING_APP_SCAN_BUTTON_TEXT},
       {"scannedImagesAriaLabel", IDS_SCANNING_APP_SCANNED_IMAGES_ARIA_LABEL}};
 

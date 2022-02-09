@@ -170,7 +170,6 @@ blink::IntRect FindImageElementRect(blink::WebElement element) {
   while (n) {
     if (blink::IsA<blink::HTMLImageElement>(*n)) {
       return n->PixelSnappedBoundingBox();
-      break;
     }
     n = blink::FlatTreeTraversal::Next(*n, node);
   }
@@ -219,8 +218,7 @@ std::vector<blink::WebElement> GetSpatialNavigationElements(
   blink::WebElementCollection all_elements = frame->GetDocument().All();
   for (blink::WebElement element = all_elements.FirstItem(); !element.IsNull();
        element = all_elements.NextItem()) {
-    gfx::Rect rect =
-        RevertDeviceScaling(element.BoundsInViewport(), scale);
+    gfx::Rect rect = RevertDeviceScaling(element.BoundsInViewport(), scale);
     if (IsInViewport(document, rect, window->innerHeight()) &&
         IsNavigableElement(element) && IsVisible(element) &&
         !IsTooSmall(rect) && !IsCovered(document, rect)) {

@@ -38,8 +38,10 @@ class SharedURLLoaderFactory;
 
 namespace policy {
 
-class SigningService;
+class ClientDataDelegate;
 class DMServerJobConfiguration;
+class RegistrationJobConfiguration;
+class SigningService;
 
 // Implements the core logic required to talk to the device management service.
 // Also keeps track of the current state of the association with the service,
@@ -239,8 +241,10 @@ class POLICY_EXPORT CloudPolicyClient {
   // This method is used to register browser (e.g. for machine-level policies).
   // Device registration with enrollment token should be performed using
   // RegisterWithCertificate method.
-  virtual void RegisterWithToken(const std::string& token,
-                                 const std::string& client_id);
+  virtual void RegisterWithToken(
+      const std::string& token,
+      const std::string& client_id,
+      const ClientDataDelegate& client_data_delegate);
 
   // Sets information about a policy invalidation. Subsequent fetch operations
   // will use the given info, and callers can use fetched_invalidation_version
@@ -791,9 +795,10 @@ class POLICY_EXPORT CloudPolicyClient {
   // Used for issuing requests to the cloud.
   DeviceManagementService* service_ = nullptr;
 
-  // Only one outstanding policy fetch is allowed, so this is tracked in
-  // its own member variable.
-  std::unique_ptr<DeviceManagementService::Job> policy_fetch_request_job_;
+  // Only one outstanding policy fetch or device/user registration request is
+  // allowed. Using a separate job to track those requests. If multiple
+  // requests have been started, only the last one will be kept.
+  std::unique_ptr<DeviceManagementService::Job> unique_request_job_;
 
   // All of the outstanding non-policy-fetch request jobs. These jobs are
   // silently cancelled if Unregister() is called.
@@ -854,6 +859,10 @@ class POLICY_EXPORT CloudPolicyClient {
   // Executes a job to upload a certificate. Onwership of the job is
   // retained by this method.
   void ExecuteCertUploadJob(std::unique_ptr<DMServerJobConfiguration> config);
+
+  // Sets `unique_request_job_` with a new job created with `config`.
+  void CreateUniqueRequestJob(
+      std::unique_ptr<RegistrationJobConfiguration> config);
 
   // Used to store a copy of the previously used |dm_token_|. This is used
   // during re-registration, which gets triggered by a failed policy fetch with

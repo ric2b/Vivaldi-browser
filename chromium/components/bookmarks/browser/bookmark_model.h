@@ -74,6 +74,10 @@ class BookmarkModel : public BookmarkUndoProvider,
                       public KeyedService {
  public:
   explicit BookmarkModel(std::unique_ptr<BookmarkClient> client);
+
+  BookmarkModel(const BookmarkModel&) = delete;
+  BookmarkModel& operator=(const BookmarkModel&) = delete;
+
   ~BookmarkModel() override;
 
   // Triggers the loading of bookmarks, which is an asynchronous operation with
@@ -434,8 +438,6 @@ class BookmarkModel : public BookmarkUndoProvider,
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<BookmarkModel> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BookmarkModel);
 };
 
 }  // namespace bookmarks

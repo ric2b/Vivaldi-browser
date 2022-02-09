@@ -5,19 +5,18 @@
 
 #include <memory>
 
-#include "base/macros.h"
-
 namespace vivaldi {
 
 class StatsReporter {
  public:
   StatsReporter() = default;
+
+  StatsReporter(const StatsReporter&) = delete;
+  StatsReporter& operator=(const StatsReporter&) = delete;
+
   virtual ~StatsReporter() = default;
 
   static std::unique_ptr<StatsReporter> CreateInstance();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(StatsReporter);
 };
 
 }  // namespace vivaldi

@@ -87,7 +87,7 @@ class StorageAccessAPIBrowserTest : public InProcessBrowserTest {
 
   void NavigateToPageWithFrame(const std::string& host) {
     GURL main_url(https_server_.GetURL(host, "/iframe.html"));
-    ui_test_utils::NavigateToURL(browser(), main_url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_url));
   }
 
   void NavigateToNewTabWithFrame(const std::string& host) {
@@ -539,8 +539,7 @@ IN_PROC_BROWSER_TEST_F(StorageAccessAPIBrowserTest,
   storage::test::CheckStorageAccessForFrame(GetNestedFrame(), false);
 
   // Manually create a pre-expired grant and ensure it doesn't grant access.
-  base::Time expiration_time =
-      base::Time::Now() - base::TimeDelta::FromMinutes(5);
+  base::Time expiration_time = base::Time::Now() - base::Minutes(5);
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   settings_map->SetContentSettingDefaultScope(

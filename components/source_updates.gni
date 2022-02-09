@@ -13,6 +13,7 @@ update_target("//components/bookmarks/browser:browser") {
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.h",
     "//vivaldi/components/bookmarks/vivaldi_partners.h",
   ]
+  deps += [ "//vivaldi/components/datasource:dataurl" ]
 }
 
 update_target("//components/history/core/browser:browser") {
@@ -120,9 +121,12 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/capture/capture_page.h",
     "//vivaldi/components/capture/thumbnail_capture_contents.cc",
     "//vivaldi/components/capture/thumbnail_capture_contents.h",
-
-    "//vivaldi/components/datasource/vivaldi_data_source_api.cc",
-    "//vivaldi/components/datasource/vivaldi_data_source_api.h",
+    "//vivaldi/components/datasource/vivaldi_image_store.cc",
+    "//vivaldi/components/datasource/vivaldi_image_store.h",
+    "//vivaldi/components/datasource/vivaldi_theme_io.cc",
+    "//vivaldi/components/datasource/vivaldi_theme_io.h",
+    "//vivaldi/components/theme/vivaldi_theme_download.cc",
+    "//vivaldi/components/theme/vivaldi_theme_download.h",
   ]
 
   if (!is_android) {
@@ -151,6 +155,7 @@ if (!is_android) {
   update_target("//chrome/browser/extensions:extensions") {
     sources += [
       "//vivaldi/components/browser/vivaldi_component_loader.cc",
+      "//vivaldi/components/browser/vivaldi_tabs_event_router.cc",
     ]
   }
 

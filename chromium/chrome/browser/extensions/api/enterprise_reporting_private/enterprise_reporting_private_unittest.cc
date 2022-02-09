@@ -60,14 +60,17 @@ class EnterpriseReportingPrivateGetDeviceIdTest : public ExtensionApiUnittest {
  public:
   EnterpriseReportingPrivateGetDeviceIdTest() = default;
 
+  EnterpriseReportingPrivateGetDeviceIdTest(
+      const EnterpriseReportingPrivateGetDeviceIdTest&) = delete;
+  EnterpriseReportingPrivateGetDeviceIdTest& operator=(
+      const EnterpriseReportingPrivateGetDeviceIdTest&) = delete;
+
   void SetClientId(const std::string& client_id) {
     storage_.SetClientId(client_id);
   }
 
  private:
   policy::FakeBrowserDMTokenStorage storage_;
-
-  DISALLOW_COPY_AND_ASSIGN(EnterpriseReportingPrivateGetDeviceIdTest);
 };
 
 TEST_F(EnterpriseReportingPrivateGetDeviceIdTest, GetDeviceId) {
@@ -95,6 +98,11 @@ class EnterpriseReportingPrivateDeviceDataFunctionsTest
  public:
   EnterpriseReportingPrivateDeviceDataFunctionsTest() = default;
 
+  EnterpriseReportingPrivateDeviceDataFunctionsTest(
+      const EnterpriseReportingPrivateDeviceDataFunctionsTest&) = delete;
+  EnterpriseReportingPrivateDeviceDataFunctionsTest& operator=(
+      const EnterpriseReportingPrivateDeviceDataFunctionsTest&) = delete;
+
   void SetUp() override {
     ExtensionApiUnittest::SetUp();
     ASSERT_TRUE(fake_appdata_dir_.CreateUniqueTempDir());
@@ -103,22 +111,20 @@ class EnterpriseReportingPrivateDeviceDataFunctionsTest
 
  private:
   base::ScopedTempDir fake_appdata_dir_;
-
-  DISALLOW_COPY_AND_ASSIGN(EnterpriseReportingPrivateDeviceDataFunctionsTest);
 };
 
 TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, StoreDeviceData) {
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateSetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> values = std::make_unique<base::ListValue>();
-  values->AppendString("a");
+  values->Append("a");
   values->Append(
       std::make_unique<base::Value>(base::Value::BlobStorage({1, 2, 3})));
   extension_function_test_utils::RunFunction(function.get(), std::move(values),
                                              browser(),
                                              extensions::api_test_utils::NONE);
   ASSERT_TRUE(function->GetResultList());
-  EXPECT_EQ(0u, function->GetResultList()->GetSize());
+  EXPECT_EQ(0u, function->GetResultList()->GetList().size());
   EXPECT_TRUE(function->GetError().empty());
 }
 
@@ -126,12 +132,12 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, DeviceDataMissing) {
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> values = std::make_unique<base::ListValue>();
-  values->AppendString("b");
+  values->Append("b");
   extension_function_test_utils::RunFunction(function.get(), std::move(values),
                                              browser(),
                                              extensions::api_test_utils::NONE);
   ASSERT_TRUE(function->GetResultList());
-  EXPECT_EQ(1u, function->GetResultList()->GetSize());
+  EXPECT_EQ(1u, function->GetResultList()->GetList().size());
   EXPECT_TRUE(function->GetError().empty());
 
   const base::Value* single_result = nullptr;
@@ -146,7 +152,7 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, DeviceBadId) {
       base::MakeRefCounted<EnterpriseReportingPrivateSetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> set_values =
       std::make_unique<base::ListValue>();
-  set_values->AppendString("a/b");
+  set_values->Append("a/b");
   set_values->Append(
       std::make_unique<base::Value>(base::Value::BlobStorage({1, 2, 3})));
   extension_function_test_utils::RunFunction(set_function.get(),
@@ -158,12 +164,12 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, DeviceBadId) {
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> values = std::make_unique<base::ListValue>();
-  values->AppendString("a");
+  values->Append("a");
   extension_function_test_utils::RunFunction(function.get(), std::move(values),
                                              browser(),
                                              extensions::api_test_utils::NONE);
   ASSERT_TRUE(function->GetResultList());
-  EXPECT_EQ(0u, function->GetResultList()->GetSize());
+  EXPECT_EQ(0u, function->GetResultList()->GetList().size());
   EXPECT_FALSE(function->GetError().empty());
 }
 
@@ -172,7 +178,7 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, RetrieveDeviceData) {
       base::MakeRefCounted<EnterpriseReportingPrivateSetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> set_values =
       std::make_unique<base::ListValue>();
-  set_values->AppendString("c");
+  set_values->Append("c");
   set_values->Append(
       std::make_unique<base::Value>(base::Value::BlobStorage({1, 2, 3})));
   extension_function_test_utils::RunFunction(set_function.get(),
@@ -183,7 +189,7 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, RetrieveDeviceData) {
   auto get_function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> values = std::make_unique<base::ListValue>();
-  values->AppendString("c");
+  values->Append("c");
   extension_function_test_utils::RunFunction(get_function.get(),
                                              std::move(values), browser(),
                                              extensions::api_test_utils::NONE);
@@ -200,7 +206,7 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, RetrieveDeviceData) {
       base::MakeRefCounted<EnterpriseReportingPrivateSetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> reset_values =
       std::make_unique<base::ListValue>();
-  reset_values->AppendString("c");
+  reset_values->Append("c");
   extension_function_test_utils::RunFunction(set_function2.get(),
                                              std::move(reset_values), browser(),
                                              extensions::api_test_utils::NONE);
@@ -210,12 +216,12 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, RetrieveDeviceData) {
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   std::unique_ptr<base::ListValue> values2 =
       std::make_unique<base::ListValue>();
-  values2->AppendString("c");
+  values2->Append("c");
   extension_function_test_utils::RunFunction(get_function2.get(),
                                              std::move(values2), browser(),
                                              extensions::api_test_utils::NONE);
   ASSERT_TRUE(get_function2->GetResultList());
-  EXPECT_EQ(1u, get_function2->GetResultList()->GetSize());
+  EXPECT_EQ(1u, get_function2->GetResultList()->GetList().size());
   EXPECT_TRUE(get_function2->GetError().empty());
 
   EXPECT_TRUE(get_function2->GetResultList()->Get(0, &single_result));
@@ -233,6 +239,13 @@ class EnterpriseReportingPrivateGetPersistentSecretFunctionTest
  public:
   EnterpriseReportingPrivateGetPersistentSecretFunctionTest() = default;
 
+  EnterpriseReportingPrivateGetPersistentSecretFunctionTest(
+      const EnterpriseReportingPrivateGetPersistentSecretFunctionTest&) =
+      delete;
+  EnterpriseReportingPrivateGetPersistentSecretFunctionTest& operator=(
+      const EnterpriseReportingPrivateGetPersistentSecretFunctionTest&) =
+      delete;
+
   void SetUp() override {
     ExtensionApiUnittest::SetUp();
 #if defined(OS_WIN)
@@ -245,9 +258,6 @@ class EnterpriseReportingPrivateGetPersistentSecretFunctionTest
 #if defined(OS_WIN)
   registry_util::RegistryOverrideManager registry_override_manager_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(
-      EnterpriseReportingPrivateGetPersistentSecretFunctionTest);
 };
 
 TEST_F(EnterpriseReportingPrivateGetPersistentSecretFunctionTest, GetSecret) {
@@ -313,11 +323,9 @@ TEST_F(EnterpriseReportingPrivateGetDeviceInfoTest, GetDeviceInfo) {
   std::unique_ptr<base::Value> device_info_value =
       RunFunctionAndReturnValue(function.get(), "[]");
   ASSERT_TRUE(device_info_value.get());
-
   enterprise_reporting_private::DeviceInfo info;
   ASSERT_TRUE(enterprise_reporting_private::DeviceInfo::Populate(
       *device_info_value, &info));
-
 #if defined(OS_MAC)
   EXPECT_EQ("macOS", info.os_name);
 #elif defined(OS_WIN)
@@ -340,6 +348,8 @@ TEST_F(EnterpriseReportingPrivateGetDeviceInfoTest, GetDeviceInfo) {
             info.disk_encrypted);
   ASSERT_EQ(1u, info.mac_addresses.size());
   EXPECT_EQ("00:00:00:00:00:00", info.mac_addresses[0]);
+  EXPECT_EQ(*info.windows_machine_domain, "MACHINE_DOMAIN");
+  EXPECT_EQ(*info.windows_user_domain, "USER_DOMAIN");
 #endif
 }
 
@@ -363,6 +373,8 @@ TEST_F(EnterpriseReportingPrivateGetDeviceInfoTest, GetDeviceInfoConversion) {
             info.disk_encrypted);
   ASSERT_EQ(1u, info.mac_addresses.size());
   EXPECT_EQ("00:00:00:00:00:00", info.mac_addresses[0]);
+  EXPECT_EQ(*info.windows_machine_domain, "MACHINE_DOMAIN");
+  EXPECT_EQ(*info.windows_user_domain, "USER_DOMAIN");
 }
 
 #endif  // !defined(OS_CHROMEOS)

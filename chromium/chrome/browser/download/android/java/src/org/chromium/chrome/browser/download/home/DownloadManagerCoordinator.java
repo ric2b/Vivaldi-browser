@@ -44,4 +44,5 @@ public interface DownloadManagerCoordinator {
     /** Vivaldi **/
     void showSettingsUI();
     void showSearchUI();
+    void clearSelection();
 }

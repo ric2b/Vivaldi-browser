@@ -14,7 +14,6 @@ import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.sync.SyncService;
@@ -26,7 +25,6 @@ import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.ChildAccountStatus.Status;
 import org.chromium.components.signin.base.CoreAccountInfo;
-import org.chromium.components.signin.identitymanager.AccountInfoServiceProvider;
 import org.chromium.components.signin.identitymanager.AccountTrackerService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
@@ -64,7 +62,7 @@ public class SigninChecker
         mAccountManagerFacade.getAccounts().then(accounts -> {
             mAccountTrackerService.seedAccountsIfNeeded(() -> {
                 mSigninManager.runAfterOperationInProgress(() -> {
-                    validatePrimaryAccountExists(accounts);
+                    validatePrimaryAccountExists(accounts, /*accountsChanged=*/false);
                     checkChildAccount(accounts);
                 });
             });
@@ -75,10 +73,10 @@ public class SigninChecker
      * This method is invoked every time the accounts on device are seeded.
      */
     @Override
-    public void onAccountsSeeded(List<CoreAccountInfo> accountInfos) {
+    public void onAccountsSeeded(List<CoreAccountInfo> accountInfos, boolean accountsChanged) {
         final List<Account> accounts = AccountUtils.toAndroidAccounts(accountInfos);
         mSigninManager.runAfterOperationInProgress(() -> {
-            validatePrimaryAccountExists(accounts);
+            validatePrimaryAccountExists(accounts, accountsChanged);
             checkChildAccount(accounts);
         });
     }
@@ -91,15 +89,22 @@ public class SigninChecker
     /**
      * Validates that the primary account exists on device.
      */
-    private void validatePrimaryAccountExists(List<Account> accounts) {
+    private void validatePrimaryAccountExists(List<Account> accounts, boolean accountsChanged) {
         final CoreAccountInfo oldAccount =
                 mSigninManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SIGNIN);
         boolean oldSyncConsent =
                 mSigninManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SYNC)
                 != null;
-        if (oldAccount == null
-                || AccountUtils.findAccountByName(accounts, oldAccount.getEmail()) != null) {
-            // Do nothing if user is not signed in or if the primary account is still on device
+        if (oldAccount == null) {
+            // Do nothing if user is not signed in
+            return;
+        }
+        if (AccountUtils.findAccountByName(accounts, oldAccount.getEmail()) != null) {
+            // Reload the accounts if the primary account is still on device and this is triggered
+            // by an accounts change event.
+            if (accountsChanged) {
+                mSigninManager.reloadAllAccountsFromSystem(oldAccount.getId());
+            }
             return;
         }
         // Check whether the primary account is renamed to another account when it is not on device
@@ -132,9 +137,7 @@ public class SigninChecker
                             public void onSignInAborted() {}
                         });
             } else {
-                AccountInfoServiceProvider.get()
-                        .getAccountInfoByEmail(newAccountName)
-                        .then(accountInfo -> { mSigninManager.signin(accountInfo, null); });
+                mSigninManager.signin(AccountUtils.createAccountFromName(newAccountName), null);
             }
         }, false);
     }
@@ -169,17 +172,11 @@ public class SigninChecker
                     @Override
                     public void onSignInAborted() {}
                 };
-                if (ChromeFeatureList.isEnabled(
-                            ChromeFeatureList.WIPE_DATA_ON_CHILD_ACCOUNT_SIGNIN)) {
-                    SyncUserDataWiper.wipeSyncUserData().then((Void v) -> {
-                        RecordUserAction.record("Signin_Signin_WipeDataOnChildAccountSignin2");
-                        mSigninManager.signinAndEnableSync(
-                                SigninAccessPoint.FORCED_SIGNIN, account, signInCallback);
-                    });
-                } else {
+                SyncUserDataWiper.wipeSyncUserData().then((Void v) -> {
+                    RecordUserAction.record("Signin_Signin_WipeDataOnChildAccountSignin2");
                     mSigninManager.signinAndEnableSync(
                             SigninAccessPoint.FORCED_SIGNIN, account, signInCallback);
-                }
+                });
                 return;
             }
         }

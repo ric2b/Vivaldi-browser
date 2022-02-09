@@ -8,18 +8,21 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "chrome/browser/ash/policy/remote_commands/device_command_start_crd_session_job.h"
 #include "components/policy/core/common/remote_commands/remote_commands_factory.h"
 
 namespace policy {
 
-class CRDHostDelegate;
-class CrdLockoutStrategy;
 class DeviceCloudPolicyManagerAsh;
 
 class DeviceCommandsFactoryAsh : public RemoteCommandsFactory {
  public:
   explicit DeviceCommandsFactoryAsh(
       DeviceCloudPolicyManagerAsh* policy_manager);
+
+  DeviceCommandsFactoryAsh(const DeviceCommandsFactoryAsh&) = delete;
+  DeviceCommandsFactoryAsh& operator=(const DeviceCommandsFactoryAsh&) = delete;
+
   ~DeviceCommandsFactoryAsh() override;
 
   // RemoteCommandsFactory:
@@ -29,15 +32,9 @@ class DeviceCommandsFactoryAsh : public RemoteCommandsFactory {
 
  private:
   DeviceCloudPolicyManagerAsh* policy_manager_;
-  // Note: This is used by |crd_host_delegate_| so it must always outlive
-  // |crd_host_delegate_|.
-  std::unique_ptr<CrdLockoutStrategy> crd_lockout_strategy_;
-  std::unique_ptr<CRDHostDelegate> crd_host_delegate_;
+  std::unique_ptr<DeviceCommandStartCrdSessionJob::Delegate> crd_host_delegate_;
 
-  CRDHostDelegate* GetCRDHostDelegate();
-  CrdLockoutStrategy* GetCrdLockoutStrategy();
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceCommandsFactoryAsh);
+  DeviceCommandStartCrdSessionJob::Delegate* GetCrdHostDelegate();
 };
 
 }  // namespace policy

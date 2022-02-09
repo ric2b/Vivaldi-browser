@@ -44,6 +44,10 @@ class WaylandCanvasSurface : public SurfaceOzoneCanvas,
  public:
   WaylandCanvasSurface(WaylandBufferManagerGpu* buffer_manager,
                        gfx::AcceleratedWidget widget);
+
+  WaylandCanvasSurface(const WaylandCanvasSurface&) = delete;
+  WaylandCanvasSurface& operator=(const WaylandCanvasSurface&) = delete;
+
   ~WaylandCanvasSurface() override;
 
   // SurfaceOzoneCanvas
@@ -77,6 +81,7 @@ class WaylandCanvasSurface : public SurfaceOzoneCanvas,
   const gfx::AcceleratedWidget widget_;
 
   gfx::Size size_;
+  float viewport_scale_ = 1.f;
   std::vector<std::unique_ptr<SharedMemoryBuffer>> buffers_;
 
   // Contains pending to be submitted buffers. The vector is processed as FIFO.
@@ -92,8 +97,6 @@ class WaylandCanvasSurface : public SurfaceOzoneCanvas,
 
   // Previously used buffer. Set on OnSubmission().
   SharedMemoryBuffer* previous_buffer_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(WaylandCanvasSurface);
 };
 
 }  // namespace ui

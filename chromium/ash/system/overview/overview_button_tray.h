@@ -41,7 +41,7 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   // overview enter animation time, once ux decides which one to match (both are
   // 300ms currently).
   static constexpr base::TimeDelta kDoubleTapThresholdMs =
-      base::TimeDelta::FromMilliseconds(300);
+      base::Milliseconds(300);
 
   explicit OverviewButtonTray(Shelf* shelf);
   OverviewButtonTray(const OverviewButtonTray&) = delete;
@@ -78,6 +78,7 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
+  void OnThemeChanged() override;
 
  private:
   friend class OverviewButtonTrayTest;

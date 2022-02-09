@@ -17,6 +17,7 @@
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/bookmarks/vivaldi_partners.h"
+#include "components/datasource/resource_reader.h"
 #include "components/locale/locale_kit.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -269,8 +270,8 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
 }
 
 absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
-  vivaldi_partners::AssetReader reader;
-  return reader.ReadJson(locale + ".json");
+  return ResourceReader::ReadJSON(vivaldi_partners::kBookmarkResourceDir,
+                                  locale + ".json");
 }
 
 BookmarkUpdater::BookmarkUpdater(
@@ -495,8 +496,7 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   } else {
     VLOG(2) << "Adding url " << item.title << " guid=" << item.guid;
     node = model_->AddURL(parent_node, index, title, item.url,
-                          custom_meta.map(), absl::nullopt,
-                          item.guid);
+                          custom_meta.map(), absl::nullopt, item.guid);
     stats_.added_urls++;
   }
   return node;
@@ -547,7 +547,7 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
   // We do not clear the partner status when the user selects a custom
   // thumbnail or uses a page snapshot as a thumbnail. So update the
   // thumbnail only if still points to the partner image.
-  if (vivaldi_partners::HasPartnerThumbnailPrefix(
+  if (ResourceReader::IsResourceURL(
           ::vivaldi_bookmark_kit::GetThumbnail(node))) {
     custom_meta.SetThumbnail(item.thumbnail);
   }
@@ -631,8 +631,7 @@ void UpdatePartnersInModel(Profile* profile,
               << " added_urls=" << stats.added_urls
               << " updated_folders=" << stats.updated_folders
               << " updated_urls=" << stats.updated_urls
-              << " removed=" << stats.removed
-              << " skipped=" << skipped
+              << " removed=" << stats.removed << " skipped=" << skipped
               << " locale=" << locale;
 
     if (stats.failed_updates) {

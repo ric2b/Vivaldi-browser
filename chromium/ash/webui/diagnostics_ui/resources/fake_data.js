@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BatteryChargeStatus, BatteryHealth, BatteryInfo, BatteryState, ConnectionType, CpuUsage, ExternalPowerSource, KeyboardInfo, MechanicalLayout, MemoryUsage, Network, NetworkGuidInfo, NetworkState, NetworkType, PhysicalLayout, PowerRoutineResult, RoutineType, StandardRoutineResult, SystemInfo, TouchDeviceInfo, TouchDeviceType, WiFiStateProperties} from './diagnostics_types.js'
+import {AuthenticationType, BatteryChargeStatus, BatteryHealth, BatteryInfo, BatteryState, ConnectionType, CpuUsage, ExternalPowerSource, KeyboardInfo, LockType, MechanicalLayout, MemoryUsage, Network, NetworkGuidInfo, NetworkState, NetworkType, NumberPadPresence, PhysicalLayout, PowerRoutineResult, RoamingState, RoutineType, SecurityType, StandardRoutineResult, SystemInfo, TouchDeviceInfo, TouchDeviceType, WiFiStateProperties} from './diagnostics_types.js'
 import {stringToMojoString16} from './mojo_utils.js';
 
 /** @type {!Array<!BatteryChargeStatus>} */
@@ -248,6 +248,9 @@ export const fakeRoutineResults = new Map([
   [RoutineType.kHttpsLatency, StandardRoutineResult.kTestPassed],
   [RoutineType.kLanConnectivity, StandardRoutineResult.kTestPassed],
   [RoutineType.kSignalStrength, StandardRoutineResult.kTestPassed],
+  [RoutineType.kArcHttp, StandardRoutineResult.kTestPassed],
+  [RoutineType.kArcPing, StandardRoutineResult.kTestPassed],
+  [RoutineType.kArcDnsResolution, StandardRoutineResult.kTestPassed],
 ]);
 
 /** @type {!Map<!RoutineType, !PowerRoutineResult>} */
@@ -294,6 +297,7 @@ export const fakeWiFiStateProperties = {
   frequency: 5745,
   bssid: '44:07:0b:06:2d:85',
   ssid: 'Dial Up',
+  security: SecurityType.kWepPsk,
 };
 
 /** @type {!Network} */
@@ -306,9 +310,34 @@ export let fakeWifiNetwork = {
       frequency: 5745,
       bssid: '44:07:0b:06:2d:85',
       ssid: 'Dial Up',
+      security: SecurityType.kNone,
     },
   },
-  guid: 'wifiGuid',
+  observerGuid: 'wifiGuid',
+  name: 'Dial Up',
+  macAddress: '84:C5:A6:30:3F:31',
+  ipConfig: {
+    ipAddress: '192.168.86.197',
+    gateway: '192.168.86.1',
+    nameServers: ['192.168.86.1'],
+    routingPrefix: 24,
+  },
+};
+
+/** @type {!Network} */
+export let fakeWifiNetworkDisabled = {
+  state: NetworkState.kDisabled,
+  type: NetworkType.kWiFi,
+  typeProperties: {
+    wifi: {
+      signalStrength: 65,
+      frequency: 5745,
+      bssid: '44:07:0b:06:2d:85',
+      ssid: 'Dial Up',
+      security: SecurityType.kNone,
+    },
+  },
+  observerGuid: 'wifiGuidDisabled',
   name: 'Dial Up',
   macAddress: '84:C5:A6:30:3F:31',
   ipConfig: {
@@ -329,9 +358,10 @@ export let fakeWifiNetworkNoNameServers = {
       frequency: 5745,
       bssid: '44:07:0b:06:2d:85',
       ssid: 'Dial Up',
+      security: SecurityType.kNone,
     },
   },
-  guid: 'wifiGuid',
+  observerGuid: 'wifiGuid',
   name: 'Dial Up',
   macAddress: '84:C5:A6:30:3F:31',
   ipConfig: {
@@ -352,9 +382,10 @@ export let fakeWifiNetworkEmptyNameServers = {
       frequency: 5745,
       bssid: '44:07:0b:06:2d:85',
       ssid: 'Dial Up',
+      security: SecurityType.kNone,
     },
   },
-  guid: 'wifiGuid',
+  observerGuid: 'wifiGuid',
   name: 'Dial Up',
   macAddress: '84:C5:A6:30:3F:31',
   ipConfig: {
@@ -375,9 +406,10 @@ export let fakeWifiNetworkMultipleNameServers = {
       frequency: 5745,
       bssid: '44:07:0b:06:2d:85',
       ssid: 'Dial Up',
+      security: SecurityType.kNone,
     },
   },
-  guid: 'wifiGuid',
+  observerGuid: 'wifiGuid',
   name: 'Dial Up',
   macAddress: '84:C5:A6:30:3F:31',
   ipConfig: {
@@ -388,14 +420,86 @@ export let fakeWifiNetworkMultipleNameServers = {
   },
 };
 
+/** @type {!Network} */
+export let fakeWifiNetworkInvalidNameServers = {
+  state: NetworkState.kConnected,
+  type: NetworkType.kWiFi,
+  typeProperties: {
+    wifi: {
+      signalStrength: 65,
+      frequency: 5745,
+      bssid: '44:07:0b:06:2d:85',
+      ssid: 'Dial Up',
+      security: SecurityType.kNone,
+    },
+  },
+  observerGuid: 'wifiGuidInvalidNameServers',
+  name: 'Dial Up',
+  macAddress: '84:C5:A6:30:3F:31',
+  ipConfig: {
+    ipAddress: '192.168.86.197',
+    gateway: '192.168.86.1',
+    nameServers: ['0.0.0.0', '192.168.86.1'],
+    routingPrefix: 24,
+  },
+};
+
+/** @type {!Network} */
+export let fakeWifiNetworkNoIpAddress = {
+  state: NetworkState.kNotConnected,
+  type: NetworkType.kWiFi,
+  typeProperties: {
+    wifi: {
+      signalStrength: 65,
+      frequency: 5745,
+      bssid: '44:07:0b:06:2d:85',
+      ssid: 'Dial Up',
+      security: SecurityType.kNone,
+    },
+  },
+  observerGuid: 'wifiGuidNoIpAddress',
+  name: 'Dial Up',
+  macAddress: '84:C5:A6:30:3F:31',
+  ipConfig: {
+    ipAddress: '',
+    gateway: '192.168.86.1',
+    nameServers: ['0.0.0.0', '192.168.86.1'],
+    routingPrefix: 24,
+  },
+};
+
 export let fakeDisconnectedWifiNetwork = {
   state: NetworkState.kNotConnected,
   type: NetworkType.kWiFi,
   typeProperties: null,
-  guid: 'wifiDisconnectedGuid',
+  observerGuid: 'wifiDisconnectedGuid',
   name: '',
   macAddress: '84:C5:A6:30:3F:31',
   ipConfig: null,
+};
+
+/** @type {!Network} */
+export let fakePortalWifiNetwork = {
+  state: NetworkState.kPortal,
+  type: NetworkType.kWiFi,
+  typeProperties: {
+    wifi: {
+      signalStrength: 65,
+      frequency: 5745,
+      bssid: '44:07:0b:06:2d:85',
+      ssid: 'Dial Up',
+      security: SecurityType.kWepPsk,
+    },
+  },
+  observerGuid: 'wifiPortalGuid',
+  name: '',
+  macAddress: '84:C5:A6:30:3F:31',
+  ipConfig: {
+    ipAddress: '192.168.86.197',
+    gateway: '192.168.86.1',
+    nameServers: ['192.168.86.1', '192.168.86.2'],
+    routingPrefix: 24,
+  },
 };
 
 /** @type {!Network} */
@@ -403,9 +507,11 @@ export let fakeEthernetNetwork = {
   state: NetworkState.kOnline,
   type: NetworkType.kEthernet,
   typeProperties: {
-    ethernet: {},
+    ethernet: {
+      authentication: AuthenticationType.k8021x,
+    },
   },
-  guid: 'ethernetGuid',
+  observerGuid: 'ethernetGuid',
   name: 'ethernetName',
   macAddress: '81:C5:A6:30:3F:31',
   ipConfig: {
@@ -417,13 +523,24 @@ export let fakeEthernetNetwork = {
 };
 
 /** @type {!Network} */
+export let fakeConnectingEthernetNetwork = {
+  state: NetworkState.kConnecting,
+  type: NetworkType.kEthernet,
+  observerGuid: 'ethernetGuid',
+  name: 'ethernetName',
+  macAddress: '81:C5:A6:30:3F:33',
+};
+
+/** @type {!Network} */
 export let fakeDisconnectedEthernetNetwork = {
   state: NetworkState.kNotConnected,
   type: NetworkType.kEthernet,
   typeProperties: {
-    ethernet: {},
+    ethernet: {
+      authentication: AuthenticationType.kNone,
+    },
   },
-  guid: 'ethernetDisconnectedGuid',
+  observerGuid: 'ethernetDisconnectedGuid',
   name: 'ethernetName',
   macAddress: '81:C5:A6:30:3F:32',
   ipConfig: null,
@@ -434,12 +551,36 @@ export let fakeCellularNetwork = {
   state: NetworkState.kConnected,
   type: NetworkType.kCellular,
   typeProperties: {
-    cellular: {},
+    cellular: {
+      networkTechnology: 'LTE',
+      roaming: true,
+      roamingState: RoamingState.kRoaming,
+      signalStrength: 55,
+      iccid: '83948080007483825411',
+      eid: '82099038007008862600508229159883',
+      simLocked: true,
+      lockType: LockType.kSimPin,
+      simAbsent: false,
+    },
   },
-  guid: 'cellularGuid',
+  observerGuid: 'cellularGuid',
   name: 'cellularName',
   macAddress: '85:C5:A6:30:3F:31',
-  ipConfig: null,
+  ipConfig: {
+    ipAddress: '192.168.86.197',
+    gateway: '',
+    nameServers: null,
+    routingPrefix: 0,
+  },
+};
+
+/** @type {!Network} */
+export let fakeCellularDisabledNetwork = {
+  state: NetworkState.kDisabled,
+  type: NetworkType.kCellular,
+  observerGuid: 'cellularDisabledGuid',
+  name: 'cellularName',
+  macAddress: '85:C5:A6:30:3F:31',
 };
 
 /** @type {!Array<!KeyboardInfo>} */
@@ -451,6 +592,7 @@ export let fakeKeyboards = [
     physicalLayout: PhysicalLayout.kChromeOS,
     mechanicalLayout: MechanicalLayout.kAnsi,
     hasAssistantKey: true,
+    numberPadPresent: NumberPadPresence.kPresent,
   },
 ];
 

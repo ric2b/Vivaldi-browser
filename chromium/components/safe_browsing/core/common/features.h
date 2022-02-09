@@ -30,6 +30,9 @@ extern const base::Feature kAdSamplerTriggerFeature;
 // Browsing.
 extern const base::Feature kBetterTelemetryAcrossReports;
 
+// Controls whether Office documents will be scanned using //third_party maldoca
+extern const base::Feature kClientSideDetectionDocumentScanning;
+
 // Enables client side detection on Android.
 extern const base::Feature kClientSideDetectionForAndroid;
 
@@ -70,6 +73,13 @@ extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
 // and implementation are validated experimentally.
 extern const base::Feature kFileAnalysisMimeTypeSniff;
 
+// Determines the tag to pass to Omaha to get a file type policy.
+extern const base::Feature kFileTypePoliciesTag;
+
+// The parameter name used for getting the tag value from
+// `kFileTypePoliciesTag`.
+const char kFileTypePoliciesTagParamName[] = "policy_omaha_tag";
+
 // Enable omitting non-user gesture from referrer chain.
 extern const base::Feature kOmitNonUserGesturesFromReferrerChain;
 
@@ -84,7 +94,7 @@ extern const base::Feature kPasswordProtectionWithToken;
 // scanning.
 extern const base::Feature kPromptEsbForDeepScanning;
 
-// Contros whether users will see an account compromise specific warning
+// Controls whether users will see an account compromise specific warning
 // when Safe Browsing determines a file is associated with stealing cookies.
 extern const base::Feature kSafeBrowsingCTDownloadWarning;
 
@@ -95,6 +105,9 @@ extern const base::Feature kSafeBrowsingEnterpriseCsd;
 // Controls whether we are disabling consumer download checks for users using
 // the enterprise download checks.
 extern const base::Feature kSafeBrowsingDisableConsumerCsdForEnterprise;
+
+// Controls whether page load tokens are added to Safe Browsing requests.
+extern const base::Feature kSafeBrowsingPageLoadToken;
 
 // Controls whether Safe Browsing password reuse warnings are updated with
 // a "Check passwords" button integrated with the CheckPasswords page.
@@ -108,6 +121,9 @@ extern const base::Feature kSafeBrowsingSeparateNetworkContexts;
 // Controls whether cookies are removed from certain communications with Safe
 // Browsing.
 extern const base::Feature kSafeBrowsingRemoveCookies;
+
+// Controls whether cookies are removed when the access token is present.
+extern const base::Feature kSafeBrowsingRemoveCookiesInAuthRequests;
 
 // Controls the daily quota for the suspicious site trigger.
 extern const base::Feature kSuspiciousSiteTriggerQuotaFeature;
@@ -165,6 +181,10 @@ bool GetShouldFillOldPhishGuardProto();
 // Returns the tag used for Client Side Phishing Detection models, as
 // computed from the current feature flags.
 std::string GetClientSideDetectionTag();
+
+// Returns the tag used for file type policies, as computed from the current
+// feature flag.
+std::string GetFileTypePoliciesTag();
 
 }  // namespace safe_browsing
 #endif  // COMPONENTS_SAFE_BROWSING_CORE_COMMON_FEATURES_H_

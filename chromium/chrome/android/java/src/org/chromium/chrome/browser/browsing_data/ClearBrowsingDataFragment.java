@@ -43,6 +43,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.ui.base.DeviceFormFactor;
+
 /**
  * Settings screen that allows the user to clear browsing data.
  * The user can choose which types of data to clear (history, cookies, etc), and the time range
@@ -434,6 +438,11 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
             RecordHistogram.recordBooleanHistogram(DIALOG_HISTOGRAM, true);
         } else {
             dismissProgressDialog();
+            // Vivaldi
+            if (ChromeApplicationImpl.isVivaldi() &&
+                    DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
+                getParentFragmentManager().popBackStack();
+            } else
             getActivity().finish();
             RecordHistogram.recordBooleanHistogram(DIALOG_HISTOGRAM, false);
         }

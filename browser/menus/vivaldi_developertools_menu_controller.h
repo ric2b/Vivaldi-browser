@@ -19,7 +19,7 @@ class Extension;
 namespace ui {
 class Accelerator;
 class SimpleMenuModel;
-}
+}  // namespace ui
 
 namespace vivaldi {
 
@@ -36,7 +36,6 @@ class DeveloperToolsMenuController {
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const;
 
-
  private:
   bool HasFeature();
   const extensions::Extension* GetExtension() const;
@@ -47,6 +46,6 @@ class DeveloperToolsMenuController {
   bool enabled_;
 };
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif  //  BROWSER_MENUS_DEVELOPERTOOLS_MENU_CONTROLLER_H_

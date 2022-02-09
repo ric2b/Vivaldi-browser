@@ -101,7 +101,8 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   // RenderWidgetHostViewBase:
   uint32_t GetCaptureSequenceNumber() const override;
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
-                   const gfx::Rect& bounds) override {}
+                   const gfx::Rect& bounds,
+                   const gfx::Rect& anchor_rect) override {}
   void Focus() override {}
   void SetIsLoading(bool is_loading) override {}
   void UpdateCursor(const WebCursor& cursor) override;
@@ -110,6 +111,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   void UpdateTooltipUnderCursor(const std::u16string& tooltip_text) override {}
   void UpdateTooltipFromKeyboard(const std::u16string& tooltip_text,
                                  const gfx::Rect& bounds) override {}
+  void ClearKeyboardTriggeredTooltip() override {}
   gfx::Rect GetBoundsInRootWindow() override;
   blink::mojom::PointerLockResult LockMouse(bool) override;
   blink::mojom::PointerLockResult ChangeMouseLock(bool) override;
@@ -270,6 +272,11 @@ class TestRenderViewHost
 class RenderViewHostImplTestHarness : public RenderViewHostTestHarness {
  public:
   RenderViewHostImplTestHarness();
+
+  RenderViewHostImplTestHarness(const RenderViewHostImplTestHarness&) = delete;
+  RenderViewHostImplTestHarness& operator=(
+      const RenderViewHostImplTestHarness&) = delete;
+
   ~RenderViewHostImplTestHarness() override;
 
   // contents() is equivalent to static_cast<TestWebContents*>(web_contents())
@@ -294,7 +301,6 @@ class RenderViewHostImplTestHarness : public RenderViewHostTestHarness {
   typedef std::unique_ptr<ui::test::ScopedSetSupportedResourceScaleFactors>
       ScopedSetSupportedScaleFactors;
   ScopedSetSupportedScaleFactors scoped_set_supported_scale_factors_;
-  DISALLOW_COPY_AND_ASSIGN(RenderViewHostImplTestHarness);
 };
 
 }  // namespace content

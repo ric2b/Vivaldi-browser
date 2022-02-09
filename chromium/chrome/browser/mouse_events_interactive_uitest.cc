@@ -30,6 +30,9 @@ class MouseEventsTest : public InProcessBrowserTest {
  public:
   MouseEventsTest() {}
 
+  MouseEventsTest(const MouseEventsTest&) = delete;
+  MouseEventsTest& operator=(const MouseEventsTest&) = delete;
+
   // InProcessBrowserTest:
   void SetUpOnMainThread() override {
     ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
@@ -60,7 +63,7 @@ class MouseEventsTest : public InProcessBrowserTest {
     const GURL url = ui_test_utils::GetTestUrl(
         base::FilePath(),
         base::FilePath(FILE_PATH_LITERAL("mouse_events_test.html")));
-    ui_test_utils::NavigateToURL(browser(), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     WaitForTitle("onload");
 
     // Move the mouse over the div and wait for onmouseover to be called.
@@ -77,8 +80,6 @@ class MouseEventsTest : public InProcessBrowserTest {
     ui_controls::SendMouseMove(bounds.CenterPoint().x(), bounds.y() - 10);
     WaitForTitle("onmouseout");
   }
-
-  DISALLOW_COPY_AND_ASSIGN(MouseEventsTest);
 };
 
 #if defined(OS_MAC)

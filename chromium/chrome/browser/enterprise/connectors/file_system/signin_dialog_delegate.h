@@ -40,11 +40,12 @@ class FileSystemSigninDialogDelegate
   ~FileSystemSigninDialogDelegate() override;
   FileSystemSigninDialogDelegate(content::BrowserContext* browser_context,
                                  const FileSystemSettings& settings,
+                                 absl::optional<std::string> account_login,
                                  AuthorizationCompletedCallback callback);
   // Visible for testing.
- protected:
-  void OnGetCurrentUserResponse(BoxApiCallResponse response,
-                                base::Value user_info);
+  void OnGotOAuthTokens(const GoogleServiceAuthError& status,
+                        const std::string& access_token,
+                        const std::string& refresh_token);
 
  private:
   // ChromeWebModalDialogManagerDelegate:
@@ -64,14 +65,12 @@ class FileSystemSigninDialogDelegate
   views::View* GetInitiallyFocusedView() override;
 
   void OnCancellation();
+  void OnGotCurrentUserResponse(BoxApiCallResponse response,
+                                base::Value user_info);
 
   // content::WebContentsObserver:
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-
-  void OnGotOAuthTokens(const GoogleServiceAuthError& status,
-                        const std::string& access_token,
-                        const std::string& refresh_token);
 
   // Invoke the callback with the status of the auth flow and tokens if
   // obtained.
@@ -88,6 +87,7 @@ class FileSystemSigninDialogDelegate
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory();
 
   const FileSystemSettings settings_;
+  absl::optional<std::string> account_login_;
   std::string access_token_;
   std::string refresh_token_;
   std::unique_ptr<views::WebView> web_view_;

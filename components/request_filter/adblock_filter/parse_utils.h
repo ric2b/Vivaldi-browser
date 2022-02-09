@@ -24,6 +24,7 @@ constexpr auto kTypeStringMap = base::MakeFixedFlatMap<base::StringPiece, int>(
      {"websocket", RequestFilterRule::kWebSocket},
      {"webrtc", RequestFilterRule::kWebRTC},
      {"font", RequestFilterRule::kFont},
+     {"webtransport", RequestFilterRule::kWebTransport},
      {"media", RequestFilterRule::kMedia},
      {"other", RequestFilterRule::kOther},
      {"xbl", RequestFilterRule::kOther},  // Compat with older filter formats

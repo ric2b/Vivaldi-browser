@@ -36,8 +36,6 @@
 #include "ui/resources/grit/ui_resources.h"
 #include "url/gurl.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace {
 
 // web_contents->GetLastCommittedURL in general will not necessarily yield the
@@ -152,16 +150,6 @@ void FaviconSource::StartDataRequest(
                                                  resource_scale_factor));
           return;
         }
-      }
-    }
-
-    if (vivaldi::IsVivaldiRunning()) {
-      // NOTE(espen@vivaldi.com): We append a query section to favicon requests
-      // to prevent a caching problem in react when an icon becomes available.
-      // Remove that section here.
-      int s = page_url.spec().rfind("/?");
-      if (s != -1) {
-        page_url = GURL(page_url.spec().substr(0, s));
       }
     }
 

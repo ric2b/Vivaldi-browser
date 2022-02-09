@@ -24,6 +24,7 @@
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/tray_info_label.h"
 #include "ash/system/tray/tray_popup_utils.h"
+#include "ash/system/tray/tray_utils.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
@@ -62,7 +63,7 @@ namespace ash {
 namespace tray {
 namespace {
 
-const int kMobileNetworkBatteryIconSize = 18;
+const int kMobileNetworkBatteryIconSize = 20;
 const int kPowerStatusPaddingRight = 10;
 const double kAlphaValueForInhibitedIconOpacity = 0.3;
 
@@ -747,7 +748,7 @@ int NetworkListView::UpdateNetworkSectionHeader(
   // visible when the header row is not at the top of the list.
   if (child_index > 0) {
     if (!*separator_view)
-      *separator_view = CreateListSubHeaderSeparator();
+      *separator_view = TrayPopupUtils::CreateListSubHeaderSeparator();
     PlaceViewAtIndex(*separator_view, child_index++);
   } else {
     if (*separator_view)

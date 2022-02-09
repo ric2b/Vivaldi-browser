@@ -179,6 +179,9 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
     /** A cache of title textures to use in different layouts. */
     protected Supplier<LayerTitleCache> mLayerTitleCacheSupplier;
 
+    /** Vivaldi **/
+    private boolean mForceOnSize;
+
     /**
      * Protected class to handle {@link TabModelObserver} related tasks. Extending classes will
      * need to override any related calls to add new functionality
@@ -298,6 +301,9 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
 
         mFrameRequestSupplier =
                 new CompositorModelChangeProcessor.FrameRequestSupplier(this::requestUpdate);
+
+        // Vivaldi
+        mForceOnSize = false;
     }
 
     /**
@@ -671,7 +677,7 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
             float width = mCachedWindowViewport.width() * mPxToDp;
             float height = mCachedWindowViewport.height() * mPxToDp;
             if (width != previousWidth || height != previousHeight
-                    || oldViewportTop != mCachedVisibleViewport.top) {
+                    || oldViewportTop != mCachedVisibleViewport.top || mForceOnSize) { // Vivaldi
                 for (int i = 0; i < mSceneOverlays.size(); i++) {
                     // Note(david@vivaldi.com): When toolbar is at the bottom we apply
                     // |mCachedVisibleViewport.bottom|
@@ -1161,5 +1167,12 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
 
     protected boolean shouldDelayHideAnimation(Layout layoutBeingHidden) {
         return false;
+    }
+
+    /** Vivaldi: Force an onViewportChanged event **/
+    public void forceOnViewportChanged() {
+        mForceOnSize = true;
+        onViewportChanged();
+        mForceOnSize = false;
     }
 }

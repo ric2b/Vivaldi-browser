@@ -120,6 +120,8 @@ static_library("browser_prefs") {
     sources += [
       "native_settings_observer_win.cc",
       "native_settings_observer_win.h",
+      "native_settings_helper_win.h",
+      "native_settings_helper_win.cc",
     ]
   }
   public_deps = [

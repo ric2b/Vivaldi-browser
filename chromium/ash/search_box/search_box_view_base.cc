@@ -60,6 +60,10 @@ class SearchBoxBackground : public views::Background {
       : corner_radius_(corner_radius) {
     SetNativeControlColor(color);
   }
+
+  SearchBoxBackground(const SearchBoxBackground&) = delete;
+  SearchBoxBackground& operator=(const SearchBoxBackground&) = delete;
+
   ~SearchBoxBackground() override = default;
 
   void SetCornerRadius(int corner_radius) { corner_radius_ = corner_radius; }
@@ -76,8 +80,6 @@ class SearchBoxBackground : public views::Background {
   }
 
   int corner_radius_;
-
-  DISALLOW_COPY_AND_ASSIGN(SearchBoxBackground);
 };
 
 // To paint grey background on mic and back buttons, and close buttons for
@@ -131,6 +133,10 @@ class SearchBoxImageButton : public views::ImageButton {
 
     views::InstallCircleHighlightPathGenerator(this);
   }
+
+  SearchBoxImageButton(const SearchBoxImageButton&) = delete;
+  SearchBoxImageButton& operator=(const SearchBoxImageButton&) = delete;
+
   ~SearchBoxImageButton() override {}
 
   // views::View overrides:
@@ -171,8 +177,6 @@ class SearchBoxImageButton : public views::ImageButton {
   }
 
   const char* GetClassName() const override { return "SearchBoxImageButton"; }
-
-  DISALLOW_COPY_AND_ASSIGN(SearchBoxImageButton);
 };
 
 // To show context menu of selected view instead of that of focused view which
@@ -182,6 +186,10 @@ class SearchBoxTextfield : public views::Textfield {
  public:
   explicit SearchBoxTextfield(SearchBoxViewBase* search_box_view)
       : search_box_view_(search_box_view) {}
+
+  SearchBoxTextfield(const SearchBoxTextfield&) = delete;
+  SearchBoxTextfield& operator=(const SearchBoxTextfield&) = delete;
+
   ~SearchBoxTextfield() override = default;
 
   // Overridden from views::View:
@@ -202,7 +210,7 @@ class SearchBoxTextfield : public views::Textfield {
     auto& accessibility = GetViewAccessibility();
     if (accessibility.IsIgnored()) {
       accessibility.OverrideIsIgnored(false);
-      accessibility.NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged);
+      NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged, true);
     }
   }
 
@@ -225,8 +233,6 @@ class SearchBoxTextfield : public views::Textfield {
 
  private:
   SearchBoxViewBase* const search_box_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(SearchBoxTextfield);
 };
 
 SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
@@ -237,13 +243,13 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
   SetLayoutManager(std::make_unique<views::FillLayout>());
   AddChildView(content_container_);
 
+  const int between_child_spacing =
+      kInnerPadding - views::LayoutProvider::Get()->GetDistanceMetric(
+                          views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING);
   box_layout_ =
       content_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal,
-          gfx::Insets(0, kSearchBoxPadding),
-          kInnerPadding -
-              views::LayoutProvider::Get()->GetDistanceMetric(
-                  views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING)));
+          gfx::Insets(0, kSearchBoxPadding), between_child_spacing));
   box_layout_->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   box_layout_->set_minimum_cross_axis_size(kSearchBoxPreferredHeight);
@@ -377,9 +383,12 @@ gfx::Size SearchBoxViewBase::CalculatePreferredSize() const {
 }
 
 void SearchBoxViewBase::OnEnabledChanged() {
-  search_box_->SetEnabled(GetEnabled());
+  bool enabled = GetEnabled();
+  search_box_->SetEnabled(enabled);
   if (close_button_)
-    close_button_->SetEnabled(GetEnabled());
+    close_button_->SetEnabled(enabled);
+  if (assistant_button_)
+    assistant_button_->SetEnabled(enabled);
 }
 
 const char* SearchBoxViewBase::GetClassName() const {

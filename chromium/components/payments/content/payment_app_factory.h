@@ -19,7 +19,6 @@ class GURL;
 
 namespace autofill {
 class AutofillProfile;
-class InternalAuthenticator;
 }  // namespace autofill
 
 namespace content {
@@ -30,6 +29,10 @@ class WebContents;
 namespace url {
 class Origin;
 }  // namespace url
+
+namespace webauthn {
+class InternalAuthenticator;
+}  // namespace webauthn
 
 namespace payments {
 
@@ -63,7 +66,7 @@ class PaymentAppFactory {
 
     virtual const std::vector<mojom::PaymentMethodDataPtr>& GetMethodData()
         const = 0;
-    virtual std::unique_ptr<autofill::InternalAuthenticator>
+    virtual std::unique_ptr<webauthn::InternalAuthenticator>
     CreateInternalAuthenticator() const = 0;
     virtual scoped_refptr<PaymentManifestWebDataService>
     GetPaymentManifestWebDataService() const = 0;
@@ -116,6 +119,10 @@ class PaymentAppFactory {
   };
 
   explicit PaymentAppFactory(PaymentApp::Type type);
+
+  PaymentAppFactory(const PaymentAppFactory&) = delete;
+  PaymentAppFactory& operator=(const PaymentAppFactory&) = delete;
+
   virtual ~PaymentAppFactory();
 
   PaymentApp::Type type() const { return type_; }
@@ -124,8 +131,6 @@ class PaymentAppFactory {
 
  private:
   const PaymentApp::Type type_;
-
-  DISALLOW_COPY_AND_ASSIGN(PaymentAppFactory);
 };
 
 }  // namespace payments

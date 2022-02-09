@@ -430,6 +430,9 @@ NET_ERROR(TLS13_DOWNGRADE_DETECTED, -180)
 // negotiated TLS key exchange method.
 NET_ERROR(SSL_KEY_USAGE_INCOMPATIBLE, -181)
 
+// The ECHConfigList fetched over DNS cannot be parsed.
+NET_ERROR(INVALID_ECH_CONFIG_LIST, -182)
+
 // Certificate error codes
 //
 // The values of certificate error codes must be consecutive.
@@ -1000,4 +1003,4 @@ NET_ERROR(DNS_SECURE_RESOLVER_HOSTNAME_RESOLUTION_FAILED, -808)
 // DNS identified the request as disallowed for insecure connection (http/ws).
 // Error should be handled as if an HTTP redirect was received to redirect to
 // https or wss.
-NET_ERROR(DNS_NAME_HTTPS_ONLY, 809)
+NET_ERROR(DNS_NAME_HTTPS_ONLY, -809)

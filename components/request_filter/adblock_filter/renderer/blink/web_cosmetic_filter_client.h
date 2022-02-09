@@ -14,9 +14,9 @@ class RTCPeerConnectionHandler;
 class WebCosmeticFilterClient {
  public:
   static void BlockWebRTCIfNeeded(
-      WebLocalFrame* web_frame, base::WeakPtr<RTCPeerConnectionHandler> rtc_peer_connection_handler,
-      const webrtc::PeerConnectionInterface::RTCConfiguration&
-          configuration);
+      WebLocalFrame* web_frame,
+      base::WeakPtr<RTCPeerConnectionHandler> rtc_peer_connection_handler,
+      const webrtc::PeerConnectionInterface::RTCConfiguration& configuration);
 };
 
 }  // namespace blink

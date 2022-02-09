@@ -4,7 +4,6 @@
 
 #include "components/payments/content/secure_payment_confirmation_app.h"
 
-#include <sstream>
 #include <utility>
 
 #include "base/base64.h"
@@ -15,11 +14,10 @@
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
-#include "base/strings/strcat.h"
-#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/payments/content/payment_request_spec.h"
+#include "components/payments/core/error_strings.h"
 #include "components/payments/core/method_strings.h"
 #include "components/payments/core/payer_data.h"
 #include "components/webauthn/core/browser/internal_authenticator.h"
@@ -56,7 +54,7 @@ SecurePaymentConfirmationApp::SecurePaymentConfirmationApp(
     const url::Origin& merchant_origin,
     base::WeakPtr<PaymentRequestSpec> spec,
     mojom::SecurePaymentConfirmationRequestPtr request,
-    std::unique_ptr<autofill::InternalAuthenticator> authenticator)
+    std::unique_ptr<webauthn::InternalAuthenticator> authenticator)
     : PaymentApp(/*icon_resource_id=*/0, PaymentApp::Type::INTERNAL),
       content::WebContentsObserver(web_contents_to_observe),
       authenticator_frame_routing_id_(
@@ -69,8 +67,6 @@ SecurePaymentConfirmationApp::SecurePaymentConfirmationApp(
       spec_(spec),
       request_(std::move(request)),
       authenticator_(std::move(authenticator)) {
-  DCHECK(web_contents_to_observe->GetMainFrame()->GetGlobalId() ==
-         authenticator_frame_routing_id_);
   DCHECK(!credential_id_.empty());
 
   app_method_names_.insert(methods::kSecurePaymentConfirmation);
@@ -89,7 +85,7 @@ void SecurePaymentConfirmationApp::InvokePaymentApp(
   options->relying_party_id = effective_relying_party_identity_;
   options->timeout = request_->timeout.has_value()
                          ? request_->timeout.value()
-                         : base::TimeDelta::FromMinutes(kDefaultTimeoutMinutes);
+                         : base::Minutes(kDefaultTimeoutMinutes);
   options->user_verification = device::UserVerificationRequirement::kRequired;
   std::vector<device::PublicKeyCredentialDescriptor> credentials;
 
@@ -112,13 +108,7 @@ void SecurePaymentConfirmationApp::InvokePaymentApp(
   options->challenge = request_->challenge;
   authenticator_->SetPaymentOptions(blink::mojom::PaymentOptions::New(
       spec_->GetTotal(/*selected_app=*/this)->amount.Clone(),
-      request_->instrument.Clone()));
-
-  // We are nullifying the security check by design, and the origin that created
-  // the credential isn't saved anywhere.
-  authenticator_->SetEffectiveOrigin(url::Origin::Create(
-      GURL(base::StrCat({url::kHttpsScheme, url::kStandardSchemeSeparator,
-                         effective_relying_party_identity_}))));
+      request_->instrument.Clone(), request_->payee_origin));
 
   authenticator_->GetAssertion(
       std::move(options),
@@ -226,9 +216,10 @@ mojom::PaymentResponsePtr
 SecurePaymentConfirmationApp::SetAppSpecificResponseFields(
     mojom::PaymentResponsePtr response) const {
   response->secure_payment_confirmation =
-      mojom::SecurePaymentConfirmationResponse::New(response_->info.Clone(),
-                                                    response_->signature,
-                                                    response_->user_handle);
+      mojom::SecurePaymentConfirmationResponse::New(
+          response_->info.Clone(), response_->signature,
+          response_->has_transport, response_->transport,
+          response_->user_handle);
   return response;
 }
 
@@ -249,10 +240,8 @@ void SecurePaymentConfirmationApp::OnGetAssertion(
     return;
 
   if (status != blink::mojom::AuthenticatorStatus::SUCCESS || !response) {
-    std::stringstream status_string_stream;
-    status_string_stream << status;
-    delegate->OnInstrumentDetailsError(base::StringPrintf(
-        "Authenticator returned %s.", status_string_stream.str().c_str()));
+    delegate->OnInstrumentDetailsError(
+        errors::kWebAuthnOperationTimedOutOrNotAllowed);
     RecordSystemPromptResult(
         SecurePaymentConfirmationSystemPromptResult::kCanceled);
     return;

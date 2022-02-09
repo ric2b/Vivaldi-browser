@@ -25,6 +25,7 @@ class RuleSourceHandler {
   using OnUpdateCallback = base::RepeatingCallback<void(RuleSourceHandler*)>;
   using OnTrackerInfosUpdateCallback =
       base::RepeatingCallback<void(const RuleSource&, base::Value)>;
+
   RuleSourceHandler(
       content::BrowserContext* context,
       RuleSource rule_source,
@@ -32,6 +33,8 @@ class RuleSourceHandler {
       OnUpdateCallback on_update_callback,
       OnTrackerInfosUpdateCallback on_tracker_infos_update_callback);
   ~RuleSourceHandler();
+  RuleSourceHandler(const RuleSourceHandler&) = delete;
+  RuleSourceHandler& operator=(const RuleSourceHandler&) = delete;
 
   const RuleSource& rule_source() const { return rule_source_; }
 
@@ -67,9 +70,8 @@ class RuleSourceHandler {
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   base::WeakPtrFactory<RuleSourceHandler> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(RuleSourceHandler);
 };
+
 }  // namespace adblock_filter
 
 #endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_RULE_SOURCE_HANDLER_H_

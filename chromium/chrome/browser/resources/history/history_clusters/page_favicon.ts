@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './shared_vars.js';
+
 import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -28,18 +30,27 @@ class PageFavicon extends PolymerElement {
   static get properties() {
     return {
       /**
-       * The URL for which the favicon is shown.
+       * Whether the favicon belongs to a top visit.
        */
-      url: Object,
+      isTopVisitFavicon: {
+        type: Boolean,
+        reflectToAttribute: true,
+        value: false,
+      },
 
       /**
        * The element's style attribute.
        */
       style: {
         type: String,
+        computed: `computeStyle_(url, isTopVisitFavicon)`,
         reflectToAttribute: true,
-        computed: `computeStyle_(url)`,
       },
+
+      /**
+       * The URL for which the favicon is shown.
+       */
+      url: Object,
     };
   }
 
@@ -47,7 +58,8 @@ class PageFavicon extends PolymerElement {
   // Properties
   //============================================================================
 
-  url: Url = new Url();
+  isTopVisitFavicon: boolean;
+  url: Url;
 
   //============================================================================
   // Helper methods
@@ -56,7 +68,9 @@ class PageFavicon extends PolymerElement {
   private computeStyle_(): string {
     return `background-image:${
         getFaviconForPageURL(
-            this.url.url, false, '', /** --favicon-size */ 16)}`;
+            this.url.url, false, '',
+            this.isTopVisitFavicon ? /** --top-visit-favicon-size */ 24 :
+                                     /** --favicon-size */ 16)}`;
   }
 }
 

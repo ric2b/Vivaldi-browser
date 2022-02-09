@@ -9,4 +9,4 @@ const char kFileSize[] = "fileSize";
 const char kMimeType[] = "mimeType";
 const char kSuggestedFilename[] = "suggestedFilename";
 
-}  // namespace guestview
+}  // namespace guest_view

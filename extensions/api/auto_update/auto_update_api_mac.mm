@@ -12,7 +12,7 @@ namespace extensions {
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   using vivaldi::auto_update::CheckForUpdates::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   AppController* controller =
@@ -67,7 +67,7 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   using vivaldi::auto_update::SetAutoInstallUpdates::Params;
   using ::vivaldi::kSparkleAutoInstallSettingName;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
   NSString* key =
       [NSString stringWithUTF8String:kSparkleAutoInstallSettingName];

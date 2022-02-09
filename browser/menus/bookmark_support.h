@@ -36,6 +36,6 @@ struct BookmarkSupport {
   bool observer_enabled;
 };
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif  // BROWSER_MENUS_BOOKMARK_SUPPORT_H_

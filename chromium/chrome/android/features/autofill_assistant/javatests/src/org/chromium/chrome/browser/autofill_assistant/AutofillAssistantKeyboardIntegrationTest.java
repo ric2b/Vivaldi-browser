@@ -34,7 +34,6 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipType;
@@ -78,7 +77,7 @@ public class AutofillAssistantKeyboardIntegrationTest {
     private boolean isKeyboardVisible() {
         CustomTabActivity activity = mTestRule.getActivity();
         return activity.getWindowAndroid().getKeyboardDelegate().isKeyboardShowing(
-                activity, activity.getCompositorViewHolder());
+                activity, activity.getCompositorViewHolderForTesting());
     }
 
     @Test
@@ -196,7 +195,6 @@ public class AutofillAssistantKeyboardIntegrationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "https://crbug.com/1216453")
     public void keyboardDoesNotShowOnElementClickInIFrame() throws Exception {
         ArrayList<ActionProto> list = new ArrayList<>();
 

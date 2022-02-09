@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Om version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> har ikke sendt nogen data.</translation>
 <translation id="1559528461873125649">Filen eller mappen findes ikke</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Prøv at <ph name="BEGIN_LINK" />gå til websitets startside<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Ikke-understøttet protokol</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv at køre Windows Netværksdiagnosticering<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Dette website indeholder skadelige programmer</translation>
 <translation id="1916770123977586577">Anvend dine opdaterede indstillinger ved at genindlæse denne side</translation>
-<translation id="1919345977826869612">Reklamer</translation>
 <translation id="1974060860693918893">Avanceret</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerer din proxy og din firewall<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Lyd</translation>
 <translation id="2119505898009119320">Udstedt til: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">Synkronisering i baggrunden</translation>
 <translation id="2166378884831602661">Dette website kan ikke levere en sikker forbindelse</translation>
 <translation id="2187317261103489799">Registrer (standard)</translation>
 <translation id="2224337661447660594">Der er ingen internetforbindelse</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">Din internetadgang er blokeret</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> kræver et brugernavn og en adgangskode.</translation>
 <translation id="2337852623177822836">Indstillingen styres af din administrator</translation>
-<translation id="2344028582131185878">Automatiske downloads</translation>
 <translation id="2355395290879513365">Hackere kan muligvis se billederne du ser på denne side, og narre dig ved at modificere dem.</translation>
 <translation id="2356070529366658676">Spørg</translation>
 <translation id="2359808026110333948">Fortsæt</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kører netværksdiagnosticering<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Underretninger</translation>
 <translation id="2491414235131909199">Denne side er blokeret af en udvidelse</translation>
 <translation id="2501278716633472235">Gå tilbage</translation>
 <translation id="2539524384386349900">Registrer</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldigt svar.</translation>
-<translation id="2586657967955657006">Udklipsholder</translation>
 <translation id="2609632851001447353">Varianter</translation>
 <translation id="2634124572758952069">IP-adressen på serveren for <ph name="HOST_NAME" /> kunne ikke findes.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
       at du skal bruge en proxyserver, skal du:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Tryk på genindlæsningsknappen for at genindsende de data, der er nødvendige for at indlæse siden.</translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Registrer altid vigtigt indhold på dette website</translation>
 <translation id="3308738399950580893">reklamer</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan ikke læses i øjeblikket.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Detaljer</translation>
 <translation id="4558551763791394412">Prøv at deaktivere dine udvidelser.</translation>
 <translation id="4592951414987517459">Din forbindelse til <ph name="DOMAIN" /> er krypteret ved hjælp af en moderne krypteringspakke.</translation>
-<translation id="4690462567478992370">Stor brugen af et ugyldigt certifikat</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Din forbindelse blev afbrudt</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Kører Windows Netværksdiagnosticering<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">Eksekverbar sti</translation>
 <translation id="4750917950439032686">Dine oplysninger (f.eks. adgangskoder eller kreditkortnumre) er private, når de sendes til dette website.</translation>
 <translation id="4764776831041365478">Websiden på <ph name="URL" /> kan være midlertidigt nede, eller også er den permanent flyttet til en ny webadresse.</translation>
+<translation id="483241715238664915">Aktivér advarsler</translation>
 <translation id="4943872375798546930">Ingen resultater</translation>
-<translation id="4974590756084640048">Genaktiver advarsler</translation>
 <translation id="5023310440958281426">Læs din administrators politikker</translation>
 <translation id="5039804452771397117">Tillad</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 i brug)}one{(# i brug)}other{(# i brug)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">Kontrollerer forbindelsen</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> omdirigerede dig for mange gange.</translation>
 <translation id="5675650730144413517">Denne side virker ikke</translation>
-<translation id="5689516760719285838">Placering</translation>
-<translation id="5710435578057952990">Dette websites identitet er ikke blevet bekræftet.</translation>
-<translation id="5778550464785688721">Fuld kontrol over MIDI</translation>
 <translation id="5785756445106461925">Desuden indeholder denne side andre ressourcer, som ikke er sikre. Disse ressourcer kan ses af andre under overførslen og kan ændres af en hacker, så siden ser anderledes ud.</translation>
 <translation id="5799902971440853357">Du kan ikke gå til <ph name="SITE" /> lige nu, da websitet sendte krypterede loginoplysninger, som Vivaldi ikke kan behandle. Netværksfejl og angreb er normalt midlertidige, så denne side vil sandsynligvis fungere igen senere.</translation>
 <translation id="5810442152076338065">Din forbindelse til <ph name="DOMAIN" /> er krypteret ved hjælp af en forældet krypteringspakke.</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">Din forbindelse til dette website er ikke sikker</translation>
 <translation id="6203231073485539293">Kontrollér din internetforbindelse</translation>
 <translation id="6225522625585012689">Besøg &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for at se listen over blokerede webadresser og andre politikker, der håndhæves af din systemadministrator.</translation>
-<translation id="625755898061068298">Du har valgt at deaktivere sikkerhedsadvarsler for dette website.</translation>
 <translation id="6264485186158353794">Tilbage i sikkerhed</translation>
 <translation id="6305205051461490394"><ph name="URL" /> kan ikke nås.</translation>
 <translation id="6321917430147971392">Kontrollér dine DNS-indstillinger</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">Brugeragent</translation>
 <translation id="7053983685419859001">Bloker</translation>
 <translation id="7079718277001814089">Dette website indeholder malware</translation>
+<translation id="7096937462164235847">Dette websites identitet er ikke bekræftet.</translation>
 <translation id="7108819624672055576">Tilladt med en udvidelse</translation>
 <translation id="7111012039238467737">(gyldigt)</translation>
 <translation id="7113310725918019676">Tillad <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">Identiteten på den server, som du er tilknyttet, kan ikke bekræftes. Du er tilknyttet en server via et navn, der kun er gyldigt i dit netværk, og som en ekstern certifikatautoritet derfor ikke har mulighed for at bekræfte ejerskabet på. Da enkelte certifikatautoriteter alligevel udsteder certifikater for disse navne, kan vi på ingen måde sikre, at du er tilknyttet det tilsigtede website og ikke til en forbryder.</translation>
 <translation id="7455133967321480974">Brug global standard (bloker)</translation>
 <translation id="7518003948725431193">Ingen webside fundet på webadressen: <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Denne webside kræver data, du tidligere har indtastet, før den kan vises korrekt. Du kan sende disse data igen, men hvis du gør dette, gentager du enhver handling, som denne side tidligere har foretaget.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan i øjeblikket ikke behandle denne anmodning.</translation>
 <translation id="7662298039739062396">Indstillingen styres af en udvidelse</translation>
@@ -227,11 +214,11 @@
 <translation id="9039213469156557790">Desuden indeholder denne side andre ressourcer, som ikke er sikre. Disse ressourcer kan ses af andre under overførslen og kan ændres af en hacker, så siden opfører sig anderledes.</translation>
 <translation id="9062620674789239642">Det kan være blevet flyttet, redigeret eller slettet.</translation>
 <translation id="9069693763241529744">Blokeret af en udvidelse</translation>
+<translation id="9073799351042754113">Du har valgt at deaktivere sikkerhedsadvarsler for dette website.</translation>
 <translation id="910924428752220542">Vivaldi-adgangskoder</translation>
 <translation id="9169664750068251925">Bloker altid på dette website</translation>
 <translation id="9180553614777056266">Ad-blocker</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> anvender en ikke-understøttet protokol.</translation>
-<translation id="9219103736887031265">Billeder</translation>
 <translation id="936602727769022409">Du kan miste adgangen til din Google-konto. Chromium anbefaler, at du skifter din adgangskode nu. Du bliver bedt om at logge ind.</translation>
 <translation id="969892804517981540">Officiel version</translation>
 <translation id="988159990683914416">Udviklerversion</translation>

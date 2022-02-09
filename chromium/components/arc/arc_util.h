@@ -106,6 +106,10 @@ bool IsArcVmUseHugePages();
 // vm_tools/init/arcvm_dev.conf file are ignored during ARCVM start.
 bool IsArcVmDevConfIgnored();
 
+// Returns true if ureadahead is disabled completely, including host and guest
+// parts. See also |GetArcVmUreadaheadMode|.
+bool IsUreadaheadDisabled();
+
 // Returns mode of operation for ureadahead during the ARCVM boot flow.
 // Valid modes are readahead, generate, or disabled.
 ArcVmUreadaheadMode GetArcVmUreadaheadMode(SystemMemoryInfoCallback callback);
@@ -186,11 +190,6 @@ bool IsArcLocaleSyncDisabled();
 // Returns true in case ARC Play Auto Install flow is disabled.
 bool IsArcPlayAutoInstallDisabled();
 
-// Adjusts the amount of CPU the ARC instance is allowed to use. When
-// |cpu_restriction_state| is CPU_RESTRICTION_BACKGROUND, the limit is adjusted
-// so ARC can only use tightly restricted CPU resources.
-void SetArcCpuRestriction(CpuRestrictionState cpu_restriction_state);
-
 // Returns the Android density that should be used for the given device scale
 // factor used on chrome.
 int32_t GetLcdDensityForDeviceScaleFactor(float device_scale_factor);
@@ -205,18 +204,6 @@ int GetSystemPropertyInt(const std::string& property);
 // are successfully processed, |callback| is called with true.
 void ConfigureUpstartJobs(std::deque<JobDesc> jobs,
                           chromeos::VoidDBusMethodCallback callback);
-
-// Returns true if core scheduling is supported in the kernel, and CPU has MDS
-// or L1TF vulnerabilities. Core scheduling does not run on CPUs that are not
-// vulnerable.
-// TODO(yusukes): Once https://crrev.com/c/3063740 is submitted, switch to the
-// function in the CL and delete this.
-bool IsCoreSchedulingAvailable();
-
-// Returns number of physical cores.
-// TODO(yusukes): Once https://crrev.com/c/3063740 is submitted, switch to the
-// function in the CL and delete this.
-int NumberOfProcessorsForCoreScheduling();
 
 }  // namespace arc
 

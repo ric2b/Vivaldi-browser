@@ -10,6 +10,7 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/chromeos_buildflags.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_service_client.h"
 #include "components/metrics/metrics_state_manager.h"
@@ -18,6 +19,10 @@
 #include "components/ukm/ukm_service.h"
 #include "components/variations/service/variations_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "components/metrics/structured/neutrino_logging.h"  // nogncheck
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace metrics_services_manager {
 
@@ -32,9 +37,14 @@ MetricsServicesManager::MetricsServicesManager(
 
 MetricsServicesManager::~MetricsServicesManager() {}
 
-std::unique_ptr<const base::FieldTrial::EntropyProvider>
-MetricsServicesManager::CreateEntropyProvider() {
-  return client_->GetMetricsStateManager()->CreateDefaultEntropyProvider();
+void MetricsServicesManager::InstantiateFieldTrialList(
+    const char* enable_gpu_benchmarking_switch) const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  metrics::structured::NeutrinoDevicesLog(
+      metrics::structured::NeutrinoDevicesLocation::kCreateEntropyProvider);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  client_->GetMetricsStateManager()->InstantiateFieldTrialList(
+      enable_gpu_benchmarking_switch, metrics::EntropyProviderType::kDefault);
 }
 
 metrics::MetricsService* MetricsServicesManager::GetMetricsService() {
@@ -62,6 +72,11 @@ void MetricsServicesManager::LoadingStateChanged(bool is_loading) {
 void MetricsServicesManager::OnPluginLoadingError(
     const base::FilePath& plugin_path) {
   GetMetricsServiceClient()->OnPluginLoadingError(plugin_path);
+}
+
+std::unique_ptr<const base::FieldTrial::EntropyProvider>
+MetricsServicesManager::CreateEntropyProviderForTesting() {
+  return client_->GetMetricsStateManager()->CreateDefaultEntropyProvider();
 }
 
 metrics::MetricsServiceClient*

@@ -65,13 +65,11 @@ const wchar_t kTestMasterPassword[] = L"0perav1v";
 
 const OperaPasswordInfo OperaPasswords[] = {
     {false, password_manager::PasswordForm::Scheme::kHtml,
-     "http://localhost:8081/login",
-     "http://localhost:8081/", L"username", L"user1", L"password", L"password1",
-     false},
+     "http://localhost:8081/login", "http://localhost:8081/", L"username",
+     L"user1", L"password", L"password1", false},
     {false, password_manager::PasswordForm::Scheme::kHtml,
-     "http://localhost:8082/login",
-     "http://localhost:8082/", L"username", L"user2", L"password", L"password2",
-     false},
+     "http://localhost:8082/login", "http://localhost:8082/", L"username",
+     L"user2", L"password", L"password2", false},
 };
 
 const OperaBookmarkInfo OperaBookmarks[] = {
@@ -276,9 +274,9 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
     ExternalProcessImporterHost* host = new ExternalProcessImporterHost;
 
     host->set_observer(observer);
-    host->StartImportSettings(import_profile, browser()->profile(),
-                              imported_items,
-                              base::WrapRefCounted<ProfileWriter>(writer).get());
+    host->StartImportSettings(
+        import_profile, browser()->profile(), imported_items,
+        base::WrapRefCounted<ProfileWriter>(writer).get());
     base::RunLoop().Run();
   }
 

@@ -686,6 +686,10 @@ class GpuMessageHandler
       public ui::GpuSwitchingObserver {
  public:
   GpuMessageHandler();
+
+  GpuMessageHandler(const GpuMessageHandler&) = delete;
+  GpuMessageHandler& operator=(const GpuMessageHandler&) = delete;
+
   ~GpuMessageHandler() override;
 
   // WebUIMessageHandler implementation.
@@ -711,8 +715,6 @@ class GpuMessageHandler
   // True if observing the GpuDataManager (re-attaching as observer would
   // DCHECK).
   bool observing_;
-
-  DISALLOW_COPY_AND_ASSIGN(GpuMessageHandler);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -734,34 +736,30 @@ GpuMessageHandler::~GpuMessageHandler() {
 void GpuMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "browserBridgeInitialized",
       base::BindRepeating(&GpuMessageHandler::OnBrowserBridgeInitialized,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "callAsync", base::BindRepeating(&GpuMessageHandler::OnCallAsync,
                                        base::Unretained(this)));
 }
 
 void GpuMessageHandler::OnCallAsync(const base::ListValue* args) {
-  DCHECK_GE(args->GetSize(), static_cast<size_t>(2));
+  DCHECK_GE(args->GetList().size(), static_cast<size_t>(2));
   // unpack args into requestId, submessage and submessageArgs
   bool ok;
-  const base::Value* requestId;
-  ok = args->Get(0, &requestId);
-  DCHECK(ok);
+  const base::Value& requestId = args->GetList()[0];
 
   std::string submessage;
   ok = args->GetString(1, &submessage);
   DCHECK(ok);
 
   auto submessageArgs = std::make_unique<base::ListValue>();
-  for (size_t i = 2; i < args->GetSize(); ++i) {
-    const base::Value* arg;
-    ok = args->Get(i, &arg);
-    DCHECK(ok);
+  for (size_t i = 2; i < args->GetList().size(); ++i) {
+    const base::Value& arg = args->GetList()[i];
 
-    submessageArgs->Append(arg->Clone());
+    submessageArgs->Append(arg.Clone());
   }
 
   // call the submessage handler
@@ -778,10 +776,10 @@ void GpuMessageHandler::OnCallAsync(const base::ListValue* args) {
   // call BrowserBridge.onCallAsyncReply with result
   if (ret) {
     web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
-                                           *requestId, *ret);
+                                           requestId, *ret);
   } else {
     web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
-                                           *requestId);
+                                           requestId);
   }
 }
 

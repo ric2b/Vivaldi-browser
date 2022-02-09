@@ -15,29 +15,23 @@ class DevtoolsPrivateGetDockingStateSizesFunction : public ExtensionFunction {
 
   DevtoolsPrivateGetDockingStateSizesFunction() = default;
 
- protected:
+ private:
   ~DevtoolsPrivateGetDockingStateSizesFunction() override = default;
 
- private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateGetDockingStateSizesFunction);
 };
 
 class DevtoolsPrivateCloseDevtoolsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.closeDevtools",
-  DEVTOOLSPRIVATE_CLOSEDEVTOOLS)
+                             DEVTOOLSPRIVATE_CLOSEDEVTOOLS)
 
   DevtoolsPrivateCloseDevtoolsFunction() = default;
 
- protected:
+ private:
   ~DevtoolsPrivateCloseDevtoolsFunction() override = default;
 
- private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateCloseDevtoolsFunction);
 };
 
 class DevtoolsPrivateToggleDevtoolsFunction : public ExtensionFunction {
@@ -46,13 +40,10 @@ class DevtoolsPrivateToggleDevtoolsFunction : public ExtensionFunction {
                              DEVTOOLSPRIVATE_TOGGLEDEVTOOLS)
   DevtoolsPrivateToggleDevtoolsFunction() = default;
 
- protected:
+ private:
   ~DevtoolsPrivateToggleDevtoolsFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateToggleDevtoolsFunction);
 };
 
 }  // namespace extensions

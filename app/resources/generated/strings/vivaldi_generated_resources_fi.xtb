@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Kuvavälimuisti</translation>
 <translation id="1601560923496285236">Käytä</translation>
 <translation id="1603914832182249871">(Yksityisikkuna)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Tiedostokuvaajat</translation>
 <translation id="1682548588986054654">Uusi yksityisikkuna</translation>
-<translation id="1706625117072057435">Lähennystasot</translation>
 <translation id="1708338024780164500">(Passiivinen)</translation>
 <translation id="1723824996674794290">&amp;Uusi ikkuna</translation>
-<translation id="1725149567830788547">Näytä &amp;säätimet</translation>
 <translation id="1729533290416704613">Määrittää myös Omnibox-hakujen aloitussivun.</translation>
 <translation id="174123615272205933">Mukautettu</translation>
 <translation id="1744108098763830590">taustasivu</translation>
@@ -89,11 +86,9 @@
 <translation id="2445081178310039857">Laajennuksen juurihakemisto tarvitaan.</translation>
 <translation id="2470702053775288986">Ei-tuetut laajennukset poistettu käytöstä</translation>
 <translation id="2476578072172137802">Sivuston asetukset</translation>
-<translation id="2482878487686419369">Ilmoitukset</translation>
 <translation id="2498539833203011245">Pienennä</translation>
 <translation id="2509495747794740764">Asteikon on oltava numero väliltä 10–200.</translation>
 <translation id="253557089021624350">Keepalive-määrä</translation>
-<translation id="2546283357679194313">Evästeet ja sivustotiedot</translation>
 <translation id="2550212893339833758">Sivutusmuisti</translation>
 <translation id="2553440850688409052">Piilota tämä laajennus</translation>
 <translation id="26224892172169984">Älä anna sivustojen määrittää yhteyskäytäntöjen käsittelypalveluita</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">CSS-välimuisti</translation>
 <translation id="3008272652534848354">Nollaa käyttöoikeudet</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">MIDI-laitteet</translation>
 <translation id="3021678814754966447">&amp;Näytä kehyksen lähdekoodi</translation>
 <translation id="3036546437875325427">Ota Flash käyttöön</translation>
 <translation id="3046910703532196514">Verkkosivu, täydellinen</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Avaa linkki eri käyttäjänä</translation>
 <translation id="3154429428035006212">Ei verkossa yli kuukauteen</translation>
 <translation id="3222066309010235055">Esihahmonna: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3241680850019875542">Voit pakata laajennuksen valitsemalla sen juurihakemiston. Jos haluat päivittää laajennuksen, valitse myös yksityinen avaintiedosto, jotta laajennusta voidaan käyttää uudelleen.</translation>
 <translation id="3280237271814976245">Tallenna &amp;nimellä…</translation>
 <translation id="3285322247471302225">Uusi &amp;välilehti</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">Älä salli suljettujen sivustojen viimeistellä tietojen lähettämistä tai vastaanottamista</translation>
 <translation id="3711931198657368127">Liitä ja &amp;siirry osoitteeseen <ph name="URL" /></translation>
 <translation id="3727187387656390258">Tutki ponnahdusikkunaa</translation>
-<translation id="3744111561329211289">Taustatahdistus</translation>
 <translation id="3760460896538743390">Tutki &amp;taustasivua</translation>
 <translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />-haku termillä <ph name="SEARCH_TERMS" /></translation>
 <translation id="3800806661949714323">Näytä kaikki (suositus)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Ei verkossa yli vuoteen</translation>
 <translation id="3905761538810670789">Korjaa sovellus</translation>
 <translation id="3908501907586732282">Ota laajennus käyttöön</translation>
+<translation id="3909701002594999354">Näytä kaikki &amp;säätimet</translation>
 <translation id="3909791450649380159">L&amp;eikkaa</translation>
 <translation id="3927932062596804919">Estä</translation>
 <translation id="3936390757709632190">Avaa &amp;äänitiedosto uuteen välilehteen</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Poista käytöstä</translation>
 <translation id="4409697491990005945">Reunukset</translation>
 <translation id="4423376891418188461">Palauta asetukset</translation>
-<translation id="4434045419905280838">Ponnahdusikkunat ja uudelleenohjaukset</translation>
 <translation id="4478664379124702289">Tallenna lin&amp;kki nimellä…</translation>
 <translation id="4579581181964204535">Osoitteen <ph name="HOST_NAME" /> suoratoisto ei onnistu.</translation>
 <translation id="4593021220803146968">&amp;Siirry osoitteeseen <ph name="URL" /></translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Vähäinen</translation>
 <translation id="5627086634964711283">Määrittää myös Etusivu-painikkeella avattavan sivun.</translation>
 <translation id="563535393368633106">Kysy ennen käyttöä (suositus)</translation>
-<translation id="5649053991847567735">Automaattiset lataukset</translation>
 <translation id="5677928146339483299">Estetty</translation>
-<translation id="5689516760719285838">Sijainti</translation>
 <translation id="5707185214361380026">Laajennuksen lataus epäonnistui kohteesta:</translation>
 <translation id="5715711091495208045">Laajennuksen välittäjä: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Tallenna PDF:ksi</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">&amp;Käännä kielelle <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Tyhjennä sivustotiedot</translation>
 <translation id="6042308850641462728">Lisää</translation>
-<translation id="6059925163896151826">USB-laitteet</translation>
 <translation id="6086846494333236931">Ylläpitäjän asentama</translation>
 <translation id="6101226222197207147">Uusi sovellus lisätty (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetyhteyttäsi hallinnoidaan</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">Sovellus: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">K&amp;opioi kuva</translation>
 <translation id="6550675742724504774">Asetukset</translation>
-<translation id="6612358246767739896">Suojattu sisältö</translation>
+<translation id="6579369886355986318">Näytä kaikki &amp;säätimet</translation>
 <translation id="6639554308659482635">SQLite-muisti</translation>
 <translation id="6686817083349815241">Tallenna salasanasi</translation>
 <translation id="6691936601825168937">S&amp;euraava</translation>
@@ -359,8 +348,6 @@
 <translation id="7270858098575133036">Kysy lupaa sivuston halutessa käyttää MIDI-laitteita järjestelmäviestein</translation>
 <translation id="7287143125007575591">Pääsy evätty.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">Näytä &amp;säätimet</translation>
-<translation id="7374461526650987610">Yhteyskäytäntökäsittelijät</translation>
 <translation id="7385854874724088939">Tulostuksessa meni jokin vikaan. Tarkista tulostimesi ja yritä uudelleen.</translation>
 <translation id="7412226954991670867">GPU-muisti</translation>
 <translation id="7421925624202799674">&amp;Näytä sivun lähdekoodi</translation>
@@ -368,7 +355,6 @@
 <translation id="7427348830195639090">Taustasivu: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Valitsemalla tämän tulostimen annat seuraavalle laajennukselle tulostimesi käyttöoikeuden:</translation>
 <translation id="749028671485790643">Henkilö <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Lopeta prosessi</translation>
 <translation id="7576690715254076113">Kokoa</translation>
 <translation id="7629827748548208700">Välilehti: <ph name="TAB_NAME" /></translation>
@@ -420,7 +406,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusve
         =1 {Lataus on meneillään} other {Latauksia on meneillään}}</translation>
 <translation id="8230134520748321204">Tallennetaanko salasanat: <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Tätä laajennusta ei löydy kohteesta <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, ja se on voitu lisätä ilman lupaasi.</translation>
-<translation id="8270242299912238708">PDF-asiakirjat</translation>
 <translation id="8339059274628563283">Sivuston <ph name="SITE" /> paikallisesti tallennetut tiedot</translation>
 <translation id="8351419472474436977">Välityspalvelimesi asetuksia hallinnoi tällä hetkellä tämä laajennus, joka voi muokata, haitata tai salakuunnella kaikkia verkkotoimiasi. Jos et tiedä, miksi tämä muutos tehtiin, et luultavasti halua käyttää sitä.</translation>
 <translation id="8382913212082956454">Kopioi s&amp;ähköpostiosoite</translation>
@@ -468,8 +453,8 @@ Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusve
 <translation id="9170848237812810038">K&amp;umoa</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />” lisätty</translation>
 <translation id="9218430445555521422">Aseta oletukseksi</translation>
-<translation id="9219103736887031265">Kuvat</translation>
 <translation id="93766956588638423">Korjaa laajennus</translation>
+<translation id="961012016278832836">Vanha Microsoft Edge</translation>
 <translation id="98515147261107953">Vaaka</translation>
 <translation id="994289308992179865">Toista &amp;jatkuvasti</translation>
 <translation id="998747458861718449">&amp;Tarkista</translation>

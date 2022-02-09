@@ -989,7 +989,7 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   using tabs_private::Update::Params;
   namespace Results = tabs_private::Update::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   tabs_private::UpdateTabInfo* info = &params->tab_info;
@@ -1021,7 +1021,7 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   using tabs_private::Get::Params;
   namespace Results = tabs_private::Get::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
@@ -1040,7 +1040,7 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
 ExtensionFunction::ResponseAction TabsPrivateInsertTextFunction::Run() {
   using tabs_private::InsertText::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
@@ -1060,7 +1060,7 @@ TabsPrivateStartDragFunction::~TabsPrivateStartDragFunction() = default;
 ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   using tabs_private::StartDrag::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   SessionID::id_type window_id = params->drag_data.window_id;
@@ -1187,7 +1187,7 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   using tabs_private::ScrollPage::Params;
   namespace Results = tabs_private::ScrollPage::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   absl::optional<::vivaldi::mojom::ScrollType> scroll_type;
@@ -1248,7 +1248,7 @@ ExtensionFunction::ResponseAction
 TabsPrivateGetSpatialNavigationRectsFunction::Run() {
   using tabs_private::GetSpatialNavigationRects::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
@@ -1275,7 +1275,7 @@ void TabsPrivateGetScrollPositionFunction::GetScrollPositionResponse(
 ExtensionFunction::ResponseAction TabsPrivateGetScrollPositionFunction::Run() {
   using tabs_private::GetScrollPosition::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
@@ -1293,7 +1293,7 @@ ExtensionFunction::ResponseAction
 TabsPrivateActivateElementFromPointFunction::Run() {
   using tabs_private::ActivateElementFromPoint::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int x = params->x;
@@ -1315,7 +1315,7 @@ TabsPrivateHasBeforeUnloadOrUnloadFunction::Run() {
   using tabs_private::HasBeforeUnloadOrUnload::Params;
   namespace Results = tabs_private::HasBeforeUnloadOrUnload::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   content::WebContents* contents =
@@ -1329,7 +1329,7 @@ ExtensionFunction::ResponseAction TabsPrivateTranslatePageFunction::Run() {
   using tabs_private::TranslatePage::Params;
   namespace Results = tabs_private::TranslatePage::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string source = params->src_lang;
@@ -1357,7 +1357,7 @@ TabsPrivateRevertTranslatePageFunction::Run() {
   using tabs_private::RevertTranslatePage::Params;
   namespace Results = tabs_private::RevertTranslatePage::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   content::WebContents* contents =
@@ -1376,7 +1376,7 @@ ExtensionFunction::ResponseAction
 TabsPrivateDetermineTextLanguageFunction::Run() {
   using tabs_private::DetermineTextLanguage::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;

@@ -36,6 +36,10 @@ class DomainReliabilityBrowserTest : public InProcessBrowserTest {
     net::URLRequestFailedJob::AddUrlHandler();
   }
 
+  DomainReliabilityBrowserTest(const DomainReliabilityBrowserTest&) = delete;
+  DomainReliabilityBrowserTest& operator=(const DomainReliabilityBrowserTest&) =
+      delete;
+
   ~DomainReliabilityBrowserTest() override {}
 
   // Note: In an ideal world, instead of appending the command-line switch and
@@ -69,12 +73,16 @@ class DomainReliabilityBrowserTest : public InProcessBrowserTest {
 
  private:
   net::EmbeddedTestServer test_server_;
-
-  DISALLOW_COPY_AND_ASSIGN(DomainReliabilityBrowserTest);
 };
 
 class DomainReliabilityDisabledBrowserTest
     : public DomainReliabilityBrowserTest {
+ public:
+  DomainReliabilityDisabledBrowserTest(
+      const DomainReliabilityDisabledBrowserTest&) = delete;
+  DomainReliabilityDisabledBrowserTest& operator=(
+      const DomainReliabilityDisabledBrowserTest&) = delete;
+
  protected:
   DomainReliabilityDisabledBrowserTest() {}
 
@@ -83,9 +91,6 @@ class DomainReliabilityDisabledBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kDisableDomainReliability);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DomainReliabilityDisabledBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(DomainReliabilityDisabledBrowserTest,
@@ -146,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(DomainReliabilityBrowserTest, Upload) {
 
   // Trigger an error.
 
-  ui_test_utils::NavigateToURL(browser(), error_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), error_url));
 
   {
     mojo::ScopedAllowSyncCallForTesting allow_sync_call;
@@ -166,7 +171,7 @@ IN_PROC_BROWSER_TEST_F(DomainReliabilityBrowserTest, Upload) {
 
   const base::ListValue* entries;
   ASSERT_TRUE(dict->GetList("entries", &entries));
-  ASSERT_EQ(1u, entries->GetSize());
+  ASSERT_EQ(1u, entries->GetList().size());
 
   const base::DictionaryValue* entry;
   ASSERT_TRUE(entries->GetDictionary(0u, &entry));
@@ -186,7 +191,8 @@ IN_PROC_BROWSER_TEST_F(DomainReliabilityBrowserTest, UploadAtShutdown) {
         GURL("https://localhost/"), upload_url);
   }
 
-  ui_test_utils::NavigateToURL(browser(), GURL("https://localhost/"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://localhost/")));
 
   {
     mojo::ScopedAllowSyncCallForTesting allow_sync_call;

@@ -11,7 +11,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
-#include "extensions/browser/value_store/testing_value_store.h"
+#include "components/value_store/testing_value_store.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -26,6 +26,12 @@ class WallpaperControllerClientImplTest : public testing::Test {
     user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(fake_user_manager));
   }
+
+  WallpaperControllerClientImplTest(const WallpaperControllerClientImplTest&) =
+      delete;
+  WallpaperControllerClientImplTest& operator=(
+      const WallpaperControllerClientImplTest&) = delete;
+
   ~WallpaperControllerClientImplTest() override = default;
 
  private:
@@ -33,8 +39,6 @@ class WallpaperControllerClientImplTest : public testing::Test {
   ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(WallpaperControllerClientImplTest);
 };
 
 TEST_F(WallpaperControllerClientImplTest, Construction) {
@@ -54,7 +58,7 @@ TEST_F(WallpaperControllerClientImplTest, MigrateCollectionIdFromValueStore) {
   WallpaperControllerClientImpl client;
   client.InitForTesting(&controller);
 
-  TestingValueStore value_store;
+  value_store::TestingValueStore value_store;
 
   // There is also a resume token and an enabled state, but that's not what is
   // being tested here, so only populate collectionId.
@@ -73,7 +77,7 @@ TEST_F(WallpaperControllerClientImplTest,
   WallpaperControllerClientImpl client;
   client.InitForTesting(&controller);
 
-  TestingValueStore value_store;
+  value_store::TestingValueStore value_store;
 
   // There is also a resume token and an enabled state, but that's not what is
   // being tested here, so only populate collectionId.
@@ -101,13 +105,13 @@ TEST_F(WallpaperControllerClientImplTest,
 
 TEST_F(WallpaperControllerClientImplTest,
        MigrateCollectionIdFromValueStoreNotOKStatusCode) {
-  using StatusCode = ValueStore::StatusCode;
+  using StatusCode = value_store::ValueStore::StatusCode;
 
   TestWallpaperController controller;
   WallpaperControllerClientImpl client;
   client.InitForTesting(&controller);
 
-  TestingValueStore value_store;
+  value_store::TestingValueStore value_store;
   value_store.set_status_code(StatusCode::OTHER_ERROR);
 
   // There is also a resume token and an enabled state, but that's not what is
@@ -127,7 +131,7 @@ TEST_F(WallpaperControllerClientImplTest,
   WallpaperControllerClientImpl client;
   client.InitForTesting(&controller);
 
-  TestingValueStore value_store;
+  value_store::TestingValueStore value_store;
   AccountId account_id =
       AccountId::FromUserEmailGaiaId("fake@test.com", "444444");
   client.MigrateCollectionIdFromValueStoreForTesting(account_id, &value_store);
@@ -141,7 +145,7 @@ TEST_F(WallpaperControllerClientImplTest,
   WallpaperControllerClientImpl client;
   client.InitForTesting(&controller);
 
-  TestingValueStore value_store;
+  value_store::TestingValueStore value_store;
   std::string json("{");
   value_store.Set(0, kChromeAppDailyRefreshInfoKey, base::Value(json));
   AccountId account_id =

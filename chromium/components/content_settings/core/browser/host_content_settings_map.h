@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
@@ -81,6 +82,9 @@ class HostContentSettingsMap : public content_settings::Observer,
                          bool is_off_the_record,
                          bool store_last_modified,
                          bool restore_session);
+
+  HostContentSettingsMap(const HostContentSettingsMap&) = delete;
+  HostContentSettingsMap& operator=(const HostContentSettingsMap&) = delete;
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
@@ -467,8 +471,6 @@ class HostContentSettingsMap : public content_settings::Observer,
   bool allow_invalid_secondary_pattern_for_testing_;
 
   base::WeakPtrFactory<HostContentSettingsMap> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(HostContentSettingsMap);
 };
 
 #endif  // COMPONENTS_CONTENT_SETTINGS_CORE_BROWSER_HOST_CONTENT_SETTINGS_MAP_H_

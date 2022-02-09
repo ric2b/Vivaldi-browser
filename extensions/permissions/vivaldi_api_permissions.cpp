@@ -48,6 +48,8 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermissionID::kSavedPasswords, "savedpasswords"},
     {APIPermissionID::kSync, "sync"},
     {APIPermissionID::kTabsPrivate, "tabsPrivate"},
+    {APIPermissionID::kThemePrivate, "themePrivate"},
+    {APIPermissionID::kTranslateHistory, "translateHistory"},
     {APIPermissionID::kThumbnails, "thumbnails"},
     {APIPermissionID::kUtilities, "utilities"},
     {APIPermissionID::kVivaldiAccount, "vivaldiAccount"},

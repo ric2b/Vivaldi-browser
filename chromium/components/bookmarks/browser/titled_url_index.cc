@@ -168,12 +168,13 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
 #endif
   query_parser::Snippet::MatchPositions title_matches, url_matches;
   bool query_has_ancestor_matches = false;
-  for (const auto& node : query_nodes) {
+  for (const auto& query_node : query_nodes) {
     const bool has_title_matches =
-        node->HasMatchIn(title_words, &title_matches);
-    const bool has_url_matches = node->HasMatchIn(url_words, &url_matches);
+        query_node->HasMatchIn(title_words, &title_matches);
+    const bool has_url_matches =
+        query_node->HasMatchIn(url_words, &url_matches);
     const bool has_ancestor_matches =
-        match_ancestor_titles && node->HasMatchIn(ancestor_words);
+        match_ancestor_titles && query_node->HasMatchIn(ancestor_words, false);
     query_has_ancestor_matches =
         query_has_ancestor_matches || has_ancestor_matches;
     if (!has_title_matches && !has_url_matches && !has_ancestor_matches)
@@ -181,9 +182,9 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
 
 #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
     const bool has_description_matches =
-        node->HasMatchIn(description_words, &description_matches);
+        query_node->HasMatchIn(description_words, &description_matches);
     const bool has_nickname_matches =
-        node->HasMatchIn(nickname_words, &nickname_matches);
+        query_node->HasMatchIn(nickname_words, &nickname_matches);
     if (!has_title_matches && !has_url_matches && !has_ancestor_matches
         && !has_description_matches && !has_nickname_matches
         )

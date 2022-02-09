@@ -33,7 +33,6 @@
 
 class ChromePageInfoUiDelegate;
 class GURL;
-class Profile;
 class Browser;
 
 namespace content {
@@ -83,7 +82,6 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
       views::View* anchor_view,
       const gfx::Rect& anchor_rect,
       gfx::NativeWindow parent_window,
-      Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
       PageInfoClosingCallback closing_callback);
@@ -117,7 +115,6 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
       views::View* anchor_view,
       const gfx::Rect& anchor_rect,
       gfx::NativeView parent_window,
-      Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
       PageInfoClosingCallback closing_callback);
@@ -160,8 +157,6 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
 
   // The presenter that controls the Page Info UI.
   std::unique_ptr<PageInfo> presenter_;
-
-  Profile* const profile_;
 
   // The header section (containing security-related information).
   SecurityInformationView* header_ = nullptr;

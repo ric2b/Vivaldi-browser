@@ -17,10 +17,13 @@ class MenuItemView;
 // Helper class for NotesSubMenuObserver. Views specific
 class NotesSubMenuObserverHelperViews : public NotesSubMenuObserverHelper {
  public:
-  NotesSubMenuObserverHelperViews(
-    NotesSubMenuObserver* sub_menu_observer,
-    ToolkitDelegateViews* toolkit_delegate);
+  NotesSubMenuObserverHelperViews(NotesSubMenuObserver* sub_menu_observer,
+                                  ToolkitDelegateViews* toolkit_delegate);
   ~NotesSubMenuObserverHelperViews() override;
+  NotesSubMenuObserverHelperViews(const NotesSubMenuObserverHelperViews&) =
+      delete;
+  NotesSubMenuObserverHelperViews& operator=(
+      const NotesSubMenuObserverHelperViews&) = delete;
 
   bool SupportsDelayedLoading() override;
 
@@ -42,8 +45,6 @@ class NotesSubMenuObserverHelperViews : public NotesSubMenuObserverHelper {
   NotesSubMenuObserver* sub_menu_observer_;
   ToolkitDelegateViews* toolkit_delegate_;
   MenuModelToMenuView menumodel_to_view_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesSubMenuObserverHelperViews);
 };
 
 #endif  // NOTES_NOTES_SUBMENU_OBSERVER_HELPER_VIEWS_H_

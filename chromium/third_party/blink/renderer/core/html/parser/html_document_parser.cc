@@ -33,7 +33,6 @@
 #include "base/stl_util.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
-#include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/css/media_values_cached.h"
@@ -719,34 +718,17 @@ void HTMLDocumentParser::EnqueueTokenizedChunk(
   }
 
   if (preloader_) {
-    bool appcache_fetched = false;
-    if (GetDocument()->Loader()) {
-      appcache_fetched = (GetDocument()->Loader()->GetResponse().AppCacheID() !=
-                          mojom::blink::kAppCacheNoCacheId);
-    }
-    bool appcache_initialized = GetDocument()->documentElement();
-    // Delay sending some requests if meta tag based CSP is present or
-    // if AppCache was used to fetch the HTML but was not yet initialized for
-    // this document.
-    if (pending_csp_meta_token_ ||
-        ((!base::FeatureList::IsEnabled(
-              blink::features::kVerifyHTMLFetchedFromAppCacheBeforeDelay) ||
-          appcache_fetched) &&
-         !appcache_initialized)) {
-      PreloadRequestStream link_rel_preloads;
+    // Delay sending some requests if meta tag based CSP is present.
+    if (pending_csp_meta_token_) {
       for (auto& request : chunk->preloads) {
-        // Link rel preloads don't need to wait for AppCache but they
-        // should probably wait for CSP.
-        if (!pending_csp_meta_token_ && request->IsLinkRelPreload())
-          link_rel_preloads.push_back(std::move(request));
-        else
-          queued_preloads_.push_back(std::move(request));
+        queued_preloads_.push_back(std::move(request));
       }
-      preloader_->TakeAndPreload(link_rel_preloads);
     } else {
       // We can safely assume that there are no queued preloads request after
-      // the document element is available, as we empty the queue immediately
-      // after the document element is created in documentElementAvailable().
+      // the document element is available and if there is no pending csp token
+      // in the speculation buffer, as we empty the queue immediately
+      // after the document element is created in DocumentElementAvailable()
+      // or when the csp token has been parsed.
       DCHECK(queued_preloads_.IsEmpty());
       preloader_->TakeAndPreload(chunk->preloads);
     }
@@ -1325,10 +1307,6 @@ void HTMLDocumentParser::Append(const String& input_source) {
   }
 
   if (GetDocument()->IsPrefetchOnly()) {
-    // Do not prefetch if there is an appcache.
-    if (GetDocument()->Loader()->GetResponse().AppCacheID() != 0)
-      return;
-
     preload_scanner_->AppendToEnd(source);
     if (preloader_) {
       // TODO(Richard.Townsend@arm.com): add test coverage of this branch.

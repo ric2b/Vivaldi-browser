@@ -22,9 +22,6 @@ class MailPrivateAsyncFunction : public ExtensionFunction {
   MailClientService* GetMailClientService();
   Profile* GetProfile() const;
   ~MailPrivateAsyncFunction() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateAsyncFunction);
 };
 
 class MailPrivateGetFilePathsFunction : public ExtensionFunction {
@@ -32,15 +29,24 @@ class MailPrivateGetFilePathsFunction : public ExtensionFunction {
  public:
   MailPrivateGetFilePathsFunction() = default;
 
- protected:
+ private:
   ~MailPrivateGetFilePathsFunction() override = default;
   void OnFinished(const std::vector<base::FilePath::StringType>& string_paths);
 
   // ExtensionFunction:
   ResponseAction Run() override;
+};
+
+class MailPrivateGetFullPathFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.getFullPath", MAIL_GET_FULL_PATH)
+ public:
+  MailPrivateGetFullPathFunction() = default;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetFilePathsFunction);
+  ~MailPrivateGetFullPathFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
 };
 
 class MailPrivateGetMailFilePathsFunction : public ExtensionFunction {
@@ -49,15 +55,12 @@ class MailPrivateGetMailFilePathsFunction : public ExtensionFunction {
  public:
   MailPrivateGetMailFilePathsFunction() = default;
 
- protected:
+ private:
   ~MailPrivateGetMailFilePathsFunction() override = default;
   void OnFinished(const std::vector<base::FilePath::StringType>& string_paths);
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetMailFilePathsFunction);
 };
 
 class MailPrivateWriteBufferToMessageFileFunction : public ExtensionFunction {
@@ -66,14 +69,11 @@ class MailPrivateWriteBufferToMessageFileFunction : public ExtensionFunction {
  public:
   MailPrivateWriteBufferToMessageFileFunction() = default;
 
- protected:
+ private:
   ~MailPrivateWriteBufferToMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateWriteBufferToMessageFileFunction);
 };
 
 class MailPrivateWriteTextToMessageFileFunction : public ExtensionFunction {
@@ -82,14 +82,11 @@ class MailPrivateWriteTextToMessageFileFunction : public ExtensionFunction {
  public:
   MailPrivateWriteTextToMessageFileFunction() = default;
 
- protected:
+ private:
   ~MailPrivateWriteTextToMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateWriteTextToMessageFileFunction);
 };
 
 class MailPrivateDeleteMessageFileFunction : public ExtensionFunction {
@@ -98,14 +95,11 @@ class MailPrivateDeleteMessageFileFunction : public ExtensionFunction {
  public:
   MailPrivateDeleteMessageFileFunction() = default;
 
- protected:
+ private:
   ~MailPrivateDeleteMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateDeleteMessageFileFunction);
 };
 
 struct ReadFileResult {
@@ -119,14 +113,11 @@ class MailPrivateReadFileToBufferFunction : public ExtensionFunction {
  public:
   MailPrivateReadFileToBufferFunction() = default;
 
- protected:
+ private:
   ~MailPrivateReadFileToBufferFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFileToBufferFunction);
 };
 
 class MailPrivateReadMessageFileToBufferFunction : public ExtensionFunction {
@@ -135,14 +126,11 @@ class MailPrivateReadMessageFileToBufferFunction : public ExtensionFunction {
  public:
   MailPrivateReadMessageFileToBufferFunction() = default;
 
- protected:
+ private:
   ~MailPrivateReadMessageFileToBufferFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadMessageFileToBufferFunction);
 };
 
 class MailPrivateReadFileToTextFunction : public ExtensionFunction {
@@ -151,14 +139,11 @@ class MailPrivateReadFileToTextFunction : public ExtensionFunction {
  public:
   MailPrivateReadFileToTextFunction() = default;
 
- protected:
+ private:
   ~MailPrivateReadFileToTextFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFileToTextFunction);
 };
 
 struct GetDirectoryResult {
@@ -172,14 +157,11 @@ class MailPrivateGetFileDirectoryFunction : public ExtensionFunction {
  public:
   MailPrivateGetFileDirectoryFunction() = default;
 
- protected:
+ private:
   ~MailPrivateGetFileDirectoryFunction() override = default;
   void OnFinished(GetDirectoryResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetFileDirectoryFunction);
 };
 
 class MailPrivateCreateFileDirectoryFunction : public ExtensionFunction {
@@ -188,14 +170,11 @@ class MailPrivateCreateFileDirectoryFunction : public ExtensionFunction {
  public:
   MailPrivateCreateFileDirectoryFunction() = default;
 
- protected:
+ private:
   ~MailPrivateCreateFileDirectoryFunction() override = default;
   void OnFinished(GetDirectoryResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateFileDirectoryFunction);
 };
 
 class MailPrivateCreateMessagesFunction : public MailPrivateAsyncFunction {
@@ -203,7 +182,7 @@ class MailPrivateCreateMessagesFunction : public MailPrivateAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.createMessages", MAIL_CREATE_MESSAGES)
   MailPrivateCreateMessagesFunction() = default;
 
- protected:
+ private:
   ~MailPrivateCreateMessagesFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -211,11 +190,8 @@ class MailPrivateCreateMessagesFunction : public MailPrivateAsyncFunction {
   // Callback for the create message function to provide results.
   void CreateMessagesComplete(std::shared_ptr<bool> result);
 
- private:
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateMessagesFunction);
 };
 
 class MailPrivateDeleteMessagesFunction : public MailPrivateAsyncFunction {
@@ -223,7 +199,7 @@ class MailPrivateDeleteMessagesFunction : public MailPrivateAsyncFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.deleteMessages", MAIL_DELETE_MESSAGES)
   MailPrivateDeleteMessagesFunction() = default;
 
- protected:
+ private:
   ~MailPrivateDeleteMessagesFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -231,11 +207,8 @@ class MailPrivateDeleteMessagesFunction : public MailPrivateAsyncFunction {
   // Callback for the DeleteMessages function to provide results.
   void DeleteMessagesComplete(std::shared_ptr<bool> result);
 
- private:
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateDeleteMessagesFunction);
 };
 
 class MailPrivateAddMessageBodyFunction : public MailPrivateAsyncFunction {
@@ -244,7 +217,7 @@ class MailPrivateAddMessageBodyFunction : public MailPrivateAsyncFunction {
                              MAIL_ADD_MESSAGE_BODY)
   MailPrivateAddMessageBodyFunction() = default;
 
- protected:
+ private:
   ~MailPrivateAddMessageBodyFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -253,11 +226,8 @@ class MailPrivateAddMessageBodyFunction : public MailPrivateAsyncFunction {
   void AddMessageBodyComplete(
       std::shared_ptr<mail_client::MessageResult> result);
 
- private:
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateAddMessageBodyFunction);
 };
 
 class MailPrivateSearchMessagesFunction : public MailPrivateAsyncFunction {
@@ -265,7 +235,7 @@ class MailPrivateSearchMessagesFunction : public MailPrivateAsyncFunction {
  public:
   MailPrivateSearchMessagesFunction() = default;
 
- protected:
+ private:
   ~MailPrivateSearchMessagesFunction() override = default;
 
   // ExtensionFunction:
@@ -275,10 +245,7 @@ class MailPrivateSearchMessagesFunction : public MailPrivateAsyncFunction {
   void MessagesSearchComplete(
       std::shared_ptr<mail_client::SearchListIdRows> results);
 
- private:
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateSearchMessagesFunction);
 };
 
 class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
@@ -286,7 +253,7 @@ class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
  public:
   MailPrivateMatchMessageFunction() = default;
 
- protected:
+ private:
   ~MailPrivateMatchMessageFunction() override = default;
 
   // ExtensionFunction:
@@ -295,10 +262,7 @@ class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
   // Callback for the MatchMessage function to provide results.
   void MatchMessageComplete(std::shared_ptr<bool> results);
 
- private:
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateMatchMessageFunction);
 };
 
 class MailPrivateRebuildDatabaseFunction : public MailPrivateAsyncFunction {
@@ -307,7 +271,7 @@ class MailPrivateRebuildDatabaseFunction : public MailPrivateAsyncFunction {
  public:
   MailPrivateRebuildDatabaseFunction() = default;
 
- protected:
+ private:
   ~MailPrivateRebuildDatabaseFunction() override = default;
 
   // ExtensionFunction:
@@ -316,10 +280,7 @@ class MailPrivateRebuildDatabaseFunction : public MailPrivateAsyncFunction {
   // Callback for the RebuildDatabse function to provide results.
   void RebuildStartedCallback(std::shared_ptr<bool> results);
 
- private:
   base::CancelableTaskTracker task_tracker_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateRebuildDatabaseFunction);
 };
 
 }  // namespace extensions

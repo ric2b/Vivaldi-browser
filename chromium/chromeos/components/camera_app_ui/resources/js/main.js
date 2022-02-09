@@ -16,6 +16,7 @@ import * as dom from './dom.js';
 import {reportError} from './error.js';
 import * as focusRing from './focus_ring.js';
 import {GalleryButton} from './gallerybutton.js';
+import {I18nString} from './i18n_string.js';
 import {Intent} from './intent.js';
 import * as metrics from './metrics.js';
 import * as filesystem from './models/file_system.js';
@@ -27,8 +28,16 @@ import * as nav from './nav.js';
 import {PerfLogger} from './perf.js';
 import {preloadImagesList} from './preload_images.js';
 import * as state from './state.js';
+import * as toast from './toast.js';
 import * as tooltip from './tooltip.js';
-import {ErrorLevel, ErrorType, Mode, PerfEvent, ViewName} from './type.js';
+import {
+  ErrorLevel,
+  ErrorType,
+  Facing,
+  Mode,
+  PerfEvent,
+  ViewName,
+} from './type.js';
 import {addUnloadCallback} from './unload.js';
 import * as util from './util.js';
 import {Camera} from './views/camera.js';
@@ -53,10 +62,12 @@ export class App {
    * @param {{
    *     perfLogger: !PerfLogger,
    *     intent: ?Intent,
+   *     facing: ?Facing,
+   *     mode: ?Mode,
    * }} params
    * @public
    */
-  constructor({perfLogger, intent}) {
+  constructor({perfLogger, intent, facing, mode: defaultMode}) {
     /**
      * @type {!PerfLogger}
      * @private
@@ -101,20 +112,21 @@ export class App {
      * @private
      */
     this.cameraView_ = (() => {
+      const mode = defaultMode ?? Mode.PHOTO;
       if (this.intent_ !== null && this.intent_.shouldHandleResult) {
         state.set(state.State.SHOULD_HANDLE_INTENT_RESULT, true);
         return new CameraIntent(
             this.intent_, this.infoUpdater_, this.photoPreferrer_,
-            this.videoPreferrer_, this.perfLogger_);
+            this.videoPreferrer_, mode, this.perfLogger_);
       } else {
-        const mode = this.intent_ !== null ? this.intent_.mode : Mode.PHOTO;
         return new Camera(
             this.galleryButton_, this.infoUpdater_, this.photoPreferrer_,
-            this.videoPreferrer_, mode, this.perfLogger_);
+            this.videoPreferrer_, mode, this.perfLogger_, facing);
       }
     })();
 
-    document.body.addEventListener('keydown', this.onKeyPressed_.bind(this));
+    document.body.addEventListener(
+        'keydown', (event) => this.onKeyPressed_(event));
 
     // Disable the zoom in-out gesture which is triggered by wheel and pinch on
     // trackpad.
@@ -239,7 +251,7 @@ export class App {
       // There are three possible cases:
       // 1. Regular instance
       //      (intent === null)
-      // 2. STILL_CAPTURE_CAMREA and VIDEO_CAMERA intents
+      // 2. STILL_CAPTURE_CAMERA and VIDEO_CAMERA intents
       //      (intent !== null && shouldHandleResult === false)
       // 3. Other intents
       //      (intent !== null && shouldHandleResult === true)
@@ -356,6 +368,68 @@ export class App {
     state.set(state.State.SUSPEND, false);
     nav.close(ViewName.WARNING, WarningType.CAMERA_PAUSED);
   }
+
+  /**
+   * Begins to take photo or recording with the current options, e.g. timer.
+   * @param {!metrics.ShutterType} shutterType The shutter is triggered by which
+   *     shutter type.
+   * @return {?Promise<void>} Promise resolved when take action completes.
+   *     Returns null if CCA can't start take action.
+   */
+  beginTake(shutterType) {
+    return this.cameraView_.beginTake(shutterType);
+  }
+}
+
+/**
+ * Parse search params in URL.
+ * @return {{
+ *     intent: ?Intent,
+ *     facing: ?Facing,
+ *     mode: ?Mode,
+ *     openFrom: ?string,
+ *     autoTake: boolean,
+ * }}
+ */
+function parseSearchParams() {
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+
+  // TODO(pihsun): Intent.create has almost same code for checking a string is
+  // an enum variant, extract them to a util function when we change TypeScript
+  // since the util function type is hard to be described in closure compiler
+  // due to lack of generic type bounds.
+  /** @type {?Facing} */
+  const facing = (() => {
+    const facing = params.get('facing');
+    if (facing === null || !Object.values(Facing).includes(facing)) {
+      return null;
+    }
+    return /** @type {!Facing} */ (facing);
+  })();
+
+  /** @type {?Mode} */
+  const mode = (() => {
+    const mode = params.get('mode');
+    if (mode === null || !Object.values(Mode).includes(mode)) {
+      return null;
+    }
+    return /** @type {!Mode} */ (mode);
+  })();
+
+  /** @type {?Intent} */
+  const intent = (() => {
+    if (params.get('intentId') === null) {
+      return null;
+    }
+    assert(mode !== null);
+    return Intent.create(url, mode);
+  })();
+
+  const autoTake = params.get('autoTake') === '1';
+  const openFrom = params.get('openFrom');
+
+  return {intent, facing, mode, autoTake, openFrom};
 }
 
 /**
@@ -373,9 +447,8 @@ let instance = null;
   }
 
   const perfLogger = new PerfLogger();
-  const url = new URL(window.location.href);
-  const intent =
-      url.searchParams.get('intentId') !== null ? Intent.create(url) : null;
+
+  const {intent, facing, mode, autoTake, openFrom} = parseSearchParams();
 
   state.set(state.State.INTENT, intent !== null);
 
@@ -435,6 +508,19 @@ let instance = null;
     });
   });
 
-  instance = new App({perfLogger, intent});
+  instance = new App({perfLogger, intent, facing, mode});
   await instance.start();
+
+  if (autoTake) {
+    const takePromise = instance.beginTake(
+        openFrom === 'assistant' ? metrics.ShutterType.ASSISTANT :
+                                   metrics.ShutterType.UNKNOWN);
+    if (takePromise === null) {
+      toast.show(
+          mode === Mode.VIDEO ? I18nString.ERROR_MSG_RECORD_START_FAILED :
+                                I18nString.ERROR_MSG_TAKE_PHOTO_FAILED);
+    } else {
+      await takePromise;
+    }
+  }
 })();

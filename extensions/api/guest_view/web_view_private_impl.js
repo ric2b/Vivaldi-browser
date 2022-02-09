@@ -62,13 +62,6 @@ WebViewImpl.prototype.allowBlockedInsecureContent = function () {
   WebViewPrivate.allowBlockedInsecureContent(this.guest.getId());
 };
 
-WebViewImpl.prototype.getFocusedElementInfo = function (callback) {
-  if (!this.guest.getId()) {
-    return;
-  }
-  WebViewPrivate.getFocusedElementInfo(this.guest.getId(), callback);
-};
-
 WebViewImpl.prototype.sendRequest =
   function (url, wasTyped, usePost, postData, extraHeaders) {
     if (!this.guest.getId()) {

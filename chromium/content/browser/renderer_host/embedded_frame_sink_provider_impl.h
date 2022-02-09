@@ -30,6 +30,11 @@ class CONTENT_EXPORT EmbeddedFrameSinkProviderImpl
   EmbeddedFrameSinkProviderImpl(
       viz::HostFrameSinkManager* host_frame_sink_manager,
       uint32_t renderer_client_id);
+
+  EmbeddedFrameSinkProviderImpl(const EmbeddedFrameSinkProviderImpl&) = delete;
+  EmbeddedFrameSinkProviderImpl& operator=(
+      const EmbeddedFrameSinkProviderImpl&) = delete;
+
   ~EmbeddedFrameSinkProviderImpl() override;
 
   void Add(
@@ -42,7 +47,6 @@ class CONTENT_EXPORT EmbeddedFrameSinkProviderImpl
       mojo::PendingRemote<blink::mojom::EmbeddedFrameSinkClient> client)
       override;
   void RegisterEmbeddedFrameSinkBundle(
-      const viz::FrameSinkId& parent_frame_sink_id,
       const viz::FrameSinkBundleId& bundle_id,
       mojo::PendingReceiver<viz::mojom::FrameSinkBundle> receiver,
       mojo::PendingRemote<viz::mojom::FrameSinkBundleClient> client) override;
@@ -86,8 +90,6 @@ class CONTENT_EXPORT EmbeddedFrameSinkProviderImpl
 
   base::flat_map<viz::FrameSinkId, std::unique_ptr<EmbeddedFrameSinkImpl>>
       frame_sink_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(EmbeddedFrameSinkProviderImpl);
 };
 
 }  // namespace content

@@ -123,11 +123,12 @@ bool ContactTable::GetAllContacts(ContactRows* contacts) {
 }
 
 bool ContactTable::UpdateContactRow(const ContactRow& contact) {
-  sql::Statement statement(GetDB().GetCachedStatement(
-      SQL_FROM_HERE,
-      "UPDATE contacts SET fn=?, birthday=?, "
-      "note=?, avatar_url=?, separator=?, generated_from_sent_mail=?, trusted=?, "
-      "last_modified=? WHERE id=?"));
+  sql::Statement statement(
+      GetDB().GetCachedStatement(SQL_FROM_HERE,
+                                 "UPDATE contacts SET fn=?, birthday=?, "
+                                 "note=?, avatar_url=?, separator=?, "
+                                 "generated_from_sent_mail=?, trusted=?, "
+                                 "last_modified=? WHERE id=?"));
   statement.BindString16(0, contact.name());
   statement.BindInt64(1, contact.birthday().ToInternalValue());
   statement.BindString16(2, contact.note());

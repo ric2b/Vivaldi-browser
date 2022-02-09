@@ -49,15 +49,21 @@ do_configure() {
     --enable-avformat
     --enable-ffmpeg
     --enable-swresample
+    --enable-swscale
     --enable-protocol=file
     --enable-protocol=pipe
     --enable-demuxer=matroska
+    --enable-demuxer=rawvideo
+    --enable-muxer=gif
     --enable-muxer=mov
     --enable-muxer=mp4
     --enable-parser=h264
     --enable-decoder=pcm_f32le
+    --enable-decoder=rawvideo
     --enable-encoder=aac
+    --enable-encoder=gif
     --enable-filter=aresample
+    --enable-filter=scale
     --enable-bsf=extract_extradata
   )
 
@@ -98,6 +104,8 @@ do_add_header() {
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// @ts-nocheck
 
 /**
  * @fileoverview
@@ -108,6 +116,7 @@ do_add_header() {
 /* eslint-disable */
 EOF
   cat ffmpeg.orig.js >> ffmpeg.js
+  echo >> ffmpeg.js
 }
 
 main() {

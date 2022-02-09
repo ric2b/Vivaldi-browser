@@ -32,8 +32,11 @@ bool IsValuePatternSupported(AXPlatformNodeDelegate* delegate) {
          IsReadOnlySupported(delegate->GetRole()) ||
          IsLink(delegate->GetRole()) ||
          delegate->GetRole() == ax::mojom::Role::kColorWell ||
-         delegate->IsCellOrHeaderOfARIAGrid() ||
-         IsPlatformDocument(delegate->GetRole());
+         delegate->IsCellOrHeaderOfAriaGrid() ||
+         (delegate->GetRole() == ax::mojom::Role::kButton &&
+          delegate->HasStringAttribute(ax::mojom::StringAttribute::kValue)) ||
+         (IsPlatformDocument(delegate->GetRole()) &&
+          delegate->GetRole() != ax::mojom::Role::kPdfRoot);
 }
 
 }  // namespace ui

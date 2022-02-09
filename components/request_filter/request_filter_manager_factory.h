@@ -21,6 +21,11 @@ class RequestFilterManagerFactory : public BrowserContextKeyedServiceFactory {
   friend struct base::DefaultSingletonTraits<RequestFilterManagerFactory>;
 
   RequestFilterManagerFactory();
+
+  RequestFilterManagerFactory(const RequestFilterManagerFactory&) = delete;
+  RequestFilterManagerFactory& operator=(const RequestFilterManagerFactory&) =
+      delete;
+
   ~RequestFilterManagerFactory() override;
 
   // BrowserContextKeyedBaseFactory methods:
@@ -28,8 +33,6 @@ class RequestFilterManagerFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* context) const override;
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(RequestFilterManagerFactory);
 };
 
 }  // namespace vivaldi

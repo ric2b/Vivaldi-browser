@@ -5,7 +5,7 @@
 
 #include "base/memory/singleton.h"
 #include "content/public/browser/web_ui_controller_factory.h"
-#include "ui/base/resource/scale_factor.h"
+#include "ui/base/resource/resource_scale_factor.h"
 
 namespace base {
 class RefCountedMemory;
@@ -32,12 +32,14 @@ class VivaldiWebUIControllerFactory : public content::WebUIControllerFactory {
  protected:
   VivaldiWebUIControllerFactory();
   ~VivaldiWebUIControllerFactory() override;
+  VivaldiWebUIControllerFactory(const VivaldiWebUIControllerFactory&) = delete;
+  VivaldiWebUIControllerFactory& operator=(
+      const VivaldiWebUIControllerFactory&) = delete;
 
  private:
-  friend struct base::DefaultSingletonTraits<VivaldiWebUIControllerFactory>;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWebUIControllerFactory);
+  friend base::DefaultSingletonTraits<VivaldiWebUIControllerFactory>;
 };
+
 }  // namespace vivaldi
 
 #endif  // UI_WEBUI_VIVALDI_WEB_UI_CONTROLLER_FACTORY_H_

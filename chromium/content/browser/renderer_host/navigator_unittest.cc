@@ -574,7 +574,8 @@ TEST_F(NavigatorTest, NoContent) {
   response->headers = new net::HttpResponseHeaders(
       std::string(kNoContentHeaders, base::size(kNoContentHeaders)));
   GetLoaderForNavigationRequest(main_request)
-      ->CallOnResponseStarted(std::move(response));
+      ->CallOnResponseStarted(std::move(response),
+                              mojo::ScopedDataPipeConsumerHandle());
 
   // There should be no pending nor speculative RenderFrameHost; the navigation
   // was aborted.
@@ -598,7 +599,8 @@ TEST_F(NavigatorTest, NoContent) {
   response->headers = new net::HttpResponseHeaders(
       std::string(kResetContentHeaders, base::size(kResetContentHeaders)));
   GetLoaderForNavigationRequest(main_request)
-      ->CallOnResponseStarted(std::move(response));
+      ->CallOnResponseStarted(std::move(response),
+                              mojo::ScopedDataPipeConsumerHandle());
 
   // There should be no pending nor speculative RenderFrameHost; the navigation
   // was aborted.
@@ -1005,7 +1007,8 @@ TEST_F(NavigatorTest, Reload) {
 
   FrameTreeNode* node = main_test_rfh()->frame_tree_node();
   controller().Reload(ReloadType::NORMAL, false);
-  auto reload1 = NavigationSimulator::CreateFromPending(contents());
+  auto reload1 =
+      NavigationSimulator::CreateFromPending(contents()->GetController());
   // A NavigationRequest should have been generated.
   NavigationRequest* main_request = node->navigation_request();
   ASSERT_TRUE(main_request != nullptr);
@@ -1019,7 +1022,8 @@ TEST_F(NavigatorTest, Reload) {
 
   // Now do a shift+reload.
   controller().Reload(ReloadType::BYPASSING_CACHE, false);
-  auto reload2 = NavigationSimulator::CreateFromPending(contents());
+  auto reload2 =
+      NavigationSimulator::CreateFromPending(contents()->GetController());
   // A NavigationRequest should have been generated.
   main_request = node->navigation_request();
   ASSERT_TRUE(main_request != nullptr);
@@ -1249,8 +1253,7 @@ TEST_F(NavigatorTest, SiteInstanceDescriptionConversion) {
   {
     SiteInstanceDescriptor descriptor(
         UrlInfo::CreateForTesting(kUrlSameSiteAs1),
-        SiteInstanceRelation::RELATED,
-        WebExposedIsolationInfo::CreateNonIsolated());
+        SiteInstanceRelation::RELATED);
     scoped_refptr<SiteInstance> converted_instance =
         ConvertToSiteInstance(rfhm, descriptor, nullptr);
     EXPECT_EQ(current_instance, converted_instance);
@@ -1263,8 +1266,7 @@ TEST_F(NavigatorTest, SiteInstanceDescriptionConversion) {
   {
     SiteInstanceDescriptor descriptor(
         UrlInfo::CreateForTesting(kUrlSameSiteAs2),
-        SiteInstanceRelation::RELATED,
-        WebExposedIsolationInfo::CreateNonIsolated());
+        SiteInstanceRelation::RELATED);
     related_instance = ConvertToSiteInstance(rfhm, descriptor, nullptr);
     // If kUrlSameSiteAs2 requires a dedicated process on this platform, this
     // should return a new instance, related to the current and set to the new
@@ -1289,8 +1291,7 @@ TEST_F(NavigatorTest, SiteInstanceDescriptionConversion) {
   {
     SiteInstanceDescriptor descriptor(
         UrlInfo::CreateForTesting(kUrlSameSiteAs1),
-        SiteInstanceRelation::UNRELATED,
-        WebExposedIsolationInfo::CreateNonIsolated());
+        SiteInstanceRelation::UNRELATED);
     scoped_refptr<SiteInstanceImpl> converted_instance_1 =
         ConvertToSiteInstance(rfhm, descriptor, nullptr);
     // Should return a new instance, unrelated to the current one, set to the
@@ -1329,8 +1330,7 @@ TEST_F(NavigatorTest, SiteInstanceDescriptionConversion) {
   {
     SiteInstanceDescriptor descriptor(
         UrlInfo::CreateForTesting(kUrlSameSiteAs2),
-        SiteInstanceRelation::UNRELATED,
-        WebExposedIsolationInfo::CreateNonIsolated());
+        SiteInstanceRelation::UNRELATED);
     scoped_refptr<SiteInstanceImpl> converted_instance_1 =
         ConvertToSiteInstance(rfhm, descriptor, related_instance.get());
     // Should return a new instance, unrelated to the current, set to the

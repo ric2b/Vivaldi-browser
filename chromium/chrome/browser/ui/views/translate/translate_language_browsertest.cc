@@ -82,6 +82,10 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
  public:
   TranslateLanguageBrowserTest() : browser_(nullptr) {}
 
+  TranslateLanguageBrowserTest(const TranslateLanguageBrowserTest&) = delete;
+  TranslateLanguageBrowserTest& operator=(const TranslateLanguageBrowserTest&) =
+      delete;
+
   void SetUp() override {
     set_open_about_blank_on_browser_launch(true);
     TranslateManager::SetIgnoreMissingKeyForTesting(true);
@@ -122,8 +126,8 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
     // TODO(789593): investigate a more robust fix.
     TranslateBubbleView::CloseCurrentBubble();
 
-    ui_test_utils::NavigateToURL(browser_,
-                                 GURL(embedded_test_server()->GetURL(path)));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser_, GURL(embedded_test_server()->GetURL(path))));
   }
 
   void CheckForTranslateUI(const char* path, const bool expect_translate) {
@@ -211,8 +215,6 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
 
   std::unique_ptr<net::test_server::ControllableHttpResponse>
       controllable_http_response_;
-
-  DISALLOW_COPY_AND_ASSIGN(TranslateLanguageBrowserTest);
 };
 
 // Flaky failures & timeouts: https://crbug.com/1131622

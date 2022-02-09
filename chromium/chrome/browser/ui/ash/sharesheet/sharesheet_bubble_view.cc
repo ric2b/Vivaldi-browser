@@ -41,8 +41,8 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/transform_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -90,9 +90,9 @@ constexpr int kExpandViewPaddingBottom = 8;
 
 constexpr int kShortSpacing = 20;
 
-constexpr auto kAnimateDelay = base::TimeDelta::FromMilliseconds(100);
-constexpr auto kQuickAnimateTime = base::TimeDelta::FromMilliseconds(100);
-constexpr auto kSlowAnimateTime = base::TimeDelta::FromMilliseconds(200);
+constexpr auto kAnimateDelay = base::Milliseconds(100);
+constexpr auto kQuickAnimateTime = base::Milliseconds(100);
+constexpr auto kSlowAnimateTime = base::Milliseconds(200);
 
 // Resize Percentage.
 constexpr int kStretchy = 1.0;
@@ -154,6 +154,10 @@ SharesheetBubbleView::SharesheetBubbleView(
     gfx::NativeWindow native_window,
     ::sharesheet::SharesheetServiceDelegate* delegate)
     : delegate_(delegate) {
+  // We set the dialog role because views::BubbleDialogDelegate defaults this to
+  // an alert dialog. This would make screen readers announce all of this dialog
+  // which is undesirable.
+  SetAccessibleRole(ax::mojom::Role::kDialog);
   set_parent_window(native_window);
   parent_widget_observer_ = std::make_unique<SharesheetParentWidgetObserver>(
       this, views::Widget::GetWidgetForNativeWindow(native_window));
@@ -163,7 +167,13 @@ SharesheetBubbleView::SharesheetBubbleView(
   CreateBubble();
 }
 
-SharesheetBubbleView::~SharesheetBubbleView() = default;
+SharesheetBubbleView::~SharesheetBubbleView() {
+  // TODO(https://crbug.com/1249491): While this is harmless, it should not be
+  // necessary unless something fishy is happening with the behavior of layer
+  // animations around widget teardown.
+  if (close_callback_)
+    std::move(close_callback_).Run(views::Widget::ClosedReason::kUnspecified);
+}
 
 void SharesheetBubbleView::ShowBubble(
     std::vector<TargetInfo> targets,
@@ -176,16 +186,13 @@ void SharesheetBubbleView::ShowBubble(
 
   main_view_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  // When there are no targets, don't show any previews. Otherwise, show
-  // previews if the flag is enabled.
-  bool show_content_previews =
-      !targets.empty() &&
-      base::FeatureList::IsEnabled(features::kSharesheetContentPreviews);
+  // When there are no targets, don't show any previews.
+  bool show_content_previews = !targets.empty();
   header_view_ =
       main_view_->AddChildView(std::make_unique<SharesheetHeaderView>(
           intent_->Clone(), delegate_->GetProfile(), show_content_previews));
-  auto* body_view = main_view_->AddChildView(std::make_unique<views::View>());
-  body_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+  body_view_ = main_view_->AddChildView(std::make_unique<views::View>());
+  body_view_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   footer_view_ = main_view_->AddChildView(std::make_unique<views::View>());
   auto* footer_layout =
@@ -198,33 +205,34 @@ void SharesheetBubbleView::ShowBubble(
       views::BoxLayout::CrossAxisAlignment::kCenter);
 
   if (targets.empty()) {
-    auto* image = body_view->AddChildView(std::make_unique<views::ImageView>());
+    auto* image =
+        body_view_->AddChildView(std::make_unique<views::ImageView>());
     image->SetImage(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
         IDR_SHARESHEET_EMPTY));
     image->SetProperty(views::kMarginsKey, gfx::Insets(0, 0, kSpacing, 0));
-    body_view->AddChildView(CreateShareLabel(
+    body_view_->AddChildView(CreateShareLabel(
         l10n_util::GetStringUTF16(IDS_SHARESHEET_ZERO_STATE_PRIMARY_LABEL),
         CONTEXT_SHARESHEET_BUBBLE_BODY, kPrimaryTextLineHeight,
         kPrimaryTextColor, gfx::ALIGN_CENTER));
-    body_view->AddChildView(CreateShareLabel(
+    body_view_->AddChildView(CreateShareLabel(
         l10n_util::GetStringUTF16(IDS_SHARESHEET_ZERO_STATE_SECONDARY_LABEL),
         CONTEXT_SHARESHEET_BUBBLE_BODY_SECONDARY, kPrimaryTextLineHeight,
         kSecondaryTextColor, gfx::ALIGN_CENTER, views::style::STYLE_PRIMARY));
   } else {
     if (show_content_previews) {
       header_body_separator_ =
-          body_view->AddChildView(std::make_unique<views::Separator>());
+          body_view_->AddChildView(std::make_unique<views::Separator>());
     }
 
     const size_t targets_size = targets.size();
     auto scroll_view = std::make_unique<views::ScrollView>();
     scroll_view->SetContents(MakeScrollableTargetView(std::move(targets)));
     scroll_view->ClipHeightTo(kTargetViewHeight, kTargetViewExpandedHeight);
-    body_view->AddChildView(std::move(scroll_view));
+    body_view_->AddChildView(std::move(scroll_view));
 
     if (expanded_view_) {
       body_footer_separator_ =
-          body_view->AddChildView(std::make_unique<views::Separator>());
+          body_view_->AddChildView(std::make_unique<views::Separator>());
       expand_button_ =
           footer_view_->AddChildView(std::make_unique<SharesheetExpandButton>(
               base::BindRepeating(&SharesheetBubbleView::ExpandButtonPressed,
@@ -452,6 +460,18 @@ void SharesheetBubbleView::CloseBubble(views::Widget::ClosedReason reason) {
   }
 }
 
+SharesheetHeaderView* SharesheetBubbleView::GetHeaderViewForTesting() {
+  return header_view_;
+}
+
+views::View* SharesheetBubbleView::GetBodyViewForTesting() {
+  return body_view_;
+}
+
+views::View* SharesheetBubbleView::GetFooterViewForTesting() {
+  return footer_view_;
+}
+
 bool SharesheetBubbleView::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   // We override this because when this is handled by the base class,
@@ -520,13 +540,6 @@ bool SharesheetBubbleView::OnKeyPressed(const ui::KeyEvent& event) {
         ->RequestFocus();
   }
   return true;
-}
-
-ax::mojom::Role SharesheetBubbleView::GetAccessibleWindowRole() {
-  // We override the role because the base class sets it to alert dialog.
-  // This would make screen readers repeatedly announce the whole of the
-  // |sharesheet_bubble_view| which is undesirable.
-  return ax::mojom::Role::kDialog;
 }
 
 std::unique_ptr<views::NonClientFrameView>
@@ -671,8 +684,7 @@ void SharesheetBubbleView::SetToDefaultBubbleSizing() {
 
 void SharesheetBubbleView::ShowWidgetWithAnimateFadeIn() {
   constexpr float kSharesheetScaleUpFactor = 0.8f;
-  constexpr auto kSharesheetScaleUpTime =
-      base::TimeDelta::FromMilliseconds(150);
+  constexpr auto kSharesheetScaleUpTime = base::Milliseconds(150);
 
   views::Widget* widget = View::GetWidget();
   ui::Layer* layer = widget->GetLayer();
@@ -697,13 +709,9 @@ void SharesheetBubbleView::ShowWidgetWithAnimateFadeIn() {
 
 void SharesheetBubbleView::CloseWidgetWithAnimateFadeOut(
     views::Widget::ClosedReason closed_reason) {
-  constexpr auto kSharesheetOpacityFadeOutTime =
-      base::TimeDelta::FromMilliseconds(80);
+  constexpr auto kSharesheetOpacityFadeOutTime = base::Milliseconds(80);
 
   is_bubble_closing_ = true;
-  if (close_callback_) {
-    std::move(close_callback_).Run(closed_reason);
-  }
   ui::Layer* layer = View::GetWidget()->GetLayer();
 
   auto scoped_settings =
@@ -726,6 +734,10 @@ void SharesheetBubbleView::CloseWidgetWithReason(
     views::Widget::ClosedReason closed_reason) {
   View::GetWidget()->CloseWithReason(closed_reason);
 
+  // Run |close_callback_| after the widget closes.
+  if (close_callback_) {
+    std::move(close_callback_).Run(closed_reason);
+  }
   // Bubble is deleted here.
   delegate_->OnBubbleClosed(active_target_);
 }

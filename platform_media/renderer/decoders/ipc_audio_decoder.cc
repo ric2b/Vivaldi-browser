@@ -45,6 +45,8 @@ bool g_audio_decoder_available = true;
 class IPCAudioDecoder::InMemoryDataSource : public DataSource {
  public:
   explicit InMemoryDataSource(FFmpegURLProtocol* protocol);
+  InMemoryDataSource(const InMemoryDataSource&) = delete;
+  InMemoryDataSource& operator=(const InMemoryDataSource&) = delete;
 
   // DataSource implementation.
   void Read(int64_t position,
@@ -65,8 +67,6 @@ class IPCAudioDecoder::InMemoryDataSource : public DataSource {
   std::string mime_type_;
   FFmpegURLProtocol* protocol_;
   bool stopped_;
-
-  DISALLOW_COPY_AND_ASSIGN(InMemoryDataSource);
 };
 
 IPCAudioDecoder::InMemoryDataSource::InMemoryDataSource(

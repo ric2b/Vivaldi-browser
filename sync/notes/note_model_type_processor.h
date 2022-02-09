@@ -29,6 +29,10 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                public syncer::ModelTypeControllerDelegate {
  public:
   NoteModelTypeProcessor();
+
+  NoteModelTypeProcessor(const NoteModelTypeProcessor&) = delete;
+  NoteModelTypeProcessor& operator=(const NoteModelTypeProcessor&) = delete;
+
   ~NoteModelTypeProcessor() override;
 
   // ModelTypeProcessor implementation.
@@ -154,8 +158,6 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // WeakPtrFactory for this processor which will be sent to sync thread.
   base::WeakPtrFactory<NoteModelTypeProcessor> weak_ptr_factory_for_worker_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(NoteModelTypeProcessor);
 };
 
 }  // namespace sync_notes

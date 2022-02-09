@@ -69,8 +69,8 @@ declare_args() {
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
-if (enable_resource_allowlist_generation) {
-  chrome_resource_whitelist = "$target_gen_dir/chrome_resource_whitelist.txt"
+if (is_win && enable_resource_allowlist_generation) {
+  _chrome_resource_allowlist = "$target_gen_dir/chrome_resource_allowlist.txt"
 }
 
 if (is_win) {
@@ -101,6 +101,8 @@ if (is_win) {
 # on Chrome and the main DLLs it uses, it will transitively assert that those
 # targets also have no deps on disallowed things.
 group("assert_no_deps") {
+  # TODO(issuetracker.google.com/199337060): remove testonly
+  testonly = enable_weston_test
   deps = []
 
   if (is_android) {
@@ -120,6 +122,8 @@ group("assert_no_deps") {
 }
 if (!is_android && !is_mac) {
   group("chrome") {
+    # TODO(issuetracker.google.com/199337060): remove testonly
+    testonly = enable_weston_test
     public_deps = [ ":chrome_initial" ]
     data_deps = [ ":chrome_initial" ]
 
@@ -160,6 +164,8 @@ if (!is_android && !is_mac) {
     data_deps = []
 
     if (is_chromeos_ash) {
+      # TODO(issuetracker.google.com/199337060): remove testonly
+      testonly = enable_weston_test
       data_deps += [ "//sandbox/linux:chrome_sandbox" ]
     }
 
@@ -289,6 +295,13 @@ if (!is_android && !is_mac) {
 
       ldflags = []
 
+      # On Chrome OS builds (for both ash-chrome and lacros-chrome), put
+      # priority to the library in the installed directory.
+      # This will avoid conflicting of exposed symbols.
+      if (is_chromeos_device) {
+        ldflags += [ "-L" + rebase_path(root_out_dir) ]
+      }
+
       # Chrome OS debug builds for arm need to pass --long-plt to the linker.
       # See https://bugs.chromium.org/p/chromium/issues/detail?id=583532
       if (is_chromeos_ash && is_debug && target_cpu == "arm") {
@@ -330,6 +343,19 @@ if (!is_android && !is_mac) {
     # library usage.
     if (is_chromeos_ash && !is_component_build) {
       configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+
+    # Lacros is built with "{arch}-generic" configuration. However, in Chrome
+    # OS, it is just "one board variation", so the libraries on the *-generic
+    # boards may not be compatible with the ones on the actual DUTs.
+    # One of the common pattern recently we hit is symbols exposed by libgcc.
+    # The symbols start to be exposed recently because of libunwind transition
+    # and along with it they are or are not re-exposed by other libraries, too,
+    # depending on per-board implementation.
+    # To mitigate the situation, marking -shared-libgcc to look up the system
+    # libgcc always.
+    if (is_chromeos_lacros && is_chromeos_device) {
+      ldflags += [ "-shared-libgcc" ]
     }
 
     data_deps += [
@@ -1541,8 +1567,8 @@ if (!is_android) {
     }
 
     if (enable_resource_allowlist_generation) {
-      repack_allowlist = chrome_resource_whitelist
-      deps = [ "//chrome:resource_whitelist" ]
+      repack_allowlist = _chrome_resource_allowlist
+      deps = [ ":resource_allowlist" ]
     }
 
     if (is_chrome_branded && !is_mac) {
@@ -1678,18 +1704,13 @@ if (is_android) {
   }
 }
 
-if (enable_resource_allowlist_generation) {
-  generate_resource_allowlist("resource_whitelist") {
-    if (is_android) {
-      deps = [ "//chrome/android:libchrome" ]
-      inputs = [ "$root_out_dir/lib.unstripped/libchrome$shlib_extension" ]
-    } else if (is_win) {
-      deps = [ ":chrome_dll" ]
-      inputs = [ "$root_out_dir/chrome.dll.pdb" ]
-    } else {
-      assert(false, "unsupported platform for whitelist generation")
-    }
-    output = chrome_resource_whitelist
+# Android also supports this, but uses
+# //chrome/android:${_variant}_resource_allowlist.
+if (is_win && enable_resource_allowlist_generation) {
+  generate_resource_allowlist("resource_allowlist") {
+    deps = [ ":chrome_dll" ]
+    inputs = [ "$root_out_dir/chrome.dll.pdb" ]
+    output = _chrome_resource_allowlist
   }
 }
 

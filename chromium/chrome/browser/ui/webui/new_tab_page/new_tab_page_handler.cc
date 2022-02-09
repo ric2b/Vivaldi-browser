@@ -67,12 +67,15 @@ new_tab_page::mojom::ThemePtr MakeTheme(
     const ui::ThemeProvider* theme_provider,
     ThemeService* theme_service,
     NtpCustomBackgroundService* ntp_custom_background_service) {
+  if (ntp_custom_background_service) {
+    ntp_custom_background_service->RefreshBackgroundIfNeeded();
+  }
   auto theme = new_tab_page::mojom::Theme::New();
   auto most_visited = most_visited::mojom::MostVisitedTheme::New();
   auto custom_background =
       ntp_custom_background_service
           ? ntp_custom_background_service->GetCustomBackground()
-          : absl::optional<CustomBackground>();
+          : absl::nullopt;
   theme->is_default = theme_service->UsingDefaultTheme();
   theme->background_color =
       theme_provider->GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
@@ -515,7 +518,7 @@ void NewTabPageHandler::GetPromo(GetPromoCallback callback) {
   // Replace the promo URL with "command:<id>" if such a command ID is set
   // via the feature params.
   const std::string command_id = base::GetFieldTrialParamValueByFeature(
-      features::kPromoBrowserCommands, features::kPromoBrowserCommandIdParam);
+      features::kPromoBrowserCommands, features::kBrowserCommandIdParam);
   if (!command_id.empty()) {
     auto promo = new_tab_page::mojom::Promo::New();
     std::vector<new_tab_page::mojom::PromoPartPtr> parts;
@@ -977,7 +980,9 @@ void NewTabPageHandler::OnLogoAvailable(
           logo->metadata.dark_share_button_opacity, logo->metadata.dark_log_url,
           logo->metadata.dark_cta_log_url);
     }
-    image_doodle->on_click_url = logo->metadata.on_click_url;
+    if (logo->metadata.on_click_url.is_valid()) {
+      image_doodle->on_click_url = logo->metadata.on_click_url;
+    }
     image_doodle->share_url = logo->metadata.short_link;
     doodle->image = std::move(image_doodle);
   } else if (logo->metadata.type ==

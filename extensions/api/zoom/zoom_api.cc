@@ -129,7 +129,7 @@ ExtensionFunction::ResponseAction ZoomSetVivaldiUIZoomFunction::Run() {
   using vivaldi::zoom::SetVivaldiUIZoom::Params;
   namespace Results = vivaldi::zoom::SetVivaldiUIZoom::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   double zoom_level = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
@@ -138,7 +138,7 @@ ExtensionFunction::ResponseAction ZoomSetVivaldiUIZoomFunction::Run() {
     // our UI).
     if (browser->is_vivaldi()) {
       WebContents* web_contents =
-        static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
+          static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
       SetUIZoomByWebContent(zoom_level, web_contents, extension());
     }
   }
@@ -172,7 +172,7 @@ ExtensionFunction::ResponseAction ZoomSetDefaultZoomFunction::Run() {
   using vivaldi::zoom::SetDefaultZoom::Params;
   namespace Results = vivaldi::zoom::SetDefaultZoom::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   Profile* profile = Profile::FromBrowserContext(browser_context());

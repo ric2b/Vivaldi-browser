@@ -38,6 +38,7 @@
 #include "content/public/common/content_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_id.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
@@ -65,7 +66,7 @@ std::unique_ptr<views::View> CreateViewAndInstallController(
 // static
 base::WeakPtr<PaymentRequestDialogView> PaymentRequestDialogView::Create(
     base::WeakPtr<PaymentRequest> request,
-    PaymentRequestDialogView::ObserverForTest* observer) {
+    base::WeakPtr<PaymentRequestDialogView::ObserverForTest> observer) {
   return (new PaymentRequestDialogView(request, observer))
       ->weak_ptr_factory_.GetWeakPtr();
 }
@@ -463,7 +464,7 @@ Profile* PaymentRequestDialogView::GetProfile() {
 
 PaymentRequestDialogView::PaymentRequestDialogView(
     base::WeakPtr<PaymentRequest> request,
-    PaymentRequestDialogView::ObserverForTest* observer)
+    base::WeakPtr<PaymentRequestDialogView::ObserverForTest> observer)
     : request_(request), observer_for_testing_(observer) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(request);
@@ -561,7 +562,7 @@ void PaymentRequestDialogView::SetupSpinnerOverlay() {
   // The throbber overlay has to have a solid white background to hide whatever
   // would be under it.
   throbber_overlay->SetBackground(views::CreateThemedSolidBackground(
-      throbber_overlay.get(), ui::NativeTheme::kColorId_DialogBackground));
+      throbber_overlay.get(), ui::kColorDialogBackground));
 
   views::GridLayout* layout =
       throbber_overlay->SetLayoutManager(std::make_unique<views::GridLayout>());

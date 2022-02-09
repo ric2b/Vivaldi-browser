@@ -1,16 +1,222 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="gl">
+<translation id="1038842779957582377">nome descoñecido</translation>
+<translation id="1089439967362294234">Cambiar contrasinal</translation>
+<translation id="1110994991967754504">Seleccionar permiso de <ph name="PERMISSION_NAME" /></translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> pechouse inesperadamente a conexión.</translation>
+<translation id="1161325031994447685">Reconectando á Wi-Fi</translation>
+<translation id="1175364870820465910">&amp;Imprimir...</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Intentar borrar as cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Sobre a versión</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> non enviou ningún dato.</translation>
 <translation id="1559528461873125649">Non existe ese ficheiro ou cartafol</translation>
+<translation id="1640244768702815859">Proba a <ph name="BEGIN_LINK" />visitar a páxina principal do sitio<ph name="END_LINK" />.</translation>
+<translation id="1645368109819982629">Protocolo non admitido</translation>
 <translation id="1710259589646384581">SO</translation>
+<translation id="1728677426644403582">Estás vendo as fontes dunha páxina web</translation>
+<translation id="1734878702283171397">Proba a contactar co administrador do sistema.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Intentar executar as diagnoses da rede de Windows<ph name="END_LINK" />.</translation>
+<translation id="1834321415901700177">Este sitio contén programas prexudiciais</translation>
+<translation id="1916770123977586577">Para aplicar a configuración actualizada para este sitio, recarga esta páxina</translation>
+<translation id="1974060860693918893">Avanzado</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprobar o proxy e o firewall<ph name="END_LINK" /></translation>
+<translation id="2119505898009119320">Emitido para:<ph name="ORGANIZATION" />[<ph name="JURISDICTION" />]</translation>
+<translation id="2166378884831602661">Este sitio non pode proporcionar unha conexión segura</translation>
+<translation id="2187317261103489799">Detectar (predeterminado)</translation>
+<translation id="2224337661447660594">Sen Internet</translation>
+<translation id="2230458221926704099">Corrixe os teus problemas de conexión co <ph name="BEGIN_LINK" />aplicativo de diagnose<ph name="END_LINK" /></translation>
+<translation id="2292556288342944218">O acceso a Internet está bloqueado</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> require un nome do usuario e contrasinal.</translation>
+<translation id="2337852623177822836">Configuración controlada polo teu administrador</translation>
+<translation id="2355395290879513365">Os atacantes poden ver as imaxes que estás mirando neste sitio e enganarte modificándoas.</translation>
+<translation id="2356070529366658676">Preguntar</translation>
+<translation id="2359808026110333948">Continuar</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar a diagnose da rede<ph name="END_LINK" /></translation>
+<translation id="2491414235131909199">Unha extensión bloqueou esta páxina</translation>
+<translation id="2501278716633472235">Volver</translation>
+<translation id="2539524384386349900">Detectar</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> enviou unha resposta inválida.</translation>
+<translation id="2609632851001447353">Variacións</translation>
+<translation id="2634124572758952069">Non se puido atopar a dirección IP do servidor de <ph name="HOST_NAME" />.</translation>
+<translation id="2649204054376361687"><ph name="CITY" />,<ph name="COUNTRY" /></translation>
+<translation id="2650446666397867134">Denegouse o acceso ao ficheiro</translation>
+<translation id="2705137772291741111">A copia gardada (almacenada en caché) deste sitio non se pode ler.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Executar a diagnose de conectividade<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Restabeleceuse a conexión.</translation>
+<translation id="2826760142808435982">A conexión encriptouse e autentificou con <ph name="CIPHER" /> e usa <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
+<translation id="2856444702002559011">Os atacantes poden estar intentando roubar a túa información de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (p. ex. contrasinais, mensaxes ou tarxetas de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Coñece máis<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="2909946352844186028">Foi detectado un cambio de rede.</translation>
+<translation id="2948083400971632585">Podes desactivar calquera complemento configurado para unha conexión desde a configuración de rede de Vivaldi.</translation>
+<translation id="2991571918955627853">Non podes visitar <ph name="SITE" /> neste momento porque o sitio web usa HSTS. Os erros e ataques de rede adoitan ser temporais, polo que é probable que esta páxina funcione máis tarde.</translation>
+<translation id="3005723025932146533">Amosar copia gardada</translation>
+<translation id="301521992641321250">Bloqueado automaticamente</translation>
+<translation id="3041612393474885105">Certificar información</translation>
+<translation id="3109728660330352905">Non tes autorización para ver esta páxina.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Intentar executar as diagnoses de conectividade<ph name="END_LINK" />.</translation>
+<translation id="3154506275960390542">Esta páxina contén un formulario que non se pode enviar de forma segura. Mentres transitan os datos que envías, estes poden ser vistos por outros e un atacante pode modificalos para cambiar l que recibe o servidor.</translation>
+<translation id="3176929007561373547">Revisa a túa configuración do proxy ou contacta co teu administrador de rede para
+      asegurarte de que o servidor proxy estea funcionando. Se consideras que non
+      necesitas usar un servidor proxy, segue estas instruccións:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3226128629678568754">Preme o botón de recargar a páxina para reenviar os datos necesarios para cargar a páxina.</translation>
+<translation id="3234666976984236645">Detectar sempre contido importante para este sitio</translation>
+<translation id="3308738399950580893">anuncios</translation>
+<translation id="3422472998109090673">O sitio <ph name="HOST_NAME" /> é inaccesible neste momento.</translation>
+<translation id="3427092606871434483">Permitir (predeterminado)</translation>
+<translation id="3447661539832366887">O propietario deste dispositivo desactivou o xogo do dinosario.</translation>
+<translation id="3447884698081792621">Amosar certificado (emitido por <ph name="ISSUER" />)</translation>
+<translation id="3462200631372590220">Agochar configuración avanzada</translation>
+<translation id="3484560055331845446">Podería perder o acceso á súa conta de Google. Chrome recomenda cambiar o seu contrasinal agora. Pediráselle que inicie sesión.</translation>
+<translation id="3566021033012934673">A túa conexión non é privada</translation>
+<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
+<translation id="3586931643579894722">Agochar detalles</translation>
+<translation id="3630155396527302611">Se foi incluído como programa autorizado para acceder á rede,
+      proba a eliminalo da lista e volvelo a engadir.</translation>
+<translation id="3658742229777143148">Revisión</translation>
+<translation id="3681007416295224113">Certificar información</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />Comprobar a configuración do proxy, firewall, e DNS <ph name="END_LINK" /></translation>
+<translation id="382518646247711829">Se usas un servidor de proxy…</translation>
+<translation id="3894751534882749287">Se desexa ver a páxina de todos os xeitos, pode cambiar o seu nivel de protección de seguimento na xanela emerxente bloqueador de seguimento ou premendo no botón Permitir</translation>
+<translation id="3950820424414687140">Iniciar sesión</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
+<translation id="3987940399970879459">Menos de 1 MB</translation>
+<translation id="4075732493274867456">O cliente e o servidor non son compatibles cunha versión do protocolo SSL ou un conxunto de cifrado comúns.</translation>
+<translation id="4116663294526079822">Permitir sempre neste sitio</translation>
+<translation id="4130226655945681476">Comprobando os cables, módem e rúter da rede</translation>
+<translation id="4151403195736952345">Usar valor por defecto global (Detectar)</translation>
+<translation id="4165986682804962316">Configuración do sitio</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Comprobar a configuración do firewall e antivirus<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Intentar executar as diagnoses de rede<ph name="END_LINK" />.</translation>
+<translation id="4235360514405112390">Válido</translation>
+<translation id="4250431568374086873">A túa conexión a este sitio non é totalmente segura</translation>
+<translation id="4265872034478892965">Permitido polo teu administrador</translation>
+<translation id="4305666528087210886">Non se puido acceder ao ficheiro</translation>
+<translation id="4312866146174492540">Bloquear (predeterminado)</translation>
+<translation id="4356973930735388585">Os atacantes a este sitio poden intentar instalar programas perigosos no teu equipo para roubar ou eliminar a túa información (p. ex. fotos, contrasinais, mensaxes e tarxetas de crédito).</translation>
+<translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> non aceptou o teu certificado de inicio de sesión ou é posible que non se lle proporcionase un.</translation>
+<translation id="4506599922270137252">Contactando co administrador do sistema</translation>
 <translation id="4522570452068850558">Detalles</translation>
+<translation id="4558551763791394412">Proba a desactivar as túas extensións.</translation>
+<translation id="4592951414987517459">A túa conexión con <ph name="DOMAIN" /> está cifrada usando un conxunto de cifrado moderno.</translation>
+<translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
+<translation id="4708268264240856090">A túa conexión foi interrompida</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar a diagnose da rede de Windows<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Bloqueador de rastreadores</translation>
 <translation id="4744603770635761495">Camiño ao executábel</translation>
+<translation id="4750917950439032686">A súa información (por exemplo, contrasinais ou números de tarxetas de crédito) é privada cando se envía a este sitio.</translation>
+<translation id="4764776831041365478">É posible que a página web <ph name="URL" /> estea temporalmente inactiva ou que fose trasladada definitivamente a outra dirección.</translation>
+<translation id="4943872375798546930">Sen resultados</translation>
+<translation id="5023310440958281426">Comproba as políticas do administrador</translation>
+<translation id="5039804452771397117">Permitir</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 en uso)} other {(# en uso)}}</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobar o enderezo do proxy<ph name="END_LINK" /></translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5287240709317226393">Amosar cookies</translation>
+<translation id="5355557959165512791">Non podes visitar <ph name="SITE" /> neste momento porque o seu certificado foi revogado. Os erros e ataques de rede adoitan ser temporais, polo que é probable que esta páxina funcione máis tarde.</translation>
+<translation id="5386426401304769735">A cadea de certificados deste sitio contén un certificado asinado con SHA-1.</translation>
+<translation id="5452270690849572955">Esta<ph name="HOST_NAME" /> páxina non se pode atopar</translation>
+<translation id="5457113250005438886">Inválido</translation>
+<translation id="5492298309214877701">Este sitio na intranet da empresa, organización ou centro educativo ten a mesma URL que un sitio web externo.
+    <ph name="LINE_BREAK" />
+    Proba a contactar co teu administrador do sistema.</translation>
+<translation id="5510766032865166053">É posible que fose trasladado ou eliminado.</translation>
 <translation id="5556459405103347317">Recargar</translation>
+<translation id="5610142619324316209">Comprobando a conexión</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> redireccionoute moitas veces.</translation>
+<translation id="5675650730144413517">Esta páxina non está funcionando</translation>
+<translation id="5785756445106461925">Ademais, esta páxina inclúe outros recursos non seguros. Mentres transitan, estes poden ser vistos por outros e un atacante pode modificalos para cambiar o aspecto da páxina.</translation>
+<translation id="5799902971440853357">Non podes visitar <ph name="SITE" />neste momento porque o sitio web enviou credenciais codificadas que Vivaldi non pode procesar. Os erros e ataques de rede adoitan ser temporais, polo que é probable que esta páxina funcione máis tarde.</translation>
+<translation id="5810442152076338065">A túa conexión con <ph name="DOMAIN" /> está cifrada usando un conxunto de cifrado moderno.</translation>
+<translation id="5838278095973806738">Non debería introducir ningunha información confidencial neste sitio (por exemplo, contrasinais ou tarxetas de crédito), xa que os atacantes poderían roubalos.</translation>
+<translation id="5869405914158311789">Este sitio é inaccesible</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =1{1 en uso} other{# en uso}}</translation>
+<translation id="5932224571077948991">O sitio amosa anuncios invasivos ou enganosos</translation>
+<translation id="6051221802930200923">Non podes visitar <ph name="SITE" /> neste momento porque o sitio web usa fixación de certificados. Os erros e ataques de rede adoitan ser temporais, polo que é probable que esta páxina funcione máis tarde.</translation>
+<translation id="6146055958333702838">Revisa os cables e reinicia o rúter, módem ou calquera outro
+    dispositivo de rede que esteas usando.</translation>
+<translation id="614940544461990577">Intenta:</translation>
+<translation id="6165508094623778733">Saber máis</translation>
+<translation id="6177128806592000436">Non é segura a túa conexión a este sitio</translation>
+<translation id="6203231073485539293">Comproba a túa conexión a Internet</translation>
+<translation id="6225522625585012689">Visita &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver a lista dos URL bloqueados e outras políticas aplicadas polo teu administrador do sistema.</translation>
+<translation id="6264485186158353794">Volver á seguranza</translation>
+<translation id="6305205051461490394">O sitio <ph name="URL" /> é inaccesible.</translation>
+<translation id="6321917430147971392">Comproba a configuración do teu DNS</translation>
+<translation id="6328639280570009161">Proba a desactivar a predicción da rede</translation>
+<translation id="6328786501058569169">Este sitio é enganoso</translation>
+<translation id="6358450015545214790">Que significa isto?</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> rexeitou conectarse.</translation>
+<translation id="6447842834002726250">Cookies</translation>
+<translation id="6451458296329894277">Confirmar reenvío do formulario</translation>
+<translation id="6569060085658103619">Estás vendo unha páxina de extensión</translation>
+<translation id="6657585470893396449">Contrasinal</translation>
+<translation id="6685834062052613830">Pechar sesión e completar a configuración</translation>
+<translation id="6711464428925977395">Algo pasou co servidor de proxy, ou o enderezo é incorrecto.</translation>
+<translation id="6757797048963528358">O teu dispositivo entrou en suspensión.</translation>
 <translation id="6897140037006041989">Axente de usuario</translation>
+<translation id="7053983685419859001">Bloquear</translation>
+<translation id="7079718277001814089">Este sitio contén programas maliciosos</translation>
+<translation id="7108819624672055576">Permitido por unha extensión</translation>
+<translation id="7111012039238467737">(Válido)</translation>
+<translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> desde <ph name="DOMAIN" /></translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> non se adheriu a ningún estándar de seguranza.</translation>
+<translation id="7219179957768738017">A conexión usa <ph name="SSL_VERSION" />.</translation>
+<translation id="7260504762447901703">Revocar acceso</translation>
 <translation id="7353601530677266744">Liña de ordes</translation>
+<translation id="7364115444476960850"><ph name="BLOCKER_NAME" /> de Vivaldi bloqueou a páxina á que estabas intentando acceder</translation>
 <translation id="7419106976560586862">Camiño ao perfil</translation>
+<translation id="7445762425076701745">A identidade do servidor ao que estás conectado non se pode validar por completo. Estás conectado a un servidor cun nombre que só é válido dentro da túa red e cuxa propiedade non pode ser validada por unha entidade externa emisora de certificados. A pesar de que algunhas entidades emisoras emiten certificados para eses nomes, non é posible garantir que esteas conectado ao sitio web que queres, e non ao dun atacante.</translation>
+<translation id="7455133967321480974">Usar valor por defecto global (Bloquear)</translation>
+<translation id="7518003948725431193">Non se atopou unha página web para o enderezo: <ph name="URL" /></translation>
+<translation id="7549584377607005141">Esta páxina web require os datos que ingresaches anteriormente para amosarse correctamente. Podes volver a envialos, pero ao facelo, repetirás as accións que realizases a páxina.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> non pode procesar esta solicitude neste momento.</translation>
+<translation id="7662298039739062396">Configuración controlada por unha extensión</translation>
+<translation id="7663736086183791259">Certificar <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7669271284792375604">Os atacantes a este sitio poden intentar enganarte para que instales programas que empeoren a túa experiencia de navegación (por exemplo, cambiando a túa páxina principal ou amosando anuncios adicionais nos sitios que visites).</translation>
+<translation id="7714464543167945231">Certificar</translation>
+<translation id="7716147886133743102">Bloqueado por un administrador</translation>
+<translation id="7716424297397655342">Este sitio non se carga desde o caché</translation>
+<translation id="7758069387465995638">Pode que o cortalumes ou o antivirus bloquéanse a conexión.</translation>
+<translation id="7800304661137206267">A conexión encriptouse con <ph name="CIPHER" />, con <ph name="MAC" /> para a autentificación da mensaxe e con <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
+<translation id="7834399512844817676">Normalmente <ph name="SITE" /> usa o cifrado para protexer a túa información. Cando Vivaldi intentou establecer unha conexión con <ph name="SITE" />, o sitio web devolveu unhas credenciais inusuais e incorrectas. Isto pode ocorrer se un atacante está intentando suplantar a <ph name="SITE" /> ou se a conexión é interrompida polo inicio de sesión nunha rede inalámbrica. A túa información segue estando protexida, xa que Vivaldi detivo a conexión antes de intercambiar datos.</translation>
+<translation id="7878562273885520351">O teu contrasinal pode estar comprometido</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8025119109950072390">Os atacantes a este sitio poden enganarte para que realices algo perigoso como instalar programas ou revelar a túa información persoal (p. ex. contrasinais, números de teléfono ou tarxetas de crédito).</translation>
+<translation id="8037357227543935929">Preguntar (por defecto)</translation>
+<translation id="8041940743680923270">Usar valor por defecto global (Preguntar)</translation>
+<translation id="808894953321890993">Cambiar contrasinal</translation>
+<translation id="8119307142152921512">rastreadores e anuncios</translation>
+<translation id="8149426793427495338">O computador entrou en suspensión.</translation>
+<translation id="8150722005171944719">O ficheiro que se atopa en <ph name="URL" /> non se pode ler. É posible que fose eliminado, trasladado ou que os permisos do ficheiro impidan acceder a el.</translation>
+<translation id="8184538546369750125">Usar valor por defecto global (permitir)</translation>
+<translation id="8211406090763984747">A conexión é segura</translation>
+<translation id="8225771182978767009">A persoa que configurou este computador elixiu bloquear este sitio.</translation>
+<translation id="8241707690549784388">A páxina que buscas empregou a información que introduciches. Volver a esa páxina pode facer que se repita calquera acción que tome. Queres continuar?</translation>
+<translation id="8241712895048303527">Bloquear neste sitio</translation>
+<translation id="8286036467436129157">Iniciar sesión</translation>
+<translation id="8288807391153049143">Amosar certificado</translation>
+<translation id="8289355894181816810">Contacta co teu administrador de rede se non estás seguro de que significa.</translation>
+<translation id="8332188693563227489">O acceso a <ph name="HOST_NAME" /> denegouse</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> tardou moito tempo en responder.</translation>
+<translation id="8503813439785031346">Nome de usuario</translation>
+<translation id="8703575177326907206">A túa conexión a <ph name="DOMAIN" /> non está encriptada.</translation>
+<translation id="8740359287975076522">Non se puido atopar a&lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Estase diagnosticando o problema.</translation>
+<translation id="8820817407110198400">Marcadores</translation>
+<translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Ir á configuración do sitio</translation>
+<translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> require un nome de usuario e contrasinal.</translation>
+<translation id="9008201768610948239">Ignorar</translation>
+<translation id="9025348182339809926">(Inválido)</translation>
+<translation id="9039213469156557790">Ademais, esta páxina inclúe outros recursos non seguros. Mentres transitan, estes poden ser vistos por outros e un atacante pode modificalos para cambiar o comportamento da páxina.</translation>
+<translation id="9062620674789239642">É posible que se movese, editase ou eliminase.</translation>
+<translation id="9069693763241529744">Bloqueado por unha extensión</translation>
+<translation id="910924428752220542">Contrasinais de Vivaldi</translation>
+<translation id="9169664750068251925">Bloquear sempre para este sitio</translation>
+<translation id="9180553614777056266">Bloqueador de anuncios</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> usa un protocolo non soportado.</translation>
+<translation id="936602727769022409">Podería perder o acceso á súa conta de Google. Chromium recomenda cambiar o seu contrasinal agora. Pediráselle que inicie sesión.</translation>
 <translation id="969892804517981540">Compilación oficial</translation>
 <translation id="988159990683914416">Compilación para desenvolvedores</translation>
 </translationbundle>

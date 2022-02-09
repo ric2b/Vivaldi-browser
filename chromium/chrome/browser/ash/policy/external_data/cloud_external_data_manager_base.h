@@ -35,6 +35,11 @@ class CloudExternalDataManagerBase : public CloudExternalDataManager {
   CloudExternalDataManagerBase(
       const GetChromePolicyDetailsCallback& get_policy_details,
       scoped_refptr<base::SequencedTaskRunner> backend_task_runner);
+
+  CloudExternalDataManagerBase(const CloudExternalDataManagerBase&) = delete;
+  CloudExternalDataManagerBase& operator=(const CloudExternalDataManagerBase&) =
+      delete;
+
   ~CloudExternalDataManagerBase() override;
 
   // Allows downloaded external data to be cached in |external_data_store|.
@@ -51,6 +56,7 @@ class CloudExternalDataManagerBase : public CloudExternalDataManager {
                    url_loader_factory) override;
   void Disconnect() override;
   void Fetch(const std::string& policy,
+             const std::string& field_name,
              ExternalDataFetcher::FetchCallback callback) override;
 
   // Allows policies to reference |max_size| bytes of external data even if no
@@ -78,8 +84,6 @@ class CloudExternalDataManagerBase : public CloudExternalDataManager {
   std::unique_ptr<Backend> backend_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(CloudExternalDataManagerBase);
 };
 
 }  // namespace policy

@@ -53,6 +53,12 @@ LayoutSVGResourcePattern::LayoutSVGResourcePattern(SVGPatternElement* node)
       attributes_wrapper_(MakeGarbageCollected<PatternAttributesWrapper>()),
       pattern_map_(MakeGarbageCollected<PatternMap>()) {}
 
+void LayoutSVGResourcePattern::Trace(Visitor* visitor) const {
+  visitor->Trace(attributes_wrapper_);
+  visitor->Trace(pattern_map_);
+  LayoutSVGResourcePaintServer::Trace(visitor);
+}
+
 void LayoutSVGResourcePattern::RemoveAllClientsFromCache() {
   NOT_DESTROYED();
   pattern_map_->clear();
@@ -212,7 +218,7 @@ sk_sp<PaintRecord> LayoutSVGResourcePattern::AsPaintRecord(
   DCHECK(pattern_content_element);
   // If the element or some of its ancestor prevents us from doing paint, we can
   // early out. Note that any locked ancestor would prevent paint.
-  if (DisplayLockUtilities::NearestLockedInclusiveAncestor(
+  if (DisplayLockUtilities::LockedInclusiveAncestorPreventingPaint(
           *pattern_content_element)) {
     return paint_recorder.finishRecordingAsPicture();
   }
@@ -224,13 +230,13 @@ sk_sp<PaintRecord> LayoutSVGResourcePattern::AsPaintRecord(
 
   SubtreeContentTransformScope content_transform_scope(content_transform);
 
-  PaintRecordBuilder builder;
+  auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
   for (LayoutObject* child = pattern_layout_object->FirstChild(); child;
        child = child->NextSibling())
-    SVGObjectPainter(*child).PaintResourceSubtree(builder.Context());
+    SVGObjectPainter(*child).PaintResourceSubtree(builder->Context());
   canvas->save();
   canvas->concat(AffineTransformToSkMatrix(tile_transform));
-  builder.EndRecording(*canvas);
+  builder->EndRecording(*canvas);
   canvas->restore();
   return paint_recorder.finishRecordingAsPicture();
 }

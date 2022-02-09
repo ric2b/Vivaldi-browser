@@ -8,6 +8,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -28,6 +29,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.StrictModeContext;
+import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LoaderErrors;
@@ -97,6 +99,9 @@ public abstract class AsyncInitializationActivity
     private Runnable mOnInflationCompleteCallback;
     private boolean mInitialLayoutInflationComplete;
 
+    // See enableHardwareAcceleration()
+    private boolean mSetWindowHWA;
+
     private static boolean sInterceptMoveTaskToBackForTesting;
     private static boolean sBackInterceptedForTesting;
 
@@ -141,10 +146,7 @@ public abstract class AsyncInitializationActivity
         // 2. To ensure mIsTablet only needs to be set once. Since the override lasts for the life
         //    of the activity, it will never change via onConfigurationUpdated().
         // See crbug.com/588838, crbug.com/662338, crbug.com/780593.
-        DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(baseContext);
-        int targetSmallestScreenWidthDp =
-                DisplayUtil.pxToDp(display, DisplayUtil.getSmallestWidth(display));
-        overrideConfig.smallestScreenWidthDp = targetSmallestScreenWidthDp;
+        overrideConfig.smallestScreenWidthDp = getCurrentSmallestScreenWidth(baseContext);
         return true;
     }
 
@@ -672,8 +674,7 @@ public abstract class AsyncInitializationActivity
     @CallSuper
     @Override
     public boolean onActivityResultWithNative(int requestCode, int resultCode, Intent intent) {
-        if (mIntentRequestTracker.onActivityResult(
-                    requestCode, resultCode, intent, mWindowAndroid)) {
+        if (mIntentRequestTracker.onActivityResult(requestCode, resultCode, intent)) {
             return true;
         }
         mLifecycleDispatcher.dispatchOnActivityResultWithNative(requestCode, resultCode, intent);
@@ -723,6 +724,30 @@ public abstract class AsyncInitializationActivity
      */
     public boolean isTablet() {
         return mIsTablet;
+    }
+
+    /**
+     * Get current smallest screen width in dp. This method uses {@link WindowManager} on
+     * Android R and above; otherwise, {@link DisplayUtil#getSmallestWidth(DisplayAndroid)}.
+     *
+     * @param context {@link Context} used to get system service and target display.
+     * @return Smallest screen width in dp.
+     */
+    protected int getCurrentSmallestScreenWidth(Context context) {
+        DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(context);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Context#getSystemService(Context.WINDOW_SERVICE) is preferred over
+            // Activity#getWindowManager, because during #attachBaseContext, #getWindowManager
+            // is not ready yet and always returns null. See crbug.com/1252150.
+            WindowManager manager =
+                    (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            assert manager != null;
+            Rect bounds = manager.getMaximumWindowMetrics().getBounds();
+            return DisplayUtil.pxToDp(
+                    display, Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top));
+        } else {
+            return DisplayUtil.pxToDp(display, DisplayUtil.getSmallestWidth(display));
+        }
     }
 
     /**
@@ -924,5 +949,42 @@ public abstract class AsyncInitializationActivity
 
     public static boolean wasMoveTaskToBackInterceptedForTesting() {
         return sBackInterceptedForTesting;
+    }
+
+    private boolean shouldDisableHardwareAcceleration() {
+        // Low end devices should disable hardware acceleration for memory gains.
+        return SysUtils.isLowEndDevice();
+    }
+
+    protected void enableHardwareAcceleration() {
+        // HW acceleration is disabled in the manifest and may be re-enabled here.
+        if (!shouldDisableHardwareAcceleration()) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+
+            // When HW acceleration is enabled manually for an activity, child windows (e.g.
+            // dialogs) don't inherit HW acceleration state. However, when HW acceleration is
+            // enabled in the manifest, child windows do inherit HW acceleration state. That
+            // looks like a bug, so I filed b/23036374
+            //
+            // In the meanwhile the workaround is to call
+            //   window.setWindowManager(..., hardwareAccelerated=true)
+            // to let the window know that it's HW accelerated. However, since there is no way
+            // to know 'appToken' argument until window's view is attached to the window (!!),
+            // we have to do the workaround in onAttachedToWindow()
+            mSetWindowHWA = true;
+        }
+    }
+
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+
+        // See enableHardwareAcceleration()
+        if (mSetWindowHWA) {
+            mSetWindowHWA = false;
+            getWindow().setWindowManager(getWindow().getWindowManager(),
+                    getWindow().getAttributes().token, getComponentName().flattenToString(),
+                    true /* hardwareAccelerated */);
+        }
     }
 }

@@ -98,7 +98,14 @@ void LeakDetectionDelegate::OnShowLeakDetectionNotification(
     IsSaved is_saved,
     IsReused is_reused,
     GURL url,
-    std::u16string username) {
+    std::u16string username,
+    std::vector<GURL> all_urls_with_leaked_credentials) {
+  std::vector<std::pair<GURL, std::u16string>> identities;
+  for (const auto& u : all_urls_with_leaked_credentials) {
+    identities.emplace_back(u, username);
+  }
+  client_->MaybeReportEnterprisePasswordBreachEvent(identities);
+
   bool force_dialog_for_testing = base::GetFieldTrialParamByFeatureAsBool(
       password_manager::features::kPasswordChange,
       password_manager::features::
@@ -171,14 +178,14 @@ bool CanStartLeakCheck(const PrefService& prefs,
   safe_browsing::SafeBrowsingState sb_state =
       safe_browsing::GetSafeBrowsingState(prefs);
   switch (sb_state) {
-    case safe_browsing::NO_SAFE_BROWSING:
+    case safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING:
       LogString(client, Logger::STRING_LEAK_DETECTION_DISABLED_SAFE_BROWSING);
       return false;
-    case safe_browsing::STANDARD_PROTECTION:
+    case safe_browsing::SafeBrowsingState::STANDARD_PROTECTION:
       if (!is_leak_protection_on)
         LogString(client, Logger::STRING_LEAK_DETECTION_DISABLED_FEATURE);
       return is_leak_protection_on;
-    case safe_browsing::ENHANCED_PROTECTION:
+    case safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION:
       // feature is on.
       break;
   }

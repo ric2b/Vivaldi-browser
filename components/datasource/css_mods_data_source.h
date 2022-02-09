@@ -17,7 +17,8 @@ class CSSModsDataClassHandler : public VivaldiDataClassHandler {
 
  private:
   static scoped_refptr<base::RefCountedMemory> GetDataForIdOnBlockingThread(
-      base::FilePath dir_path, std::string data_id);
+      base::FilePath dir_path,
+      std::string data_id);
 };
 
 #endif  // COMPONENTS_DATASOURCE_CSS_MODS_DATA_SOURCE_H_

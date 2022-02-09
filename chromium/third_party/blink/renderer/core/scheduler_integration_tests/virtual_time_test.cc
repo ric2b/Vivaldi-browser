@@ -42,11 +42,12 @@ class VirtualTimeTest : public SimTest {
 
   String ExecuteJavaScript(String script_source) {
     ScriptExecutionCallbackHelper callback_helper;
-    WebView()
-        .MainFrame()
-        ->ToWebLocalFrame()
-        ->RequestExecuteScriptAndReturnValue(
-            WebScriptSource(WebString(script_source)), false, &callback_helper);
+    WebScriptSource source(script_source);
+    WebView().MainFrame()->ToWebLocalFrame()->RequestExecuteScript(
+        DOMWrapperWorld::kMainWorldId, base::make_span(&source, 1), false,
+        WebLocalFrame::kSynchronous, &callback_helper,
+        BackForwardCacheAware::kAllow);
+
     return callback_helper.Result();
   }
 
@@ -71,7 +72,7 @@ class VirtualTimeTest : public SimTest {
         FROM_HERE,
         WTF::Bind(&VirtualTimeTest::StopVirtualTimeAndExitRunLoop,
                   WTF::Unretained(this)),
-        base::TimeDelta::FromMillisecondsD(delay_ms));
+        base::Milliseconds(delay_ms));
     test::EnterRunLoop();
   }
 };

@@ -494,7 +494,7 @@ Status WebViewImpl::CallUserSyncScript(const std::string& frame,
                                        const base::TimeDelta& timeout,
                                        std::unique_ptr<base::Value>* result) {
   base::ListValue sync_args;
-  sync_args.AppendString(script);
+  sync_args.Append(script);
   // Clone needed since Append only accepts Value as an rvalue.
   sync_args.Append(args.Clone());
   return CallFunctionWithTimeout(frame, kExecuteScriptScript, sync_args,
@@ -545,11 +545,12 @@ Status WebViewImpl::DispatchTouchEventsForMouseEvents(
   // Touch events are filtered by the compositor if there are no touch listeners
   // on the page. Wait two frames for the compositor to sync with the main
   // thread to get consistent behavior.
-  base::DictionaryValue params;
-  params.SetString("expression",
-                   "new Promise(x => setTimeout(() => setTimeout(x, 20), 20))");
-  params.SetBoolean("awaitPromise", true);
-  client_->SendCommand("Runtime.evaluate", params);
+  base::DictionaryValue promise_params;
+  promise_params.SetString(
+      "expression",
+      "new Promise(x => setTimeout(() => setTimeout(x, 20), 20))");
+  promise_params.SetBoolean("awaitPromise", true);
+  client_->SendCommand("Runtime.evaluate", promise_params);
   for (auto it = events.begin(); it != events.end(); ++it) {
     base::DictionaryValue params;
 
@@ -759,7 +760,7 @@ Status WebViewImpl::DispatchKeyEvents(const std::vector<KeyEvent>& events,
       }
 
       std::unique_ptr<base::ListValue> command_list(new base::ListValue);
-      command_list->AppendString(command);
+      command_list->Append(command);
       params.SetList("commands", std::move(command_list));
     }
 
@@ -794,7 +795,7 @@ Status WebViewImpl::GetCookies(std::unique_ptr<base::ListValue>* cookies,
 
   if (browser_info_->browser_name != "webview") {
     base::ListValue url_list;
-    url_list.AppendString(current_page_url);
+    url_list.Append(current_page_url);
     params.SetKey("urls", url_list.Clone());
     Status status =
         client_->SendCommandAndGetResult("Network.getCookies", params, &result);
@@ -883,7 +884,7 @@ Status WebViewImpl::WaitForPendingNavigations(const std::string& frame_id,
     // executing the next command, and it will be counted towards its timeout.
     Status new_status = client_->HandleEventsUntil(
         not_pending_navigation,
-        Timeout(base::TimeDelta::FromSeconds(kWaitForNavigationStopSeconds)));
+        Timeout(base::Seconds(kWaitForNavigationStopSeconds)));
     navigation_tracker_->set_timed_out(false);
     if (new_status.IsError())
       status = new_status;
@@ -932,7 +933,7 @@ Status WebViewImpl::CaptureScreenshot(
     std::string* screenshot,
     const base::DictionaryValue& params) {
   std::unique_ptr<base::DictionaryValue> result;
-  Timeout timeout(base::TimeDelta::FromSeconds(10));
+  Timeout timeout(base::Seconds(10));
   Status status = client_->SendCommandAndGetResultWithTimeout(
       "Page.captureScreenshot", params, &timeout, &result);
   if (status.IsError())
@@ -950,7 +951,7 @@ Status WebViewImpl::PrintToPDF(const base::DictionaryValue& params,
                   "PrintToPDF is only supported in headless mode");
   }
   std::unique_ptr<base::DictionaryValue> result;
-  Timeout timeout(base::TimeDelta::FromSeconds(10));
+  Timeout timeout(base::Seconds(10));
   Status status = client_->SendCommandAndGetResultWithTimeout(
       "Page.printToPDF", params, &timeout, &result);
   if (status.IsError()) {
@@ -1069,7 +1070,7 @@ Status WebViewImpl::SetFileInputFiles(const std::string& frame,
         std::string fullPath;
         if (!getFileInfoResult->GetString("path", &fullPath))
           return Status(kUnknownError, "DevTools didn't return path");
-        file_list.AppendString(fullPath);
+        file_list.Append(fullPath);
       }
     }
   }
@@ -1084,7 +1085,7 @@ Status WebViewImpl::SetFileInputFiles(const std::string& frame,
       return Status(kUnknownError,
                     "path is not canonical: " + files[i].AsUTF8Unsafe());
     }
-    file_list.AppendString(files[i].AsUTF8Unsafe());
+    file_list.Append(files[i].AsUTF8Unsafe());
   }
 
   base::DictionaryValue setFilesParams;
@@ -1183,9 +1184,9 @@ Status WebViewImpl::CallAsyncFunctionInternal(
     const base::TimeDelta& timeout,
     std::unique_ptr<base::Value>* result) {
   base::ListValue async_args;
-  async_args.AppendString("return (" + function + ").apply(null, arguments);");
+  async_args.Append("return (" + function + ").apply(null, arguments);");
   async_args.Append(args.Clone());
-  async_args.AppendBoolean(is_user_supplied);
+  async_args.Append(is_user_supplied);
   std::unique_ptr<base::Value> tmp;
   Timeout local_timeout(timeout);
   Status status = CallFunctionWithTimeout(frame, kExecuteAsyncScriptScript,
@@ -1207,12 +1208,12 @@ Status WebViewImpl::CallAsyncFunctionInternal(
       "}",
       kJavaScriptError,
       kDocUnloadError);
-  const base::TimeDelta kOneHundredMs = base::TimeDelta::FromMilliseconds(100);
+  const base::TimeDelta kOneHundredMs = base::Milliseconds(100);
 
   while (true) {
     base::ListValue no_args;
     std::unique_ptr<base::Value> query_value;
-    Status status = CallFunction(frame, kQueryResult, no_args, &query_value);
+    status = CallFunction(frame, kQueryResult, no_args, &query_value);
     if (status.IsError()) {
       if (status.code() == kNoSuchFrame)
         return Status(kJavaScriptError, kDocUnloadError);

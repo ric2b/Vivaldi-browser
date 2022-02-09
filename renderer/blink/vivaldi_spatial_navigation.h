@@ -20,9 +20,8 @@ gfx::Rect CORE_EXPORT RevertDeviceScaling(const gfx::Rect& rect, float scale);
 blink::IntRect CORE_EXPORT FindImageElementRect(blink::WebElement element);
 std::string CORE_EXPORT ElementPath(blink::WebElement& element);
 
-std::vector<blink::WebElement> CORE_EXPORT GetSpatialNavigationElements(
-    blink::WebLocalFrame* frame,
-    float scale);
+std::vector<blink::WebElement> CORE_EXPORT
+GetSpatialNavigationElements(blink::WebLocalFrame* frame, float scale);
 
 }  // namespace vivaldi
 

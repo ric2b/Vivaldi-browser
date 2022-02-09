@@ -58,6 +58,7 @@
 #include <stdint.h>
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -188,19 +189,18 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
   FieldTrial(const FieldTrial&) = delete;
   FieldTrial& operator=(const FieldTrial&) = delete;
 
-  // Disables this trial, meaning it always determines the default group
-  // has been selected. May be called immediately after construction, or
-  // at any time after initialization (should not be interleaved with
-  // AppendGroup calls). Once disabled, there is no way to re-enable a
-  // trial.
-  // TODO(mad): http://code.google.com/p/chromium/issues/detail?id=121446
-  // This doesn't properly reset to Default when a group was forced.
+  // Disables this trial, meaning the default group is always selected. May be
+  // called immediately after construction or at any time after initialization;
+  // however, it cannot be called after group(). Once disabled, there is no way
+  // to re-enable a trial.
   void Disable();
 
-  // Establish the name and probability of the next group in this trial.
+  // Establishes the name and probability of the next group in this trial.
   // Sometimes, based on construction randomization, this call may cause the
   // provided group to be *THE* group selected for use in this instance.
-  // The return value is the group number of the new group.
+  // The return value is the group number of the new group. AppendGroup can be
+  // called after calls to group() but it should be avoided if possible. Doing
+  // so may be confusing since it won't change the group selection.
   int AppendGroup(const std::string& name, Probability group_probability);
 
   // Return the name of the FieldTrial (excluding the group name).
@@ -232,7 +232,7 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
   // be done from the UI thread.
   void SetForced();
 
-  // Enable benchmarking sets field trials to a common setting.
+  // Supports benchmarking by causing field trials' default groups to be chosen.
   static void EnableBenchmarking();
 
   // Creates a FieldTrial object with the specified parameters, to be used for
@@ -381,8 +381,8 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
   // Reference to related field trial struct and data in shared memory.
   FieldTrialRef ref_;
 
-  // When benchmarking is enabled, field trials all revert to the 'default'
-  // group.
+  // Denotes whether benchmarking is enabled. In this case, field trials all
+  // revert to the default group.
   static bool enable_benchmarking_;
 };
 
@@ -424,15 +424,16 @@ class BASE_EXPORT FieldTrialList {
   // Destructor Release()'s references to all registered FieldTrial instances.
   ~FieldTrialList();
 
-  // Get a FieldTrial instance from the factory.
+  // Gets a FieldTrial instance from the factory.
   //
-  // |name| is used to register the instance with the FieldTrialList class,
-  // and can be used to find the trial (only one trial can be present for each
-  // name). |default_group_name| is the name of the default group which will
-  // be chosen if none of the subsequent appended groups get to be chosen.
+  // |trial_name| (a) is used to register the instance with the FieldTrialList
+  // class and (b) can be used to find the trial (only one trial can be present
+  // for each name). |default_group_name| is the name of the group that is
+  // chosen if none of the subsequent appended groups are chosen. Note that the
+  // default group is also chosen whenever |enable_benchmarking_| is true.
   // |default_group_number| can receive the group number of the default group as
   // AppendGroup returns the number of the subsequence groups. |trial_name| and
-  // |default_group_name| may not be empty but |default_group_number| can be
+  // |default_group_name| must not be empty, but |default_group_number| can be
   // null if the value is not needed.
   //
   // Group probabilities that are later supplied must sum to less than or equal

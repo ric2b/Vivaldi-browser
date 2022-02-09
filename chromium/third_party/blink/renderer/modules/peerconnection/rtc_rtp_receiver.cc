@@ -349,7 +349,11 @@ RTCRtpCapabilities* RTCRtpReceiver::getCapabilities(ScriptState* state,
       for (const auto& parameter : rtc_codec.parameters) {
         if (!sdp_fmtp_line.empty())
           sdp_fmtp_line += ";";
-        sdp_fmtp_line += parameter.first + "=" + parameter.second;
+        if (parameter.first.empty()) {
+          sdp_fmtp_line += parameter.second;
+        } else {
+          sdp_fmtp_line += parameter.first + "=" + parameter.second;
+        }
       }
       codec->setSdpFmtpLine(sdp_fmtp_line.c_str());
     }
@@ -372,7 +376,7 @@ RTCRtpCapabilities* RTCRtpReceiver::getCapabilities(ScriptState* state,
     IdentifiableTokenBuilder builder;
     IdentifiabilityAddRTCRtpCapabilitiesToBuilder(builder, *capabilities);
     IdentifiabilityMetricBuilder(ExecutionContext::From(state)->UkmSourceID())
-        .Set(IdentifiableSurface::FromTypeAndToken(
+        .Add(IdentifiableSurface::FromTypeAndToken(
                  IdentifiableSurface::Type::kRtcRtpReceiverGetCapabilities,
                  IdentifiabilityBenignStringToken(kind)),
              builder.GetToken())
@@ -499,7 +503,6 @@ void RTCRtpReceiver::InitializeEncodedAudioStreams(ScriptState* script_state) {
             absl::make_unique<RtcEncodedAudioReceiverSourceOptimizer>(
                 std::move(set_underlying_source),
                 std::move(disconnect_callback)));
-    encoded_audio_streams_->setReadableStream(readable_stream);
     encoded_audio_streams_->setReadable(readable_stream);
   }
 
@@ -526,7 +529,6 @@ void RTCRtpReceiver::InitializeEncodedAudioStreams(ScriptState* script_state) {
             std::move(set_underlying_sink), encoded_audio_transformer_));
   }
 
-  encoded_audio_streams_->setWritableStream(writable_stream);
   encoded_audio_streams_->setWritable(writable_stream);
 }
 
@@ -581,7 +583,6 @@ void RTCRtpReceiver::InitializeEncodedVideoStreams(ScriptState* script_state) {
       ReadableStream::CreateWithCountQueueingStrategy(
           script_state, video_from_depacketizer_underlying_source_,
           /*high_water_mark=*/0);
-  encoded_video_streams_->setReadableStream(readable_stream);
   encoded_video_streams_->setReadable(readable_stream);
 
   // Set up writable.
@@ -595,14 +596,14 @@ void RTCRtpReceiver::InitializeEncodedVideoStreams(ScriptState* script_state) {
                                       ->GetEncodedVideoStreamTransformer()
                                 : nullptr;
               },
-              WrapWeakPersistent(this)));
+              WrapWeakPersistent(this)),
+          webrtc::TransformableFrameInterface::Direction::kReceiver);
   // The high water mark for the stream is set to 1 so that the stream seems
   // ready to write, but without queuing frames.
   WritableStream* writable_stream =
       WritableStream::CreateWithCountQueueingStrategy(
           script_state, video_to_decoder_underlying_sink_,
           /*high_water_mark=*/1);
-  encoded_video_streams_->setWritableStream(writable_stream);
   encoded_video_streams_->setWritable(writable_stream);
 }
 

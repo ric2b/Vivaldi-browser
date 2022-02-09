@@ -14,6 +14,9 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/ui_base_types.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -103,8 +106,10 @@ void SubmenuView::ChildPreferredSizeChanged(View* child) {
 
   if (controller) {
     bool dir;
-    gfx::Rect bounds = controller->CalculateMenuBounds(item, false, &dir);
-    Reposition(bounds);
+    ui::OwnedWindowAnchor anchor;
+    gfx::Rect bounds =
+        controller->CalculateMenuBounds(item, false, &dir, &anchor);
+    Reposition(bounds, anchor);
   }
 }
 
@@ -228,8 +233,8 @@ void SubmenuView::PaintChildren(const PaintInfo& paint_info) {
   if (paint_drop_indicator) {
     gfx::Rect bounds = CalculateDropIndicatorBounds(drop_item_, drop_position_);
     ui::PaintRecorder recorder(paint_info.context(), size());
-    const SkColor drop_indicator_color = GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_MenuDropIndicator);
+    const SkColor drop_indicator_color =
+        GetColorProvider()->GetColor(ui::kColorMenuDropmarker);
     recorder.canvas()->FillRect(bounds, drop_indicator_color);
   }
 }
@@ -271,6 +276,12 @@ ui::mojom::DragOperation SubmenuView::OnPerformDrop(
     const ui::DropTargetEvent& event) {
   DCHECK(parent_menu_item_->GetMenuController());
   return parent_menu_item_->GetMenuController()->OnPerformDrop(this, event);
+}
+
+views::View::DropCallback SubmenuView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  DCHECK(parent_menu_item_->GetMenuController());
+  return parent_menu_item_->GetMenuController()->GetDropCallback(this, event);
 }
 
 bool SubmenuView::OnMouseWheel(const ui::MouseWheelEvent& e) {
@@ -413,9 +424,13 @@ void SubmenuView::ShowAt(const MenuHost::InitParams& init_params) {
   NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupStart, true);
 }
 
-void SubmenuView::Reposition(const gfx::Rect& bounds) {
-  if (host_)
+void SubmenuView::Reposition(const gfx::Rect& bounds,
+                             const ui::OwnedWindowAnchor& anchor) {
+  if (host_) {
+    // Anchor must be updated first.
+    host_->SetMenuHostOwnedWindowAnchor(anchor);
     host_->SetMenuHostBounds(bounds);
+  }
 }
 
 void SubmenuView::Close() {
@@ -467,12 +482,17 @@ void SubmenuView::SetDropMenuItem(MenuItemView* item,
   if (drop_item_ == item && drop_position_ == position)
     return;
   SchedulePaintForDropIndicator(drop_item_, drop_position_);
+  MenuItemView* old_drop_item = drop_item_;
   drop_item_ = item;
   drop_position_ = position;
+  if (old_drop_item && old_drop_item != drop_item_)
+    old_drop_item->OnDropStatusChanged();
+  if (drop_item_)
+    drop_item_->OnDropStatusChanged();
   SchedulePaintForDropIndicator(drop_item_, drop_position_);
 }
 
-bool SubmenuView::GetShowSelection(MenuItemView* item) {
+bool SubmenuView::GetShowSelection(const MenuItemView* item) const {
   if (drop_item_ == nullptr)
     return true;
   // Something is being dropped on one of this menus items. Show the

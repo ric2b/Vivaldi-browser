@@ -147,6 +147,9 @@ class TabClosedChecker : public StatusChangeChecker,
     DCHECK(web_contents);
   }
 
+  TabClosedChecker(const TabClosedChecker&) = delete;
+  TabClosedChecker& operator=(const TabClosedChecker&) = delete;
+
   ~TabClosedChecker() override = default;
 
   // StatusChangeChecker overrides.
@@ -163,8 +166,6 @@ class TabClosedChecker : public StatusChangeChecker,
 
  private:
   bool closed_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(TabClosedChecker);
 };
 
 // Used to wait until a page's title changes to a certain value (useful to
@@ -178,6 +179,9 @@ class PageTitleChecker : public StatusChangeChecker,
         expected_title_(base::UTF8ToUTF16(expected_title)) {
     DCHECK(web_contents);
   }
+
+  PageTitleChecker(const PageTitleChecker&) = delete;
+  PageTitleChecker& operator=(const PageTitleChecker&) = delete;
 
   ~PageTitleChecker() override = default;
 
@@ -197,8 +201,6 @@ class PageTitleChecker : public StatusChangeChecker,
 
  private:
   const std::u16string expected_title_;
-
-  DISALLOW_COPY_AND_ASSIGN(PageTitleChecker);
 };
 
 // Used to wait until IsTrustedVaultKeyRequiredForPreferredDataTypes() returns
@@ -294,21 +296,29 @@ class FakeSecurityDomainsServerMemberStatusChecker
 class SingleClientNigoriSyncTest : public SyncTest {
  public:
   SingleClientNigoriSyncTest() : SyncTest(SINGLE_CLIENT) {}
+
+  SingleClientNigoriSyncTest(const SingleClientNigoriSyncTest&) = delete;
+  SingleClientNigoriSyncTest& operator=(const SingleClientNigoriSyncTest&) =
+      delete;
+
   ~SingleClientNigoriSyncTest() override = default;
 
   bool WaitForPasswordForms(
       const std::vector<password_manager::PasswordForm>& forms) const {
     return PasswordFormsChecker(0, forms).Wait();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientNigoriSyncTest);
 };
 
 class SingleClientNigoriSyncTestWithNotAwaitQuiescence
     : public SingleClientNigoriSyncTest {
  public:
   SingleClientNigoriSyncTestWithNotAwaitQuiescence() = default;
+
+  SingleClientNigoriSyncTestWithNotAwaitQuiescence(
+      const SingleClientNigoriSyncTestWithNotAwaitQuiescence&) = delete;
+  SingleClientNigoriSyncTestWithNotAwaitQuiescence& operator=(
+      const SingleClientNigoriSyncTestWithNotAwaitQuiescence&) = delete;
+
   ~SingleClientNigoriSyncTestWithNotAwaitQuiescence() override = default;
 
   bool TestUsesSelfNotifications() override {
@@ -317,23 +327,6 @@ class SingleClientNigoriSyncTestWithNotAwaitQuiescence
     // achieved and isn't needed.
     return false;
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientNigoriSyncTestWithNotAwaitQuiescence);
-};
-
-class SingleClientNigoriSyncTestWithFullKeystoreMigration
-    : public SingleClientNigoriSyncTest {
- public:
-  SingleClientNigoriSyncTestWithFullKeystoreMigration() {
-    override_features_.InitAndEnableFeature(
-        switches::kSyncTriggerFullKeystoreMigration);
-  }
-
-  ~SingleClientNigoriSyncTestWithFullKeystoreMigration() override = default;
-
- private:
-  base::test::ScopedFeatureList override_features_;
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest,
@@ -494,7 +487,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest, ShouldRotateKeystoreKey) {
 }
 
 // Performs initial sync with backward compatible keystore Nigori.
-IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTestWithFullKeystoreMigration,
+IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest,
                        PRE_ShouldCompleteKeystoreMigrationAfterRestart) {
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
@@ -517,7 +510,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTestWithFullKeystoreMigration,
 
 // After browser restart the client should commit full keystore Nigori (e.g. it
 // should use keystore key as encryption key).
-IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTestWithFullKeystoreMigration,
+IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest,
                        ShouldCompleteKeystoreMigrationAfterRestart) {
   ASSERT_TRUE(SetupClients());
   const std::string expected_key_bag_key_name =
@@ -567,8 +560,6 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(GetSyncService(0)->GetUserSettings()->SetDecryptionPassphrase(
       "password"));
   EXPECT_TRUE(WaitForPasswordForms({password_form}));
-  // TODO(crbug.com/1042251): verify that client fixes NigoriSpecifics once
-  // such behavior is supported.
 }
 
 // Performs initial sync for Nigori, but doesn't allow initialized Nigori to be
@@ -601,6 +592,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTestWithNotAwaitQuiescence,
 class SingleClientNigoriWithWebApiTest : public SyncTest {
  public:
   SingleClientNigoriWithWebApiTest() : SyncTest(SINGLE_CLIENT) {}
+
+  SingleClientNigoriWithWebApiTest(const SingleClientNigoriWithWebApiTest&) =
+      delete;
+  SingleClientNigoriWithWebApiTest& operator=(
+      const SingleClientNigoriWithWebApiTest&) = delete;
+
   ~SingleClientNigoriWithWebApiTest() override = default;
 
   // InProcessBrowserTest:
@@ -643,8 +640,6 @@ class SingleClientNigoriWithWebApiTest : public SyncTest {
 
  private:
   std::unique_ptr<syncer::FakeSecurityDomainsServer> security_domains_server_;
-
-  DISALLOW_COPY_AND_ASSIGN(SingleClientNigoriWithWebApiTest);
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
@@ -1323,10 +1318,9 @@ class SingleClientNigoriWithRecoveryAndPasswordsAccountStorageTest
   base::test::ScopedFeatureList override_features_;
 };
 
-// TODO(crbug.com/1218713): Flaky on various platforms.
 IN_PROC_BROWSER_TEST_F(
     SingleClientNigoriWithRecoveryAndPasswordsAccountStorageTest,
-    DISABLED_ShouldAcceptEncryptionKeysFromTheWeb) {
+    ShouldAcceptEncryptionKeysFromTheWeb) {
   // Mimic the account using a trusted vault passphrase.
   const std::vector<uint8_t> kTestEncryptionKey = {1, 2, 3, 4};
   SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
@@ -1372,10 +1366,9 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
 }
 
-// TODO(crbug.com/1218713): Flaky on various platforms.
 IN_PROC_BROWSER_TEST_F(
     SingleClientNigoriWithRecoveryAndPasswordsAccountStorageTest,
-    DISABLED_ShouldReportDegradedTrustedVaultRecoverability) {
+    ShouldReportDegradedTrustedVaultRecoverability) {
   const std::vector<uint8_t> kTestRecoveryMethodPublicKey =
       syncer::SecureBoxKeyPair::GenerateRandom()->public_key().ExportToBytes();
   base::HistogramTester histogram_tester;

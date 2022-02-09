@@ -25,7 +25,7 @@ DevtoolsPrivateGetDockingStateSizesFunction::Run() {
   using vivaldi::devtools_private::GetDockingStateSizes::Params;
   namespace Results = vivaldi::devtools_private::GetDockingStateSizes::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int tab_id = params->tab_id;
@@ -61,7 +61,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
   using vivaldi::devtools_private::CloseDevtools::Params;
   namespace Results = vivaldi::devtools_private::CloseDevtools::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int tab_id = params->tab_id;
@@ -72,11 +72,11 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
     int window_id = *params->window_id;
     for (auto* browser : *BrowserList::GetInstance()) {
       if (browser->session_id().id() == window_id) {
-        TabStripModel *tabs = browser->tab_strip_model();
+        TabStripModel* tabs = browser->tab_strip_model();
         for (int n = 0; n < tabs->count(); n++) {
           content::WebContents* contents = tabs->GetWebContentsAt(n);
           DevToolsWindow* window =
-            DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+              DevToolsWindow::GetInstanceForInspectedWebContents(contents);
           if (window) {
             window->ForceCloseWindow();
             int tab_id = sessions::SessionTabHelper::IdForTab(contents).id();
@@ -91,9 +91,9 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
     Browser* browser;
     int tab_index;
 
-    if (extensions::ExtensionTabUtil::GetTabById(
-            tab_id, browser_context(), true, &browser, NULL, &contents,
-            &tab_index)) {
+    if (extensions::ExtensionTabUtil::GetTabById(tab_id, browser_context(),
+                                                 true, &browser, NULL,
+                                                 &contents, &tab_index)) {
       DevToolsWindow* window =
           DevToolsWindow::GetInstanceForInspectedWebContents(contents);
       if (window) {
@@ -109,7 +109,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
 ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
   using vivaldi::devtools_private::ToggleDevtools::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   PanelType panelType = params->panel_type;
@@ -136,11 +136,13 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
     if (::vivaldi::IsVivaldiApp(host)) {
       DevToolsWindow::InspectElement(
           static_cast<VivaldiBrowserWindow*>(browser->window())
-          ->web_contents()->GetMainFrame(), 0, 0);
+              ->web_contents()
+              ->GetMainFrame(),
+          0, 0);
     } else {
       if (panelType == PanelType::PANEL_TYPE_DEFAULT) {
-        DevToolsWindow::OpenDevToolsWindow(
-            current_tab, DevToolsToggleAction::Show());
+        DevToolsWindow::OpenDevToolsWindow(current_tab,
+                                           DevToolsToggleAction::Show());
       } else if (panelType == PanelType::PANEL_TYPE_INSPECT) {
         DevToolsWindow::OpenDevToolsWindow(current_tab,
                                            DevToolsToggleAction::Inspect());

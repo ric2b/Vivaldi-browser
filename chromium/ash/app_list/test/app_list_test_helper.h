@@ -15,9 +15,13 @@ namespace ash {
 class AppListBubbleAppsPage;
 class AppListBubbleAssistantPage;
 class AppListBubbleSearchPage;
+class AppListBubbleView;
 class AppListControllerImpl;
+class AppListFolderView;
 class AppListView;
+class AppsContainerView;
 class ContinueSectionView;
+class PagedAppsGridView;
 class RecentAppsView;
 class ScrollableAppsGridView;
 class SearchBoxView;
@@ -26,6 +30,10 @@ enum class AppListViewState;
 class AppListTestHelper {
  public:
   AppListTestHelper();
+
+  AppListTestHelper(const AppListTestHelper&) = delete;
+  AppListTestHelper& operator=(const AppListTestHelper&) = delete;
+
   ~AppListTestHelper();
 
   // Shows the app list on the default display.
@@ -69,11 +77,28 @@ class AppListTestHelper {
   // Run all pending in message loop to wait for animation to finish.
   void WaitUntilIdle();
 
+  // Adds `num_apps` to the app list model.
+  void AddAppItems(int num_apps);
+
+  // Adds a page break item to the app list model.
+  void AddPageBreakItem();
+
+  // Whether the app list is showing a folder.
+  bool IsInFolderView();
+
   // Fullscreen/peeking launcher helpers.
   AppListView* GetAppListView();
+  AppsContainerView* GetAppsContainerView();
+  AppListFolderView* GetFullscreenFolderView();
+  RecentAppsView* GetFullscreenRecentAppsView();
+
+  // Paged launcher helpers.
+  PagedAppsGridView* GetRootPagedAppsGridView();
 
   // Bubble launcher helpers. The bubble must be open before calling these.
+  AppListBubbleView* GetBubbleView();
   SearchBoxView* GetBubbleSearchBoxView();
+  AppListFolderView* GetBubbleFolderView();
   AppListBubbleAppsPage* GetBubbleAppsPage();
   ContinueSectionView* GetContinueSectionView();
   RecentAppsView* GetBubbleRecentAppsView();
@@ -86,8 +111,6 @@ class AppListTestHelper {
  private:
   AppListControllerImpl* app_list_controller_ = nullptr;
   std::unique_ptr<TestAppListClient> app_list_client_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppListTestHelper);
 };
 
 }  // namespace ash

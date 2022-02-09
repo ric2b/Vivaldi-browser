@@ -32,6 +32,9 @@ class ShillDeviceClientImpl : public ShillDeviceClient {
  public:
   explicit ShillDeviceClientImpl(dbus::Bus* bus) : bus_(bus) {}
 
+  ShillDeviceClientImpl(const ShillDeviceClientImpl&) = delete;
+  ShillDeviceClientImpl& operator=(const ShillDeviceClientImpl&) = delete;
+
   ~ShillDeviceClientImpl() override {
     for (HelperMap::iterator iter = helpers_.begin(); iter != helpers_.end();
          ++iter) {
@@ -63,7 +66,10 @@ class ShillDeviceClientImpl : public ShillDeviceClient {
                      DBusMethodCallback<base::Value> callback) override {
     dbus::MethodCall method_call(shill::kFlimflamDeviceInterface,
                                  shill::kGetPropertiesFunction);
-    GetHelper(device_path)->CallValueMethod(&method_call, std::move(callback));
+    GetHelper(device_path)
+        ->CallValueMethod(&method_call,
+                          base::BindOnce(&ShillClientHelper::OnGetProperties,
+                                         device_path, std::move(callback)));
   }
 
   void SetProperty(const dbus::ObjectPath& device_path,
@@ -211,8 +217,6 @@ class ShillDeviceClientImpl : public ShillDeviceClient {
 
   dbus::Bus* bus_;
   HelperMap helpers_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShillDeviceClientImpl);
 };
 
 }  // namespace

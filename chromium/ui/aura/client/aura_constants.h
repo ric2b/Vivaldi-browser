@@ -33,8 +33,12 @@ constexpr int kResizeBehaviorCanResize = 1 << 0;
 constexpr int kResizeBehaviorCanMaximize = 1 << 1;
 constexpr int kResizeBehaviorCanMinimize = 1 << 2;
 
-// A value used to represent an unassigned workspace for kWindowWorkspaceKey.
-constexpr int kUnassignedWorkspace = -1;
+// A value used to represent an unassigned workspace for `kWindowWorkspaceKey`.
+constexpr int kWindowWorkspaceUnassignedWorkspace = -1;
+
+// A value used to represent a window being assigned to all workspaces for
+// `kWindowWorkspaceKey`.
+constexpr int kWindowWorkspaceVisibleOnAllWorkspaces = -2;
 
 // Alphabetical sort.
 
@@ -102,6 +106,11 @@ AURA_EXPORT extern const WindowProperty<ui::ModalType>* const kModalKey;
 // A property key to store the name of the window; mostly used for debugging.
 AURA_EXPORT extern const WindowProperty<std::string*>* const kNameKey;
 
+// A property key to store anchor to attach an owned anchored window to (such
+// as tooltips, menus, etc).
+AURA_EXPORT extern const WindowProperty<struct ui::OwnedWindowAnchor*>* const
+    kOwnedWindowAnchor;
+
 // A property key to store the accessible parent of a native view. This is
 // used to allow WebContents to access their accessible parents for use in
 // walking up the accessibility tree via platform APIs.
@@ -150,9 +159,6 @@ AURA_EXPORT extern const WindowProperty<std::u16string*>* const kTitleKey;
 // the web contents for app windows and varies for fullscreen windows.
 AURA_EXPORT extern const WindowProperty<int>* const kTopViewInset;
 
-// A property key to store whether this window is visible on all workspaces.
-AURA_EXPORT extern const WindowProperty<bool>* const kVisibleOnAllWorkspacesKey;
-
 // A property key to store the window icon, typically 16x16 for title bars.
 AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kWindowIconKey;
 
@@ -161,7 +167,7 @@ AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kWindowIconKey;
 AURA_EXPORT extern const WindowProperty<int>* const kWindowCornerRadiusKey;
 
 // A property key to indicate a desk index of a workspace this window belongs
-// to. The default value is kUnassignedWorkspace.
+// to. The default value is kWindowWorkspaceUnassignedWorkspace.
 AURA_EXPORT extern const WindowProperty<int>* const kWindowWorkspaceKey;
 
 // A property key to store the z-ordering.

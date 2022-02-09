@@ -131,5 +131,10 @@ const char kTouchTextSelectionStrategy[] = "touch-selection-strategy";
 const char kSharedArrayBufferAllowedOrigins[] =
     "shared-array-buffer-allowed-origins";
 
+// Allows overriding the conditional focus window's length.
+const char kConditionalFocusWindowMs[] = "conditional-focus-window-ms";
+
+const char kWebSQLInThirdPartyContextEnabled[] =
+    "web-sql-in-third-party-context-enabled";
 }  // namespace switches
 }  // namespace blink

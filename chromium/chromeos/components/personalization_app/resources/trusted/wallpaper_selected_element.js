@@ -12,6 +12,7 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-iconset-svg/iron-iconset-svg.js';
 import '../common/icons.js';
 import {assert} from 'chrome://resources/js/assert.m.js'
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {isNonEmptyArray} from '../common/utils.js';
 import {getWallpaperProvider} from './mojo_interface_provider.js';
@@ -20,6 +21,15 @@ import {getDailyRefreshCollectionId, setCustomWallpaperLayout, setDailyRefreshCo
 import {WallpaperLayout, WallpaperType} from './personalization_reducers.js';
 import {Paths} from './personalization_router_element.js';
 import {WithPersonalizationStore} from './personalization_store.js';
+
+let setTimeout = window.setTimeout;
+let clearTimeout = window.clearTimeout;
+
+/** @param {{setTimeout: Function, clearTimeout: Function}} mock */
+export function mockTimeoutForTesting(mock) {
+  setTimeout = mock.setTimeout;
+  clearTimeout = mock.clearTimeout;
+}
 
 /**
  * Set up the observer to listen for wallpaper changes.
@@ -123,6 +133,7 @@ export class WallpaperSelected extends WithPersonalizationStore {
       /** @private */
       isLoading_: {
         type: Boolean,
+        observer: 'onIsLoadingChanged_',
       },
 
       /** @private */
@@ -188,6 +199,13 @@ export class WallpaperSelected extends WithPersonalizationStore {
         type: String,
         value: null,
       },
+
+      showPreviewButton_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('fullScreenPreviewEnabled');
+        }
+      }
     };
   }
 
@@ -215,6 +233,17 @@ export class WallpaperSelected extends WithPersonalizationStore {
         'dailyRefreshCollectionId_', state => state.dailyRefresh.collectionId);
     this.updateFromStore();
     getDailyRefreshCollectionId(this.wallpaperProvider_, this.getStore());
+    /**
+     * Set a 2 minute timer. If no wallpaper information has been received by
+     * then, dispatch a failure state.
+     * @type {?number}
+     */
+    this.initialLoadTimeout_ = setTimeout(() => {
+      // If still loading the initial currently selected wallpaper image after
+      // 120 seconds, consider this an error and update the store.
+      this.dispatch(setSelectedImageAction(null));
+      this.initialLoadTimeout_ = null;
+    }, 120 * 1000);
   }
 
   /** @override */
@@ -228,6 +257,11 @@ export class WallpaperSelected extends WithPersonalizationStore {
    *     currentWallpaper
    */
   onWallpaperChanged(currentWallpaper) {
+    // Clear the initial load timer if wallpaper information is received.
+    if (this.initialLoadTimeout_) {
+      clearTimeout(this.initialLoadTimeout_);
+      this.initialLoadTimeout_ = null;
+    }
     this.dispatch(setSelectedImageAction(currentWallpaper));
   }
 
@@ -539,6 +573,22 @@ export class WallpaperSelected extends WithPersonalizationStore {
       default:
         return WallpaperLayout.kCenter;
     }
+  }
+
+  /**
+   * Return a container class depending on loading state.
+   * @param {boolean} isLoading
+   * @param {boolean} showImage
+   * @return {string}
+   * @private
+   */
+  getContainerClass_(isLoading, showImage) {
+    return this.showPlaceholders_(isLoading, showImage) ? 'loading' : '';
+  }
+
+  /** @private */
+  onClickPreview_() {
+    console.log('Full screen preview not implemented yet');
   }
 }
 

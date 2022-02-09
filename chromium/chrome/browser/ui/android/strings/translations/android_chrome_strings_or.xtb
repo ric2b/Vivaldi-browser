@@ -57,19 +57,23 @@
 <translation id="1310482092992808703">ଗୋଷ୍ଠୀ ଟାବ୍‌ଗୁଡ଼ିକ</translation>
 <translation id="1311657260431405215">ଏହି QR କୋଡ୍ ଗୋଟିଏ URL ନୁହେଁ: <ph name="QRCODEVALUE" /></translation>
 <translation id="1316212908214730110">chrome_stylized_highlight_</translation>
+<translation id="1320912611264252795">ବୁକମାର୍କ ସେଭ ଫ୍ଲୋ ଫୋଲ୍ଡରଗୁଡ଼ିକ ସମ୍ପୂର୍ଣ୍ଣ ଭାବେ ଖୋଲାଯାଇଛି</translation>
 <translation id="1327257854815634930">ନାଭିଗେସନ୍ ଇତିହାସ ଖୋଲା ଅଛି</translation>
 <translation id="1331212799747679585">Chrome ଅପ୍‌ଡେଟ୍ ହୋଇପାରିବ ନାହିଁ। ଅଧିକ ବିକଳ୍ପ</translation>
 <translation id="1332501820983677155">Google Chrome ବୈଶିଷ୍ଟ୍ୟ ସର୍ଟକଟ୍</translation>
 <translation id="1344653310988386453">ହାଇଲାଇଟ୍ କରାଯାଇଥିବା ଟେକ୍ସଟର ଲିଙ୍କକୁ ଅନ୍ତର୍ଭୁକ୍ତ କରନ୍ତୁ</translation>
 <translation id="1347468774581902829">କାର୍ଯ୍ୟକଳାପ ପରିଚାଳନା କରନ୍ତୁ</translation>
+<translation id="1353372385686746892">ଏହି ଆପଟିକୁ ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରିବା ପାଇଁ, Chrome, Googleକୁ ଡାଏଗ୍ନୋଷ୍ଟିକ୍ ଡାଟା ପଠାଏ। <ph name="BEGIN_LINK" />ପରିବର୍ତ୍ତନ କରନ୍ତୁ<ph name="END_LINK" /></translation>
 <translation id="1360432990279830238">ସିଙ୍କ ସାଇନ୍‌ ଆଉଟ୍‍ ଏବଂ ବନ୍ଦ କରିବେ?</translation>
 <translation id="1373696734384179344">ଚୟନ କରାଯାଇଥିବା ବିଷୟବସ୍ତୁ ଡାଉନ୍‌ଲୋଡ୍ କରିବା ପାଇଁ ପର୍ଯ୍ୟାପ୍ତ ମେମୋରୀ ନାହିଁ।</translation>
 <translation id="1376578503827013741">ଗଣନା ହେଉଛି…</translation>
+<translation id="1382912999714108023">ଆପଣଙ୍କ ବର୍ତ୍ତମାନର ସୂଚନା ଦେଖାଯାଉନାହିଁ କି? ଏହାକୁ ଅପଡେଟ୍ କରିବା ପାଇଁ ଦୟାକରି ଆପଣଙ୍କ ବ୍ୟାଙ୍କ ସହ ଯୋଗାଯୋଗ କରନ୍ତୁ।</translation>
 <translation id="1383876407941801731">Search</translation>
 <translation id="1384704387250346179">Google Lens ସହ ଛବି ଅନୁବାଦ <ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /></translation>
 <translation id="1386674309198842382"><ph name="LAST_UPDATED" /> ଦିନ ପୂର୍ବେ ସକ୍ରିୟ ଥିଲା</translation>
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> ମାଧ୍ୟମରେ ସନ୍ଧାନ କରନ୍ତୁ</translation>
 <translation id="1406000523432664303">“ଟ୍ରାକ୍ କରନ୍ତୁ ନାହିଁ”</translation>
+<translation id="1407069428457324124">ଗାଢ଼ ଥିମ୍</translation>
 <translation id="1407135791313364759">ସବୁ ଖୋଲନ୍ତୁ</translation>
 <translation id="1409426117486808224">ଖୋଲାଥିବା ଟାବ୍‍ଗୁଡ଼ିକ ପାଇଁ ସରଳୀକୃତ ଦୃଶ୍ୟ</translation>
 <translation id="1409879593029778104"><ph name="FILE_NAME" /> ଡାଇନ୍‌ଲୋଡ୍‍କୁ ପ୍ରତିରୋଧ କରାଯାଇଛି କାରଣ ଫାଇଲ୍‌ ପୂର୍ବରୁ ଅଛି।</translation>
@@ -80,6 +84,7 @@
 <translation id="1466383950273130737">Chromeର ଭାଷା ବାଛନ୍ତୁ</translation>
 <translation id="147113415845704694">“ଆଜିର ପାଣିପାଗ କିପରି ଅଛି?” ପଚାରି ଦେଖନ୍ତୁ</translation>
 <translation id="1477626028522505441">ସର୍ଭର୍ ସମସ୍ୟା ଯୋଗୁଁ <ph name="FILE_NAME" /> ଡାଉନ୍‌ଲୋଡ୍ ହେବାରେ ବିଫଳ ହେଲା।</translation>
+<translation id="148482509007564431">ବୁକମାର୍କ ସେଭ ଫ୍ଲୋ</translation>
 <translation id="1492417797159476138">ଆପଣ ଏହି ସାଇଟ୍ ପାଇଁ ଏହି ଉପଯୋଗକର୍ତ୍ତାନାମ ପୂର୍ବରୁ ସେଭ୍ କରିଛନ୍ତି</translation>
 <translation id="1493287004536771723">ଆପଣ <ph name="SITE_NAME" />କୁ ଅନୁସରଣ କରୁଛନ୍ତି</translation>
 <translation id="1506061864768559482">ସନ୍ଧାନ ଇଞ୍ଜିନ୍</translation>
@@ -104,6 +109,7 @@
 <translation id="1680919990519905526">Google Lens ସହ ଛବି କିଣନ୍ତୁ <ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /></translation>
 <translation id="1682195225331129001">ବର୍ତ୍ତମାନ ବ୍ୟବହାର କରି ଦେଖନ୍ତୁ</translation>
 <translation id="1697284962337958118">ଏଥିରେ ଯୋଗ କରନ୍ତୁ</translation>
+<translation id="1702543251015153180">ଆପଣଙ୍କ ଗାଢ଼ା ଥିମ ସେଟିଂସ ବଦଳାଇବେ କି?</translation>
 <translation id="1718835860248848330">ଶେଷ ଘଣ୍ଟାକର</translation>
 <translation id="1724977129262658800">ଆପଣଙ୍କ ପାସୱାର୍ଡ ଏଡିଟ୍ କରିବାକୁ ଅନଲକ୍ କରନ୍ତୁ</translation>
 <translation id="173522743738009831">ପ୍ରାଇଭେସି ସେଣ୍ଡବକ୍ସ ବିଷୟରେ</translation>
@@ -120,13 +126,14 @@
 <translation id="1807246157184219062">ଫିକା</translation>
 <translation id="1810845389119482123">ପ୍ରାରମ୍ଭିକ ସିଙ୍କ୍ ସେଟ୍‌ଅପ୍ ସମାପ୍ତ ହୋଇ ନାହିଁ</translation>
 <translation id="1829244130665387512">ପୃଷ୍ଠାରେ ଖୋଜି ପାଆନ୍ତୁ</translation>
-<translation id="1830550083491357902">ସାଇନ୍‍ ଇନ୍‍ କରିନାହାନ୍ତି</translation>
 <translation id="1843805151597803366">ଆହୁରି ଭଲ ଅନୁବାଦ ପାଇବା ପାଇଁ, Google Searchକୁ ବର୍ତ୍ତମାନର ପୃଷ୍ଠା ବ୍ୟବହାର କରିବାକୁ ଦିଅନ୍ତୁ</translation>
 <translation id="1856325424225101786">ଲାଇଟ୍‌ ମୋଡ୍‌ ରିସେଟ୍‌ କରିବେ?</translation>
 <translation id="1868024384445905608">ପୂର୍ବାପେକ୍ଷା Chrome ବର୍ତ୍ତମାନ ଦ୍ରୁତତର ଭାବେ ଫାଇଲ୍‌ଗୁଡ଼ିକ ଡାଉନ୍‌ଲୋଡ୍‌ କରୁଛି</translation>
 <translation id="1877026089748256423">Chromeର ସମୟସୀମା ଶେଷ ହୋଇଛି</translation>
 <translation id="1883903952484604915">ମୋ ଫାଇଲ୍‌ଗୁଡ଼ିକ</translation>
 <translation id="189358972401248634">ଅନ୍ୟ ଭାଷାଗୁଡ଼ିକ</translation>
+<translation id="1905320231301365059">ଆପଣ ଇନକଗ୍ନିଟୋ ମୋଡରେ ଡାଉନଲୋଡ କରିଥିବା ଫାଇଲଗୁଡ଼ିକ ଏବେ ବି ଏହି ଡିଭାଇସକୁ ବ୍ୟବହାର କରୁଥିବା ଯେ କୌଣସି ବ୍ୟକ୍ତିଙ୍କୁ ଦେଖାଯିବ।</translation>
+<translation id="1910950723001426294">ସେୟାରିଂ ବିକଳ୍ପଗୁଡ଼ିକର ତାଲିକା ବନ୍ଦ ଅଛି।</translation>
 <translation id="1918175104945982129">Assistantର ଭଏସ୍ ମାଧ୍ୟମରେ ସନ୍ଧାନ ପାଇଁ ସମ୍ମତିର ui ଅଧା ସ୍କ୍ରିନରେ ଖୋଲିଛି</translation>
 <translation id="1919130412786645364">Chromeରେ ସାଇନ୍-ଇନ୍‌ କରିବାକୁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>
 <translation id="1922362554271624559">ପ୍ରସ୍ତାବିତ ଭାଷାଗୁଡ଼ିକ</translation>
@@ -140,16 +147,17 @@
 <translation id="1960290143419248813">Androidର ଏହି ସଂସ୍କରଣ ପାଇଁ Chrome ଅପ୍‌ଡେଟ୍‌ଗୁଡ଼ିକ ଆଉ ସମର୍ଥିତ ନୁହେଁ।</translation>
 <translation id="1963976881984600709">ଷ୍ଟାଣ୍ଡାର୍ଡ ସୁରକ୍ଷା</translation>
 <translation id="1966710179511230534">ଦୟାକରି, ଆପଣଙ୍କର ସାଇନ୍‌-ଇନ୍‌ ବିବରଣୀ ଅପ୍‌ଡେଟ୍‌ କରନ୍ତୁ।</translation>
+<translation id="197288927597451399">Keep</translation>
 <translation id="1973912524893600642">ଡାଟା ରଖନ୍ତୁ</translation>
 <translation id="1974060860693918893">ବିକଶିତ</translation>
 <translation id="1984417487208496350">କୌଣସି ସୁରକ୍ଷା ନାହିଁ (ସୁପାରିଶ କରାଯାଇ ନାହିଁ)</translation>
 <translation id="1986685561493779662">ନାମ ପୂର୍ବରୁ ଅଛି</translation>
 <translation id="1987739130650180037"><ph name="MESSAGE" /> <ph name="LINK_NAME" /> ବଟନ୍</translation>
 <translation id="2000419248597011803">ଆପଣଙ୍କର ଡିଫଲ୍ଟ ସନ୍ଧାନ ଇଞ୍ଜିନ୍‌କୁ ଠିକଣା ବାର୍‌ ଏବଂ ସନ୍ଧାନ ବାକ୍ସରୁ କିଛି କୁକୀ ଏବଂ ସନ୍ଧାନ ପଠାନ୍ତୁ</translation>
+<translation id="200114059308480249">Google ସନ୍ଧାନଗୁଡ଼ିକରେ ଆଖପାଖର ଟେକ୍ସଟକୁ ଅନ୍ତର୍ଭୁକ୍ତ କରିବେ କି?</translation>
 <translation id="2013642289801508067">{FILE_COUNT,plural, =1{#ଟି ଫାଇଲ୍}other{#ଟି ଫାଇଲ୍}}</translation>
 <translation id="2021896219286479412">ପୂର୍ଣ୍ଣ-ସ୍କ୍ରିନ୍ ସାଇଟ୍ ନିୟନ୍ତ୍ରଣ</translation>
 <translation id="2038563949887743358">ଅନୁରୋଧ ଡେକ୍ସଟପ୍ ସାଇଟ୍ ଚାଲୁ କରନ୍ତୁ</translation>
-<translation id="2039379262107991683">ଏକ ରିମାଇଣ୍ଡର୍ ପାଇବା ପାଇଁ ଆପଣଙ୍କ ପଢ଼ିବା ତାଲିକାରେ ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="204321170514947529"><ph name="APP_NAME" />ର ମଧ୍ୟ Chromeରେ ଡାଟା ଅଛି</translation>
 <translation id="2046634576464120978">ପଞ୍ଜିକରଣ ବିଫଳ ହୋଇଛି</translation>
 <translation id="2049574241039454490"><ph name="FILE_SIZE_OF_TOTAL" /> <ph name="SEPARATOR" /> <ph name="DESCRIPTION" /></translation>
@@ -174,6 +182,7 @@
 <translation id="2139186145475833000">ହୋମ୍ ସ୍କ୍ରିନରେ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="2141396931810938595">ଆପଣଙ୍କ ବ୍ୟବହାର ଉପରେ ଆଧାର କରି</translation>
 <translation id="214888715418183969">ଆପଣ Chrome ସହିତ କଣ ସହଜରେ ସେୟାର୍ କରିପାରିବେ ତାହା ବାଛନ୍ତୁ। Chromeର ଫିଚର୍, କାର୍ଯ୍ୟଦକ୍ଷତା ଏବଂ ସ୍ଥିରତା ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରିବାକୁ ଆପଣ ସେୟାର୍ କରିଥିବା ମେଟ୍ରିକ୍ସ ବ୍ୟବହାର କରାଯିବ।</translation>
+<translation id="2149973817440762519">ବୁକମାର୍କ୍ ସମ୍ପାଦନ କରନ୍ତୁ</translation>
 <translation id="2154484045852737596">କାର୍ଡକୁ ଏଡିଟ୍ କରନ୍ତୁ</translation>
 <translation id="2154710561487035718">URL କପି କରନ୍ତୁ</translation>
 <translation id="2156074688469523661">ବାକିଥିବା ସାଇଟ୍‍ଗୁଡ଼ିକ (<ph name="NUMBER_OF_SITES" />)</translation>
@@ -194,6 +203,7 @@
 <translation id="2276696007612801991">ଆପଣଙ୍କ ପାସୱାର୍ଡଗୁଡ଼ିକୁ ଯାଞ୍ଚ କରିବା ପାଇଁ ଆପଣଙ୍କର Google ଆକାଉଣ୍ଟରେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ</translation>
 <translation id="2278052315791335171">ଏହି ପାସୱାର୍ଡ ଡିଲିଟ୍ କରିବା ଫଳରେ <ph name="SITE" />ରେ ଥିବା ଆପଣଙ୍କ ଆକାଉଣ୍ଟ ଡିଲିଟ୍ ହେବ ନାହିଁ</translation>
 <translation id="2286841657746966508">ବିଲିଂ ଠିକଣା</translation>
+<translation id="228704530595896923">ସେୟାରିଂ ବିକଳ୍ପଗୁଡ଼ିକର ତାଲିକା।</translation>
 <translation id="230115972905494466">କୌଣସି ସୁସଙ୍ଗତ ଡିଭାଇସ୍ ମିଳିଲା ନାହିଁ।</translation>
 <translation id="230155349749732438">ଏହି ସେଟିଂ ବ୍ୟବହାର କରିବା ପାଇଁ <ph name="BEGIN_LINK" />ସନ୍ଧାନ ଏବଂ ବ୍ରାଉଜିଂକୁ ଉନ୍ନତ କରନ୍ତୁ<ph name="END_LINK" />କୁ ଚାଲୁ କରାଯିବା ଆବଶ୍ୟକ</translation>
 <translation id="2318045970523081853">କଲ୍ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ</translation>
@@ -201,11 +211,6 @@
 <translation id="2321958826496381788">ସ୍ଲାଇଡର୍‍କୁ ସେପର୍ଯ୍ୟନ୍ତ ଟାଣନ୍ତୁ, ଯେପର୍ଯ୍ୟନ୍ତ ଆପଣ ଏହାକୁ ଭଲ ଭାବରେ ପଢ଼ିନାହାନ୍ତି। ପାରାଗ୍ରାଫ୍‍‍ରେ ଦୁଇଥର ଟାପ୍ କରିବା ପରେ ଟେକ୍ସଟ୍ ଅତି କମ୍‍‍ରେ ଏତେ ବଡ଼ ଦେଖାଯିବା ଆବଶ୍ୟକ।</translation>
 <translation id="2323763861024343754">ସାଇଟ୍ ଷ୍ଟୋରେଜ୍</translation>
 <translation id="2328985652426384049">ସାଇନ୍ ଇନ୍ କରିପାରିବେ ନାହିଁ</translation>
-<translation id="2336549603503100420">ଏହାକୁ ସକ୍ଷମ କରାଯାଇଥିଲେ, ସାଇଟଗୁଡ଼ିକ ସେଗୁଡ଼ିକର ବିଷୟବସ୍ତୁ ଓ ସେବା ପ୍ରଦାନ କରିବା ପାଇଁ ଏଠାରେ ଦେଖାଯାଇଥିବା ଗୋପନୀୟତା-ସଂରକ୍ଷଣ ସମ୍ବନ୍ଧିତ କୌଶଳଗୁଡ଼ିକୁ ବ୍ୟବହାର କରିପାରେ। ଏଥିରେ କ୍ରସ୍-ସାଇଟ୍ ଟ୍ରାକିଂର ବିକଳ୍ପଗୁଡ଼ିକ ଅନ୍ତର୍ଭୁକ୍ତ ଅଛି। ଅଧିକ ଟ୍ରାଏଲଗୁଡ଼ିକ ସମୟ ଅନୁସାରେ ଯୋଗ କରାଯାଇପାରେ।
-
-<ph name="BEGIN_LIST_ITEM1" />ଯେତେବେଳେ ହଜାର ହଜାର ଉପଯୋଗକର୍ତ୍ତା – ଏକ କନସର୍ଟରେ କ୍ରାଉଡ୍ ପରି — ସମାନ ରୁଚି ସେୟାର୍ କରନ୍ତି, ସେତେବେଳେ ବିଜ୍ଞାପନଦାତାମାନେ ଜାଣିପାରିବେ ଏବଂ ଏକ ନିର୍ଦ୍ଦିଷ୍ଟ ବ୍ୟକ୍ତି ପରିବର୍ତ୍ତେ, କ୍ରାଉଡ୍ ପାଇଁ ବିଜ୍ଞାପନଗୁଡ଼ିକୁ ଚୟନ କରିପାରିବେ।<ph name="END_LIST_ITEM1" />
-
-<ph name="BEGIN_LIST_ITEM2" />ବିଜ୍ଞାପନଦାତାମାନେ ଏପରି ଉପାୟରେ ବିଜ୍ଞାପନଗୁଡ଼ିକର ପ୍ରଭାବକୁ ଅଧ୍ୟୟନ କରିପାରିବେ ଯାହା ଆପଣଙ୍କୁ ବିଭିନ୍ନ ସାଇଟରେ ଟ୍ରାକ୍ କରେ ନାହିଁ।<ph name="END_LIST_ITEM2" /></translation>
 <translation id="2337236196941929873">ଆପଣ ଭିଜିଟ୍ କରିପାରନ୍ତି ବୋଲି Chrome ଭାବୁଥିବା ପୃଷ୍ଠାଗୁଡ଼ିକୁ ପ୍ରିଲୋଡ୍ କରେ। ଏହା କରିବା ପାଇଁ, ଆପଣ କୁକୀଗୁଡ଼ିକୁ ଅନୁମତି ଦେଲେ Chrome ସେଗୁଡ଼ିକୁ ବ୍ୟବହାର କରିପାରେ ଏବଂ ଆପଣଙ୍କ ପରିଚୟକୁ ସାଇଟଗୁଡ଼ିକରୁ ଲୁଚାଇବା ପାଇଁ ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଏନକ୍ରିପ୍ଟ କରି Google ମାଧ୍ୟମରେ ପଠାଇପାରେ।</translation>
 <translation id="234265804618409743">ଆପଣଙ୍କ କ୍ୟାମେରାକୁ ଖୋଲାଯାଇ ପାରିବ ନାହିଁ। କିଛି ତ୍ରୁଟି ହୋଇଗଲା।</translation>
 <translation id="2345671828921229300">ସନ୍ଧାନ କରିବାକୁ, କୌଣସି ଏକ ଶବ୍ଦକୁ ସ୍ପର୍ଶ କରି ଧରି ରଖନ୍ତୁ</translation>
@@ -216,6 +221,7 @@
 <translation id="2369533728426058518">ଖୋଲାଥିବା ଟାବ୍</translation>
 <translation id="2386938421315164605">ବିଷୟଗୁଡ଼ିକୁ ଲୁଚାନ୍ତୁ ଏବଂ ଦେଖାନ୍ତୁ</translation>
 <translation id="2387895666653383613">ଟେକ୍ସଟ୍‌ ସ୍କେଲିଂ</translation>
+<translation id="2390510615457643724">ଆପଣ <ph name="FILE_NAME" /> <ph name="FILE_SIZE" />କୁ ପୁଣି ଡାଉନଲୋଡ୍ କରିବା ପାଇଁ ଚାହୁଁଛନ୍ତି କି?</translation>
 <translation id="2394602618534698961">ଆପଣ ଡାଉନ୍‌ଲୋଡ୍ କରିଥିବା ଫାଇଲ୍‌ଗୁଡ଼ିକ ଏଠାରେ ଦେଖାଯିବ</translation>
 <translation id="2407481962792080328">ଆପଣ ଆପଣଙ୍କର Google ଆକାଉଣ୍ଟରେ ସାଇନ୍ ଇନ୍ କଲେ ଏହି ଫିଚର୍ ଚାଲୁ ହୁଏ</translation>
 <translation id="2410754283952462441">ଗୋଟିଏ ଆକାଉଣ୍ଟ ବାଛନ୍ତୁ</translation>
@@ -241,6 +247,7 @@
 <translation id="2517472476991765520">ସ୍କାନ୍ କରନ୍ତୁ</translation>
 <translation id="2518590038762162553">ଲାଇଟ୍ ମୋଡ୍‌ରେ, Chrome ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଅତିଶୀଘ୍ର ଲୋଡ୍ କରେ ଏବଂ 60 ଶତକଡ଼ା ପର୍ଯ୍ୟନ୍ତ କମ୍ ଡାଟାର ଉପଯୋଗ କରେ। ଆପଣ ଯାଉଥିବା ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଅନୁକୂଳିତ କରିବା ପାଇଁ, Chrome ଆପଣଙ୍କର ୱେବ୍ ଟ୍ରାଫିକ୍‍କୁ Googleକୁ ପଠାଏ। <ph name="BEGIN_LINK" />ଅଧିକ ଜାଣନ୍ତୁ<ph name="END_LINK" /></translation>
 <translation id="2523184218357549926">Googleକୁ ଆପଣ ଭିଜିଟ୍ କରିଥିବା ପୃଷ୍ଠାର URL ପଠାଏ</translation>
+<translation id="2527209463677295330">ଗୋଟିଏ ପୃଷ୍ଠାର ଅଧିକ ଟେକ୍ସଟକୁ ଅନ୍ତର୍ଭୁକ୍ତ କରି, ଆପଣ ଉନ୍ନତ ଫଳାଫଳ ଦେଖିପାରନ୍ତି</translation>
 <translation id="2527497042232966453">ଇନକଗ୍ନିଟୋ ଟାବକୁ ସ୍ଵିଚ୍ କରାଯାଇଛି</translation>
 <translation id="2527779675047087889">କ୍ଲିପବୋର୍ଡର ବିଷୟବସ୍ତୁଗୁଡ଼ିକୁ ଲୁଚାନ୍ତୁ</translation>
 <translation id="2532336938189706096">ୱେବ୍ ଦୃଶ୍ୟ</translation>
@@ -253,11 +260,13 @@
 <translation id="2581165646603367611">ଏହାଦ୍ୱାରା Chrome ମହତ୍ୱପୂର୍ଣ୍ଣ ବୋଲି ଭାବୁନଥିବା, କୁକିସ୍, କ୍ୟାଶ୍ ଏବଂ ସାଇଟ୍‌ର ଅନ୍ୟାନ୍ୟ ଡାଟାଗୁଡ଼ିକ ଖାଲି ହୋଇଯିବ।</translation>
 <translation id="2587052924345400782">ନୂତନତର ସଂସ୍କରଣ ଉପଲବ୍ଧ ଅଛି</translation>
 <translation id="2593272815202181319">ମୋନୋସ୍ପେସ୍</translation>
+<translation id="2604446170045642109">ଆପଣ ଆପଣଙ୍କ ସେଟିଂସରେ ସାଇଟଗୁଡ଼ିକ ପାଇଁ ଗାଢ଼ା ଥିମକୁ ବନ୍ଦ କରିପାରିବେ।</translation>
 <translation id="2612676031748830579">କାର୍ଡ ସଂଖ୍ୟା</translation>
 <translation id="2625189173221582860">ପାସ୍‍ୱର୍ଡ କପି ହୋଇଛି</translation>
 <translation id="2631006050119455616">ସେଭ୍‌ ହୋଇଗଲା</translation>
 <translation id="2645657967708199252">ଆପଣଙ୍କ <ph name="CONNECTION_TYPE" /> ସଂଯୋଗ ଆପଣଙ୍କର ଡାଉନଲୋଡକୁ ସ୍ଲୋ କରିପାରେ</translation>
 <translation id="2647434099613338025">ଭାଷା ଯୋଗ କରନ୍ତୁ</translation>
+<translation id="2649068648233607930">ଆପଣଙ୍କ ବ୍ରାଉଜର <ph name="DOMAIN" /> ଦ୍ୱାରା ପରିଚାଳିତ ହେଉଛି</translation>
 <translation id="2650751991977523696">ଫାଇଲ୍‌ଟି ପୁଣି ଡାଉନ୍‌ଲୋଡ୍ କରିବେ?</translation>
 <translation id="2651091186440431324">{FILE_COUNT,plural, =1{#ଟି ଅଡିଓ ଫାଇଲ୍‌}other{#ଟି ଅଡିଓ ଫାଇଲ୍‌}}</translation>
 <translation id="2656405586795711023">ୱେବ୍ ଆପଗୁଡ଼ିକ</translation>
@@ -284,6 +293,7 @@
 <translation id="2801022321632964776">Chromeର ନବୀନତମ ସଂସ୍କରଣରେ ଆପଣଙ୍କ ଭାଷା ପାଇବା ନିମନ୍ତେ ଅପ୍‌ଡେଟ୍ କରନ୍ତୁ</translation>
 <translation id="2805756323405976993">ଆପ୍ସ</translation>
 <translation id="2806840421670364300">FLoC</translation>
+<translation id="2809150421034843096">ଆପଣଙ୍କ Chrome ବ୍ୟବହାର ସମ୍ପର୍କିତ ସୂଚନା ଯାହାକୁ ଆପଣଙ୍କ ସହ ଯୋଡ଼ା ଯାଇପାରିବ ନାହିଁ\n\nକ୍ୱଚିତ Chrome କ୍ରାସଗୁଡ଼ିକରୁ ପ୍ରାସଙ୍ଗିକ ଡାଟା, ଯେଉଁଥିରେ କିଛି ବ୍ୟକ୍ତିଗତ ସୂଚନା ଅନ୍ତର୍ଭୁକ୍ତ ଥାଇପାରେ\n\nଯଦି ଆପଣ ସିଙ୍କ ଚାଲୁ କରିଛନ୍ତି, ତେବେ ଆପଣ ଭିଜିଟ କରିଥିବା URL ସମ୍ବନ୍ଧିତ ସୂଚନା ମଧ୍ୟ ମେଟ୍ରିକ୍ସରେ ଅନ୍ତର୍ଭୁକ୍ତ ଥାଇପାରେ</translation>
 <translation id="281504910091592009">ଆପଣଙ୍କର <ph name="BEGIN_LINK" />Google ଆକାଉଣ୍ଟ<ph name="END_LINK" />ରେ ସେଭ୍ ହୋ‍ଇଥିବା ପାସ୍‌ୱର୍ଡଗୁଡ଼ିକୁ ଦେଖନ୍ତୁ ଓ ପରିଚାଳନା କରନ୍ତୁ।</translation>
 <translation id="2818669890320396765">ଆପଣଙ୍କର ସମସ୍ତ ଡିଭାଇସ୍‌ରେ ବୁକ୍‍ମାର୍କଗୁଡ଼ିକ ପ୍ରାପ୍ତ କରିବାକୁ, ସାଇନ୍‌ ଇନ୍‌ କରନ୍ତୁ ଏବଂ ସିଙ୍କ୍‌ ଚାଲୁ କରନ୍ତୁ</translation>
 <translation id="2827278682606527653">Feed card menu half height</translation>
@@ -305,10 +315,13 @@
 <translation id="2908243544703713905">ପଢ଼ାଯାଇନଥିବା ଷ୍ଟୋରୀଗୁଡ଼ିକ ପ୍ରସ୍ତୁତ ଅଛି</translation>
 <translation id="2909615210195135082">Google Notifications Platform</translation>
 <translation id="2912296070571964914">ଆପଣଙ୍କ ଆଗ୍ରହ ଥିବା ବିଷୟଗୁଡ଼ିକୁ ପରିଚାଳନା କରନ୍ତୁ</translation>
+<translation id="2912345083818861431">ଖୋଲା ଥିବା ଇନକଗ୍ନିଟୋ ଟାବଗୁଡ଼ିକୁ ଦେଖିବା ପାଇଁ ସ୍କ୍ରିନ ଲକ ବ୍ୟବହାର କରନ୍ତୁ</translation>
 <translation id="2923908459366352541">ନାମ ଅବୈଧ ଅଟେ</translation>
 <translation id="2932150158123903946">Google <ph name="APP_NAME" /> ଷ୍ଟୋରେଜ୍</translation>
 <translation id="2932222164150889403">ଆପଣଙ୍କ କୀବୋର୍ଡ ପରିବର୍ତ୍ତନ ହେବ ନାହିଁ</translation>
 <translation id="2942036813789421260">ପ୍ରିଭ୍ୟୁ ଟାବ୍ ବନ୍ଦ କରାଯାଇଛି</translation>
+<translation id="2946420957526726953">ଅନ୍ୟ ଡିଭାଇସଗୁଡ଼ିକ ସହ ସଂଯୋଗ କରିବା ପାଇଁ Chromeକୁ ଅପଡେଟ୍ କରାଯାଉଛି</translation>
+<translation id="2951071800649516099">ପରବର୍ତ୍ତୀ ସମୟ ପାଇଁ ଆପଣଙ୍କ ପଢ଼ିବା ତାଲିକାରେ ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="2956410042958133412">ଏହି ଆକାଉଣ୍ଟ <ph name="PARENT_NAME_1" /> ଏବଂ <ph name="PARENT_NAME_2" /> ଦ୍ୱାରା ପରିଚାଳିତ ହେଉଛି।</translation>
 <translation id="2961208450284224863">{READING_LIST_UNREAD_PAGE_COUNT,plural, =1{<ph name="READING_LIST_UNREAD_PAGE_COUNT_ONE" />ଟି ପଢ଼ାଯାଇନଥିବା ପୃଷ୍ଠା}other{<ph name="READING_LIST_UNREAD_PAGE_COUNT_MANY" />ଟି ପଢ଼ାଯାଇନଥିବା ପୃଷ୍ଠା}}</translation>
 <translation id="2961210776189273067">ଟାଇଟେଲ୍</translation>
@@ -316,13 +329,16 @@
 <translation id="2979448359891869301">ସ୍କ୍ରିନସଟର ବିସ୍ତାର କରାଯାଇପାରିବ ନାହିଁ। ଆପଣଙ୍କ ଫୋନର କମ୍ ବ୍ୟବହାର ହେଉଥିବା ସମୟରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</translation>
 <translation id="2979639724566107830">ନୂତନ ୱିଣ୍ଡୋରେ ଖୋଲନ୍ତୁ</translation>
 <translation id="2981364137500752533">ଆପଣ 5ଟି ପର୍ଯ୍ୟନ୍ତ ୱିଣ୍ଡୋକୁ ଖୋଲିପାରିବେ।</translation>
+<translation id="2984978667043170458">Google ସନ୍ଧାନଗୁଡ଼ିକରେ ଆଖପାଖର ଟେକ୍ସଟକୁ ଅନ୍ତର୍ଭୁକ୍ତ କରନ୍ତୁ</translation>
 <translation id="2987620471460279764">ଅନ୍ୟ ଡିଭାଇସ୍ ଠାରୁ ଟେକ୍ସଟ୍ ସେୟାର୍ କରାଯାଇଛି</translation>
 <translation id="2989523299700148168">ନିକଟରେ ଯାଇଥିବା</translation>
 <translation id="2992473221983447149">ଛବିର ବର୍ଣ୍ଣନା</translation>
 <translation id="2996291259634659425">ପାସ୍‌ଫ୍ରେଜ୍ ତିଆରି କରନ୍ତୁ</translation>
 <translation id="2996809686854298943">URL ଆବଶ୍ୟକ</translation>
 <translation id="3006881078666935414">କୌଣସି ବ୍ୟବହାର ହେଉଥିବା ଡାଟା ନାହିଁ</translation>
+<translation id="301080557829842765">ଗୋପନୀୟତା ଗାଇଡ୍</translation>
 <translation id="3016635187733453316">ଏହି ଡିଭାଇସ୍‌ଟି ଇଣ୍ଟର୍ନେଟ୍ ସହ ସଂଯୁକ୍ତ ହୋଇଥିବା ସୁନିଶ୍ଚିତ କରନ୍ତୁ</translation>
+<translation id="3026955690410463085">ଲିଙ୍କ୍ ଅନ୍ତର୍ଭୁକ୍ତ କରନ୍ତୁ</translation>
 <translation id="3029704984691124060">ପାସଫ୍ରେଜ୍ ମେଳ ଖାଉନାହିଁ</translation>
 <translation id="3031225630520268969">Assistantର ଭଏସ୍ ମାଧ୍ୟମରେ ସନ୍ଧାନ ପାଇଁ ସମ୍ମତିର ui</translation>
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />ସାହାଯ୍ୟ ପାଆନ୍ତୁ<ph name="END_LINK" /></translation>
@@ -339,6 +355,7 @@
 <translation id="3123734510202723619">ଘୋଷଣାଗୁଡ଼ିକ</translation>
 <translation id="3134784203083076891">”</translation>
 <translation id="314939179385989105">Chromeର ମୂଳପୃଷ୍ଠା</translation>
+<translation id="3154863790776532719">ନୂଆ ଫିଚର ଏବଂ ଉନ୍ନତ ପରଫରମାନ୍ସ</translation>
 <translation id="3157842584138209013">ଅଧିକ ବିକଳ୍ପ ବଟନ୍‌ରୁ ଆପଣ କେତେ ଡାଟା ସେଭ୍ କରିଛନ୍ତି ଦେଖନ୍ତୁ</translation>
 <translation id="3166827708714933426">ଟାବ୍‌ ଏବଂ ୱିଣ୍ଡୋ ସର୍ଟକଟ୍‌</translation>
 <translation id="316694332262407393">Chrome ପୂର୍ବରୁ ଏଠାରେ ଚାଲୁଛି।</translation>
@@ -350,8 +367,10 @@
 <translation id="3214996641768123781">ଆପଣ ସାଇନ୍ ଇନ୍ କରିଥିବା ବେଳେ <ph name="BEGIN_LINK1" />ସନ୍ଧାନ ଇତିହାସ<ph name="END_LINK1" /> ଏବଂ <ph name="BEGIN_LINK2" />ଅନ୍ୟ ପ୍ରକାରର କାର୍ଯ୍ୟକଳାପ<ph name="END_LINK2" /> ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟରେ ସେଭ୍ ହୋଇପାରେ। ଆପଣ ସେଗୁଡ଼ିକୁ ଯେ କୌଣସି ସମୟରେ ଡିଲିଟ୍ କରିପାରିବେ।</translation>
 <translation id="321773570071367578">ଯଦି ଆପଣ ନିଜର ପାସ୍‌ଫ୍ରେଜ୍ ଭୁଲିଯାଇଛନ୍ତି କିମ୍ବା ଏହି ସେଟିଂ ପରିବର୍ତ୍ତନ କରିବାକୁ ଚାହୁଁଛନ୍ତି, ତେବେ <ph name="BEGIN_LINK" />ସିଙ୍କ୍ ରିସେଟ୍ କରନ୍ତୁ<ph name="END_LINK" />।</translation>
 <translation id="3220943972464248773">ଆପଣଙ୍କ ପାସୱାର୍ଡଗୁଡ଼ିକୁ ସିଙ୍କ୍ କରିବା ପାଇଁ ଏହା ଆପଣ ଅଟନ୍ତି ବୋଲି ଯାଞ୍ଚ କରନ୍ତୁ</translation>
+<translation id="3223522355830797639">ଏହା ଆପଣ ଅଟନ୍ତି ବୋଲି ଆପଣଙ୍କ ବ୍ୟାଙ୍କ ସୁନିଶ୍ଚିତ କରିବାକୁ ଚାହେଁ।</translation>
 <translation id="3227557059438308877">ଏକ ସୁରକ୍ଷା କୀ ଭାବେ Google Chromeର ବ୍ୟବହାର</translation>
 <translation id="3232754137068452469">ୱେବ୍ ଆପ୍</translation>
+<translation id="3234978181857588512">ଡିଭାଇସରେ ସେଭ୍ କରନ୍ତୁ</translation>
 <translation id="3236059992281584593">ଅବଶିଷ୍ଟ 1 ମିନଟ୍‌ ଅଛି</translation>
 <translation id="3244271242291266297">ମାସ</translation>
 <translation id="3250563604907490871">ଯେତେବେଳେ ଆପଣ ୱାଇ-ଫାଇ ସହ ସଂଯୋଗ କରନ୍ତି ଛବିର ବର୍ଣ୍ଣନା ପୁଣି ଆରମ୍ଭ ହେବ</translation>
@@ -372,7 +391,6 @@
 <translation id="3295530008794733555">ଦ୍ରୁତତର ବ୍ରାଉଜ୍ କରନ୍ତୁ। କମ୍ ଡାଟା ବ୍ୟବହାର କରନ୍ତୁ।</translation>
 <translation id="3297344142967351106">ଭଏସ୍ ସହାୟତା</translation>
 <translation id="3303414029551471755">ବିଷୟବସ୍ତୁ ଡାଉନ୍‍‍ଲୋଡ୍ କରିବା ପାଇଁ ଆଗକୁ ବଢ଼ିବେ?</translation>
-<translation id="333367884906698540">ଆପଣଙ୍କ କାର୍ଯ୍ୟ ସମ୍ପୂର୍ଣ୍ଣ ହେବା ପରେ ବ୍ଲୁଟୁଥ୍ ବନ୍ଦ ହୋଇଯିବ</translation>
 <translation id="3334729583274622784">ଫାଇଲ୍‍‍ର ଏକ୍ସଟେନ୍‌ସନ୍ ବଦଳାଇବେ କି?</translation>
 <translation id="3341058695485821946">ଆପଣ କେତେ ଡାଟା ସେଭ୍ କରିଛନ୍ତି ତାହା ଦେଖନ୍ତୁ</translation>
 <translation id="3341262203274374114">ଅନୁସରଣ କରିବା ବନ୍ଦ କରାଯାଇପାରିବ ନାହିଁ। କିଛି ତ୍ରୁଟି ହୋଇଛି।</translation>
@@ -388,15 +406,10 @@
 <translation id="3398320232533725830">ବୁକ୍‌ମାର୍କ ପରିଚାଳକ ଖୋଲନ୍ତୁ</translation>
 <translation id="3414952576877147120">ଆକାର:</translation>
 <translation id="3429160811076349561">ଟ୍ରାଏଲ୍ ଫିଚରଗୁଡ଼ିକ ବନ୍ଦ ଅଛି</translation>
+<translation id="3435465986463792564">ଅନେକ ୱିଣ୍ଡୋ ଖୋଲା ଅଛି କି? ଆପଣ ସେଗୁଡ଼ିକୁ ଏଠାରୁ ପରିଚାଳନା କରିପାରିବେ</translation>
 <translation id="3440975416244667276">ଅଧିକ ପ୍ରାସଙ୍ଗିକ ସୂଚନା ପାଇଁ ସ୍ପର୍ଶ କରି ଧରି ରଖନ୍ତୁ</translation>
 <translation id="3443221991560634068">ବର୍ତ୍ତମାନର ପୃଷ୍ଠାକୁ ରିଲୋଡ୍ କରନ୍ତୁ</translation>
-<translation id="3451542610083122179">ପ୍ରାଇଭେସି ସେଣ୍ଡବକ୍ସ ହେଉଛି ଓପନ ୱେବକୁ ସଂରକ୍ଷିତ କରିବା ପାଇଁ ଏକ ଚାଲୁଥିବା ଇନିସିଏଟିଭ୍ ଯାହା ଟ୍ରାକିଂ କାର୍ଯ୍ୟ ପ୍ରଣାଳୀଠାରୁ ଆପଣଙ୍କୁ ସୁରକ୍ଷିତ ରଖିବାରେ ସାହାଯ୍ୟ କରିବ।
-
-ଆଜି, ପ୍ରାସଙ୍ଗିକ ବିଜ୍ଞାପନଗୁଡ଼ିକୁ ଦେଖାଇବା ଏବଂ ଏକ ସାଇଟର ପରଫରମାନ୍ସର ପରିମାପ କରିବା ପରି ଗୁରୁତ୍ୱପୂର୍ଣ୍ଣ ସେବାଗୁଡ଼ିକ ପାଇଁ, ୱେବସାଇଟଗୁଡ଼ିକ ତୃତୀୟ-ପକ୍ଷ କୁକୀଗୁଡ଼ିକ ପରି ଅନେକ ଟେକ୍ନୋଲୋଜି ଉପରେ ନିର୍ଭର କରେ।
-
-ପ୍ରାଇଭେସି ସେଣ୍ଡବକ୍ସ ସେବାଗୁଡ଼ିକୁ ସମ୍ପାଦନ କରିବା ପାଇଁ ଉନ୍ନତ ଉପାୟଗୁଡ଼ିକ ତିଆରି କରି – ସାଇଟଗୁଡ଼ିକର କାର୍ଯ୍ୟରେ କ୍ଷତି ନକରି ସମଗ୍ର ୱେବରେ ଆପଣଙ୍କୁ ଗୋପନ ଭାବେ ଟ୍ରାକ୍ ହେବାରୁ ପ୍ରତିବନ୍ଧିତ କରିବା ସମୟରେ ଓପନ ୱେବର ଗୁରୁତ୍ୱକୁ ସଂରକ୍ଷିତ ରଖିଥାଏ।
-
-ପ୍ରାଇଭେସି ସେଣ୍ଡବକ୍ସ ଏବେ ବି ବିକଶିତ ହେଉଛି ଏବଂ ଚୟନିତ ଅଞ୍ଚଳଗୁଡ଼ିକରେ ଉପଲବ୍ଧ ଅଛି। ବର୍ତ୍ତମାନ ପାଇଁ, ସାଇଟଗୁଡ଼ିକ ତୃତୀୟ-ପକ୍ଷ କୁକୀଗୁଡ଼ିକ ପରି ବର୍ତ୍ତମାନର ୱେବ୍ ଟେକ୍ନୋଲୋଜିଗୁଡ଼ିକୁ ବ୍ୟବହାର କରିବା ସମୟରେ ପ୍ରାଇଭେସି ସେଣ୍ଡବକ୍ସ ବ୍ୟବହାର କରି ଦେଖିପାରେ। <ph name="BEGIN_LINK" />ଅଧିକ ଜାଣନ୍ତୁ<ph name="END_LINK" /></translation>
+<translation id="3444179773590444986">ସାଇଟଗୁଡ଼ିକ ପାଇଁ ଗାଢ଼ା ଥିମ ବିଷୟରେ ମତାମତ ସେୟାର କରିବେ?</translation>
 <translation id="3469665409713263828">{FILE_COUNT,plural, =1{1ଟି ଡାଉନଲୋଡ୍ ସିଡୁଲ୍ କରାଯାଇଛି}other{#ଟି ଡାଉନଲୋଡ୍ ସିଡୁଲ୍ କରାଯାଇଛି}}</translation>
 <translation id="3478363558367712427">ଆପଣ ଆପଣଙ୍କର ସର୍ଚ୍ଚ ଇଞ୍ଜିନ୍ ବାଛିପାରିବେ</translation>
 <translation id="3493531032208478708">ପ୍ରସ୍ତାବିତ ବିଷୟବସ୍ତୁ ବିଷୟରେ <ph name="BEGIN_LINK" />ଅଧିକ ଜାଣନ୍ତୁ<ph name="END_LINK" /></translation>
@@ -421,6 +434,7 @@
 <translation id="3602290021589620013">ପ୍ରିଭ୍ୟୁ</translation>
 <translation id="3616113530831147358">ଅଡିଓ</translation>
 <translation id="3622349720008044802">ୱିଣ୍ଡୋଗୁଡ଼ିକୁ ପରିଚାଳନା କରନ୍ତୁ</translation>
+<translation id="3624977496395967031">ସର୍ଟ କରିବାର ବିକଳ୍ପଗୁଡ଼ିକୁ ଖୋଲିବା ପାଇଁ କ୍ଲିକ କରନ୍ତୁ</translation>
 <translation id="3631987586758005671"><ph name="DEVICE_NAME" /> ସହ ସେୟାର୍ କରାଯାଉଛି</translation>
 <translation id="3632295766818638029">ପାସ୍‌ୱର୍ଡ ଦେଖାନ୍ତୁ</translation>
 <translation id="363596933471559332">ଷ୍ଟୋର୍ ଥିବା କ୍ରିଡେନ୍‌ସିଆଲ୍ ବ୍ୟବହାର କରି ୱେବ୍‌ସାଇଟ୍‌ରେ ସ୍ୱଚାଳିତରୂପେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ। ଯେତେବେଳେ ଏହି ବୈଶିଷ୍ଟ୍ୟଟି ବନ୍ଦଥାଏ, ସେତେବେଳେ ଏକ ୱେବ୍‌ସାଇଟ୍‌ରେ ସାଇନ୍ ଇନ୍ କରିବା ପୂର୍ବରୁ ପ୍ରତ୍ୟେକଥର ଆପଣଙ୍କୁ ଯାଞ୍ଚ କରିବା ପାଇଁ କୁହାଯିବ।</translation>
@@ -450,6 +464,7 @@
 <translation id="3810838688059735925">ଭିଡିଓ</translation>
 <translation id="3810973564298564668">ପରିଚାଳନା</translation>
 <translation id="3819178904835489326"><ph name="NUMBER_OF_DOWNLOADS" />ଟି ଡାଉନ୍‍‍ଲୋଡ୍ ଡିଲିଟ୍ କରାଯାଇଛି</translation>
+<translation id="3819183753496523827">ଆପଣ ଅଫଲାଇନ୍ ଅଛନ୍ତି। ଆପଣଙ୍କ ଇଣ୍ଟରନେଟ୍ ସଂଯୋଗକୁ ଯାଞ୍ଚ କରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</translation>
 <translation id="3845098929839618392">ଇନକଗ୍ନିଟୋ ଟାବରେ ଖୋଲନ୍ତୁ</translation>
 <translation id="3856096718352044181">ଏହା ଏକ ବୈଧ ପ୍ରଦାନକାରୀ ବୋଲି ଯାଞ୍ଚ କରନ୍ତୁ କିମ୍ବା ପରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ</translation>
 <translation id="3858860766373142691">ନାମ</translation>
@@ -489,15 +504,17 @@
 <translation id="4084682180776658562">ବୁକମାର୍କ</translation>
 <translation id="4084712963632273211"><ph name="PUBLISHER_ORIGIN" />ଙ୍କ ଠାରୁ – <ph name="BEGIN_DEEMPHASIZED" />Google ଦ୍ୱାରା ବିତରଣ କରାଯାଇଛି<ph name="END_DEEMPHASIZED" /></translation>
 <translation id="4095146165863963773">ଆପ୍ ଡାଟା ଡିଲିଟ୍ କରିବେ କି?</translation>
-<translation id="4095189195365058471">ପରେ ପଢ଼ନ୍ତୁ <ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /></translation>
+<translation id="4096227151372679484">ବୁକମାର୍କ ସେଭ ଫ୍ଲୋ ଅଧା ଖୋଲାଯାଇଛି</translation>
 <translation id="4099578267706723511">Googleକୁ ବ୍ୟବହାରର ପରିସଂଖ୍ୟାନ ଏବଂ କ୍ରାଶ୍ ରିପୋର୍ଟ ପଠାଇ, Chromeକୁ ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରନ୍ତୁ।</translation>
 <translation id="410351446219883937">ସ୍ୱଚାଳିତ</translation>
 <translation id="4108314971463891922">ଅନୁସରଣ କରନ୍ତୁ</translation>
 <translation id="4108998448622696017">ବିପଦଜନକ ଘଟଣାଗୁଡ଼ିକ ଘଟିଲେ ଏଗୁଡ଼ିକୁ ଚିହ୍ନଟ କରି ଆପଣଙ୍କୁ ଚେତାବନୀ ଦିଏ।</translation>
 <translation id="4116038641877404294">ଅଫ୍‌ଲାଇନ୍‌ରେ ବ୍ୟବହାର କରିବାକୁ ପୃଷ୍ଠାଗୁଡ଼ିକ ଡାଉନ୍‌ଲୋଡ୍‌ କରନ୍ତୁ</translation>
 <translation id="4135200667068010335">ଏକ ଟାବ୍ ସେୟାର୍ କରିବା ପାଇଁ ଡିଭାଇସ୍‌ର ତାଲିକା ବନ୍ଦ କରାଯାଇଛି।</translation>
+<translation id="4137746084635924146">ଡିଭାଇସର ବର୍ତ୍ତମାନର ଭାଷା</translation>
 <translation id="4141536112466364990">Chrome ବିଷୟରେ ଜାଣନ୍ତୁ</translation>
 <translation id="4149994727733219643">ୱେବ୍ ପୃଷ୍ଠାଗୁଡ଼ିକ ପାଇଁ ସରଳୀକୃତ ଭ୍ୟୁ</translation>
+<translation id="4162867837470729563">ସେୟାରିଂ ବିକଳ୍ପଗୁଡ଼ିକର ତାଲିକା ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନରେ ଖୋଲିଛି।</translation>
 <translation id="4165986682804962316">ସାଇଟ୍‍ ସେଟିଂସ୍‌</translation>
 <translation id="4170011742729630528">ସେବା ଉପଲବ୍ଧ ନାହିଁ; ପରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</translation>
 <translation id="4179980317383591987"><ph name="AMOUNT" /> ବ୍ୟବହୃତ</translation>
@@ -515,6 +532,7 @@
 <translation id="4263656433980196874">Assistantର ଭଏସ୍ ମାଧ୍ୟମରେ ସନ୍ଧାନ ପାଇଁ ସମ୍ମତିର ui ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନରେ ଖୋଲିଛି</translation>
 <translation id="4269820728363426813">ଲିଙ୍କ୍ ଠିକଣା କପି କରନ୍ତୁ</translation>
 <translation id="4290281343757112331">ଏହା ପରିବର୍ତ୍ତେ ପରେ ଡାଉନଲୋଡ୍ କରିବେ କି?</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Android ସେଟିଂସରେ ସ୍କ୍ରିନ ଲକ ଚାଲୁ କରନ୍ତୁ<ph name="END_LINK" /></translation>
 <translation id="4296252229500326964">ନୂଆ ଇନକଗ୍ନିଟୋ ଟାବ୍</translation>
 <translation id="4298388696830689168">ଲିଙ୍କ୍‌ ହୋ‍ଇଥିବା ସାଇଟ୍‍ଗୁଡ଼ିକ</translation>
 <translation id="4303044213806199882">chrome_screenshot_<ph name="CURRENT_TIMESTAMP_MS" /></translation>
@@ -525,6 +543,7 @@
 <translation id="4335835283689002019">ସୁରକ୍ଷିତ ବ୍ରାଉଜିଂ ବନ୍ଦ ଅଛି</translation>
 <translation id="4351244548802238354">ଡାୟଲଗ୍‍କୁ ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="4378154925671717803">ଫୋନ୍</translation>
+<translation id="438319986296050901">କେବଳ କାର୍ଡ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="4384468725000734951">ସନ୍ଧାନ ପାଇଁ Sogou ବ୍ୟବହାର କରାଯାଉଛି</translation>
 <translation id="4402611456429872546"><ph name="LANG" /> - ଡାଉନଲୋଡ୍ ହେଉଛି…</translation>
 <translation id="4404568932422911380">କୌଣସି ବୁକ୍‍ମାର୍କ ନାହିଁ</translation>
@@ -537,7 +556,7 @@
 <translation id="4452411734226507615"><ph name="TAB_TITLE" />ଟ୍ୟାବ୍ ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="4452548195519783679"><ph name="FOLDER_NAME" />ରେ ବୁକ୍‍ମାର୍କ କରାଯାଇଛି</translation>
 <translation id="4472118726404937099">ସମ୍ପୂର୍ଣ୍ଣ ଡିଭାଇସ୍‌ଗୁଡ଼ିକରେ ସିଙ୍କ୍‌ ଏବଂ ବ୍ୟକ୍ତିଗତକରଣ କରିବାକୁ, ସାଇନ୍‌ ଇନ୍‌ କରନ୍ତୁ ଏବଂ ସିଙ୍କ୍‌ ଚାଲୁ କରନ୍ତୁ</translation>
-<translation id="447252321002412580">Chromeର ବୈଶିଷ୍ଟ୍ୟଗୁଡ଼ିକୁ ଏବଂ କାର୍ଯ୍ୟଦକ୍ଷତାକୁ ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରେ</translation>
+<translation id="4479839115899251637">ପଢ଼ିବା ତାଲିକାରୁ ଡିଲିଟ କରନ୍ତୁ</translation>
 <translation id="4479972344484327217">Chrome ପାଇଁ <ph name="MODULE" /> ଇନ୍‍ଷ୍ଟଲ୍‍ କରାଯାଉଛି …</translation>
 <translation id="4487967297491345095">Chromeର ସମସ୍ତ ଆପ୍ ଡାଟା ସ୍ଥାୟୀ ଭାବରେ ଡିଲିଟ୍ ହୋଇଯିବ। ଏଥିରେ ସମସ୍ତ ଫାଇଲ୍, ସେଟିଂସ୍, ଡାଟାବେସ୍, ଇତ୍ୟାଦି ଅନ୍ତର୍ଭୁକ୍ତ ଅଛି।</translation>
 <translation id="449126573531210296">ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟ ସହ ସିଙ୍କ୍ ହୋଇଥିବା ପାସୱାର୍ଡଗୁଡ଼ିକୁ ଏନକ୍ରିପ୍ଟ କରନ୍ତୁ</translation>
@@ -575,6 +594,7 @@
 <translation id="4663499661119906179">ଆପଣଙ୍କ ପାଇଁ ଉଦ୍ଦିଷ୍ଟ ଶ୍ରେଷ୍ଠ ସାଇଟ୍ ଏବଂ ଷ୍ଟୋରୀଗୁଡ଼ିକୁ ଦେଖନ୍ତୁ</translation>
 <translation id="4663756553811254707"><ph name="NUMBER_OF_BOOKMARKS" />ଟି ବୁକ୍‌ମାର୍କ ଡିଲିଟ୍ କରାଗଲା</translation>
 <translation id="4668347365065281350">କୁକୀ ଏବଂ ଡିଭାଇସରେ ଷ୍ଟୋର୍ ଥିବା ଅନ୍ୟ ଡାଟା ସମେତ ସମସ୍ତ ଡାଟା ସାଇଟଗୁଡ଼ିକ ଦ୍ୱାରା ଷ୍ଟୋର୍ କରାଯାଇଛି</translation>
+<translation id="4678082183394354975">Chromeରେ ସାଇଟଗୁଡ଼ିକ ପାଇଁ ଗାଢ଼ା ଥିମ ଚାଲୁ ଅଛି</translation>
 <translation id="4684427112815847243">ସବୁକିଛି ସିଙ୍କ୍‌ କରନ୍ତୁ</translation>
 <translation id="4695891336199304370">{SHIPPING_OPTIONS,plural, =1{<ph name="SHIPPING_OPTION_PREVIEW" />\u2026 ଏବଂ <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> ଅଧିକ}other{<ph name="SHIPPING_OPTION_PREVIEW" />\u2026 ଏବଂ <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> ଅଧିକ}}</translation>
 <translation id="4696983787092045100">ଆପଣଙ୍କର ଡିଭାଇସ୍‌ଗୁଡ଼ିକୁ ଟେକ୍ସଟ୍ ପଠାନ୍ତୁ</translation>
@@ -588,12 +608,14 @@
 <translation id="4738836084190194332">ଶେଷଥର ସିଙ୍କ ହୋଇଥିଲା: <ph name="WHEN" /></translation>
 <translation id="4742970037960872810">ହାଇଲାଇଟ୍ କାଢ଼ି ଦିଅନ୍ତୁ</translation>
 <translation id="4749960740855309258">ଏକ ନୂଆ ଟାବ୍ ଖୋଲନ୍ତୁ</translation>
+<translation id="4758061975920522644">କେବଳ ଛବି ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="4759238208242260848">ଡାଉନଲୋଡସମୂହ</translation>
 <translation id="4763480195061959176">ଭିଡିଓ</translation>
 <translation id="4763829664323285145">{FILE_COUNT,plural, =1{1ଟି ଡାଉନ୍‍‍‍ଲୋଡ୍ ସମୂର୍ଣ୍ଣ ହେଲା।}other{# ଟି ଡାଉନ୍‍‍‍ଲୋଡ୍ ସମୂର୍ଣ୍ଣ ହେଲା।}}</translation>
 <translation id="4766678251456904326">ଡିଭାଇସରେ ଆକାଉଣ୍ଟ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="4767937498890654900">{FILE_COUNT,plural, =1{1ଟି ଡାଉନଲୋଡ୍ ସିଡୁଲ୍ କରାଯାଇଛି।}other{#ଟି ଡାଉନଲୋଡ୍ ସିଡୁଲ୍ କରାଯାଇଛି।}}</translation>
 <translation id="4791358705705538979">ସମଗ୍ର ୱେବରେ ଚେକଆଉଟ୍ ପରି ଟାସ୍କଗୁଡ଼ିକୁ ସମ୍ପୂର୍ଣ୍ଣ କରିବାରେ ଆପଣଙ୍କୁ ସାହାଯ୍ୟ କରେ</translation>
+<translation id="4794291718671962615">(<ph name="MEGABYTES" />) <ph name="URL" /></translation>
 <translation id="4802417911091824046">ପାସଫ୍ରେଜ୍ ଏନକ୍ରିପ୍ସନ୍, Google Payରୁ ପେମେଣ୍ଟ ପଦ୍ଧତି ଓ ଠିକଣାଗୁଡ଼ିକୁ ଅନ୍ତର୍ଭୁକ୍ତ କରେ ନାହିଁ।
 
 ଏହି ସେଟିଂ ପରିବର୍ତ୍ତନ କରିବାକୁ, <ph name="BEGIN_LINK" />ସିଙ୍କ୍‌ ରିସେଟ୍‍ କରନ୍ତୁ<ph name="END_LINK" /></translation>
@@ -607,7 +629,6 @@
 <translation id="4850886885716139402">ଦେଖନ୍ତୁ</translation>
 <translation id="4860895144060829044">କଲ୍ କରନ୍ତୁ</translation>
 <translation id="4864369630010738180">ସାଇନ୍ ଇନ୍ ହେଉଛି…</translation>
-<translation id="4865987431642283918">ଡିଭାଇସର ଡିଫଲ୍ଟ ଭାଷା</translation>
 <translation id="4866368707455379617">Chrome ପାଇଁ <ph name="MODULE" /> ଇନ୍‌ଷ୍ଟଲ୍ କରିବାରେ ଅକ୍ଷମ</translation>
 <translation id="4875775213178255010">ବିଷୟବସ୍ତୁ ପରାମର୍ଶ</translation>
 <translation id="4877678010818027629">ଇନକଗ୍ନିଟୋ ମୋଡକୁ ଯାଆନ୍ତୁ</translation>
@@ -616,7 +637,9 @@
 <translation id="4881695831933465202">ଖୋଲନ୍ତୁ</translation>
 <translation id="488187801263602086">ଫାଇଲ୍‌କୁ ରିନେମ୍ କରନ୍ତୁ</translation>
 <translation id="4885273946141277891">Chrome ଇନ୍‌ଷ୍ଟାନ୍‌ସଗୁଡ଼ିକର ଅସମର୍ଥିତ ସଂଖ୍ୟା।</translation>
+<translation id="4905823827770127520">ପୃଷ୍ଠାର ଏକ ଲିଙ୍କ୍ ଅନ୍ତର୍ଭୁକ୍ତ କରନ୍ତୁ</translation>
 <translation id="4908869848243824489">Googleର Discover</translation>
+<translation id="4909709702739934280">ଆପଣଙ୍କ ବ୍ରାଉଜର ଆପଣଙ୍କର ଆଡମିନିଷ୍ଟ୍ରେଟରଙ୍କ ଦ୍ୱାରା ପରିଚାଳିତ ହେଉଛି</translation>
 <translation id="4910889077668685004">ପେମେଣ୍ଟ ଆପ୍ସ</translation>
 <translation id="4912413785358399818">ଟାବ୍ ମୁଭ୍ କରନ୍ତୁ</translation>
 <translation id="4913161338056004800">ପରିସଂଖ୍ୟାନ ରିସେଟ୍ କରନ୍ତୁ</translation>
@@ -630,7 +653,6 @@
 <translation id="4943872375798546930">କୌଣସି ଫଳାଫଳ ନାହିଁ</translation>
 <translation id="4957722034734105353">ଅଧିକ ଜାଣନ୍ତୁ...</translation>
 <translation id="4961107849584082341">ଏହି ପୃଷ୍ଠାକୁ ଯେକୌଣସି ଭାଷାରେ ଅନୁବାଦ କରନ୍ତୁ</translation>
-<translation id="4970824347203572753">ଆପଣଙ୍କର ଲୋକେସନ୍‌ରେ ଉପଲବ୍ଧ ନାହିଁ</translation>
 <translation id="4971735654804503942">ବିପଦଜନକ ୱେବସାଇଟ୍, ଡାଉନଲୋଡ୍ ଏବଂ ଏକ୍ସଟେନ୍ସନଗୁଡ଼ିକ ବିରୁଦ୍ଧରେ ଦ୍ରୁତ, ସକ୍ରିୟ ସୁରକ୍ଷା। ପାସୱାର୍ଡ ଚୋରି ବିଷୟରେ ଆପଣଙ୍କୁ ଚେତାବନୀ ଦିଏ। Googleକୁ ବ୍ରାଉଜିଂ ଡାଟା ପଠାଇବା ଆବଶ୍ୟକ କରେ।</translation>
 <translation id="497421865427891073">ଆଗକୁ ଯାଆନ୍ତୁ</translation>
 <translation id="4988210275050210843">ଫାଇଲ୍‌ ଡାଉନ୍‌ଲୋଡ୍‌ ହେଉଛି(<ph name="MEGABYTES" />)।</translation>
@@ -652,6 +674,7 @@
 <translation id="510275257476243843">1 ଘଣ୍ଟା ବାକି ଅଛି</translation>
 <translation id="5118713593561876160">ଆଗ୍ରହ</translation>
 <translation id="5123685120097942451">ଇନ୍‌କଗ୍ନିଟୋ ଟାବ୍</translation>
+<translation id="5126510351761255129">ଆପଣଙ୍କର କାର୍ଡ ଯାଞ୍ଚ କରନ୍ତୁ</translation>
 <translation id="5132942445612118989">ସମସ୍ତ ଡିଭାଇସ୍‌ଗୁଡ଼ିକରେ ଆପଣଙ୍କର ପାସ୍‌ୱାର୍ଡ, ଇତିବୃତ୍ତି ଏବଂ ଆହୁରି ଅନେକ କିଛି ସିଙ୍କ୍‌ କରନ୍ତୁ</translation>
 <translation id="5139940364318403933">Google Drive କିପରି ବ୍ୟବହାର କରିବେ, ତାହା ଜାଣନ୍ତୁ</translation>
 <translation id="5142281402488957685">ନୂଆ ଷ୍ଟୋରୀଗୁଡ଼ିକ ପାଇଁ ରିଫ୍ରେସ୍ କରିବାକୁ ତଳକୁ ଟାଣନ୍ତୁ</translation>
@@ -687,9 +710,9 @@
 <translation id="5317780077021120954">ସଞ୍ଚୟ</translation>
 <translation id="5319359161174645648">Google Chromeକୁ ସୁପାରିଶ କରୁଛି</translation>
 <translation id="5324858694974489420">ଅଭିଭାବକୀୟ ସେଟିଂସ୍</translation>
+<translation id="5329858041417644019">ଆପଣଙ୍କର ବ୍ରାଉଜର୍ ପରିଚାଳିତ ନୁହେଁ</translation>
 <translation id="5342314432463739672">ଅନୁମତି ଅନୁରୋଧଗୁଡ଼ିକ</translation>
 <translation id="5355191726083956201">ଉନ୍ନତ ସୁରକ୍ଷା ଚାଲୁ ଅଛି</translation>
-<translation id="5357811892247919462">ଟାବ୍ ପ୍ରାପ୍ତ ହୋଇଛି</translation>
 <translation id="5368958499335451666">{OPEN_TABS,plural, =1{<ph name="OPEN_TABS_ONE" />ଟି ଖୋଲାଥିବା ଟାବ୍, ଟାବ୍‌ଗୁଡ଼ିକ ସ୍ୱିଚ୍ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ}other{<ph name="OPEN_TABS_MANY" />ଟି ଖୋଲାଥିବା ଟାବ୍, ଟାବ୍‌ଗୁଡ଼ିକ ସ୍ୱିଚ୍ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ}}</translation>
 <translation id="5375577065097716013">Google Lens ସହ ଛବି ଖୋଜନ୍ତୁ <ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /></translation>
 <translation id="5403644198645076998">କେବଳ ନିର୍ଦ୍ଦିଷ୍ଟ ସାଇଟ୍‌ଗୁଡିକୁ ଅନୁମତି ଦିଏ</translation>
@@ -700,6 +723,7 @@
 <translation id="543338862236136125">ପାସ୍‍ୱାର୍ଡ ସମ୍ପାଦନ କରନ୍ତୁ</translation>
 <translation id="5433691172869980887">ଉପଯୋଗକର୍ତ୍ତାଙ୍କର ନାମ କପି କରାଗଲା</translation>
 <translation id="543509235395288790"><ph name="COUNT" />ଟି ଫାଇଲ୍ (<ph name="MEGABYTES" />) ଡାଉନ‌ଲୋଡ୍ ହେଉଛି।</translation>
+<translation id="5438292632479953702">ପୁଣି ଡାଉନଲୋଡ୍ କରନ୍ତୁ</translation>
 <translation id="5441466871879044658">ଏହି ଭାଷାରେ ଅନୁବାଦ କରନ୍ତୁ</translation>
 <translation id="5441522332038954058">ଆଡ୍ରେସ୍ ବାର୍‌କୁ ଯାଆନ୍ତୁ</translation>
 <translation id="544776284582297024">ଟାବଗୁଡ଼ିକୁ ଖୋଲିବାକୁ ଏବଂ ଏକା ସମୟରେ ବିଭିନ୍ନ ପୃଷ୍ଠାକୁ ଭିଜିଟ୍ କରିବାକୁ, "ଟାବଗୁଡ଼ିକ ଖୋଲନ୍ତୁ" ବଟନରେ ଟାପ୍ କରନ୍ତୁ</translation>
@@ -712,7 +736,6 @@
 <translation id="5483197086164197190">Chrome ନାଭିଗେଟ୍ କରନ୍ତୁ</translation>
 <translation id="5487521232677179737">ଡାଟା ଖାଲି କରନ୍ତୁ</translation>
 <translation id="549025011754480756">ଆପଣଙ୍କ ଭଏସ୍ ଦ୍ୱାରା କିପରି ସନ୍ଧାନ କରିବେ</translation>
-<translation id="5500777121964041360">ଏହା ଆପଣଙ୍କର ଲୋକେସନ୍‌ରେ ଉପଲବ୍ଧ ନଥାଇପାରେ</translation>
 <translation id="5512137114520586844">ଏହି ଆକାଉଣ୍ଟ <ph name="PARENT_NAME" />ଙ୍କ ଦ୍ଵାରା ପରିଚାଳିତ ହେଉଛି।</translation>
 <translation id="5514904542973294328">ଏହି ଡିଭାଇସ୍‍ର ବ୍ୟବସ୍ଥାପକଙ୍କ ଦ୍ୱାରା ଅକ୍ଷମ କରାଯାଇଛି</translation>
 <translation id="5515439363601853141">ଆପଣଙ୍କର ପାସ୍‍ୱର୍ଡ ଦେଖିବା ପାଇଁ ଅନ୍‍ଲକ୍ କରନ୍ତୁ</translation>
@@ -730,7 +753,6 @@
 <translation id="5599941490345670218">Google Assistant ଆପଣଙ୍କ ପାଇଁ ସମଗ୍ର ୱେବସାଇଟରେ କାର୍ଯ୍ୟଗୁଡ଼ିକୁ ସମ୍ପୂର୍ଣ୍ଣ କରିପାରିବ</translation>
 <translation id="5620163320393916465">କୌଣସି ସେଭ୍ କରାଯାଇଥିବା ପାସୱାର୍ଡ ନାହିଁ</translation>
 <translation id="5620928963363755975">ଅଧିକ ବିକଳ୍ପ ବଟନ୍‌ ମଧ୍ୟରେ ଥିବା ଡାଉନ୍‍‍‍ଲୋଡ୍ରୁ ଆପଣଙ୍କର ଫାଇଲ୍ ଏବଂ ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଖୋଜନ୍ତୁ</translation>
-<translation id="562168087174703495">ହାଇଲାଇଟ୍ କରାଯାଇଥିବା ଟେକ୍ସଟର ଲିଙ୍କକୁ ତିଆରି କରାଯାଇପାରିବ ନାହିଁ। ପୃଷ୍ଠାର ଲିଙ୍କକୁ ସେୟାର୍ କରନ୍ତୁ।</translation>
 <translation id="562289928968387744">ପ୍ରତିକ୍ରିୟାଗୁଡ଼ିକୁ ପରିଚାଳନା କରନ୍ତୁ</translation>
 <translation id="5626134646977739690">ନାମ:</translation>
 <translation id="5628604359369369630">ପଢ଼ାଯାଇନଥିବା - ଅଫଲାଇନରେ ଉପଲବ୍ଧ ଅଛି</translation>
@@ -752,9 +774,11 @@
 <translation id="5748802427693696783">ସାଧାରଣ ଟାବ୍‌ଗୁଡ଼ିକୁ ସ୍ୱିଚ୍ କରାଗଲା</translation>
 <translation id="5749068826913805084">ଫାଇଲ୍‌ଗୁଡ଼ିକ ଡାଉନ୍‌ଲୋଡ୍ କରିବାକୁ Chrome ଷ୍ଟୋରେଜ୍ ଆକ୍ସେସ୍ ଆବଶ୍ୟକ କରେ।</translation>
 <translation id="5749237766298580851">ବନ୍ଦ ଥିବା <ph name="SEPARATOR" />ର ସୁପାରିଶ କରାଯାଇନାହିଁ</translation>
+<translation id="5752232708629533680">କେବଳ GIF ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="5754350196967618083">Discoverକୁ ରିଫ୍ରେସ୍ କରାଯାଇପାରିବ ନାହିଁ</translation>
 <translation id="5763382633136178763">ଇନ୍‍କଗ୍ନିଟୋ ଟାବ୍‍</translation>
 <translation id="5763514718066511291">ଏହି ଆପ୍ ପାଇଁ URL କପି କରିବାକୁ ଟାପ୍ କରନ୍ତୁ</translation>
+<translation id="5765517223145864268">ଆପଣଙ୍କ ଅନୁଭୂତି ବିଷୟରେ ଆମକୁ କୁହନ୍ତୁ। କିମ୍ବା <ph name="BEGIN_LINK" />ଆପଣଙ୍କ ସେଟିଂସ ପରିବର୍ତ୍ତନ କରନ୍ତୁ<ph name="END_LINK" />।</translation>
 <translation id="5765780083710877561">ବିବରଣୀ:</translation>
 <translation id="5767013862801005129"><ph name="TAB_TITLE" /> ଟାବ୍ ରିଷ୍ଟୋର କରାଯାଇଛି</translation>
 <translation id="5776970333778123608">ଗୁରୁତ୍ୱହୀନ ଡାଟା</translation>
@@ -791,7 +815,6 @@
 <translation id="5942872142862698679">ସନ୍ଧାନ ପାଇଁ Google ବ୍ୟବହାର କରାଯାଉଛି</translation>
 <translation id="5945035219773565305">ବର୍ତ୍ତମାନର ସୁପାରିଶଗୁଡ଼ିକ:  <ph name="RECOMMENDATION" /></translation>
 <translation id="5951119116059277034">ଲାଇଭ୍ ପୃଷ୍ଠା ଦେଖୁଛନ୍ତି</translation>
-<translation id="5952764234151283551">Googleରେ ପହଞ୍ଚିବା ପାଇଁ ଆପଣ ଚେଷ୍ଟା କରୁଥିବା ଗୋଟିଏ ପୃଷ୍ଠାର URLକୁ ପଠାଇଥାଏ</translation>
 <translation id="5956665950594638604">ଏକ ନୂଆ ଟାବ୍‌ରେ Chrome ସାହାଯ୍ୟ କେନ୍ଦ୍ର ଖୋଲନ୍ତୁ</translation>
 <translation id="5957442310066583693">ଆପଣଙ୍କ ଶ୍ରେଷ୍ଠ ସାଇଟଗୁଡ଼ିକୁ ଦେଖିବା ପାଇଁ, ହୋମ୍ ବଟନରେ ଟାପ୍ କରନ୍ତୁ</translation>
 <translation id="5958275228015807058">ଡାଉନ୍‌ଲୋଡ୍‌ରେ ଆପଣଙ୍କର ଫାଇଲ୍‌ ଏବଂ ପୃଷ୍ଠାଗୁଡ଼ିକ ଖୋଜନ୍ତୁ</translation>
@@ -799,6 +822,7 @@
 <translation id="5964805880140440652">ଅନ୍ୟ ଏକ ଡିଭାଇସ୍ ସହ ଏହି ପୃଷ୍ଠା ସେୟାର୍ କରିବା ପାଇଁ Chrome ସେଟିଂସରେ ସିଙ୍କ ଚାଲୁ କରନ୍ତୁ</translation>
 <translation id="5964869237734432770">ଛବିର ବର୍ଣ୍ଣନା ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="5979084224081478209">ପାସ୍‌ୱାର୍ଡଗୁଡ଼ିକୁ ଯାଞ୍ଚ କରନ୍ତୁ</translation>
+<translation id="5995726099713306770">ପୃଷ୍ଠାକୁ ପୁଣି ଡାଉନଲୋଡ୍ କରିବେ କି?</translation>
 <translation id="6000066717592683814">Googleକୁ ଡିଫଲ୍ଟ ଭାବେ ରଖନ୍ତୁ</translation>
 <translation id="6000203700195075278">ପୁଣି ଅନୁସରଣ କରନ୍ତୁ</translation>
 <translation id="6005538289190791541">ପ୍ରସ୍ତାବିତ ପାସ୍‌ୱାର୍ଡ</translation>
@@ -814,6 +838,8 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="604996488070107836">ଏକ ଅଜଣା ତ୍ରୁଟି ଯୋଗୁଁ <ph name="FILE_NAME" /> ଡାଉନ୍‌ଲୋଡ୍ ହୋଇପାରିଲା ନାହିଁ।</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6059830886158432458">ଏଠାରେ ଆପଣଙ୍କ ଷ୍ଟୋରୀ ଏବଂ କାର୍ଯ୍ୟକଳାପ ନିୟନ୍ତ୍ରଣ କରନ୍ତୁ</translation>
+<translation id="6069177176307973611">ଗୋପନୀୟତା ଏବଂ ସୁରକ୍ଷା ସେଟିଂସର ସମୀକ୍ଷା କରନ୍ତୁ</translation>
+<translation id="6070730414166672373">ଆପଣଙ୍କ ବ୍ୟାଙ୍କ ସହ ଯୋଗାଯୋଗ କରାଯାଉଛି\u2026</translation>
 <translation id="6085886413119427067">ଏକ ସୁରକ୍ଷିତ ସଂଯୋଗରେ ୱେବସାଇଟଗୁଡ଼ିକ ସହ କିପରି ଯୋଗାଯୋଗ କରିବ ତାହା ନିର୍ଦ୍ଧାରଣ କରିଥାଏ</translation>
 <translation id="60923314841986378"><ph name="HOURS" /> ଘଣ୍ଟା ବାକି ଅଛି</translation>
 <translation id="6108923351542677676">ସେଟ୍ ଅପ୍ ପ୍ରକ୍ରିୟା ଚାଲିଛି…</translation>
@@ -844,6 +870,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6277522088822131679">ପୃଷ୍ଟା ପ୍ରିଣ୍ଟ କରିବାରେ କିଛି ସମସ୍ୟା ଦେଖାଦେଇଛି। ଦୟାକରି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</translation>
 <translation id="6278428485366576908">ଥିମ୍</translation>
 <translation id="6292420053234093573">Chrome ବ୍ୟବହାର କରିବା ଦ୍ୱାରା, ଆପଣ <ph name="BEGIN_LINK1" />Google ସେବାର ସର୍ତ୍ତାବଳୀ<ph name="END_LINK1" /> ଏବଂ <ph name="BEGIN_LINK2" />Google Chrome ଏବଂ Chrome OS ଅତିରିକ୍ତ ସେବାର ସର୍ତ୍ତାବଳୀ<ph name="END_LINK2" /> ସହିତ ସହମତ ହେଉଛନ୍ତି।</translation>
+<translation id="6294610283659775533">ସମାନ Google ଆକାଉଣ୍ଟ ମାଧ୍ୟମରେ ସାଇନ୍ ଇନ୍ କରାଯାଇଥିବା ଡିଭାଇସଗୁଡ଼ିକ ମଧ୍ୟରେ ଆପଣ ଟାବଗୁଡ଼ିକ ପଠାଇପାରିବେ</translation>
 <translation id="6297765934698848803">ଆପଣଙ୍କର ଡିଭାଇସକୁ ପରିଚାଳନା କରୁଥିବା ସଂସ୍ଥା ଆପଣଙ୍କ କ୍ୟାମେରାକୁ ବନ୍ଦ କରିଦେଇଛି।</translation>
 <translation id="6301525844455696527">ଆପଣଙ୍କ ପଢ଼ିବା ତାଲିକା ଦେଖନ୍ତୁ</translation>
 <translation id="6303969859164067831">ସାଇନ୍ ଆଉଟ୍ କରନ୍ତୁ ଏବଂ ସିଙ୍କ୍ ବନ୍ଦ କରନ୍ତୁ</translation>
@@ -863,7 +890,6 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6364438453358674297">ଇତିବୃତ୍ତିରୁ ପ୍ରସ୍ତାବକୁ କାଢ଼ି ଦେବେକି?</translation>
 <translation id="6378173571450987352">ବିବରଣୀ: ବ୍ୟବହାର କରାଯାଇଥିବା ଡାଟାର ପରିମାଣ ଅନୁସାରେ କ୍ରମବଦ୍ଧ କରାଯାଇଛି</translation>
 <translation id="6379829913050047669"><ph name="APP_NAME" /> Chromeରେ ଖୋଲିବ। ଜାରି ରଖିବା ଦ୍ୱାରା, ଆପଣ <ph name="BEGIN_LINK1" />Google ସେବାର ସର୍ତ୍ତାବଳୀ<ph name="END_LINK1" /> ଏବଂ <ph name="BEGIN_LINK2" />Google Chrome ଏବଂ Chrome OS ଅତିରିକ୍ତ ସେବାର ସର୍ତ୍ତାବଳୀ<ph name="END_LINK2" /> ସହିତ ସହମତ ହେଉଛନ୍ତି।</translation>
-<translation id="6381421346744604172">ଡାର୍କ କରାଯାଇଥିବା ୱେବ୍‌ସାଇଟ୍</translation>
 <translation id="6395288395575013217">ଲିଙ୍କ୍</translation>
 <translation id="6397616442223433927">ପୁଣି ଅନଲାଇନ୍ ହୋଇଛି</translation>
 <translation id="6402652558933147609"><ph name="VIOLATED_URL" />ରେ <ph name="ERROR_CODE" /></translation>
@@ -877,6 +903,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="641643625718530986">ପ୍ରିଣ୍ଟ କରନ୍ତୁ…</translation>
 <translation id="6427112570124116297">ୱେବ୍ ଅନୁବାଦ କରନ୍ତୁ</translation>
 <translation id="6433501201775827830">ଆପଣଙ୍କର ସନ୍ଧାନ ଇଞ୍ଜିନ୍ ବାଛନ୍ତୁ</translation>
+<translation id="6434309073475700221">ବର୍ଜିତ କରନ୍ତୁ</translation>
 <translation id="6437478888915024427">ପୃଷ୍ଠା ସୂଚନା</translation>
 <translation id="6441734959916820584">ନାମଟି ବହୁତ ଲମ୍ବା ଅଟେ</translation>
 <translation id="6444421004082850253">{FILE_COUNT,plural, =1{#ଟି ଛବି}other{#ଟି ଛବି}}</translation>
@@ -884,11 +911,11 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6459045781120991510">ସର୍ଭେଗୁଡ଼ିକ</translation>
 <translation id="6461962085415701688">ଫାଇଲ୍ ଖୋଲିପାରିବ ନାହିଁ</translation>
 <translation id="6464977750820128603">ଆପଣ Chromeରେ ଯେଉଁ ସାଇଟ୍‍ଗୁଡ଼ିକୁ ଯାଆନ୍ତି, ସେଗୁଡ଼ିକୁ ଦେଖିପାରିବେ ଏବଂ ସେଗୁଡ଼ିକ ପାଇଁ ଟାଇମର୍‌ଗୁଡ଼ିକ ସେଟ୍‌ କରିପାରିବେ। \n\nଆପଣ କେଉଁ ସାଇଟ୍‍ଗୁଡ଼ିକ ପାଇଁ ଟାଇମର୍‌ଗୁଡ଼ିକ ସେଟ୍‌ କରନ୍ତି ଏବଂ ଆପଣ ସେଗୁଡ଼ିକୁ କେତେ ସମୟ ପାଇଁ ଯାଆନ୍ତି, Google ସେହି ବିଷୟରେ ସୂଚନା ପ୍ରାପ୍ତ କରେ। ଡିଜିଟାଲ୍ ୱେଲ୍‍ବିଂକୁ ଉନ୍ନତ କରିବାରେ ଏହି ସୂଚନା ବ୍ୟବହାର କରାଯାଏ।</translation>
+<translation id="6473086018775716761">ଅଧା ସ୍କ୍ରିନରେ ଖୋଲାଯାଇଥିବା ସେୟାରିଂ ବିକଳ୍ପଗୁଡ଼ିକର ତାଲିକା।</translation>
 <translation id="6475951671322991020">ଭିଡିଓ ଡାଉନ୍‌ଲୋଡ୍ କରନ୍ତୁ</translation>
 <translation id="6477928892249167417">ଏହି ସାଇଟଗୁଡ଼ିକ ଆପଣଙ୍କ ପାଇଁ ଗୁରୁତ୍ୱପୂର୍ଣ୍ଣ ପରି ଜଣାପଡ଼ୁଛି:</translation>
 <translation id="6482749332252372425">ଷ୍ଟୋରେଜ୍ ସ୍ଥାନ ଅଭାବ ଯୋଗୁଁ <ph name="FILE_NAME" /> ଡାଉନ୍‌ଲୋଡ୍ ହେଲା ନାହିଁ।</translation>
 <translation id="6489610539826642779">ପଢ଼ିବା ତାଲିକା <ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /></translation>
-<translation id="6490496612063106490">ହାଇଲାଇଟ୍ କରାଯାଇଥିବା ଟେକ୍ସଟର ଲିଙ୍କ</translation>
 <translation id="6496823230996795692"><ph name="APP_NAME" />କୁ ପ୍ରଥମ ଥର ବ୍ୟବହାର କରିବା ପାଇଁ, ଦୟାକରି ଇଣ୍ଟର୍ନେଟ୍‌ରେ ସଂଯୋଗ କରନ୍ତୁ।</translation>
 <translation id="650224091954855786">{FILE_COUNT,plural, =1{ଫାଇଲ୍ ଡାଉନଲୋଡ୍ କରାଯାଇଛି}other{#ଟି ଡାଉନଲୋଡ୍ ସମୂର୍ଣ୍ଣ ହୋଇଛି}}</translation>
 <translation id="6508722015517270189">Chrome ରିଷ୍ଟାର୍ଟ କରନ୍ତୁ</translation>
@@ -900,7 +927,6 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6545017243486555795">ସମସ୍ତ ଡାଟା ଖାଲି କରନ୍ତୁ</translation>
 <translation id="6546511553472444032">ଫାଇଲଟି କ୍ଷତିକାରକ ହୋଇପାରେ</translation>
 <translation id="6556542240154580383">{TAB_COUNT,plural, =1{<ph name="TAB_TITLE" /> ଏବଂ <ph name="TAB_COUNT_ONE" />ଟି ଅଧିକ ଟାବ୍ ବନ୍ଦ ହୋଇଯିବ}other{<ph name="TAB_TITLE" /> ଏବଂ <ph name="TAB_COUNT_MANY" />ଟି ଅଧିକ ଟାବ୍ ବନ୍ଦ ହୋଇଯିବ}}</translation>
-<translation id="6560066289487134861">ଆପଣଙ୍କ ହାଇଲାଇଟ୍ ପାଇଁ ଏକ ଟେମ୍ପଲେଟ୍ ଚୟନ କରନ୍ତୁ। ମୁଖ୍ୟ ଡାଏଲଗକୁ ଫେରିବା ପାଇଁ, ପ୍ରଥମେ ଏକ ଉପର ଜେଶ୍ଚର୍, ତା'ପରେ ତଳ ଜେଶ୍ଚର୍ ବ୍ୟବହାର କରନ୍ତୁ, ତା'ପରେ ପରବର୍ତ୍ତୀରେ ଟାପ୍ କରନ୍ତୁ।</translation>
 <translation id="6560414384669816528">Sogouରେ ସନ୍ଧାନ କରନ୍ତୁ</translation>
 <translation id="656065428026159829">ଅଧିକ ଦେଖନ୍ତୁ</translation>
 <translation id="6565959834589222080">ୱାଇ-ଫାଇ ଉପଲବ୍ଧ ହେଲେ ଏହାକୁ ବ୍ୟବହାର କରାଯାଏ</translation>
@@ -921,6 +947,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="663674369910034433">ଗୋପନୀୟତା, ସୁରକ୍ଷା ଏବଂ ଡାଟା ସଂଗ୍ରହ ସମ୍ବନ୍ଧିତ ଅଧିକ ସେଟିଂସ୍ ପାଇଁ <ph name="BEGIN_LINK1" />ସିଙ୍କ୍<ph name="END_LINK1" /> ଏବଂ <ph name="BEGIN_LINK2" />Google ସେବାଗୁଡ଼ିକୁ<ph name="END_LINK2" /> ଦେଖନ୍ତୁ</translation>
 <translation id="6643016212128521049">ଖାଲି କରନ୍ତୁ</translation>
 <translation id="6643649862576733715">ସେଭ୍ କରାଯାଇଥିବା ଡାଟାର ପରିଣାମ ଅନୁଯାୟୀ କ୍ରମବଦ୍ଧ କରାଯାଇଛି</translation>
+<translation id="6648459603387803038">ଆପଣଙ୍କର ଆଡମିନିଷ୍ଟ୍ରେଟର୍ ଆପଣଙ୍କ ବ୍ରାଉଜର୍ ସେଟଅପକୁ ରିମୋଟ୍ ଭାବରେ ବଦଳାଇପାରିବେ। ଏହି ଡିଭାଇସରେ କରାଯାଉଥିବା କାର୍ଯ୍ୟକଳାପ Chrome ବାହାରେ ମଧ୍ୟ ପରିଚାଳନା କରାଯାଇପାରେ।</translation>
 <translation id="6648977384226967773">{CONTACT,plural, =1{<ph name="CONTACT_PREVIEW" />\u2026 ଏବଂ <ph name="NUMBER_OF_ADDITIONAL_CONTACTS" /> ଅଧିକ}other{<ph name="CONTACT_PREVIEW" />\u2026 ଏବଂ <ph name="NUMBER_OF_ADDITIONAL_CONTACTS" /> ଅଧିକ}}</translation>
 <translation id="6649642165559792194"><ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /> ଛବିର ପୂର୍ବାବଲୋକନ କରନ୍ତୁ</translation>
 <translation id="6657585470893396449">ପାସ୍‌ୱର୍ଡ</translation>
@@ -929,21 +956,24 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6671495933530132209">ଛବି କପି କରନ୍ତୁ</translation>
 <translation id="6674571176963658787">ସିଙ୍କ୍ ଆରମ୍ଭ କରିବାକୁ, ଆପଣଙ୍କ ପାସଫ୍ରେଜ୍ ଲେଖନ୍ତୁ</translation>
 <translation id="6676840375528380067">ଏହି ଡିଭାଇସ୍‌ରୁ ଆପଣଙ୍କର Chrome ଡାଟା ଖାଲି କରିବେ କି?</translation>
-<translation id="6697492270171225480">ଯେତେବେଳେ କୌଣସି ପୃଷ୍ଠା ମିଳୁନାହିଁ, ସେତେବେଳେ ମେଳ ହେଉଥିବା ପୃଷ୍ଠାଗୁଡ଼ିକ ଦେଖାନ୍ତୁ</translation>
+<translation id="6684809838922667136">Chromeକୁ ଆହୁରି ଉନ୍ନତ କରନ୍ତୁ</translation>
 <translation id="6698801883190606802">ସିଙ୍କ୍‌ ହୋ‍ଇଥିବା ଡାଟା ପରିଚାଳନା କରନ୍ତୁ</translation>
 <translation id="6699370405921460408">ଆପଣ ଯାଉଥିବା ପୃଷ୍ଠାଗୁଡ଼ିକୁ Google ସର୍ଭର୍‌ଗୁଡ଼ିକ ଅପ୍ଟିମାଇଜ୍‌ କରିବ।</translation>
 <translation id="670498945988402717">ଗତକାଲି ଯାଞ୍ଚ କରାଯାଇଛି</translation>
 <translation id="6710213216561001401">ପୂର୍ବବର୍ତ୍ତୀ</translation>
 <translation id="671481426037969117">ଆପଣଙ୍କର <ph name="FQDN" /> ଟାଇମର୍‌ର ସମୟ ସମାପ୍ତ ହୋଇଗଲା। ଏହା ଆସନ୍ତାକାଲି କାର୍ଯ୍ୟାରମ୍ଭ କରିବ।</translation>
+<translation id="6715020873764921614">ଆପଣ ଯେ କୌଣସି ମତେ <ph name="FILE_NAME" /> (<ph name="FILE_SIZE" />)କୁ ଡାଉନଲୋଡ୍ କରିବାକୁ ଚାହାଁନ୍ତି କି?</translation>
 <translation id="6738516213925468394">ଆପଣଙ୍କର ଡାଟା <ph name="TIME" />ଟାରେ ଆପଣଙ୍କ <ph name="BEGIN_LINK" />ସିଙ୍କ୍ ପାସ୍‌ଫ୍ରେଜ୍<ph name="END_LINK" /> ମାଧ୍ୟମରେ ଏନ୍‌କ୍ରିପ୍ଟ କରାଯାଇଥିଲା। ସିଙ୍କ୍ ଆରମ୍ଭ କରିବାକୁ ଏହାକୁ ଲେଖନ୍ତୁ।</translation>
 <translation id="6738867403308150051">ଡାଉନ୍‍‍‍ଲୋଡ୍ ହେଉଛି…</translation>
 <translation id="6751521182688001123">ଶୀଘ୍ର ଏକ ନୂଆ ଟାବ୍ ଖୋଲନ୍ତୁ। ଏହି ସର୍ଟକଟକୁ ଏଡିଟ୍ କରିବା ପାଇଁ, ସ୍ପର୍ଶ କରି ଧରି ରଖନ୍ତୁ।</translation>
+<translation id="6756507620369789050">ମତାମତ ସେୟାର କରନ୍ତୁ</translation>
 <translation id="6767294960381293877">ଏକ ଟାବ୍ ସେୟାର୍ କରିବା ପାଇଁ ଡିଭାଇସ୍‌ର ତାଲିକା ଅଧା ସ୍କ୍ରିନ୍‌ରେ ଖୋଲାଯାଇଛି।</translation>
 <translation id="6783942555455976443">ଏହି ପୃଷ୍ଠାକୁ ପରବର୍ତ୍ତୀ ସମୟ ପାଇଁ ସେଭ୍ କରନ୍ତୁ ଏବଂ ଏକ ରିମାଇଣ୍ଡର୍ ପାଆନ୍ତୁ</translation>
 <translation id="6795633245022906657">ଶୀଘ୍ର ଏକ ନୂଆ ଟାବ୍ ଖୋଲନ୍ତୁ। ଏହି ସର୍ଟକଟକୁ ଏଡିଟ୍ କରିବା ପାଇଁ, ସେଟିଂସକୁ ଯାଆନ୍ତୁ।</translation>
 <translation id="6802555630140434547">ୱିଣ୍ଡୋଟି ବନ୍ଦ ହୋଇଯିବ</translation>
 <translation id="6811034713472274749">ଦେଖିବା ପାଇଁ ପୃଷ୍ଟାଟି ପ୍ତସ୍ତୁତ ଅଛି</translation>
 <translation id="6813446258015311409">Chromeରେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ, ଖୋଲା ଅଛି।</translation>
+<translation id="6814033694018386318">ଆପଣ Google ସହିତ କ’ଣ ସେୟାର୍ କରନ୍ତି</translation>
 <translation id="6817747507826986771">ଏହି ପୃଷ୍ଠାକୁ ଶୀଘ୍ର ସେୟାର୍ କରନ୍ତୁ। ଏହି ସର୍ଟକଟକୁ ଏଡିଟ୍ କରିବା ପାଇଁ, ସ୍ପର୍ଶ କରି ଧରି ରଖନ୍ତୁ।</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6824899148643461612"><ph name="TAB_TITLE" /> ଟାବ୍ ଚୟନ କରାଯାଇଛି</translation>
@@ -969,6 +999,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6945221475159498467">ଚୟନ କରନ୍ତୁ</translation>
 <translation id="6955535239952325894">ପରିଚାଳିତ ବ୍ରାଉଜରଗୁଡ଼ିକରେ ଏହି ସେଟିଂସ୍ ଅକ୍ଷମ କରାଯାଇଛି</translation>
 <translation id="6963766334940102469">ବୁକ୍‌ମାର୍କଗୁଡ଼ିକ ଡିଲିଟ୍‌ କରନ୍ତୁ</translation>
+<translation id="6964116075545915250">ପଢ଼ିବା ତାଲିକାକୁ ଏଡିଟ କରନ୍ତୁ</translation>
 <translation id="696447261358045621">ଇନକଗ୍ନିଟୋ ମୋଡରୁ ବାହାରିଯାଆନ୍ତୁ</translation>
 <translation id="6979737339423435258">ସବୁ ସମୟରେ</translation>
 <translation id="6981982820502123353">ଆକ୍ସେସିବିଲିଟୀ</translation>
@@ -976,11 +1007,13 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="6989267951144302301">ଡାଉନଲୋଡ୍ କରିହେଲା ନାହିଁ</translation>
 <translation id="6995899638241819463">ଯଦି ଡାଟା ଚୋରି ଯୋଗୁଁ ପାସ୍‌ୱାର୍ଡଗୁଡ଼ିକ ବିପଦରେ ପଡ଼ିଯାଏ, ତେବେ ଏହା ଆପଣଙ୍କୁ ଚେତାବନୀ ଦେଇଥାଏ</translation>
 <translation id="7001056293070445572">ଏହି ଫାଇଲଟି ବଡ଼ ଅଟେ (<ph name="FILE_SIZE" />)</translation>
+<translation id="7020741890149022655">ପଢ଼ିବା ତାଲିକାରେ ଯୋଗ କରନ୍ତୁ <ph name="BEGIN_NEW" />ନୂଆ<ph name="END_NEW" /></translation>
 <translation id="7022756207310403729">ବ୍ରାଉଜର୍‌ରେ ଖୋଲନ୍ତୁ</translation>
 <translation id="702463548815491781">TalkBack କିମ୍ବା ଆକ୍ସେସ୍ ପରିବର୍ତ୍ତନ ଚାଲୁ ଥିଲେ ଏହା କରିବାକୁ ସୁପାରିଶ୍ କରାଯାଇଛି</translation>
 <translation id="7027549951530753705"><ph name="ITEM_TITLE" /> ରିଷ୍ଟୋର୍ କରାଯାଇଛି</translation>
 <translation id="7029390216614421513">ଏହି ଫ୍ରେମରେ QR କୋଡ୍/ବାରକୋଡକୁ ରଖନ୍ତୁ।</translation>
 <translation id="7029809446516969842">ପାସୱାର୍ଡଗୁଡିକ</translation>
+<translation id="7038956721828960940">chrome_image_<ph name="CURRENT_TIMESTAMP_MS" /></translation>
 <translation id="7054588988317389591">ଛବିର ବର୍ଣ୍ଣନା ପାଇବାକୁ ଚାହାଁନ୍ତି କି?</translation>
 <translation id="7055152154916055070">ରିଡାଇରେକ୍ଟକୁ ଅବରୋଧ କରାଯାଇଛି:</translation>
 <translation id="7063006564040364415">ସିଙ୍କ ସର୍ଭର ସହ ସଂଯୋଗ କରାଯାଇପାରିଲା ନାହିଁ।</translation>
@@ -989,6 +1022,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7077143737582773186">SD କାର୍ଡ</translation>
 <translation id="7080806333218412752">URLଗୁଡ଼ିକ ଯାଞ୍ଚ କରିବା ପାଇଁ ସେଗୁଡ଼ିକୁ ସୁରକ୍ଷିତ ବ୍ରାଉଜିଂକୁ ପଠାଏ। ନୂଆ ବିପଦଗୁଡ଼ିକୁ ଖୋଜି ପାଇବାରେ ସାହାଯ୍ୟ କରିବାକୁ ପୃଷ୍ଠାଗୁଡ଼ିକର ଏକ ଛୋଟ ନମୁନା, ଡାଉନଲୋଡ୍, ଏକ୍ସଟେନସନ୍ କାର୍ଯ୍ୟକଳାପ ଏବଂ ସିଷ୍ଟମ୍ ସୂଚନା ମଧ୍ୟ ପଠାଏ। ସମଗ୍ର Google ଆପରେ ଆପଣଙ୍କୁ ସୁରକ୍ଷା ଦେବା ପାଇଁ, ଆପଣ ସାଇନ୍ ଇନ୍ ହେଲେ ଏହି ଡାଟାକୁ ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟରେ ଅସ୍ଥାୟୀ ଭାବରେ ଲିଙ୍କ୍ କରେ।</translation>
 <translation id="7088681679121566888">Chrome ଅପ୍ ଟୁ ଡେଟ୍ ଅଛି</translation>
+<translation id="7093803425429738190">ଇମୋସନ୍ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="7106762743910369165">ଆପଣଙ୍କ ସଂସ୍ଥା ଦ୍ୱାରା ଆପଣଙ୍କର ବ୍ରାଉଜର୍ ପରିଚାଳିତ ହୋଇଥାଏ</translation>
 <translation id="7121362699166175603">ଠିକଣା ବାର୍‍‍ରେ ଥିବା ଇତିବୃତ୍ତି ଓ ସ୍ୱତଃପୂରଣଗୁଡ଼ିକୁ ଖାଲି କରେ। ଆପଣଙ୍କର Google ଆକାଉଣ୍ଟର ବାଉଜିଂ ଇତିବୃତ୍ତି <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" />ରେ ଅନ୍ୟ ଫର୍ମରେ ଥାଇପାରେ।</translation>
 <translation id="7138678301420049075">ଅନ୍ୟ</translation>
@@ -1028,6 +1062,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7353894246028566792">{NUM_SELECTED,plural, =1{1ଟି ଚୟନିତ ଆଇଟମ୍ ସେୟାର୍ କରନ୍ତୁ}other{#ଟି ଚୟନିତ ଆଇଟମ୍ ସେୟାର୍ କରନ୍ତୁ}}</translation>
 <translation id="7359002509206457351">ପେମେଣ୍ଟ ପଦ୍ଧତି ଆକ୍ସେସ୍ କରନ୍ତୁ</translation>
 <translation id="7375125077091615385">ପ୍ରକାର:</translation>
+<translation id="7376560087009844242">ଗୋଟିଏ ପୃଷ୍ଠାର ଅଧିକ ଟେକ୍ସଟକୁ ଅନ୍ତର୍ଭୁକ୍ତ କରି, ଆପଣ ଯେତେବେଳେ ଟଚ ଟୁ ସର୍ଚ୍ଚ ବ୍ୟବହାର କରନ୍ତି, ଉନ୍ନତ ଫଳାଫଳ ଦେଖିପାରନ୍ତି। ଏହାକୁ ପରିବର୍ତ୍ତନ କରିବା ପାଇଁ ଆପଣ ସର୍ବଦା <ph name="BEGIN_LINK" />ସେଟିଂସ<ph name="END_LINK" />କୁ ଭିଜିଟ କରିପାରିବେ।</translation>
 <translation id="7386842512861524348">ସାଇଟର ସଂଯୋଗଟି ସୁରକ୍ଷିତ ନୁହେଁ ବୋଲି Chrome ଆପଣଙ୍କୁ କହି ନଥିବା ପର୍ଯ୍ୟନ୍ତ, ଏହା ସୁରକ୍ଷିତ ଅଟେ।</translation>
 <translation id="7396940094317457632"><ph name="FILE_NAME" />।</translation>
 <translation id="7400418766976504921">URL</translation>
@@ -1042,6 +1077,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7444811645081526538">ଅଧିକ ବର୍ଗ</translation>
 <translation id="7453467225369441013">ଆପଣଙ୍କୁ ଅଧିକତମ ସାଇଟ୍‍ରୁ ସାଇନ୍‌ ଆଉଟ୍‍ କରିଦିଏ। ଆପଣଙ୍କର Google ଆକାଉଣ୍ଟରୁ ଆପଣ ସାଇନ୍‌ ଆଉଟ୍‌ ହେବେନାହିଁ।</translation>
 <translation id="7454641608352164238">ପର୍ଯ୍ୟାପ୍ତ ଜାଗା ନାହିଁ</translation>
+<translation id="7474822150871987353">ପୃଷ୍ଠାରୁ ବାହାରି ନଯାଇ ୱେବସାଇଟରେ ଥିବା ବିଷୟଗୁଡ଼ିକ ସମ୍ବନ୍ଧରେ ଜାଣନ୍ତୁ। ଗୋଟିଏ କିମ୍ବା ଅଧିକ ଶବ୍ଦ ବିଷୟରେ ସନ୍ଧାନ କରିବାକୁ ପୃଷ୍ଠାରେ ସେଗୁଡ଼ିକୁ ଚୟନ କରନ୍ତୁ।</translation>
 <translation id="7475192538862203634">ଯଦି ଆପଣ ଏହା ବାରମ୍ବାର ଦେଖୁଛନ୍ତି, ତେବେ ଏହି <ph name="BEGIN_LINK" />ପରାମର୍ଶଗୁଡ଼ିକ<ph name="END_LINK" /> ବ୍ୟବହାର କରି ଦେଖନ୍ତୁ।</translation>
 <translation id="7475688122056506577">SD କାର୍ଡ୍ ମିଳିଲା ନାହିଁ। ଆପଣଙ୍କର ଫାଇଲ୍‌ ମଧ୍ୟରୁ କିଛି ଫାଇଲ୍‌ ନାହିଁ</translation>
 <translation id="7479104141328977413">ଟାବ୍‌ ପରିଚାଳନା</translation>
@@ -1076,6 +1112,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7605594153474022051">ସିଙ୍କ୍‌ କାର୍ଯ୍ୟ କରୁନାହିଁ</translation>
 <translation id="7606077192958116810">ଲାଇଟ୍‍ ମୋଡ୍ ଅନ୍‌ ଅଛି। ଏହାକୁ ସେଟିଂସ୍‌ରେ ପରିଚାଳନା କରନ୍ତୁ।</translation>
 <translation id="7612619742409846846">ଏପରି Googleରେ ସାଇନ୍ ଇନ୍ ହୋଇଛି</translation>
+<translation id="7616551326690708776">ଆପଣଙ୍କ ହାଇଲାଇଟ ପାଇଁ ଏକ ଟେମ୍ପଲେଟ ଚୟନ କରନ୍ତୁ।</translation>
 <translation id="7619072057915878432">ନେଟ୍‌ୱାର୍କ ନଥିବା ଯୋଗୁଁ <ph name="FILE_NAME" /> ଡାଉନ୍‌ଲୋଡ୍ ହୋଇପାରିଲା ନାହିଁ।</translation>
 <translation id="7626032353295482388">Chromeକୁ ସ୍ୱାଗତ୍‌</translation>
 <translation id="7630202231528827509">ପ୍ରଦାନକାରୀ URL</translation>
@@ -1092,7 +1129,6 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7707922173985738739">ମୋବାଇଲ୍ ଡାଟା ବ୍ୟବହାର କରନ୍ତୁ।</translation>
 <translation id="7725024127233776428">ଏଠାରେ ଆପଣ ବୁକ୍‌ମାର୍କ କରୁଥିବା ପୃଷ୍ଠା ଦେଖାଯାଏ</translation>
 <translation id="7757787379047923882"><ph name="DEVICE_NAME" />ରୁ ଟେକ୍ସଟ୍ ସେୟାର୍ କରାଯାଇଛି</translation>
-<translation id="7760558538939385512">(<ph name="MEGABYTES" />)\n<ph name="URL" /></translation>
 <translation id="7761849928583394409">ତାରିଖ ଓ ସମୟ ବାଛନ୍ତୁ</translation>
 <translation id="7762668264895820836">SD କାର୍ଡ <ph name="SD_CARD_NUMBER" /></translation>
 <translation id="7764225426217299476">ଠିକଣା ଯୋଗ କରନ୍ତୁ</translation>
@@ -1117,6 +1153,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7853202427316060426">କାର୍ଯ୍ୟକଳାପ</translation>
 <translation id="7857691613771368249">କେତେବେଳେ ଫାଇଲଗୁଡ଼ିକ ସେଭ୍ କରିବାକୁ ହେବ, ପଚାରନ୍ତୁ</translation>
 <translation id="7859988229622350291">କେବେ ବି ଅନୁବାଦ କରନ୍ତୁ ନାହିଁ</translation>
+<translation id="78707286264420418">ଆପଣଙ୍କ ଡିଭାଇସ୍ ସହ ସଂଯୋଗ କରିବାକୁ <ph name="PRODUCT_NAME" /> ଆଖପାଖର ଡିଭାଇସଗୁଡ଼ିକର ଅନୁମତି ଆବଶ୍ୟକ କରେ</translation>
 <translation id="7875915731392087153">ଇମେଲ୍ ତିଆରି କରନ୍ତୁ</translation>
 <translation id="7876243839304621966">ସବୁ କାଢ଼ି ଦିଅନ୍ତୁ</translation>
 <translation id="7879130110979560610">{READING_LIST_REMINDER_NOTIFICATION_SUBTITLE,plural, =1{ଆପଣଙ୍କର <ph name="READING_LIST_REMINDER_NOTIFICATION_SUBTITLE_ONE" />ଟି ପଢ଼ାଯାଇନଥିବା ପୃଷ୍ଠା ଅଛି}other{ଆପଣଙ୍କର <ph name="READING_LIST_REMINDER_NOTIFICATION_SUBTITLE_MANY" />ଟି ପଢ଼ାଯାଇନଥିବା ପୃଷ୍ଠା ଅଛି}}</translation>
@@ -1129,6 +1166,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="7926975587469166629">କାର୍ଡର ଡାକନାମ</translation>
 <translation id="7929962904089429003">ମେନୁ ଖୋଲନ୍ତୁ</translation>
 <translation id="7930998711684428189">ଯଦି ଡାଟା ଚୋରି ଯୋଗୁଁ ପାସୱାର୍ଡଗୁଡ଼ିକ ବିପଦରେ ପଡ଼ିଯାଏ, ତେବେ ଆପଣଙ୍କୁ ଚେତାବନୀ ଦେଇଥାଏ।</translation>
+<translation id="7939485076072265087">ହାଇଲାଇଟ ସହ ଷ୍ଟାଇଲାଇଜଡ କାର୍ଡ ତିଆରି କରନ୍ତୁ</translation>
 <translation id="7942131818088350342"><ph name="PRODUCT_NAME" />ର ସମୟସୀମା ଶେଷ ହୋଇଛି।</translation>
 <translation id="7944772052836377867">ଏହା ଆପଣ ଅଟନ୍ତି ବୋଲି ସିଙ୍କ ଯାଞ୍ଚ କରିବାକୁ ଚାହେଁ</translation>
 <translation id="7947953824732555851">ସ୍ୱୀକାର ଓ ସାଇନ୍‌ଇନ୍‍</translation>
@@ -1167,6 +1205,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8103578431304235997">ଇନ୍‌କଗ୍ନିଟୋ ଟାବ୍</translation>
 <translation id="8105893657415066307"><ph name="DESCRIPTION" /> <ph name="SEPARATOR" /> <ph name="FILE_SIZE" /></translation>
 <translation id="8109613176066109935">ଆପଣଙ୍କ ସମସ୍ତ ଡିଭାଇସ୍‍‍ରେ ଆପଣଙ୍କର ବୁକ୍‍ମାର୍କଗୁଡ଼ିକୁ ପ୍ରାପ୍ତ କରିବା ପାଇଁ, ସିଙ୍କ୍‍କୁ ଚାଲୁ କରନ୍ତୁ</translation>
+<translation id="8110024788458304985">Chromeର ଫିଚର ଏବଂ ପରଫରମାନ୍ସକୁ ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରନ୍ତୁ</translation>
 <translation id="8110087112193408731">ଡିଜିଟାଲ୍ ୱେଲ୍‍ବିଂରେ ଆପଣଙ୍କର Chrome କାର୍ଯ୍ୟକଳାପ ଦେଖାଇବେ?</translation>
 <translation id="8127542551745560481">ମୂଳପୃଷ୍ଠାକୁ ସମ୍ପାଦନ କରନ୍ତୁ</translation>
 <translation id="8130309322784422030">ଆପଣ ଷ୍ଟୋର୍ କରିଥିବା ସାଇନ୍-ଇନ୍ ସୂଚନା ପୁରୁଣା ହୋଇଥାଇପାରେ</translation>
@@ -1178,13 +1217,13 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8186512483418048923"><ph name="FILES" />ଫାଇଲ୍‌ଗୁଡ଼ିକ ବାକି ଅଛି</translation>
 <translation id="8189750580333936930">ପ୍ରାଇଭେସି ସେଣ୍ଡବକ୍ସ</translation>
 <translation id="8190358571722158785">1 ଦିନ ବାକି ଅଛି</translation>
+<translation id="8193953846147532858"><ph name="BEGIN_LINK" />ଆପଣଙ୍କ ଡିଭାଇସଗୁଡ଼ିକ<ph name="END_LINK" /> · <ph name="EMAIL" /></translation>
 <translation id="8200772114523450471">ସାରାଶଂ</translation>
 <translation id="8209050860603202033">ଛବି ଖୋଲନ୍ତୁ</translation>
 <translation id="8216351761227087153">ଦେଖନ୍ତୁ</translation>
 <translation id="8218052821161047641">ଶୀଘ୍ର ଲୋଡ୍ ହେଉଥିବା ପୃଷ୍ଠା</translation>
 <translation id="8218622182176210845">ଆପଣଙ୍କର ଆକାଉଣ୍ଟ ପରିଚାଳନା କରନ୍ତୁ</translation>
 <translation id="8223642481677794647">ଫିଡ୍ କାର୍ଡ ମେନୁ</translation>
-<translation id="8224471946457685718">ୱାଇ-ଫାଇରେ ଆପଣଙ୍କ ପାଇଁ ଆର୍ଟିକଲ୍‌ଗୁଡ଼ିକ ଡାଉନ୍‌ଲୋଡ୍ କରନ୍ତୁ</translation>
 <translation id="8250920743982581267">ଡକୁମେଣ୍ଟ</translation>
 <translation id="825412236959742607">ଏହି ପୃଷ୍ଠାଟି ବହୁତ ଅଧିକ ମେମୋରୀ ବ୍ୟବହାର କରୁଛି, ତେଣୁ Chrome କିଛି ବିଷୟବସ୍ତୁ ବାହାର କରି ଦେଇଛି।</translation>
 <translation id="8260126382462817229">ପୁଣି ସାଇନ୍ ଇନ୍ କରିବାକୁ ଚେଷ୍ଟା କରନ୍ତୁ</translation>
@@ -1192,6 +1231,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8266862848225348053">ଲୋକେସନ୍‌ ଡାଉନ୍‌ଲୋଡ୍ କରନ୍ତୁ</translation>
 <translation id="8274165955039650276">ଡାଉନ୍‌ଲୋଡ୍‌ଗୁଡ଼ିକ ଦେଖନ୍ତୁ</translation>
 <translation id="8281886186245836920">ଛାଡ଼ିଦିଅନ୍ତୁ</translation>
+<translation id="8282297628636750033">ଯଦି ସମ୍ଭବ ସାଇଟରେ ଗାଢ଼ା ଥିମ ଲାଗୁକର</translation>
 <translation id="8284326494547611709">କ୍ୟାପସନ୍</translation>
 <translation id="829672787777123339">ଆପଣଙ୍କ ଡିଭାଇସ୍ ସହ ସଂଯୋଗ କରାଯାଉଛି…</translation>
 <translation id="8310344678080805313">ଷ୍ଟାଣ୍ଡାର୍ଡ ଟାବ୍‌</translation>
@@ -1206,14 +1246,17 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8393700583063109961">ମେସେଜ୍‌ ପଠାନ୍ତୁ</translation>
 <translation id="8410695015584479363">ମୂଲ୍ୟଗୁଡ଼ିକୁ ଟ୍ରାକ୍ କରନ୍ତୁ</translation>
 <translation id="8413126021676339697">ସମ୍ପୂର୍ଣ୍ଣ ଇତିବୃତ୍ତି ଦେଖାନ୍ତୁ</translation>
+<translation id="8419244640277402268">ଅନ୍ତର୍ଭୁକ୍ତ କରନ୍ତୁ</translation>
 <translation id="8424781820952413435">ପୃଷ୍ଠାଟି ପଠାଯାଇଛି। ଏହାକୁ ଦେଖିବା ପାଇଁ, ଆପଣଙ୍କ <ph name="DEVICE_TYPE" />ରେ Chrome ଖୋଲନ୍ତୁ</translation>
 <translation id="8427875596167638501">ପ୍ରିଭ୍ୟୁ ଟାବ୍ ଅଧା ଖୋଲା ଅଛି</translation>
 <translation id="8428213095426709021">ସେଟିଂସ୍</translation>
+<translation id="8430824733382774043">କେବଳ ସ୍କ୍ରିନସଟ୍ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="8438566539970814960">ସନ୍ଧାନ ଓ ବ୍ରାଉଜିଂକୁ ଉନ୍ନତ କରନ୍ତୁ</translation>
 <translation id="8439974325294139057"><ph name="LANG" /> - ଭାଷା ପ୍ରସ୍ତୁତ ଅଛି, <ph name="APP_NAME" />କୁ ରିଷ୍ଟାର୍ଟ କରନ୍ତୁ।</translation>
 <translation id="8442258441309440798">କୌଣସି ଷ୍ଟୋରୀ ଉପଲବ୍ଧ ନାହିଁ</translation>
 <translation id="8443209985646068659">Chrome ଅପ୍‌ଡେଟ୍ ହୋଇପାରିବ ନାହିଁ</translation>
 <translation id="8445448999790540984">ପାସ୍‍ୱାର୍ଡ ଏକ୍ସପୋର୍ଟ କରିପାରିବ ନାହିଁ</translation>
+<translation id="8446884382197647889">ଅଧିକ ଜାଣନ୍ତୁ</translation>
 <translation id="8453310803815879010">Dino ଗେମ୍ ଆରମ୍ଭ କରନ୍ତୁ</translation>
 <translation id="8461694314515752532">ଆପଣ ନିଜର ସିଙ୍କ୍‌ ପାସ୍‌ଫ୍ରେଜ୍ ସହିତ ସିଙ୍କ୍ କରାଯାଇଥିବା ଡାଟାକୁ ଏନ୍‌କ୍ରିପ୍ଟ କରନ୍ତୁ।</translation>
 <translation id="8466613982764129868"><ph name="TARGET_DEVICE_NAME" /> ଇଣ୍ଟର୍ନେଟ୍ ସହ ସଂଯୁକ୍ତ ଥିବା ସୁନିଶ୍ଚିତ କରନ୍ତୁ</translation>
@@ -1236,12 +1279,14 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8523928698583292556">ଷ୍ଟୋର୍‌ ହୋ‍ଇଥିବା ପାସ୍‌ୱର୍ଡ ଡିଲିଟ୍‌ କରନ୍ତୁ</translation>
 <translation id="8540136935098276800">ସଠିକ୍ ଭାବରେ ଫର୍ମାଟ୍ କରାଯାଇଥିବା ଗୋଟିଏ URL ଲେଖନ୍ତୁ</translation>
 <translation id="854522910157234410">ଏହି ପୃଷ୍ଠାଟି ଖୋଲନ୍ତୁ</translation>
+<translation id="8551513938758868521">ଆପଣ Chromeରୁ ବାହାରି ଯିବା ସମୟରେ ଇନକଗ୍ନିଟୋ ଟାବଗୁଡ଼ିକୁ ଲକ କରନ୍ତୁ</translation>
 <translation id="8555836665334561807">ୱାଇ-ଫାଇରେ</translation>
 <translation id="8559990750235505898">ଅନ୍ୟ ଭାଷାରେ ପୃଷ୍ଠାଗୁଡ଼ିକୁ ଅନୁବାଦ କରିବାକୁ ଅଫର୍ ଦିଅନ୍ତୁ</translation>
 <translation id="8560602726703398413">ବୁକମାର୍କରେ ଆପଣଙ୍କ ପଢ଼ିବା ତାଲିକା ଖୋଜନ୍ତୁ</translation>
 <translation id="8562452229998620586">ସେଭ୍ ଥିବା ପାସ୍‌ୱର୍ଡ ଏଠାରେ ଦେଖାଯିବ।</translation>
 <translation id="856481929701340285">ଡେସ୍କଟପ ସାଇଟ ପାଇଁ ଅନୁରୋଧ କର</translation>
 <translation id="8569404424186215731"><ph name="DATE" /> ଠାରୁ</translation>
+<translation id="8570677896027847510">ଫାଇଲକୁ ସୁରକ୍ଷିତ ଭାବେ ଡାଉନଲୋଡ କରାଯାଇପାରିବ ନାହିଁ</translation>
 <translation id="8571213806525832805">ବିଗତ 4 ସପ୍ତାହ</translation>
 <translation id="8572344201470131220">ଛବି କପି କରାଯାଇଛି</translation>
 <translation id="8583805026567836021">ଆକାଉଣ୍ଟ ଡାଟା ଖାଲି ହେଉଛି</translation>
@@ -1263,13 +1308,14 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="867767487203716855">ପରବର୍ତ୍ତୀ ଅପଡେଟ୍</translation>
 <translation id="8683039184091909753">ଛବି</translation>
 <translation id="8683081248374354009">ଗୋଷ୍ଠୀ ରିସେଟ୍ କରନ୍ତୁ</translation>
+<translation id="8683526617475118045">ଆପଣ କ’ଣ ପାଇବେ</translation>
 <translation id="869891660844655955">ମିଆଦ ଶେଷ ହେଉଥିବା ତାରିଖ</translation>
 <translation id="8699120352855309748">ଏହି ଭାଷାଗୁଡ଼ିକର ଅନୁବାଦ କରିବାକୁ ଅଫର୍ କରନ୍ତୁ ନାହିଁ</translation>
-<translation id="8712637175834984815">ବୁଝିଗଲି</translation>
 <translation id="8725066075913043281">ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ</translation>
 <translation id="8730621377337864115">ସମାପ୍ତ ହୋଇଛି</translation>
 <translation id="8746155870861185046">ହାଇଲାଇଟ୍ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="8748850008226585750">ଲୁଚାଯାଇଥିବା ବିଷୟବସ୍ତୁ</translation>
+<translation id="8766529642647037772">ଏହିପରି ଏକ ହାଇଲାଇଟ୍ କରାଯାଇଥିବା ଲିଙ୍କ୍ ତିଆରି କରିବେ?</translation>
 <translation id="8773160212632396039">ପ୍ରକ୍ରିୟାକରଣ ପାଇଁ ଅନୁରୋଧ</translation>
 <translation id="8788265440806329501">ନାଭିଗେସନ୍ ଇତିହାସ ବନ୍ଦ କରାଯାଇଛି</translation>
 <translation id="8788968922598763114">ଶେଷରେ ବନ୍ଦ କରାଯାଇଥିବା ଟାବ୍ ଖୋଲନ୍ତୁ</translation>
@@ -1293,6 +1339,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8912362522468806198">Google ଆକାଉଣ୍ଟ</translation>
 <translation id="8920114477895755567">ଅଭିଭାବକଙ୍କ ବିବରଣୀ ପାଇଁ ଅପେକ୍ଷାରତ।</translation>
 <translation id="8922289737868596582">ସେଗୁଡ଼ିକୁ ଅଫ୍‌ଲାଇନ୍‌ରେ ବ୍ୟବହାର କରିବାକୁ ’ଅଧିକ ବିକଳ୍ପଗୁଡ଼ିକ’ ବଟନ୍‌ରୁ ପୃଷ୍ଠାଗୁଡ଼ିକ ଡାଉନ୍‌ଲୋଡ୍‌ କରନ୍ତୁ</translation>
+<translation id="8924575305646776101"><ph name="BEGIN_LINK" />ଅଧିକ ଜାଣନ୍ତୁ<ph name="END_LINK" /></translation>
 <translation id="892496902842311796"><ph name="LANG" /> ପ୍ରସ୍ତୁତ ଅଛି</translation>
 <translation id="8928626432984354940">ଅଧା ଖୋଲାଯାଇଥିବା ବୁକମାର୍କ ଫୋଲ୍ଡରଗୁଡ଼ିକର ତାଲିକା</translation>
 <translation id="8937267401510745927">କାର୍ଯ୍ୟଗୁଡ଼ିକୁ ସମ୍ପୂର୍ଣ୍ଣ କରିବାରେ ଆପଣଙ୍କୁ ସାହାଯ୍ୟ କରିବା ପାଇଁ, ଆପଣ Assistant ବ୍ୟବହାର କରିଥିବା ସାଇଟଗୁଡ଼ିକର URL ଏବଂ ବିଷୟବସ୍ତୁଗୁଡ଼ିକ ସହିତ Assistant ମାଧ୍ୟମରେ ଆପଣ ଦାଖଲ କରିଥିବା ସୂଚନା Google ପ୍ରାପ୍ତ କରିବ। ଏହି ସୂଚନା ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟରେ ଷ୍ଟୋର୍ ହୋଇପାରେ। ଆପଣ Chrome ସେଟିଂସରେ Assistantକୁ ବନ୍ଦ କରିପାରିବେ।</translation>
@@ -1300,12 +1347,13 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="8942627711005830162">ଅନ୍ୟ ୱିଣ୍ଡୋରେ ଖୋଲନ୍ତୁ</translation>
 <translation id="8945143127965743188"><ph name="LANG" /> - ଏହି ଭାଷାକୁ ଡାଉନଲୋଡ୍ କରାଯାଇପାରିଲା ନାହିଁ। ପରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</translation>
 <translation id="8951232171465285730">Chrome ଆପଣଙ୍କର <ph name="MEGABYTES" /> MB ସେଭ୍ କରିଛି</translation>
+<translation id="8955719471735800169">ଉପରକୁ ଫେରି ଯାଆନ୍ତୁ</translation>
 <translation id="8965591936373831584">ବାକି ଅଛି</translation>
+<translation id="8967427617812342790">ପଢ଼ିବା ତାଲିକାରେ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="8968085728801125376">{TAB_COUNT,plural, =1{<ph name="INCOGNITO_TAB_COUNT" />ଟି ଇନକଗ୍ନିଟୋ ଏବଂ <ph name="TAB_COUNT_ONE" />ଟି ଅଧିକ ଟାବ୍ ବନ୍ଦ ହୋଇଯିବ}other{<ph name="INCOGNITO_TAB_COUNT" />ଟି ଇନକଗ୍ନିଟୋ ଏବଂ <ph name="TAB_COUNT_MANY" />ଟି ଅଧିକ ଟାବ୍ ବନ୍ଦ ହୋଇଯିବ}}</translation>
 <translation id="8970887620466824814">କିଛି ଭୁଲ ହୋଇଗଲା।</translation>
 <translation id="8972098258593396643">ଡିଫଲ୍ଟ ଫୋଲ୍ଡର୍‍କୁ ଡାଉନ୍‍‍ଲୋଡ୍ କରିବେ କି?</translation>
 <translation id="8987641763863173640">ଭିଡିଓ ପ୍ରିଭ୍ୟୁ ସେଟିଂସକୁ ପରିଚାଳନା କରନ୍ତୁ</translation>
-<translation id="8988028529677883095">ଫୋନକୁ ଏକ ସୁରକ୍ଷା କୀ ଭାବରେ ବ୍ୟବହାର କରନ୍ତୁ</translation>
 <translation id="8993760627012879038">ଇନ୍‌କଗ୍‌ନିଟୋ ମୋଡ୍‍‍ରେ ଏକ ନୂଆ ଟାବ୍ ଖୋଲନ୍ତୁ</translation>
 <translation id="8996847606757455498">ଅନ୍ୟ ଏକ ପ୍ରଦାନକାରୀ ବାଛନ୍ତୁ</translation>
 <translation id="8998729206196772491"><ph name="MANAGED_DOMAIN" />ଙ୍କ ଦ୍ୱାରା ପରିଚାଳିତ ଏକ ଆକାଉଣ୍ଟ ମାଧ୍ୟମରେ ଆପଣ ସାଇନ୍ ଇନ୍ କରିଛନ୍ତି ଏବଂ ଏହାର ଆଡ୍‍ମିନିଷ୍ଟ୍ରେଟର୍‍ଙ୍କୁ ଆପଣଙ୍କ Chrome ଡାଟାର ନିୟନ୍ତ୍ରଣ ଦେଇଛନ୍ତି। ଆପଣଙ୍କର ଡାଟା ସ୍ଥାୟୀ ରୂପେ ଏହି ଆକାଉଣ୍ଟ ସହିତ ଯୋଡ଼ି ହୋଇଯିବ। Chromeରୁ ସାଇନ୍-ଆଉଟ୍ କରିବା ଦ୍ଵାରା ଏହି ଡିଭାଇସ୍‍ରୁ ଆପଣଙ୍କ ଡାଟା ଡିଲିଟ୍ ହୋଇଯିବ କିନ୍ତୁ ଏହା ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟରେ ଷ୍ଟୋର୍ ହୋଇ ରହିଥିବ।</translation>
@@ -1318,6 +1366,7 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="9063523880881406963">ଡେସ୍କଟପ୍ ସାଇଟ୍ ଅନୁରୋଧକୁ ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="9065203028668620118">ସମ୍ପାଦନ</translation>
 <translation id="9065383040763568503">Chrome ଗୁରୁତ୍ୱପୂର୍ଣ୍ଣ ବୋଲି ମନେ କରୁନଥିବା ଷ୍ଟୋର୍ କରାଯାଇଥିବା ଡାଟା (ଉ.ଦା. ସେଭ୍ କରାଯାଇଥିବା କୌଣସି ସେଟିଂସ୍ ନଥିବା କିମ୍ବା ଆପଣ ପ୍ରାୟତଃ ଭିଜିଟ୍ କରୁନଥିବା ସାଇଟଗୁଡ଼ିକ)</translation>
+<translation id="906781307897697745"><ph name="PRODUCT_NAME" />ରେ</translation>
 <translation id="9069999660519089861">ପଢ଼ାଯାଇନଥିବା କୌଣସି ପୃଷ୍ଠା ନାହିଁ</translation>
 <translation id="9070377983101773829">ଭଏସ୍ ସନ୍ଧାନ ଆରମ୍ଭ କରନ୍ତୁ</translation>
 <translation id="9074336505530349563">Google ଦ୍ୱାରା ପରାମର୍ଶ ଦିଆଯାଇଥିବା ବିଷୟବସ୍ତୁ ପ୍ରାପ୍ତ କରିବାକୁ ସାଇନ୍‍ ଇନ୍‌ କରନ୍ତୁ ଏବଂ ସିଙ୍କ୍‍ ଚାଲୁ କରନ୍ତୁ</translation>
@@ -1327,14 +1376,17 @@ Privacy Sandbox ଟ୍ରାଏଲଗୁଡ଼ିକ ଏବେ ବି ବିକଶ�
 <translation id="9086455579313502267">ନେଟ୍‌ୱାର୍କ ଆକ୍ସେସ୍ କରିବାରେ ଅକ୍ଷମ</translation>
 <translation id="9100505651305367705">ସମର୍ଥିତ ହେଲେ, ପ୍ରବନ୍ଧଗୁଡ଼ିକର ସରଳିକୃତ ଦୃଶ୍ୟ ଦେଖାଇବାକୁ ଅଫର୍ କରେ</translation>
 <translation id="9100610230175265781">ପାସଫ୍ରେଜ୍ ଆବଶ୍ୟକ ଅଟେ</translation>
+<translation id="9101137867221042551">ମ୍ୟାନେଜମେଣ୍ଟ</translation>
 <translation id="9102803872260866941">ପ୍ରିଭ୍ୟୁ ଟାବ୍ ଖୋଲାଯାଇଛି</translation>
 <translation id="9104217018994036254">ଏକ ଟାବ୍ ସେୟାର୍ କରିବା ପାଇଁ ଡିଭାଇସ୍‌ଗୁଡ଼ିକର ତାଲିକା।</translation>
+<translation id="9106148373857059373">ବୁକମାର୍କ ସେଭ ଫ୍ଲୋକୁ ବନ୍ଦ କରାଯାଇଛି</translation>
 <translation id="9108312223223904744">ଏକ ସୁରକ୍ଷା କୀ ସପୋର୍ଟ ଭାବେ ଫୋନର ବ୍ୟବହାର</translation>
 <translation id="9108808586816295166">ସୁରକ୍ଷିତ DNS ସବୁ ସମୟରେ ଉପଲବ୍ଧ ହୋଇନପାରେ</translation>
 <translation id="9133397713400217035">ଅଫ୍‌ଲାଇନ୍‌ରେ ଏକ୍ସପ୍ଲୋର୍ କରନ୍ତୁ</translation>
 <translation id="9137013805542155359">ମୂଳ ଲେଖା ଦେଖାନ୍ତୁ</translation>
 <translation id="9148126808321036104">ପୁଣି ସାଇନ୍ ଇନ୍ କରନ୍ତୁ</translation>
 <translation id="9155898266292537608">ଆପଣ ଏକ ଶଦ୍ଦ ଉପରେ କେବଳ ଏକ ଟାପ୍‌ କରି ଶୀଘ୍ର ଖୋଜିପାରିବେ</translation>
+<translation id="9158770349521403363">କେବଳ ବିଷୟବସ୍ତୁ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="9169507124922466868">ନାଭିଗେସନ୍ ଇତିହାସ ଅଧା ଖୋଲା ଅଛି</translation>
 <translation id="9199368092038462496">{NUM_MINS,plural, =1{1 ମିନିଟ୍ ପୂର୍ବେ ଯାଞ୍ଚ କରାଯାଇଛି}other{# ମିନିଟ୍ ପୂର୍ବେ ଯାଞ୍ଚ କରାଯାଇଛି}}</translation>
 <translation id="9204836675896933765">1 ଫାଇଲ୍‌ ବାକି ଅଛି</translation>

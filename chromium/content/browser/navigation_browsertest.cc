@@ -42,6 +42,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
@@ -89,6 +90,7 @@
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
@@ -1025,7 +1027,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   {
     const char kReplacePortNumber[] = "setPortNumber(%d);";
     uint16_t port_number = embedded_test_server()->port();
-    GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
+    url = embedded_test_server()->GetURL("foo.com", "/title2.html");
     EXPECT_TRUE(
         ExecJs(shell(), base::StringPrintf(kReplacePortNumber, port_number)));
 
@@ -1059,7 +1061,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   {
     const char kReplacePortNumber[] = "setPortNumber(%d);";
     uint16_t port_number = embedded_test_server()->port();
-    GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
+    url = embedded_test_server()->GetURL("foo.com", "/title2.html");
     EXPECT_TRUE(
         ExecJs(shell(), base::StringPrintf(kReplacePortNumber, port_number)));
 
@@ -1099,7 +1101,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   {
     const char kReplacePortNumber[] = "setPortNumber(%d);";
     uint16_t port_number = embedded_test_server()->port();
-    GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
+    url = embedded_test_server()->GetURL("foo.com", "/title2.html");
     EXPECT_TRUE(ExecJs(subframe_rfh,
                        base::StringPrintf(kReplacePortNumber, port_number)));
 
@@ -1173,7 +1175,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   {
     const char kReplacePortNumber[] = "setPortNumber(%d);";
     uint16_t port_number = embedded_test_server()->port();
-    GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
+    url = embedded_test_server()->GetURL("foo.com", "/title2.html");
     EXPECT_TRUE(
         ExecJs(shell(), base::StringPrintf(kReplacePortNumber, port_number)));
 
@@ -1566,6 +1568,11 @@ class PreviewsStateContentBrowserClient : public ContentBrowserClient {
         determine_allowed_previews_called_(false),
         determine_committed_previews_called_(false) {}
 
+  PreviewsStateContentBrowserClient(const PreviewsStateContentBrowserClient&) =
+      delete;
+  PreviewsStateContentBrowserClient& operator=(
+      const PreviewsStateContentBrowserClient&) = delete;
+
   ~PreviewsStateContentBrowserClient() override {}
 
   blink::PreviewsState DetermineAllowedPreviews(
@@ -1617,8 +1624,6 @@ class PreviewsStateContentBrowserClient : public ContentBrowserClient {
   blink::PreviewsState previews_state_;
   bool determine_allowed_previews_called_;
   bool determine_committed_previews_called_;
-
-  DISALLOW_COPY_AND_ASSIGN(PreviewsStateContentBrowserClient);
 };
 
 }  // namespace
@@ -3530,10 +3535,9 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
     // will be the navigation to `url2` started below.
     TestNavigationObserver nav_observer(wc, 2);
 
-    // Start a same-document navigation to url2, but it's racing with the
-    // renderer's history.pushState(). It will return false, as the navigation
-    // is restarted.
-    EXPECT_FALSE(NavigateToURL(shell(), url2));
+    // Start a same-document navigation to url2 that is racing with the
+    // renderer's history.pushState().
+    shell()->LoadURL(url2);
 
     nav_observer.Wait();
   }
@@ -3703,8 +3707,8 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       handler_method, BrowserURLHandler::null_handler());
 
   TestNavigationObserver observer(web_contents());
-  EXPECT_TRUE(NavigateToURL(
-      shell(), GURL(embedded_test_server()->GetURL("/virtual-url.html"))));
+  shell()->LoadURL(embedded_test_server()->GetURL("/virtual-url.html"));
+  observer.Wait();
   EXPECT_EQ("/title2.html", observer.last_navigation_url().path());
   EXPECT_EQ(2, rewrite_count);
 }
@@ -4307,7 +4311,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, ErrorPageFromCspSandboxResponse) {
 
   // An error page committed. It doesn't have any sandbox flags, despite the
   // original response headers.
-  EXPECT_TRUE(current_frame_host()->is_error_page());
+  EXPECT_TRUE(current_frame_host()->IsErrorDocument());
   EXPECT_EQ(network::mojom::WebSandboxFlags::kNone,
             current_frame_host()->active_sandbox_flags());
 
@@ -4446,7 +4450,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, ErrorPageFromInSandboxedIframe) {
   // An error page committed. Apparently, the error page inherited sandbox flags
   // from its parent.
   // TODO(https://crbug.com/1158370): Reconsider this.
-  EXPECT_TRUE(child_rfh->is_error_page());
+  EXPECT_TRUE(child_rfh->IsErrorDocument());
   EXPECT_EQ(network::mojom::WebSandboxFlags::kAll &
                 ~network::mojom::WebSandboxFlags::kOrientationLock,
             child_rfh->active_sandbox_flags());
@@ -4691,12 +4695,13 @@ class SubresourceLoadingTest : public NavigationBrowserTest {
         break;
       visited_contents.insert(current_contents);
 
-      // Flush all the frames in the `current_frame`'s frame tree.
-      for (RenderFrameHost* frame_to_flush : current_contents->GetAllFrames()) {
-        constexpr bool kDoNothingIfNoNetworkServiceConnection = true;
-        frame_to_flush->FlushNetworkAndNavigationInterfacesForTesting(
-            kDoNothingIfNoNetworkServiceConnection);
-      }
+      // Flush all the frames in the `current_contents's active page.
+      current_contents->GetMainFrame()->ForEachRenderFrameHost(
+          base::BindRepeating([](RenderFrameHost* frame_to_flush) {
+            constexpr bool kDoNothingIfNoNetworkServiceConnection = true;
+            frame_to_flush->FlushNetworkAndNavigationInterfacesForTesting(
+                kDoNothingIfNoNetworkServiceConnection);
+          }));
 
       // Traverse the `current_frame`'s opener chain.
       if (FrameTreeNode* opener_node =
@@ -5689,6 +5694,106 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWithPerformanceManager,
                            ->GetLastCommittedURL());
 }
 
+// Helper that ignores a request from the renderer to commit a navigation and
+// detaches the nth child (0-indexed) of `frame_tree_node` instead.
+class DetachChildFrameInCommitCallbackInterceptor
+    : public RenderFrameHostImpl::CommitCallbackInterceptor {
+ public:
+  DetachChildFrameInCommitCallbackInterceptor(FrameTreeNode* frame_tree_node,
+                                              int child_to_detach)
+      : frame_tree_node_(frame_tree_node), child_to_detach_(child_to_detach) {}
+
+  bool WillProcessDidCommitNavigation(
+      NavigationRequest* request,
+      mojom::DidCommitProvisionalLoadParamsPtr* params,
+      mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
+      override {
+    request->GetRenderFrameHost()->SetCommitCallbackInterceptorForTesting(
+        nullptr);
+    // At this point, the renderer has already committed the RenderFrame, but
+    // on the browser side, the RenderFrameHost is still speculative.
+
+    // Intentionally do not wait for script completion here. This runs an event
+    // loop that pumps incoming messages, but that would cause us to process
+    // IPCs from b.com out of order (since process DidCommitNavigation has been
+    // interrupted by this hook).
+    ExecuteScriptAsync(
+        frame_tree_node_,
+        JsReplace("document.querySelectorAll('iframe')[$1].remove()",
+                  child_to_detach_));
+
+    // However, since it's not possible to wait for `remove()` to take effect,
+    // the test must cheat a little and directly call the Mojo IPC that the JS
+    // above would eventually trigger.
+    frame_tree_node_->child_at(child_to_detach_)
+        ->render_manager()
+        ->current_frame_host()
+        ->Detach();
+
+    // Ignore the commit message and pretend it never arrived.
+    return false;
+  }
+
+ private:
+  FrameTreeNode* const frame_tree_node_;
+  const int child_to_detach_;
+};
+
+// Regression test for https://crbug.com/1223837. Previously, if a child frame
+// was in the middle of committing a navigation to a provisional frame in render
+// process B while render process A simultaneously detaches that child frame,
+// the detach message would never be received by render process B.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWithPerformanceManager,
+                       DetachAfterCommitNavigationInSubFrame) {
+  if (!AreAllSitesIsolatedForTesting())
+    return;
+
+  ASSERT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "a.com", "/cross_site_iframe_factory.html?a(b,a)")));
+
+  WebContentsImpl* const web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* const first_subframe_node =
+      web_contents->GetMainFrame()->child_at(0);
+  FrameTreeNode* const second_subframe_node =
+      web_contents->GetMainFrame()->child_at(1);
+  RenderProcessHost* const b_com_render_process_host =
+      first_subframe_node->render_manager()->current_frame_host()->GetProcess();
+
+  // Start a navigation in the second child frame that will create a speculative
+  // RFH in the existing render process for b.com. The first child frame is
+  // already hosted in the render process for b.com: this is to ensure the
+  // render process remains live even after the second child frame is detached
+  // later in this test.
+  ASSERT_TRUE(BeginNavigateToURLFromRenderer(
+      second_subframe_node,
+      embedded_test_server()->GetURL("b.com", "/title1.html")));
+
+  // Ensure the speculative RFH is in the expected process.
+  RenderFrameHostImpl* speculative_render_frame_host =
+      second_subframe_node->render_manager()->speculative_frame_host();
+  ASSERT_TRUE(speculative_render_frame_host);
+  EXPECT_EQ(b_com_render_process_host,
+            speculative_render_frame_host->GetProcess());
+
+  // Simulates a race where the a.com renderer detaches the second child frame
+  // after the browser sends `CommitNavigation()` to the b.com renderer.
+  DetachChildFrameInCommitCallbackInterceptor interceptor(
+      web_contents->GetFrameTree()->root(), 1);
+  speculative_render_frame_host->SetCommitCallbackInterceptorForTesting(
+      &interceptor);
+
+  EXPECT_TRUE(WaitForLoadStop(web_contents));
+  // Validate that render process for b.com has handled the detach message for
+  // the provisional frame that was committing. Before the fix, the render
+  // process for b.com still had the proxy for the second child frame, because
+  // the browser process's request to delete it was sent via a broken message
+  // pipe. Thus, the frame tree in the render process for b.com incorrectly
+  // thought there were still two child frames.
+  EXPECT_EQ(1, EvalJs(first_subframe_node, "top.length"));
+}
+
 // The following test checks what happens if a WebContentsDelegate navigates
 // away in response to the NavigationStateChanged event. Previously
 // (https://crbug.com/1210234), this was triggering a crash when creating the
@@ -5737,9 +5842,9 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, MAYBE_Bug1210234) {
   // Since we committed a navigation, the next cross-origin navigation will
   // create a speculative RenderFrameHost.
 
-  NavigateToURLBlockUntilNavigationsComplete(
-      web_contents(), initial_url, /*number_of_navigations=*/1,
-      /*ignore_uncommitted_navigations=*/true);
+  EXPECT_TRUE(NavigateToURL(web_contents(), initial_url,
+                            /*expected_commit_url=*/redirection_url));
+
   EXPECT_TRUE(IsLastCommittedEntryOfPageType(web_contents(), PAGE_TYPE_NORMAL));
   EXPECT_EQ(redirection_url, web_contents()->GetLastCommittedURL());
 }
@@ -5904,6 +6009,61 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
   EXPECT_NE(anonymous_nonce, anonymous_nonce_b);
   EXPECT_EQ(anonymous_nonce_b,
             child_b->current_frame_host()->storage_key().nonce().value());
+}
+
+// Ensures that OpenURLParams::FromNavigationHandle translates navigation params
+// correctly when used to initiate a navigation in another WebContents.
+IN_PROC_BROWSER_TEST_F(
+    NavigationBrowserTest,
+    FromNavigationHandleTranslatesNavigationParamsCorrectly) {
+  // Test that the params are translated correctly for a redirected navigation.
+  const GURL kRedirectedURL(
+      embedded_test_server()->GetURL("/server-redirect?/simple_page.html"));
+  NavigationController::LoadURLParams load_params(kRedirectedURL);
+  TestNavigationManager first_tab_manager(web_contents(), kRedirectedURL);
+  web_contents()->GetController().LoadURLWithParams(load_params);
+
+  // Wait for response to allow the navigation to resolve the redirect.
+  EXPECT_TRUE(first_tab_manager.WaitForResponse());
+
+  // Create LoadURLParams from the navigation after redirection.
+  NavigationController::LoadURLParams load_url_params(
+      OpenURLParams::FromNavigationHandle(
+          first_tab_manager.GetNavigationHandle()));
+  Shell* second_tab = CreateBrowser();
+  TestNavigationManager second_tab_manager(second_tab->web_contents(),
+                                           load_url_params.url);
+  second_tab->web_contents()->GetController().LoadURLWithParams(
+      load_url_params);
+
+  EXPECT_TRUE(second_tab_manager.WaitForResponse());
+
+  // Ensure params from the navigation in the first tab are translated to the
+  // navigation in the second tab as expected.
+  auto* first_tab_handle = first_tab_manager.GetNavigationHandle();
+  auto* second_tab_handle = second_tab_manager.GetNavigationHandle();
+  EXPECT_EQ(embedded_test_server()->GetURL("/simple_page.html"),
+            second_tab_handle->GetURL());
+  EXPECT_EQ(first_tab_handle->GetReferrer(), second_tab_handle->GetReferrer());
+  EXPECT_TRUE(
+      ui::PageTransitionCoreTypeIs(first_tab_handle->GetPageTransition(),
+                                   second_tab_handle->GetPageTransition()));
+  EXPECT_EQ(first_tab_handle->IsRendererInitiated(),
+            second_tab_handle->IsRendererInitiated());
+  EXPECT_EQ(first_tab_handle->GetInitiatorOrigin(),
+            second_tab_handle->GetInitiatorOrigin());
+  EXPECT_EQ(first_tab_handle->GetSourceSiteInstance(),
+            second_tab_handle->GetSourceSiteInstance());
+  EXPECT_EQ(first_tab_handle->HasUserGesture(),
+            second_tab_handle->HasUserGesture());
+  EXPECT_EQ(first_tab_handle->WasStartedFromContextMenu(),
+            second_tab_handle->WasStartedFromContextMenu());
+  EXPECT_EQ(first_tab_handle->GetHrefTranslate(),
+            second_tab_handle->GetHrefTranslate());
+  EXPECT_EQ(first_tab_handle->GetReloadType(),
+            second_tab_handle->GetReloadType());
+  EXPECT_EQ(first_tab_handle->GetRedirectChain(),
+            second_tab_handle->GetRedirectChain());
 }
 
 }  // namespace content

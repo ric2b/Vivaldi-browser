@@ -11,4 +11,4 @@ void LoadURLAsPendingEntry(content::WebContents* target_contents,
 
 }  // namespace vivaldi
 
-#endif // VIVALDI_BROWSER_UI_VIVALDI_BROWSER_NAVIGATOR_H
+#endif  // VIVALDI_BROWSER_UI_VIVALDI_BROWSER_NAVIGATOR_H

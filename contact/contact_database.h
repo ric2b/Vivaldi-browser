@@ -47,6 +47,8 @@ class ContactDatabase : public ContactTable,
  public:
   ContactDatabase();
   ~ContactDatabase() override;
+  ContactDatabase(const ContactDatabase&) = delete;
+  ContactDatabase& operator=(const ContactDatabase&) = delete;
 
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
@@ -105,8 +107,6 @@ class ContactDatabase : public ContactTable,
   sql::InitStatus EnsureCurrentVersion();
   sql::Database db_;
   sql::MetaTable meta_table_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactDatabase);
 };
 
 }  // namespace contact

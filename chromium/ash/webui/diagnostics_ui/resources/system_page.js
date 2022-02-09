@@ -22,6 +22,7 @@ import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bun
 import {DiagnosticsBrowserProxy, DiagnosticsBrowserProxyImpl} from './diagnostics_browser_proxy.js';
 import {SystemDataProviderInterface, SystemInfo} from './diagnostics_types.js'
 import {getSystemDataProvider} from './mojo_interface_provider.js';
+import {TestSuiteStatus} from './routine_list_executor.js';
 
 /**
  * @fileoverview
@@ -52,10 +53,10 @@ Polymer({
       value: false,
     },
 
-    /** @type {boolean} */
-    isTestRunning: {
-      type: Boolean,
-      value: false,
+    /** @type {!TestSuiteStatus} */
+    testSuiteStatus: {
+      type: Number,
+      value: TestSuiteStatus.kNotRunning,
     },
 
     /** @type {boolean} */
@@ -113,7 +114,11 @@ Polymer({
     this.fetchSystemInfo_();
     this.browserProxy_ = DiagnosticsBrowserProxyImpl.getInstance();
     this.browserProxy_.initialize();
-    this.addCautionBannerEventListeners_();
+
+    // Only use inner banner behavior if system page is in stand-alone mode.
+    if (!this.isNetworkingEnabled) {
+      this.addCautionBannerEventListeners_();
+    }
   },
 
   /** @private */
@@ -192,5 +197,18 @@ Polymer({
    */
   onNavigationPageChanged({isActive}) {
     this.isActive = isActive;
+    if (isActive) {
+      // Focus the topmost system page element.
+      this.$$('#overviewCard').$$('#overviewCardContainer').focus();
+    }
+  },
+
+  /**
+   * @protected
+   * @return {string}
+   */
+  getCardContainerClass_() {
+    let cardContainer = 'diagnostics-cards-container';
+    return `${cardContainer}${this.isNetworkingEnabled ? '-nav' : ''}`;
   },
 });

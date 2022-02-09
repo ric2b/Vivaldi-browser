@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -229,7 +230,7 @@ class VideoSenderTest : public ::testing::Test {
   }
 
   void RunTasks(int during_ms) {
-    task_runner_->Sleep(base::TimeDelta::FromMilliseconds(during_ms));
+    task_runner_->Sleep(base::Milliseconds(during_ms));
   }
 
   base::SimpleTestTickClock testing_clock_;
@@ -326,7 +327,7 @@ TEST_F(VideoSenderTest, RtcpTimer) {
 
   // Make sure that we send at least one RTCP packet.
   base::TimeDelta max_rtcp_timeout =
-      base::TimeDelta::FromMilliseconds(1 + kRtcpReportIntervalMs * 3 / 2);
+      base::Milliseconds(1 + kRtcpReportIntervalMs * 3 / 2);
 
   RunTasks(max_rtcp_timeout.InMilliseconds());
   EXPECT_LE(1, transport_->number_of_rtp_packets());
@@ -359,7 +360,7 @@ TEST_F(VideoSenderTest, ResendTimer) {
   video_sender_->InsertRawVideoFrame(video_frame, reference_time);
 
   base::TimeDelta max_resend_timeout =
-      base::TimeDelta::FromMilliseconds(1 + kDefaultRtpMaxDelayMs);
+      base::Milliseconds(1 + kDefaultRtpMaxDelayMs);
 
   // Make sure that we do a re-send.
   RunTasks(max_resend_timeout.InMilliseconds());
@@ -414,7 +415,7 @@ TEST_F(VideoSenderTest, StopSendingInTheAbsenceOfAck) {
 
   // Send 3 more frames and record the number of packets sent.
   for (int i = 0; i < 3; ++i) {
-    scoped_refptr<media::VideoFrame> video_frame = GetNewVideoFrame();
+    video_frame = GetNewVideoFrame();
     video_sender_->InsertRawVideoFrame(video_frame, testing_clock_.NowTicks());
     RunTasks(33);
   }
@@ -423,7 +424,7 @@ TEST_F(VideoSenderTest, StopSendingInTheAbsenceOfAck) {
   // Send 3 more frames - they should not be encoded, as we have not received
   // any acks.
   for (int i = 0; i < 3; ++i) {
-    scoped_refptr<media::VideoFrame> video_frame = GetNewVideoFrame();
+    video_frame = GetNewVideoFrame();
     video_sender_->InsertRawVideoFrame(video_frame, testing_clock_.NowTicks());
     RunTasks(33);
   }
@@ -460,7 +461,7 @@ TEST_F(VideoSenderTest, DuplicateAckRetransmit) {
 
   // Send 3 more frames but don't ACK.
   for (int i = 0; i < 3; ++i) {
-    scoped_refptr<media::VideoFrame> video_frame = GetNewVideoFrame();
+    video_frame = GetNewVideoFrame();
     video_sender_->InsertRawVideoFrame(video_frame, testing_clock_.NowTicks());
     RunTasks(33);
   }
@@ -503,7 +504,7 @@ TEST_F(VideoSenderTest, DuplicateAckRetransmitDoesNotCancelRetransmits) {
 
   // Send 2 more frames but don't ACK.
   for (int i = 0; i < 2; ++i) {
-    scoped_refptr<media::VideoFrame> video_frame = GetNewVideoFrame();
+    video_frame = GetNewVideoFrame();
     video_sender_->InsertRawVideoFrame(video_frame, testing_clock_.NowTicks());
     RunTasks(33);
   }
@@ -625,8 +626,7 @@ TEST_F(VideoSenderTest, CancelSendingOnReceivingPli) {
   video_sender_->OnReceivedPli();
   video_frame = GetNewVideoFrame();
   video_sender_->InsertRawVideoFrame(
-      video_frame,
-      testing_clock_.NowTicks() + base::TimeDelta::FromMilliseconds(1000));
+      video_frame, testing_clock_.NowTicks() + base::Milliseconds(1000));
   RunTasks(33);
   transport_->SetPause(false);
   RunTasks(33);

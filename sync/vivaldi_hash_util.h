@@ -7,7 +7,7 @@
 
 namespace syncer {
 
-  // A helper for generating the notes type's tag.  This is required in more
+// A helper for generating the notes type's tag.  This is required in more
 // than one place, so we define the algorithm here to make sure the
 // implementation is consistent.
 std::string GenerateSyncableNotesHash(

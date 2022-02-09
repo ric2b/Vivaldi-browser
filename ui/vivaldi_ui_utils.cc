@@ -20,11 +20,11 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "ui/base/base_window.h"
-#include "ui/vivaldi_browser_window.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
+#include "ui/base/base_window.h"
 #include "ui/views/widget/widget.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace vivaldi {
 namespace ui_tools {
@@ -93,7 +93,8 @@ VivaldiBrowserWindow* GetLastActiveMainWindow() {
 
 content::WebContents* GetWebContentsFromTabStrip(
     int tab_id,
-    content::BrowserContext* browser_context, std::string* error) {
+    content::BrowserContext* browser_context,
+    std::string* error) {
   content::WebContents* contents = nullptr;
   bool include_incognito = true;
   Browser* browser;
@@ -112,8 +113,9 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
 
   bool outside = true;
   for (auto* browser : *BrowserList::GetInstance()) {
-    gfx::Rect rect =
-        browser->is_type_devtools() ? gfx::Rect() : browser->window()->GetBounds();
+    gfx::Rect rect = browser->is_type_devtools()
+                         ? gfx::Rect()
+                         : browser->window()->GetBounds();
     if (rect.Contains(screen_point)) {
       outside = false;
       break;
@@ -121,7 +123,6 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
   }
   return outside;
 }
-
 
 Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
   if (current_browser->profile()->IsOffTheRecord()) {
@@ -187,8 +188,8 @@ bool MoveTabToWindow(Browser* source_browser,
   if (*new_index > target_tab_strip->count() || *new_index < 0)
     *new_index = target_tab_strip->count();
 
-  target_tab_strip->InsertWebContentsAt(
-    *new_index, std::move(web_contents), TabStripModel::ADD_PINNED);
+  target_tab_strip->InsertWebContentsAt(*new_index, std::move(web_contents),
+                                        TabStripModel::ADD_PINNED);
 
   return true;
 }

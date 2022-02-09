@@ -163,11 +163,11 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
               (const PasswordForm&, const PasswordFormManagerForUI*),
               (override));
   MOCK_METHOD(PasswordStoreInterface*,
-              GetProfilePasswordStoreInterface,
+              GetProfilePasswordStore,
               (),
               (const, override));
   MOCK_METHOD(PasswordStoreInterface*,
-              GetAccountPasswordStoreInterface,
+              GetAccountPasswordStore,
               (),
               (const, override));
   MOCK_METHOD(PasswordReuseManager*,
@@ -385,7 +385,7 @@ class PasswordManagerTest : public testing::TestWithParam<bool> {
   void SetUp() override {
     store_ = new MockPasswordStoreInterface;
 
-    ON_CALL(client_, GetProfilePasswordStoreInterface())
+    ON_CALL(client_, GetProfilePasswordStore())
         .WillByDefault(Return(store_.get()));
 
     ON_CALL(*store_, GetSmartBubbleStatsStore)
@@ -395,7 +395,7 @@ class PasswordManagerTest : public testing::TestWithParam<bool> {
             features::kEnablePasswordsAccountStorage)) {
       account_store_ = new MockPasswordStoreInterface;
 
-      ON_CALL(client_, GetAccountPasswordStoreInterface())
+      ON_CALL(client_, GetAccountPasswordStore())
           .WillByDefault(Return(account_store_.get()));
 
       // Most tests don't really need the account store, but it'll still get
@@ -3272,13 +3272,13 @@ TEST_P(PasswordManagerTest, ReportMissingFormManager) {
     EXPECT_CALL(client_, GetMetricsRecorder())
         .WillRepeatedly(Return(metrics_recorder.get()));
 
-    for (const FormData& form_data : test_case.processed_form_data) {
+    for (const FormData& processed_form_data : test_case.processed_form_data) {
       switch (test_case.save_signal) {
         case MissingFormManagerTestCase::Signal::Automatic:
-          manager()->OnPasswordFormSubmitted(nullptr, form_data);
+          manager()->OnPasswordFormSubmitted(nullptr, processed_form_data);
           break;
         case MissingFormManagerTestCase::Signal::Manual:
-          manager()->OnInformAboutUserInput(nullptr, form_data);
+          manager()->OnInformAboutUserInput(nullptr, processed_form_data);
           break;
         case MissingFormManagerTestCase::Signal::None:
           break;
@@ -4282,10 +4282,6 @@ TEST_P(PasswordManagerTest, SubmittedManagerClearingOnSuccessfulLogin) {
 // Check that on successful login the credentials are checked for leak depending
 // on mute state of insecure credential.
 TEST_P(PasswordManagerTest, DontStartLeakDetectionWhenMuted) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(features::kMutingCompromisedCredentials,
-                                    true);
-
   auto mock_factory =
       std::make_unique<testing::StrictMock<MockLeakDetectionCheckFactory>>();
   manager()->set_leak_factory(std::move(mock_factory));
@@ -4316,9 +4312,6 @@ TEST_P(PasswordManagerTest, DontStartLeakDetectionWhenMuted) {
 // Tests that check for leaks happens even if there are muted credentials for
 // the same domain, but with different username.
 TEST_P(PasswordManagerTest, StartLeakCheckWhenForUsernameNotMuted) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(features::kMutingCompromisedCredentials,
-                                    true);
 
   auto mock_factory =
       std::make_unique<testing::StrictMock<MockLeakDetectionCheckFactory>>();

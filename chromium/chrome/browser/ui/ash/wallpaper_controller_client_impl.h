@@ -23,11 +23,14 @@
 #include "url/gurl.h"
 
 class AccountId;
-class ValueStore;
 
 namespace base {
 class SequencedTaskRunner;
 }  // namespace base
+
+namespace value_store {
+class ValueStore;
+}
 
 // Handles chrome-side wallpaper control alongside the ash-side controller.
 class WallpaperControllerClientImpl
@@ -36,6 +39,11 @@ class WallpaperControllerClientImpl
       public file_manager::VolumeManagerObserver {
  public:
   WallpaperControllerClientImpl();
+
+  WallpaperControllerClientImpl(const WallpaperControllerClientImpl&) = delete;
+  WallpaperControllerClientImpl& operator=(
+      const WallpaperControllerClientImpl&) = delete;
+
   ~WallpaperControllerClientImpl() override;
 
   // Initializes and connects to ash.
@@ -124,8 +132,9 @@ class WallpaperControllerClientImpl
   bool IsActiveUserWallpaperControlledByPolicy();
   ash::WallpaperInfo GetActiveUserWallpaperInfo();
   bool ShouldShowWallpaperSetting();
-  void MigrateCollectionIdFromValueStoreForTesting(const AccountId& account_id,
-                                                   ValueStore* storage);
+  void MigrateCollectionIdFromValueStoreForTesting(
+      const AccountId& account_id,
+      value_store::ValueStore* storage);
 
  private:
   // Initialize the controller for this client and some wallpaper directories.
@@ -149,7 +158,7 @@ class WallpaperControllerClientImpl
   void OnGetWallpaperChromeAppValueStore(
       scoped_refptr<base::SequencedTaskRunner> main_task_runner,
       const AccountId& account_id,
-      ValueStore* value_store);
+      value_store::ValueStore* value_store);
 
   // Passes |collection_id| to wallpaper controller on main task runner.
   void SetDailyRefreshCollectionId(const AccountId& account_id,
@@ -160,6 +169,7 @@ class WallpaperControllerClientImpl
                                const backdrop::Image& image,
                                const std::string& next_resume_token);
 
+  void OnProfileCreated(user_manager::User* user);
   void ObserveVolumeManagerForActiveUser(user_manager::User* user);
 
   // WallpaperController interface in ash.
@@ -185,8 +195,6 @@ class WallpaperControllerClientImpl
   base::WeakPtrFactory<WallpaperControllerClientImpl> weak_factory_{this};
   base::WeakPtrFactory<WallpaperControllerClientImpl> storage_weak_factory_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(WallpaperControllerClientImpl);
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_WALLPAPER_CONTROLLER_CLIENT_IMPL_H_

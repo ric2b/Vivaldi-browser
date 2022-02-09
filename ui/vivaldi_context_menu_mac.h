@@ -30,6 +30,9 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   VivaldiContextMenuMac(content::WebContents* web_contents,
                         ui::SimpleMenuModel* menu_model,
                         const gfx::Rect& rect);
+  VivaldiContextMenuMac(const VivaldiContextMenuMac&) = delete;
+  VivaldiContextMenuMac& operator=(const VivaldiContextMenuMac&) = delete;
+
   void Init(ui::SimpleMenuModel* menu_model,
             vivaldi::ContextMenuPostitionDelegate* delegate) override;
   bool Show() override;
@@ -45,8 +48,6 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   ui::SimpleMenuModel* menu_model_;
   gfx::Rect rect_;
   NSView* parent_view_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuMac);
 };
 
 #endif  // UI_VIVALDI_CONTEXT_MENU_MAC_H_

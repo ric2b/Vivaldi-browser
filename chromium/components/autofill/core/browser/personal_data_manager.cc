@@ -1232,17 +1232,21 @@ std::vector<AutofillOfferData*> PersonalDataManager::GetAutofillOffers() const {
 }
 
 std::vector<const AutofillOfferData*>
-PersonalDataManager::GetAutofillPromoCodeOffers() const {
+PersonalDataManager::GetActiveAutofillPromoCodeOffersForOrigin(
+    GURL origin) const {
   if (!IsAutofillWalletImportEnabled())
     return {};
 
-  std::vector<const AutofillOfferData*> result;
-  result.reserve(autofill_offer_data_.size());
-  for (const auto& data : autofill_offer_data_) {
-    if (data.get()->IsPromoCodeOffer())
-      result.push_back(data.get());
-  }
-  return result;
+  std::vector<const AutofillOfferData*> promo_code_offers_for_origin;
+  base::ranges::for_each(
+      autofill_offer_data_,
+      [&](const std::unique_ptr<AutofillOfferData>& autofill_offer_data) {
+        if (autofill_offer_data.get()->IsPromoCodeOffer() &&
+            autofill_offer_data.get()->IsActiveAndEligibleForOrigin(origin)) {
+          promo_code_offers_for_origin.push_back(autofill_offer_data.get());
+        }
+      });
+  return promo_code_offers_for_origin;
 }
 
 gfx::Image* PersonalDataManager::GetCreditCardArtImageForUrl(
@@ -1558,19 +1562,31 @@ const std::string& PersonalDataManager::GetDefaultCountryCodeForNewAddress()
   if (default_country_code_.empty())
     default_country_code_ = MostCommonCountryCodeFromProfiles();
 
-  // Failing that, use the country code from variations service.
+  // Failing that, use the country code determined for experiment groups.
   if (default_country_code_.empty())
-    default_country_code_ = variations_country_code_;
-
-  // Failing that, guess based on system timezone.
-  if (default_country_code_.empty())
-    default_country_code_ = CountryCodeForCurrentTimezone();
-
-  // Failing that, guess based on locale.
-  if (default_country_code_.empty())
-    default_country_code_ = AutofillCountry::CountryCodeForLocale(app_locale());
+    default_country_code_ = GetCountryCodeForExperimentGroup();
 
   return default_country_code_;
+}
+
+const std::string& PersonalDataManager::GetCountryCodeForExperimentGroup()
+    const {
+  // Set to |variations_country_code_| if it exists.
+  if (experiment_country_code_.empty())
+    experiment_country_code_ = variations_country_code_;
+
+  // Failing that, guess based on system timezone.
+  if (experiment_country_code_.empty())
+    experiment_country_code_ = CountryCodeForCurrentTimezone();
+
+  // Failing that, guess based on locale. This returns "US" if there is no good
+  // guess.
+  if (experiment_country_code_.empty()) {
+    experiment_country_code_ =
+        AutofillCountry::CountryCodeForLocale(app_locale());
+  }
+
+  return experiment_country_code_;
 }
 
 // static

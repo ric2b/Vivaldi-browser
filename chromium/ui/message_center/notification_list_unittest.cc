@@ -29,6 +29,10 @@ using NotificationState = NotificationList::NotificationState;
 class NotificationListTest : public testing::Test {
  public:
   NotificationListTest() {}
+
+  NotificationListTest(const NotificationListTest&) = delete;
+  NotificationListTest& operator=(const NotificationListTest&) = delete;
+
   ~NotificationListTest() override {}
 
   void SetUp() override {
@@ -110,9 +114,6 @@ class NotificationListTest : public testing::Test {
   std::unique_ptr<NotificationList> notification_list_;
   NotificationBlockers blockers_;
   size_t counter_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NotificationListTest);
 };
 
 bool IsInNotifications(const NotificationList::Notifications& notifications,
@@ -300,8 +301,8 @@ TEST_F(NotificationListTest, OldPopupShouldNotBeHidden) {
     EXPECT_EQ(ids[i], (*iter)->id()) << i;
   }
 
-  for (auto iter = popups.begin(); iter != popups.end(); ++iter) {
-    notification_list_->MarkSinglePopupAsShown((*iter)->id(), false);
+  for (auto* popup : popups) {
+    notification_list_->MarkSinglePopupAsShown(popup->id(), false);
   }
   popups.clear();
   popups = GetPopups();
@@ -351,52 +352,59 @@ TEST_F(NotificationListTest, Priority) {
 // Tests that GetNotificationsByAppId returns notifications regardless of their
 // visibility.
 TEST_F(NotificationListTest, GetNotificationsByAppId) {
-  // Add a notification for |app_id1|.
   const std::string app_id1("app_id1");
-  const std::string id1("id1");
-  std::unique_ptr<Notification> notification(new Notification(
-      NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated", gfx::Image(),
-      std::u16string(), GURL(), NotifierId(NotifierType::APPLICATION, app_id1),
-      RichNotificationData(), nullptr));
-  notification_list_->AddNotification(std::move(notification));
-  EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id1).size());
-
-  // Mark the popup as shown but not read.
-  notification_list_->MarkSinglePopupAsShown(id1, false);
-  EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id1).size());
-
-  // Mark the popup as shown and read.
-  notification_list_->MarkSinglePopupAsShown(id1, true);
-  EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id1).size());
-
-  // Remove the notification.
-  notification_list_->RemoveNotification(id1);
-  EXPECT_EQ(0u, notification_list_->GetNotificationsByAppId(app_id1).size());
-
-  // Add two notifications for |app_id1| and one for |app_id2|.
-  notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated", gfx::Image(),
-      std::u16string(), GURL(), NotifierId(NotifierType::APPLICATION, app_id1),
-      RichNotificationData(), nullptr);
-  notification_list_->AddNotification(std::move(notification));
-
-  const std::string id2("id2");
-  notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated", gfx::Image(),
-      std::u16string(), GURL(), NotifierId(NotifierType::APPLICATION, app_id1),
-      RichNotificationData(), nullptr);
-  notification_list_->AddNotification(std::move(notification));
-  EXPECT_EQ(2u, notification_list_->GetNotificationsByAppId(app_id1).size());
-
-  const std::string id3("id3");
   const std::string app_id2("app_id2");
-  notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated", gfx::Image(),
-      std::u16string(), GURL(), NotifierId(NotifierType::APPLICATION, app_id2),
-      RichNotificationData(), nullptr);
-  notification_list_->AddNotification(std::move(notification));
-  EXPECT_EQ(2u, notification_list_->GetNotificationsByAppId(app_id1).size());
-  EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id2).size());
+
+  {
+    // Add a notification for |app_id1|.
+    const std::string id1("id1");
+    std::unique_ptr<Notification> notification(
+        new Notification(NOTIFICATION_TYPE_PROGRESS, id1, u"updated",
+                         u"updated", gfx::Image(), std::u16string(), GURL(),
+                         NotifierId(NotifierType::APPLICATION, app_id1),
+                         RichNotificationData(), nullptr));
+    notification_list_->AddNotification(std::move(notification));
+    EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id1).size());
+
+    // Mark the popup as shown but not read.
+    notification_list_->MarkSinglePopupAsShown(id1, false);
+    EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id1).size());
+
+    // Mark the popup as shown and read.
+    notification_list_->MarkSinglePopupAsShown(id1, true);
+    EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id1).size());
+
+    // Remove the notification.
+    notification_list_->RemoveNotification(id1);
+    EXPECT_EQ(0u, notification_list_->GetNotificationsByAppId(app_id1).size());
+
+    // Add two notifications for |app_id1| and one for |app_id2|.
+    notification = std::make_unique<Notification>(
+        NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated", gfx::Image(),
+        std::u16string(), GURL(),
+        NotifierId(NotifierType::APPLICATION, app_id1), RichNotificationData(),
+        nullptr);
+    notification_list_->AddNotification(std::move(notification));
+
+    const std::string id2("id2");
+    notification = std::make_unique<Notification>(
+        NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated", gfx::Image(),
+        std::u16string(), GURL(),
+        NotifierId(NotifierType::APPLICATION, app_id1), RichNotificationData(),
+        nullptr);
+    notification_list_->AddNotification(std::move(notification));
+    EXPECT_EQ(2u, notification_list_->GetNotificationsByAppId(app_id1).size());
+
+    const std::string id3("id3");
+    notification = std::make_unique<Notification>(
+        NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated", gfx::Image(),
+        std::u16string(), GURL(),
+        NotifierId(NotifierType::APPLICATION, app_id2), RichNotificationData(),
+        nullptr);
+    notification_list_->AddNotification(std::move(notification));
+    EXPECT_EQ(2u, notification_list_->GetNotificationsByAppId(app_id1).size());
+    EXPECT_EQ(1u, notification_list_->GetNotificationsByAppId(app_id2).size());
+  }
 
   for (std::string app_id : {app_id1, app_id2}) {
     for (auto* notification :
@@ -560,12 +568,12 @@ TEST_F(NotificationListTest, NotificationOrderAndPriority) {
   optional.priority = 2;
   std::string max_id = AddNotification(optional);
 
-  now += base::TimeDelta::FromSeconds(1);
+  now += base::Seconds(1);
   optional.timestamp = now;
   optional.priority = 1;
   std::string high_id = AddNotification(optional);
 
-  now += base::TimeDelta::FromSeconds(1);
+  now += base::Seconds(1);
   optional.timestamp = now;
   optional.priority = 0;
   std::string default_id = AddNotification(optional);

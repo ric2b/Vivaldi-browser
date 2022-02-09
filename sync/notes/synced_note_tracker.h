@@ -50,6 +50,10 @@ class SyncedNoteTracker {
     // |note_node| can be null for tombstones. |metadata| must not be null.
     Entity(const vivaldi::NoteNode* note_node,
            std::unique_ptr<sync_pb::EntityMetadata> metadata);
+
+    Entity(const Entity&) = delete;
+    Entity& operator=(const Entity&) = delete;
+
     ~Entity();
 
     // Returns true if this data is out of sync with the server.
@@ -104,8 +108,6 @@ class SyncedNoteTracker {
     // server. The tracker sets it to true in the constructor because this code
     // path is only executed in production when loading from disk.
     bool commit_may_have_started_ = false;
-
-    DISALLOW_COPY_AND_ASSIGN(Entity);
   };
 
   // Returns a client tag hash given a note GUID.
@@ -122,6 +124,9 @@ class SyncedNoteTracker {
   static std::unique_ptr<SyncedNoteTracker> CreateFromNotesModelAndMetadata(
       const vivaldi::NotesModel* model,
       sync_pb::NotesModelMetadata model_metadata);
+
+  SyncedNoteTracker(const SyncedNoteTracker&) = delete;
+  SyncedNoteTracker& operator=(const SyncedNoteTracker&) = delete;
 
   ~SyncedNoteTracker();
 
@@ -329,8 +334,6 @@ class SyncedNoteTracker {
   // TODO(crbug.com/1032052): Remove this code once all local sync metadata is
   // required to populate the client tag (and be considered invalid otherwise).
   base::Time last_sync_time_;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncedNoteTracker);
 };
 
 }  // namespace sync_notes

@@ -78,6 +78,34 @@
         }
       },
       {
+        "name": "getFullPath",
+        "type": "function",
+        "description": "Given a file entry, return full path of the file",
+        "parameters": [
+          {
+            "name": "filesystem",
+            "type": "string",
+            "description": "The file entry to be looked up"
+          },
+          {
+            "name": "path",
+            "type": "string",
+            "description": "The path"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "path",
+              "type": "string",
+              "description": "The full path of the file entry"
+            }
+          ]
+        }
+      },
+      {
         "name": "getMailFilePaths",
         "type": "function",
         "description": "Returns array of file paths under the  default profile /Mail directory.",

@@ -167,7 +167,7 @@ const char kTimeoutForLoadingIndicatorSecondsParamName[] =
 const int kDefaultTimeoutForLoadingIndicatorSeconds = 5;
 
 base::TimeDelta GetTimeoutForLoadingIndicator() {
-  return base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+  return base::Seconds(base::GetFieldTrialParamByFeatureAsInt(
       ntp_snippets::kArticleSuggestionsFeature,
       kTimeoutForLoadingIndicatorSecondsParamName,
       kDefaultTimeoutForLoadingIndicatorSeconds));
@@ -879,8 +879,7 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
         if (ShouldForceFetchedSuggestionsNotifications() &&
             IsFetchedSuggestionsNotificationsEnabled()) {
           suggestion->set_should_notify(true);
-          suggestion->set_notification_deadline(clock_->Now() +
-                                                base::TimeDelta::FromDays(7));
+          suggestion->set_notification_deadline(clock_->Now() + base::Days(7));
         }
         if (!IsFetchedSuggestionsNotificationsEnabled()) {
           suggestion->set_should_notify(false);
@@ -1576,17 +1575,16 @@ void RemoteSuggestionsProviderImpl::RestoreCategoriesFromPrefs() {
                     << kCategoryContentTitle << "': " << entry;
       continue;
     }
-    bool included_in_last_server_response = false;
-    if (!dict->GetBoolean(kCategoryContentProvidedByServer,
-                          &included_in_last_server_response)) {
+    absl::optional<bool> included_in_last_server_response =
+        dict->FindBoolKey(kCategoryContentProvidedByServer);
+    if (!included_in_last_server_response) {
       DLOG(WARNING) << "Invalid category pref value, missing '"
                     << kCategoryContentProvidedByServer << "': " << entry;
       continue;
     }
-    bool allow_fetching_more_results = false;
     // This wasn't always around, so it's okay if it's missing.
-    dict->GetBoolean(kCategoryContentAllowFetchingMore,
-                     &allow_fetching_more_results);
+    bool allow_fetching_more_results =
+        dict->FindBoolKey(kCategoryContentAllowFetchingMore).value_or(false);
 
     Category category = Category::FromIDValue(id);
     // The ranker may not persist the order of remote categories.
@@ -1603,7 +1601,7 @@ void RemoteSuggestionsProviderImpl::RestoreCategoriesFromPrefs() {
             : BuildRemoteCategoryInfo(title, allow_fetching_more_results);
     CategoryContent* content = UpdateCategoryInfo(category, info);
     content->included_in_last_server_response =
-        included_in_last_server_response;
+        included_in_last_server_response.value();
   }
 }
 

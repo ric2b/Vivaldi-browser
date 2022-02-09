@@ -2,32 +2,36 @@
 
 #include "browser/vivaldi_profile_impl.h"
 
-#include "app/vivaldi_apptools.h"
-#include "app/vivaldi_version_info.h"
 #include "base/command_line.h"
 #include "base/strings/string_split.h"
 #include "base/version.h"
-#include "browser/vivaldi_runtime_feature.h"
-#include "calendar/calendar_model_loaded_observer.h"
-#include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/common/pref_names.h"
-#include "components/content_injection/content_injection_service_factory.h"
-#include "components/db/mail_client/mail_client_service_factory.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/page_actions/page_actions_service_factory.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/url_data_source.h"
+#include "content/public/common/content_switches.h"
+#include "extensions/buildflags/buildflags.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_version_info.h"
+#include "browser/vivaldi_runtime_feature.h"
+#include "calendar/calendar_model_loaded_observer.h"
+#include "calendar/calendar_service_factory.h"
+#include "components/content_injection/content_injection_service_factory.h"
+#include "components/datasource/vivaldi_data_source.h"
+#include "components/datasource/vivaldi_web_source.h"
+#include "components/db/mail_client/mail_client_service_factory.h"
+#include "components/page_actions/page_actions_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "contact/contact_model_loaded_observer.h"
 #include "contact/contact_service_factory.h"
-#include "content/public/common/content_switches.h"
-#include "extensions/buildflags/buildflags.h"
 #include "menus/context_menu_service_factory.h"
 #include "menus/main_menu_service_factory.h"
 #include "menus/menu_model.h"
@@ -182,6 +186,13 @@ void VivaldiInitProfile(Profile* profile) {
   if (!vivaldi::IsVivaldiRunning())
     return;
 
+  content::URLDataSource::Add(
+      profile, std::make_unique<VivaldiThumbDataSource>(profile));
+  content::URLDataSource::Add(profile,
+                              std::make_unique<VivaldiDataSource>(profile));
+  content::URLDataSource::Add(profile,
+                              std::make_unique<VivaldiWebSource>(profile));
+
   calendar::CalendarService* calendar_service =
       calendar::CalendarServiceFactory::GetForProfile(profile);
   calendar_service->AddObserver(new calendar::CalendarModelLoadedObserver());
@@ -211,12 +222,14 @@ void VivaldiInitProfile(Profile* profile) {
     if (IsBetaOrFinal()) {
       std::string version = ::vivaldi::GetVivaldiVersionString();
       std::vector<std::string> version_array = base::SplitString(
-        version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+          version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
       if (version_array.size() == 4) {
         int major;
         if (base::StringToInt(version_array[0], &major) && major >= 4) {
-          pref_service->SetInteger(vivaldiprefs::kStartupHasSeenFeature,
-            static_cast<int>(vivaldiprefs::StartupHasSeenFeatureValues::kMail));
+          pref_service->SetInteger(
+              vivaldiprefs::kStartupHasSeenFeature,
+              static_cast<int>(
+                  vivaldiprefs::StartupHasSeenFeatureValues::kMail));
           pref_service->SetBoolean(prefs::kHasSeenWelcomePage, false);
         }
       }

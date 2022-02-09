@@ -147,6 +147,10 @@ class FormStructureBrowserTest
     : public InProcessBrowserTest,
       public DataDrivenTest,
       public ::testing::WithParamInterface<base::FilePath> {
+ public:
+  FormStructureBrowserTest(const FormStructureBrowserTest&) = delete;
+  FormStructureBrowserTest& operator=(const FormStructureBrowserTest&) = delete;
+
  protected:
   FormStructureBrowserTest();
   ~FormStructureBrowserTest() override;
@@ -170,7 +174,6 @@ class FormStructureBrowserTest
   // GenerateResults method but it is consumed later in the IO thread by the
   // embedded test server to generate the response.
   std::string html_content_;
-  DISALLOW_COPY_AND_ASSIGN(FormStructureBrowserTest);
 };
 
 FormStructureBrowserTest::FormStructureBrowserTest()
@@ -234,8 +237,8 @@ void FormStructureBrowserTest::GenerateResults(const std::string& input,
   }
 
   // Navigate to the test html content.
-  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/test.html")));
+  ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/test.html"))));
 
   // Dump the form fields (and their inferred field types).
   content::WebContents* web_contents =

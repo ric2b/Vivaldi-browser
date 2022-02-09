@@ -101,6 +101,8 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
       return vector_icons::kProtocolHandlerIcon;
     case RequestType::kSecurityAttestation:
       return kUsbSecurityKeyIcon;
+    case RequestType::kU2fApiRequest:
+      return kUsbSecurityKeyIcon;
     case RequestType::kStorageAccess:
       return vector_icons::kCookieIcon;
     case RequestType::kWindowPlacement:
@@ -111,9 +113,7 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
 }
 #endif  // !defined(OS_ANDROID)
 
-}  // namespace
-
-RequestType ContentSettingsTypeToRequestType(
+absl::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
     ContentSettingsType content_settings_type) {
   switch (content_settings_type) {
     case ContentSettingsType::ACCESSIBILITY_EVENTS:
@@ -161,9 +161,22 @@ RequestType ContentSettingsTypeToRequestType(
       return RequestType::kWindowPlacement;
 #endif
     default:
-      CHECK(false);
-      return RequestType::kGeolocation;
+      return absl::nullopt;
   }
+}
+
+}  // namespace
+
+bool IsRequestablePermissionType(ContentSettingsType content_settings_type) {
+  return !!ContentSettingsTypeToRequestTypeIfExists(content_settings_type);
+}
+
+RequestType ContentSettingsTypeToRequestType(
+    ContentSettingsType content_settings_type) {
+  absl::optional<RequestType> request_type =
+      ContentSettingsTypeToRequestTypeIfExists(content_settings_type);
+  CHECK(request_type);
+  return *request_type;
 }
 
 absl::optional<ContentSettingsType> RequestTypeToContentSettingsType(
@@ -280,6 +293,10 @@ const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
 #endif
     case permissions::RequestType::kStorageAccess:
       return "storage_access";
+#if !defined(OS_ANDROID)
+    case permissions::RequestType::kU2fApiRequest:
+      return "u2f_api_request";
+#endif
     case permissions::RequestType::kVrSession:
       return "vr_session";
 #if !defined(OS_ANDROID)

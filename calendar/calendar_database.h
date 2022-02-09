@@ -49,6 +49,8 @@ class CalendarDatabase : public EventDatabase,
  public:
   CalendarDatabase();
   ~CalendarDatabase() override;
+  CalendarDatabase(const CalendarDatabase&) = delete;
+  CalendarDatabase& operator=(const CalendarDatabase&) = delete;
 
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
@@ -114,8 +116,6 @@ class CalendarDatabase : public EventDatabase,
   sql::MetaTable meta_table_;
 
   base::Time cached_early_expiration_threshold_;
-
-  DISALLOW_COPY_AND_ASSIGN(CalendarDatabase);
 };
 
 }  // namespace calendar

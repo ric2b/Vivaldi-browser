@@ -7,6 +7,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -35,8 +36,7 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
     : toolkit_delegate_(new ToolkitDelegateViews),
       web_contents_(web_contents),
       menu_model_(menu_model),
-      rect_(rect) {
-}
+      rect_(rect) {}
 
 VivaldiContextMenuViews::~VivaldiContextMenuViews() {}
 
@@ -114,12 +114,12 @@ VivaldiContextMenuViews::GetToolkitDelegate() {
 
 bool VivaldiContextMenuViews::HasDarkTextColor() {
   views::Widget* widget = GetTopLevelWidgetFromWebContents(web_contents_);
-  if (widget && widget->GetNativeTheme()) {
-    return color_utils::IsDark(widget->GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor));
+  if (widget && widget->GetColorProvider()) {
+    return color_utils::IsDark(
+        widget->GetColorProvider()->GetColor(ui::kColorMenuItemForeground));
   } else {
-    return true; // Assume light background
+    return true;  // Assume light background
   }
 }
 
-}  // namespace vivialdi
+}  // namespace vivaldi

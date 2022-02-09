@@ -25,6 +25,8 @@
 namespace proximity_auth {
 namespace {
 
+using SmartLockState = ash::SmartLockState;
+
 // This enum is tied directly to a UMA enum defined in
 // //tools/metrics/histograms/enums.xml, and should always reflect it (do not
 // change one without changing the other). Entries should be never modified
@@ -40,7 +42,7 @@ enum class FindAndConnectToHostResult {
 
 // The maximum amount of time that the unlock manager can stay in the 'waking
 // up' state after resuming from sleep.
-constexpr base::TimeDelta kWakingUpDuration = base::TimeDelta::FromSeconds(15);
+constexpr base::TimeDelta kWakingUpDuration = base::Seconds(15);
 
 // The maximum amount of time that we wait for the BluetoothAdapter to be
 // fully initialized after resuming from sleep.
@@ -48,18 +50,15 @@ constexpr base::TimeDelta kWakingUpDuration = base::TimeDelta::FromSeconds(15);
 // returns incorrect presence and power values directly after resume, and does
 // not return correct values until about 1-2 seconds later. Remove this once
 // the bug is fixed.
-constexpr base::TimeDelta kBluetoothAdapterResumeMaxDuration =
-    base::TimeDelta::FromSeconds(3);
+constexpr base::TimeDelta kBluetoothAdapterResumeMaxDuration = base::Seconds(3);
 
 // The limit on the elapsed time for an auth attempt. If an auth attempt exceeds
 // this limit, it will time out and be rejected. This is provided as a failsafe,
 // in case something goes wrong.
-constexpr base::TimeDelta kAuthAttemptTimeout = base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta kAuthAttemptTimeout = base::Seconds(5);
 
-constexpr base::TimeDelta kMinExtendedDuration =
-    base::TimeDelta::FromMilliseconds(1);
-constexpr base::TimeDelta kMaxExtendedDuration =
-    base::TimeDelta::FromSeconds(15);
+constexpr base::TimeDelta kMinExtendedDuration = base::Milliseconds(1);
+constexpr base::TimeDelta kMaxExtendedDuration = base::Seconds(15);
 const int kNumDurationMetricBuckets = 100;
 
 const char kGetRemoteStatusNone[] = "none";

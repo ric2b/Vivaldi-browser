@@ -15,7 +15,7 @@
 #include "base/win/registry.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "ui/vivaldi_browser_window.h"
 
 namespace vivaldi {
@@ -60,8 +60,8 @@ void VivaldiShortcutPinToTaskbar(const std::wstring& app_id) {
 
 void StartPinShortcutToTaskbar(VivaldiBrowserWindow* window) {
   DCHECK(window);
-  std::string app_name = web_app::GenerateApplicationNameFromAppId(
-      window->extension()->id());
+  std::string app_name =
+      web_app::GenerateApplicationNameFromAppId(window->extension()->id());
   std::wstring app_name_wide;
   app_name_wide.assign(app_name.begin(), app_name.end());
   base::ThreadPool::PostTask(

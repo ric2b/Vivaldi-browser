@@ -41,7 +41,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-
 constexpr char const AdverseAdFilterTestHarness::kDefaultAllowedSuffix[];
 constexpr char const AdverseAdFilterTestHarness::kDefaultDisallowedSuffix[];
 constexpr char const AdverseAdFilterTestHarness::kDefaultDisallowedUrl[];
@@ -108,8 +107,7 @@ void AdverseAdFilterTestHarness::SetUp() {
           web_contents()));
 
   VivaldiSubresourceFilterAdblockingThrottleManager::
-      CreateSubresourceFilterWebContentsHelper(
-  web_contents());
+      CreateSubresourceFilterWebContentsHelper(web_contents());
 
   CreateSubresourceFilterWebContentsHelper(web_contents());
 
@@ -130,8 +128,7 @@ void AdverseAdFilterTestHarness::TearDown() {
 }
 
 // Will return nullptr if the navigation fails.
-content::RenderFrameHost*
-AdverseAdFilterTestHarness::SimulateNavigateAndCommit(
+content::RenderFrameHost* AdverseAdFilterTestHarness::SimulateNavigateAndCommit(
     const GURL& url,
     content::RenderFrameHost* rfh) {
   auto simulator =

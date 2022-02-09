@@ -12,9 +12,9 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_resource.h"
-#include "media/base/audio_decoder_config.h"
 #include "media/base/video_decoder_config.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 

@@ -62,6 +62,7 @@
 #include "url/url_constants.h"
 
 #if !defined(OS_ANDROID)
+#include "chrome/browser/signin/identity_browser_test_base.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -204,13 +205,16 @@ class UkmBrowserTestBase : public SyncTest {
                                           {internal::kMetricsReportingFeature});
   }
 
+  UkmBrowserTestBase(const UkmBrowserTestBase&) = delete;
+  UkmBrowserTestBase& operator=(const UkmBrowserTestBase&) = delete;
+
 #if !defined(OS_ANDROID)
   ukm::UkmSource* NavigateAndGetSource(const GURL& url,
                                        Browser* browser,
                                        ukm::UkmTestHelper* ukm_test_helper) {
     content::NavigationHandleObserver observer(
         browser->tab_strip_model()->GetActiveWebContents(), url);
-    ui_test_utils::NavigateToURL(browser, url);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser, url));
     const ukm::SourceId source_id = ukm::ConvertToSourceId(
         observer.navigation_id(), ukm::SourceIdType::NAVIGATION_ID);
     return ukm_test_helper->GetSource(source_id);
@@ -287,13 +291,14 @@ class UkmBrowserTestBase : public SyncTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(UkmBrowserTestBase);
 };
 
 class UkmBrowserTest : public UkmBrowserTestBase {
  public:
   UkmBrowserTest() : UkmBrowserTestBase() {}
+
+  UkmBrowserTest(const UkmBrowserTest&) = delete;
+  UkmBrowserTest& operator=(const UkmBrowserTest&) = delete;
 
 #if defined(OS_ANDROID)
   void PreRunTestOnMainThread() override {
@@ -310,14 +315,16 @@ class UkmBrowserTest : public UkmBrowserTestBase {
     EXPECT_EQ(0U, TabModelList::models().size());
   }
 #endif  // defined(OS_ANDROID)
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UkmBrowserTest);
 };
 
 class UkmBrowserTestWithSyncTransport : public UkmBrowserTestBase {
  public:
   UkmBrowserTestWithSyncTransport() {}
+
+  UkmBrowserTestWithSyncTransport(const UkmBrowserTestWithSyncTransport&) =
+      delete;
+  UkmBrowserTestWithSyncTransport& operator=(
+      const UkmBrowserTestWithSyncTransport&) = delete;
 
   void SetUpInProcessBrowserTestFixture() override {
     // This is required to support (fake) secondary-account-signin (based on
@@ -337,8 +344,6 @@ class UkmBrowserTestWithSyncTransport : public UkmBrowserTestBase {
 
  private:
   base::CallbackListSubscription test_signin_client_subscription_;
-
-  DISALLOW_COPY_AND_ASSIGN(UkmBrowserTestWithSyncTransport);
 };
 
 // This tests if UKM service is enabled/disabled appropriately based on an
@@ -349,6 +354,10 @@ class UkmConsentParamBrowserTest : public UkmBrowserTestBase,
                                    public testing::WithParamInterface<bool> {
  public:
   UkmConsentParamBrowserTest() : UkmBrowserTestBase() {}
+
+  UkmConsentParamBrowserTest(const UkmConsentParamBrowserTest&) = delete;
+  UkmConsentParamBrowserTest& operator=(const UkmConsentParamBrowserTest&) =
+      delete;
 
   static bool IsMetricsAndCrashReportingEnabled() {
     return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
@@ -362,6 +371,9 @@ class UkmConsentParamBrowserTest : public UkmBrowserTestBase,
   }
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
+#if defined(OS_CHROMEOS)
+    IdentityBrowserTestBase::CreatedBrowserMainParts(parts);
+#endif  // defined(OS_CHROMEOS)
     // IsMetricsReportingEnabled() in non-official builds always returns false.
     // Enable the official build checks so that this test can work in both
     // official and non-official builds.
@@ -373,8 +385,6 @@ class UkmConsentParamBrowserTest : public UkmBrowserTestBase,
 
  private:
   base::FilePath local_state_path_;
-
-  DISALLOW_COPY_AND_ASSIGN(UkmConsentParamBrowserTest);
 };
 #endif  // !defined(OS_ANDROID)
 
@@ -402,10 +412,13 @@ class UkmBrowserTestWithDemographics
     }
   }
 
+  UkmBrowserTestWithDemographics(const UkmBrowserTestWithDemographics&) =
+      delete;
+  UkmBrowserTestWithDemographics& operator=(
+      const UkmBrowserTestWithDemographics&) = delete;
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(UkmBrowserTestWithDemographics);
 };
 
 // Make sure that UKM is disabled while an incognito window is open.
@@ -671,12 +684,12 @@ IN_PROC_BROWSER_TEST_P(UkmBrowserTestWithDemographics,
     histogram.ExpectTotalCount("UKM.UserDemographics.Status", /*count=*/0);
   }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !defined(OS_CHROMEOS)
   // Sign out the user to revoke all refresh tokens. This prevents any posted
   // tasks from successfully fetching an access token during the tear-down
   // phase and crashing on a DCHECK. See crbug/1102746 for more details.
   harness->SignOutPrimaryAccount();
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !defined(OS_CHROMEOS)
   ClosePlatformBrowser(browser);
 }
 
@@ -980,7 +993,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, LogsOpenerSource) {
 // Keep in sync with testSingleSyncSignout in ios/chrome/browser/metrics/
 // ukm_egtest.mm and singleSyncSignoutCheck in chrome/android/javatests/src/org/
 // chromium/chrome/browser/sync/UkmTest.java.
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_F(UkmBrowserTest, SingleSyncSignoutCheck) {
   ukm::UkmTestHelper ukm_test_helper(GetUkmService());
   MetricsConsentOverride metrics_consent(true);
@@ -1001,11 +1014,12 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, SingleSyncSignoutCheck) {
   harness->service()->GetUserSettings()->SetSyncRequested(false);
   ClosePlatformBrowser(browser);
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS) &&
+        // !defined(OS_ANDROID)
 
 // ChromeOS doesn't have the concept of sign-out so this test doesn't make sense
 // there. Android doesn't have multiple profiles.
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
 #if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
 // https://crbug.com/1223061
@@ -1043,7 +1057,8 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, MAYBE_MultiSyncSignoutCheck) {
   CloseBrowserSynchronously(browser2);
   CloseBrowserSynchronously(browser1);
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS) &&
+        // !defined(OS_ANDROID)
 
 // Make sure that if history/sync services weren't available when we tried to
 // attach listeners, UKM is not enabled.
@@ -1135,7 +1150,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, MAYBE_HistoryDeleteCheck) {
 
 // On ChromeOS, the test profile starts with a primary account already set, so
 // this test doesn't apply.
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_F(UkmBrowserTestWithSyncTransport,
                        NotEnabledForSecondaryAccountSync) {
   ukm::UkmTestHelper ukm_test_helper(GetUkmService());
@@ -1170,7 +1185,8 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTestWithSyncTransport,
 
   EXPECT_FALSE(ukm_test_helper.IsRecordingEnabled());
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS) &&
+        // !defined(OS_ANDROID)
 
 #if !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_P(UkmConsentParamBrowserTest, GroupPolicyConsentCheck) {
@@ -1233,7 +1249,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, EvictObsoleteSources) {
   content::NavigationHandleObserver tab_1_observer(
       sync_browser->tab_strip_model()->GetActiveWebContents(), test_urls[0]);
   // Navigate to a test URL in this new tab.
-  ui_test_utils::NavigateToURL(sync_browser, test_urls[0]);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(sync_browser, test_urls[0]));
   // Get the source id associated to the last committed navigation, which could
   // differ from the id from WebContents for example if the site executes a
   // same-document navigation (e.g. history.pushState/replaceState). This
@@ -1258,7 +1274,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, EvictObsoleteSources) {
                          ui::PAGE_TRANSITION_TYPED, true);
   content::NavigationHandleObserver tab_2_observer(
       sync_browser->tab_strip_model()->GetActiveWebContents(), test_urls[1]);
-  ui_test_utils::NavigateToURL(sync_browser, test_urls[1]);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(sync_browser, test_urls[1]));
   source_id2 = ukm::ConvertToSourceId(tab_2_observer.navigation_id(),
                                       ukm::SourceIdType::NAVIGATION_ID);
 
@@ -1295,7 +1311,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, EvictObsoleteSources) {
 
   // Navigate to a new URL in the current tab, this will mark source 2 that was
   // in the current tab as obsolete.
-  ui_test_utils::NavigateToURL(sync_browser, test_urls[2]);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(sync_browser, test_urls[2]));
 
   // The previous report was the last one that could potentially contain entries
   // for source 1. Source 1 is thus no longer included in future reports. This
@@ -1417,7 +1433,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, NotMarkSourcesIfNavigationNotCommitted) {
   EXPECT_FALSE(ukm_test_helper.IsSourceObsolete(source_id));
 
   // New navigation did not commit, thus the source should still be kept alive.
-  ui_test_utils::NavigateToURL(sync_browser, test_url_no_commit);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(sync_browser, test_url_no_commit));
   EXPECT_FALSE(ukm_test_helper.IsSourceObsolete(source_id));
 }
 #endif  // !defined(OS_ANDROID)

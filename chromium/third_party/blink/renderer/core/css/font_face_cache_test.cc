@@ -80,7 +80,8 @@ void FontFaceCacheTest::AppendTestFaceForCapabilities(const CSSValue& stretch,
 
   auto* style_rule_font_face =
       MakeGarbageCollected<StyleRuleFontFace>(font_face_descriptor);
-  FontFace* font_face = FontFace::Create(&GetDocument(), style_rule_font_face);
+  FontFace* font_face = FontFace::Create(&GetDocument(), style_rule_font_face,
+                                         false /* is_user_style */);
   CHECK(font_face);
   cache_->Add(style_rule_font_face, font_face);
 }
@@ -101,7 +102,8 @@ FontDescription FontFaceCacheTest::FontDescriptionForRequest(
     FontSelectionValue style,
     FontSelectionValue weight) {
   FontFamily font_family;
-  font_family.SetFamily(kFontNameForTesting);
+  font_family.SetFamily(kFontNameForTesting,
+                        FontFamily::InferredTypeFor(kFontNameForTesting));
   FontDescription description;
   description.SetFamily(font_family);
   description.SetStretch(stretch);

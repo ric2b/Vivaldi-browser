@@ -18,10 +18,10 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/apps/app_service/webapk/webapk_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/mojom/webapk.mojom.h"
@@ -58,8 +58,7 @@ const char kMinimumIconSize = 64;
 const uint64_t kMurmur2HashSeed = 0;
 
 // Time to wait for a response from the Web APK minter.
-constexpr base::TimeDelta kMinterResponseTimeout =
-    base::TimeDelta::FromSeconds(60);
+constexpr base::TimeDelta kMinterResponseTimeout = base::Seconds(60);
 
 constexpr char kWebApkServerUrl[] =
     "https://webapk.googleapis.com/v1/webApks?key=";
@@ -239,7 +238,7 @@ namespace apps {
 WebApkInstallTask::WebApkInstallTask(Profile* profile,
                                      const std::string& app_id)
     : profile_(profile),
-      web_app_provider_(web_app::WebAppProvider::Get(profile_)),
+      web_app_provider_(web_app::WebAppProvider::GetDeprecated(profile_)),
       app_id_(app_id),
       package_name_to_update_(
           webapk_prefs::GetWebApkPackageName(profile_, app_id_)),
@@ -255,10 +254,13 @@ void WebApkInstallTask::Start(ResultCallback callback) {
 
   auto& registrar = web_app_provider_->registrar();
 
-  // This is already checked in WebApkManager, check again in case anything
-  // changed while the install request was queued.
+  // Installation & share target are already checked in WebApkManager, check
+  // again in case anything changed while the install request was queued.
+  // Manifest URL is always set for apps installed or updated in recent
+  // versions, but might be missing for older apps.
   if (!registrar.IsInstalled(app_id_) ||
-      !registrar.GetAppShareTarget(app_id_)) {
+      !registrar.GetAppShareTarget(app_id_) ||
+      registrar.GetAppManifestUrl(app_id_).is_empty()) {
     DeliverResult(WebApkInstallStatus::kAppInvalid);
     return;
   }
@@ -345,14 +347,15 @@ void WebApkInstallTask::OnArcFeaturesLoaded(
   // the manifest. Since we can't be perfect, it's okay to be roughly correct
   // and just send any URL of the correct purpose.
   auto& registrar = web_app_provider_->registrar();
-  const auto& icon_infos = registrar.GetAppIconInfos(app_id_);
+  const auto& manifest_icons = registrar.GetAppIconInfos(app_id_);
   auto it = std::find_if(
-      icon_infos.begin(), icon_infos.end(),
-      [&icon_size_and_purpose](const WebApplicationIconInfo& info) {
-        return info.purpose == icon_size_and_purpose->purpose;
+      manifest_icons.begin(), manifest_icons.end(),
+      [&icon_size_and_purpose](const apps::IconInfo& info) {
+        return info.purpose ==
+               ManifestPurposeToIconInfoPurpose(icon_size_and_purpose->purpose);
       });
 
-  if (it == icon_infos.end()) {
+  if (it == manifest_icons.end()) {
     LOG(ERROR) << "Could not find URL for icon";
     DeliverResult(WebApkInstallStatus::kAppInvalid);
     return;

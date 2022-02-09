@@ -36,11 +36,10 @@
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/common/url_constants.h"
 #include "chromium/content/public/browser/navigation_entry.h"
-#include "components/datasource/vivaldi_data_source_api.h"
-#include "components/password_manager/content/browser/content_password_manager_driver.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/password_manager/content/browser/content_password_manager_driver.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/search_engines/template_url.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -104,56 +103,13 @@ const GURL& GetDocumentURL(const content::ContextMenuParams& params) {
   return params.frame_url.is_empty() ? params.page_url : params.frame_url;
 }
 
-void SetLocalImageAsBackground(content::BrowserContext* browser_context,
-                               const GURL& src_url) {
-  // PathExists() triggers IO restriction.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-
-  // Strip any url encoding.
-  std::string filename = net::UnescapeURLComponent(
-      src_url.GetContent(),
-      net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
-          net::UnescapeRule::REPLACE_PLUS_WITH_SPACE |
-          net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
-#if defined(OS_POSIX)
-  base::FilePath path(filename);
-#elif defined(OS_WIN)
-  base::FilePath path(base::UTF8ToWide(filename));
-#endif
-  if (!base::PathExists(path)) {
-    if (filename[0] == '/') {
-      // It might be in a format /D:/somefile.png so strip the first
-      // slash.
-      filename = filename.substr(1, std::string::npos);
-#if defined(OS_POSIX)
-      path = base::FilePath(filename);
-#elif defined(OS_WIN)
-      path = base::FilePath(base::UTF8ToWide(filename));
-#endif
-    }
-  }
-  // Call UpdateMapping. In paralell we will inform JS to switch to use the
-  // custom background. In the very unlikely case when the former will access
-  // the custom image preference before we set its URL in the UpdateMapping
-  // callback the user may briefly see the older background.
-  //
-  // If we will need to ensure that useLocalImageAsBackground will always be
-  // called after UpdateMapping calls our callback, we will need a weak pointer
-  // for WebContents, which is messy until https://crbug.com/952390 is
-  // resolved.
-  VivaldiDataSourcesAPI::UpdateMapping(
-      browser_context, 0,
-      VivaldiDataSourcesAPI::kThemeBackgroundUserImage_Index, std::move(path),
-      base::DoNothing());
-}
-
 WindowOpenDisposition GetNewTabDispostion(content::WebContents* web_contents) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   bool open_in_background =
       profile->GetPrefs()->GetBoolean(vivaldiprefs::kTabsOpenNewInBackground);
-  return open_in_background ? WindowOpenDisposition::NEW_BACKGROUND_TAB :
-      WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  return open_in_background ? WindowOpenDisposition::NEW_BACKGROUND_TAB
+                            : WindowOpenDisposition::NEW_FOREGROUND_TAB;
 }
 
 // Same as RenderViewContextMenu::IsOpenLinkOTREnabled() except for no
@@ -169,15 +125,15 @@ bool CanOpenInPrivateWindow(content::BrowserContext* browser_context,
   IncognitoModePrefs::Availability incognito_avail =
       IncognitoModePrefs::GetAvailability(
           user_prefs::UserPrefs::Get(browser_context));
-  return incognito_avail != IncognitoModePrefs::DISABLED;
+  return incognito_avail != IncognitoModePrefs::Availability::kDisabled;
 }
 
 }  // namespace
 
 namespace vivaldi {
 
-VivaldiRenderViewContextMenu*
-    VivaldiRenderViewContextMenu::active_controller_ = nullptr;
+VivaldiRenderViewContextMenu* VivaldiRenderViewContextMenu::active_controller_ =
+    nullptr;
 int VivaldiRenderViewContextMenu::active_id_counter_ = 0;
 
 // static
@@ -186,13 +142,14 @@ VivaldiRenderViewContextMenu* VivaldiRenderViewContextMenu::Create(
     const content::ContextMenuParams& params,
     gfx::NativeView parent_view) {
   return new VivaldiRenderViewContextMenu(render_frame_host, params,
-      parent_view);
+                                          parent_view);
 }
 
 // static
 VivaldiRenderViewContextMenu* VivaldiRenderViewContextMenu::GetActive(int id) {
-  return active_controller_ && active_controller_->id_ == id ?
-    active_controller_ : nullptr;
+  return active_controller_ && active_controller_->id_ == id
+             ? active_controller_
+             : nullptr;
 }
 
 // static
@@ -236,11 +193,11 @@ bool VivaldiRenderViewContextMenu::Supports(
 VivaldiRenderViewContextMenu::VivaldiRenderViewContextMenu(
     content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params,
-    gfx::NativeView parent_view):
-  RenderViewContextMenu(render_frame_host, params),
-  id_(active_id_counter_++),
-  parent_view_(parent_view),
-  embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
+    gfx::NativeView parent_view)
+    : RenderViewContextMenu(render_frame_host, params),
+      id_(active_id_counter_++),
+      parent_view_(parent_view),
+      embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
   active_controller_ = this;
 }
 
@@ -267,8 +224,8 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   Browser* browser = FindBrowserWithWebContents(embedder_web_contents_);
   if (!browser) {
     // This happens when we request a menu from the UI document (edit fields).
-    VivaldiBrowserWindow* window = FindWindowForEmbedderWebContents(
-        embedder_web_contents_);
+    VivaldiBrowserWindow* window =
+        FindWindowForEmbedderWebContents(embedder_web_contents_);
     if (!window) {
       return;
     }
@@ -276,20 +233,22 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   }
 
   extensions::WebViewGuest* web_view_guest =
-    extensions::WebViewGuest::FromWebContents(embedder_web_contents_);
+      extensions::WebViewGuest::FromWebContents(embedder_web_contents_);
   std::unique_ptr<ContextMenuContentType> content_type =
       ContextMenuContentTypeFactory::Create(embedder_web_contents_, params_);
 
-  bool is_vivaldi_origin = params_.page_url.GetOrigin() ==
-      GURL(::vivaldi::kVivaldiAppURLDomain);
+  bool is_vivaldi_origin =
+      params_.page_url.GetOrigin() == GURL(::vivaldi::kVivaldiAppURLDomain);
   bool is_chrome_extension = params_.page_url.SchemeIs("chrome-extension");
 
   extensions::vivaldi::context_menu::DocumentParams request;
   request.linkurl = params_.link_url.spec();
   request.linktitle = base::UTF16ToUTF8(params_.link_text);
-  request.pageurl = is_chrome_extension ?
-    (is_vivaldi_origin ? "" : embedder_web_contents_->GetVisibleURL(). spec()) :
-    params_.page_url.spec();
+  request.pageurl =
+      is_chrome_extension
+          ? (is_vivaldi_origin ? ""
+                               : embedder_web_contents_->GetVisibleURL().spec())
+          : params_.page_url.spec();
   request.pagetitle = base::UTF16ToUTF8(source_web_contents_->GetTitle());
   request.srcurl = params_.src_url.spec();
   request.selection = base::UTF16ToUTF8(params_.selection_text);
@@ -316,32 +275,35 @@ void VivaldiRenderViewContextMenu::InitMenu() {
 
   request.keywordurl = params_.vivaldi_keyword_url.spec(),
   request.isdevtools =
-    params_.page_url.SchemeIs(content::kChromeDevToolsScheme);
-  request.iseditable = content_type->SupportsGroup(
-      ContextMenuContentType::ITEM_GROUP_EDITABLE);
+      params_.page_url.SchemeIs(content::kChromeDevToolsScheme);
+  request.iseditable =
+      content_type->SupportsGroup(ContextMenuContentType::ITEM_GROUP_EDITABLE);
   request.isimage = content_type->SupportsGroup(
-      ContextMenuContentType::ITEM_GROUP_MEDIA_IMAGE); // params.has_image_contents;
-  request.isframe = content_type->SupportsGroup(
-      ContextMenuContentType::ITEM_GROUP_FRAME);
+      ContextMenuContentType::
+          ITEM_GROUP_MEDIA_IMAGE);  // params.has_image_contents;
+  request.isframe =
+      content_type->SupportsGroup(ContextMenuContentType::ITEM_GROUP_FRAME);
   request.ismailcontent = web_view_guest && web_view_guest->IsVivaldiMail();
   request.iswebpanel = web_view_guest && web_view_guest->IsVivaldiWebPanel();
   request.ismailto = params_.link_url.SchemeIs(url::kMailToScheme);
-  request.support.copy = content_type->SupportsGroup(
-      ContextMenuContentType::ITEM_GROUP_COPY);
+  request.support.copy =
+      content_type->SupportsGroup(ContextMenuContentType::ITEM_GROUP_COPY);
   request.support.extensions =
-    content_type->SupportsGroup(
-        ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION) ||
-    content_type->SupportsGroup(
-        ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
+      content_type->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION) ||
+      content_type->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
   request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
       browser->tab_strip_model()->GetActiveWebContents());
   request.support.sendlinktodevices =
-    send_tab_to_self::ShouldOfferFeatureForLink(
-        browser->tab_strip_model()->GetActiveWebContents(), params_.link_url);
+      send_tab_to_self::ShouldOfferFeatureForLink(
+          browser->tab_strip_model()->GetActiveWebContents(), params_.link_url);
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
-  request.support.emoji = DoesInputFieldTypeSupportEmoji(
-      params_.input_field_type) && ui::IsEmojiPanelSupported();
-  request.support.editoptions = params_.misspelled_word.empty() &&
+  request.support.emoji =
+      DoesInputFieldTypeSupportEmoji(params_.input_field_type) &&
+      ui::IsEmojiPanelSupported();
+  request.support.editoptions =
+      params_.misspelled_word.empty() &&
       !content_type->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN);
   request.support.audio = content_type->SupportsGroup(
@@ -349,12 +311,13 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   request.support.video = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_VIDEO);
   request.support.pictureinpicture =
-    base::FeatureList::IsEnabled(media::kPictureInPicture);
+      base::FeatureList::IsEnabled(media::kPictureInPicture);
   request.support.plugin = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN);
   request.support.canvas = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_CANVAS);
-  request.support.paste = request.iseditable &&
+  request.support.paste =
+      request.iseditable &&
       (params_.edit_flags & blink::ContextMenuDataEditFlags::kCanPaste);
   if (request.iseditable) {
     if (is_vivaldi_origin) {
@@ -368,29 +331,28 @@ void VivaldiRenderViewContextMenu::InitMenu() {
     } else {
       request.textfield = context_menu::TEXTFIELD_TYPE_DOCUMENT;
       request.support.password = content_type->SupportsGroup(
-        ContextMenuContentType::ITEM_GROUP_PASSWORD);
+          ContextMenuContentType::ITEM_GROUP_PASSWORD);
       if (request.support.password) {
         password_manager::ContentPasswordManagerDriver* driver =
-          password_manager::ContentPasswordManagerDriver::GetForRenderFrameHost(
-              GetRenderFrameHost());
+            password_manager::ContentPasswordManagerDriver::
+                GetForRenderFrameHost(GetRenderFrameHost());
         request.support.passwordgeneration =
-          password_manager_util::ManualPasswordGenerationEnabled(driver);
+            password_manager_util::ManualPasswordGenerationEnabled(driver);
         request.support.passwordshowall =
-          password_manager_util::ShowAllSavedPasswordsContextMenuEnabled(driver);
+            password_manager_util::ShowAllSavedPasswordsContextMenuEnabled(
+                driver);
       }
     }
   }
 
-  extensions::ContextMenuAPI::RequestMenu(GetBrowserContext(),
-                                          browser->session_id().id(),
-                                          id_,
-                                          request);
+  extensions::ContextMenuAPI::RequestMenu(
+      GetBrowserContext(), browser->session_id().id(), id_, request);
 }
 
-void VivaldiRenderViewContextMenu::Show() {
-}
+void VivaldiRenderViewContextMenu::Show() {}
 
-void VivaldiRenderViewContextMenu::AddMenuModelToMap(int command_id,
+void VivaldiRenderViewContextMenu::AddMenuModelToMap(
+    int command_id,
     ui::SimpleMenuModel* menu_model) {
   menu_model_map_[command_id] = menu_model;
 }
@@ -443,7 +405,7 @@ void VivaldiRenderViewContextMenu::AddSeparator() {
 
 void VivaldiRenderViewContextMenu::AddSubMenu(int command_id,
                                               const std::u16string& label,
-                                        ui::MenuModel* model) {
+                                              ui::MenuModel* model) {
   if (populating_menu_model_) {
     AddMenuModelToMap(command_id, populating_menu_model_);
     populating_menu_model_->AddSubMenu(command_id, label, model);
@@ -459,11 +421,11 @@ void VivaldiRenderViewContextMenu::AddSubMenuWithStringIdAndIcon(
     const ui::ImageModel& icon) {
   if (populating_menu_model_) {
     AddMenuModelToMap(command_id, populating_menu_model_);
-    populating_menu_model_->AddSubMenuWithStringIdAndIcon(command_id,
-        message_id, model, icon);
+    populating_menu_model_->AddSubMenuWithStringIdAndIcon(
+        command_id, message_id, model, icon);
   } else {
     RenderViewContextMenu::AddSubMenuWithStringIdAndIcon(command_id, message_id,
-        model, icon);
+                                                         model, icon);
   }
 }
 
@@ -489,7 +451,7 @@ void VivaldiRenderViewContextMenu::UpdateMenuItem(int command_id,
 }
 
 void VivaldiRenderViewContextMenu::UpdateMenuIcon(int command_id,
-                                            const ui::ImageModel& icon) {
+                                                  const ui::ImageModel& icon) {
   ui::SimpleMenuModel* menu_model = GetMappedMenuModel(command_id);
   if (menu_model) {
     int index = menu_model->GetIndexOfCommandId(command_id);
@@ -520,8 +482,8 @@ void VivaldiRenderViewContextMenu::RemoveMenuItem(int command_id) {
 
 void VivaldiRenderViewContextMenu::AddSpellCheckServiceItem(bool is_checked) {
   if (populating_menu_model_) {
-    RenderViewContextMenu::AddSpellCheckServiceItem(
-        populating_menu_model_, is_checked);
+    RenderViewContextMenu::AddSpellCheckServiceItem(populating_menu_model_,
+                                                    is_checked);
   } else {
     RenderViewContextMenu::AddSpellCheckServiceItem(is_checked);
   }
@@ -531,7 +493,6 @@ void VivaldiRenderViewContextMenu::AddAccessibilityLabelsServiceItem(
     bool is_checked) {
   RenderViewContextMenu::AddAccessibilityLabelsServiceItem(is_checked);
 }
-
 
 void VivaldiRenderViewContextMenu::SetCommandId(int command_id, int api_id) {
   command_id_map_[command_id] = api_id;
@@ -566,10 +527,11 @@ bool VivaldiRenderViewContextMenu::IsCommandIdChecked(int command_id) const {
         return true;
       }
       if (extensions_controller_ &&
-        extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)
-        && extensions_controller_->get_extension_items()->IsCommandIdChecked(
-            command_id)) {
-          return true;
+          extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(
+              command_id) &&
+          extensions_controller_->get_extension_items()->IsCommandIdChecked(
+              command_id)) {
+        return true;
       }
       return false;
   }
@@ -580,7 +542,7 @@ bool VivaldiRenderViewContextMenu::IsCommandIdVisible(int command_id) const {
   if (extensions_controller_ &&
       extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)) {
     return extensions_controller_->get_extension_items()->IsCommandIdVisible(
-      command_id);
+        command_id);
   }
   return true;
 }
@@ -590,13 +552,13 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
   bool enabled;
   if (image_profile_controller_ &&
       image_profile_controller_->IsCommandIdEnabled(command_id, params_,
-          &enabled)) {
+                                                    &enabled)) {
     return enabled;
   }
   if (extensions_controller_ &&
       extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)) {
     return extensions_controller_->get_extension_items()->IsCommandIdEnabled(
-      command_id);
+        command_id);
   }
 #if defined(OS_MAC)
   if (speech_controller_ &&
@@ -614,29 +576,33 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
       // behaviour and/or where we need to test for extra states.
       case IDC_VIV_OPEN_IMAGE_NEW_WINDOW: {
         bool isGuest = Profile::FromBrowserContext(
-            embedder_web_contents_->GetBrowserContext())->IsGuestSession();
+                           embedder_web_contents_->GetBrowserContext())
+                           ->IsGuestSession();
         bool isPrivate =
             embedder_web_contents_->GetBrowserContext()->IsOffTheRecord();
         return params_.media_type ==
-           blink::mojom::ContextMenuDataMediaType::kImage &&
-           (isGuest || (!isGuest && !isPrivate));
+                   blink::mojom::ContextMenuDataMediaType::kImage &&
+               (isGuest || (!isGuest && !isPrivate));
       }
       // For these two we prefer to modify the behaviour wrt chrome. That is,
       // open in private window is enabled in a private window and open in new
       // window is disabled. Chrome does it the other way around.
       case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW: {
         bool isGuest = Profile::FromBrowserContext(
-            embedder_web_contents_->GetBrowserContext())->IsGuestSession();
+                           embedder_web_contents_->GetBrowserContext())
+                           ->IsGuestSession();
         bool isPrivate =
             embedder_web_contents_->GetBrowserContext()->IsOffTheRecord();
-        return isPrivate && !isGuest ? false :
-          RenderViewContextMenu::IsCommandIdEnabled(command_id);
+        return isPrivate && !isGuest
+                   ? false
+                   : RenderViewContextMenu::IsCommandIdEnabled(command_id);
       }
       case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
-        return embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
-          CanOpenInPrivateWindow(embedder_web_contents_->GetBrowserContext(),
-                                 params_.link_url) :
-          RenderViewContextMenu::IsCommandIdEnabled(command_id);
+        return embedder_web_contents_->GetBrowserContext()->IsOffTheRecord()
+                   ? CanOpenInPrivateWindow(
+                         embedder_web_contents_->GetBrowserContext(),
+                         params_.link_url)
+                   : RenderViewContextMenu::IsCommandIdEnabled(command_id);
       // Other static commands that are vivaldi specific and/or where we need to
       // test for extra states.
       case IDC_VIV_OPEN_LINK_CURRENT_TAB:
@@ -650,7 +616,7 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
       case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
       case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
         return params_.media_type ==
-            blink::mojom::ContextMenuDataMediaType::kImage;
+               blink::mojom::ContextMenuDataMediaType::kImage;
       case IDC_RELOAD: {
         extensions::WebViewGuest* guest_view =
             extensions::WebViewGuest::FromWebContents(source_web_contents_);
@@ -660,7 +626,6 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
           return RenderViewContextMenu::IsCommandIdEnabled(command_id);
         }
       }
-      break;
       case IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE:
         return !params_.vivaldi_keyword_url.is_empty();
       case IDC_VIV_COPY_TO_NOTE:
@@ -689,8 +654,8 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
         return RenderViewContextMenu::IsCommandIdEnabled(command_id);
     }
   } else {
-    return model_delegate_ ? model_delegate_->IsCommandIdEnabled(command_id) :
-        false;
+    return model_delegate_ ? model_delegate_->IsCommandIdEnabled(command_id)
+                           : false;
   }
 }
 
@@ -759,22 +724,22 @@ void VivaldiRenderViewContextMenu::MenuClosed(ui::SimpleMenuModel* source) {
 }
 
 VivaldiRenderViewContextMenu::ActionChain
-    VivaldiRenderViewContextMenu::HandleCommand(int command_id,
-                                                int event_flags) {
+VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
   // Test controllers first.
   if (extensions_controller_ &&
       extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)) {
     content::RenderFrameHost* render_frame_host = GetRenderFrameHost();
     if (render_frame_host) {
-      extensions_controller_->get_extension_items()->ExecuteCommand(command_id,
-          source_web_contents_, render_frame_host, params_);
+      extensions_controller_->get_extension_items()->ExecuteCommand(
+          command_id, source_web_contents_, render_frame_host, params_);
     }
     return ActionChain::kStop;
   } else if (link_profile_controller_ &&
-      link_profile_controller_->HandleCommand(command_id, event_flags)) {
+             link_profile_controller_->HandleCommand(command_id, event_flags)) {
     return ActionChain::kStop;
   } else if (image_profile_controller_ &&
-             image_profile_controller_->HandleCommand(command_id, event_flags)) {
+             image_profile_controller_->HandleCommand(command_id,
+                                                      event_flags)) {
     return ActionChain::kStop;
   } else if (sendtopage_controller_ &&
              sendtopage_controller_->HandleCommand(command_id, event_flags)) {
@@ -799,45 +764,40 @@ VivaldiRenderViewContextMenu::ActionChain
       break;
     case IDC_VIV_OPEN_LINK_BACKGROUND_TAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
-        WindowOpenDisposition::NEW_BACKGROUND_TAB,
-        ui::PAGE_TRANSITION_LINK, "", true);
+                              WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_LINK_CURRENT_TAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
-        WindowOpenDisposition::CURRENT_TAB,
-        ui::PAGE_TRANSITION_LINK, "", true);
+                              WindowOpenDisposition::CURRENT_TAB,
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_CURRENT_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
-        WindowOpenDisposition::CURRENT_TAB,
-        ui::PAGE_TRANSITION_LINK,"", true);
+                              WindowOpenDisposition::CURRENT_TAB,
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
-        GetNewTabDispostion(GetWebContents()),
-        ui::PAGE_TRANSITION_LINK,"", true);
+                              GetNewTabDispostion(GetWebContents()),
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
-        WindowOpenDisposition::NEW_BACKGROUND_TAB,
-        ui::PAGE_TRANSITION_LINK,"", true);
+                              WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
-        WindowOpenDisposition::NEW_WINDOW,
-        ui::PAGE_TRANSITION_LINK,"", true);
+                              WindowOpenDisposition::NEW_WINDOW,
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
-        WindowOpenDisposition::OFF_THE_RECORD,
-        ui::PAGE_TRANSITION_LINK,"", true);
+                              WindowOpenDisposition::OFF_THE_RECORD,
+                              ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_USE_IMAGE_AS_BACKGROUND:
-      // Special handling. For a local file we set up a resource and inform JS
-      // to use it.
-      if (params_.src_url.SchemeIs(url::kFileScheme)) {
-        SetLocalImageAsBackground(GetBrowserContext(), params_.src_url);
-      }
       return ActionChain::kContinue;
     case IDC_RELOAD: {
       // Test for web panel and handle that case here if so.
@@ -891,7 +851,7 @@ VivaldiRenderViewContextMenu::ActionChain
 #if defined(OS_MAC)
     case IDC_CONTENT_CONTEXT_LOOK_UP: {
       content::RenderWidgetHostView* view =
-        GetRenderViewHost()->GetWidget()->GetView();
+          GetRenderViewHost()->GetWidget()->GetView();
       if (view) {
         view->ShowDefinitionForSelection();
       }
@@ -906,10 +866,12 @@ VivaldiRenderViewContextMenu::ActionChain
 }
 
 void VivaldiRenderViewContextMenu::AddNotesController(
-    ui::SimpleMenuModel* menu_model, int id, bool is_folder) {
+    ui::SimpleMenuModel* menu_model,
+    int id,
+    bool is_folder) {
   if (!note_submenu_observer_) {
-    note_submenu_observer_.reset(new NotesSubMenuObserver(this,
-                                                          toolkit_delegate_));
+    note_submenu_observer_.reset(
+        new NotesSubMenuObserver(this, toolkit_delegate_));
   }
 
   note_submenu_observer_->SetRootModel(menu_model, id, is_folder);
@@ -918,7 +880,7 @@ void VivaldiRenderViewContextMenu::AddNotesController(
 }
 
 void VivaldiRenderViewContextMenu::SetToolkitDelegate(
-      RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate) {
+    RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate) {
   toolkit_delegate_ = toolkit_delegate;
 }
 
@@ -960,36 +922,35 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
   }
 }
 
-void VivaldiRenderViewContextMenu::PopulateContainer(const Container& container,
-    int id, ui::SimpleMenuModel* menu_model) {
+void VivaldiRenderViewContextMenu::PopulateContainer(
+    const Container& container,
+    int id,
+    ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
   switch (container.content) {
     case context_menu::CONTAINER_CONTENT_LINKINPROFILE:
-      link_profile_controller_.reset(new ProfileMenuController(this,
-                                                               GetProfile(),
-                                                               false));
+      link_profile_controller_.reset(
+          new ProfileMenuController(this, GetProfile(), false));
       link_profile_controller_->Populate(base::UTF8ToUTF16(container.name),
-                                         menu_model,
-                                         this);
+                                         menu_model, this);
       break;
     case context_menu::CONTAINER_CONTENT_IMAGEINPROFILE:
-      image_profile_controller_.reset(new ProfileMenuController(this,
-                                                                GetProfile(),
-                                                                true));
+      image_profile_controller_.reset(
+          new ProfileMenuController(this, GetProfile(), true));
       image_profile_controller_->Populate(base::UTF8ToUTF16(container.name),
-                                          menu_model,
-                                          this);
+                                          menu_model, this);
       break;
     case context_menu::CONTAINER_CONTENT_LINKINPWA:
       pwa_link_controller_ = std::make_unique<PWALinkMenuController>(
           PWALinkMenuController(this, GetProfile()));
-      pwa_link_controller_->Populate(GetBrowser(),
-                                     base::UTF8ToUTF16(container.name),
-                                     menu_model);
+      pwa_link_controller_->Populate(
+          GetBrowser(), base::UTF8ToUTF16(container.name), menu_model);
       break;
     case context_menu::CONTAINER_CONTENT_NOTES:
-      AddNotesController(menu_model, id, container.mode ==
-          extensions::vivaldi::context_menu::CONTAINER_MODE_FOLDER);
+      AddNotesController(
+          menu_model, id,
+          container.mode ==
+              extensions::vivaldi::context_menu::CONTAINER_MODE_FOLDER);
       break;
     case context_menu::CONTAINER_CONTENT_EXTENSIONS: {
       std::u16string text = PrintableSelectionText();
@@ -1001,23 +962,19 @@ void VivaldiRenderViewContextMenu::PopulateContainer(const Container& container,
       break;
     }
     case context_menu::CONTAINER_CONTENT_SENDPAGETODEVICES:
-      sendtopage_controller_.reset(new DeviceMenuController(this,
-          DeviceMenuController::kPage));
+      sendtopage_controller_.reset(
+          new DeviceMenuController(this, DeviceMenuController::kPage));
       if (GetBrowser()) {
-        sendtopage_controller_->Populate(GetBrowser(),
-                                         base::UTF8ToUTF16(container.name),
-                                         menu_model,
-                                         this);
+        sendtopage_controller_->Populate(
+            GetBrowser(), base::UTF8ToUTF16(container.name), menu_model, this);
       }
       break;
     case context_menu::CONTAINER_CONTENT_SENDLINKTODEVICES:
-      sendtolink_controller_.reset(new DeviceMenuController(this,
-          DeviceMenuController::kLink));
+      sendtolink_controller_.reset(
+          new DeviceMenuController(this, DeviceMenuController::kLink));
       if (GetBrowser()) {
-        sendtolink_controller_->Populate(GetBrowser(),
-                                         base::UTF8ToUTF16(container.name),
-                                         menu_model,
-                                         this);
+        sendtolink_controller_->Populate(
+            GetBrowser(), base::UTF8ToUTF16(container.name), menu_model, this);
       }
       break;
     case context_menu::CONTAINER_CONTENT_SPEECH:
@@ -1043,66 +1000,68 @@ void VivaldiRenderViewContextMenu::PopulateContainer(const Container& container,
 }
 
 int VivaldiRenderViewContextMenu::GetStaticIdForAction(std::string command) {
-  static const std::map<std::string, int> map {
-    {"DOCUMENT_BACK", IDC_BACK},
-    {"DOCUMENT_FORWARD", IDC_FORWARD},
-    {"DOCUMENT_RELOAD", IDC_RELOAD},
-    {"DOCUMENT_SAVE", IDC_SAVE_PAGE},
-    {"DOCUMENT_PRINT", IDC_PRINT},
-    {"DOCUMENT_CAST", IDC_ROUTE_MEDIA},
-    {"DOCUMENT_VIEW_SOURCE", IDC_VIEW_SOURCE},
-    {"DOCUMENT_VIEW_FRAME_SOURCE", IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE},
-    {"DOCUMENT_RELOAD_FRAME", IDC_CONTENT_CONTEXT_RELOADFRAME},
-    {"DOCUMENT_INSPECT", IDC_CONTENT_CONTEXT_INSPECTELEMENT},
-    {"DOCUMENT_OPEN_IN_NEW_TAB", IDC_CONTENT_CONTEXT_OPENLINKNEWTAB},
-    {"DOCUMENT_OPEN_IN_NEW_BACKGROUND_TAB", IDC_VIV_OPEN_LINK_BACKGROUND_TAB},
-    {"DOCUMENT_OPEN_IN_TAB", IDC_VIV_OPEN_LINK_CURRENT_TAB},
-    {"DOCUMENT_OPEN_IN_NEW_WINDOW", IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW},
-    {"DOCUMENT_OPEN_IN_PRIVATE_WINDOW",
-      IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD},
-    {"DOCUMENT_COPY_LINK_ADDRESS", IDC_CONTENT_CONTEXT_COPYLINKLOCATION},
-    {"DOCUMENT_SAVE_LINK", IDC_CONTENT_CONTEXT_SAVELINKAS},
-    {"DOCUMENT_COPY", IDC_CONTENT_CONTEXT_COPY},
-    {"DOCUMENT_PRINT", IDC_PRINT},
-    {"DOCUMENT_OPEN_IMAGE_IN_NEW_TAB", IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB},
-    {"DOCUMENT_OPEN_IMAGE_IN_NEW_BACKGROUND_TAB",
-      IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB},
-    {"DOCUMENT_OPEN_IMAGE_IN_TAB", IDC_VIV_OPEN_IMAGE_CURRENT_TAB},
-    {"DOCUMENT_OPEN_IMAGE_IN_NEW_WINDOW", IDC_VIV_OPEN_IMAGE_NEW_WINDOW},
-    {"DOCUMENT_OPEN_IMAGE_IN_PRIVATE_WINDOW",
-      IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW},
-    {"DOCUMENT_SAVE_IMAGE", IDC_CONTENT_CONTEXT_SAVEIMAGEAS},
-    {"DOCUMENT_COPY_IMAGE", IDC_CONTENT_CONTEXT_COPYIMAGE},
-    {"DOCUMENT_COPY_IMAGE_ADDRESS", IDC_CONTENT_CONTEXT_COPYIMAGELOCATION},
-    {"DOCUMENT_USE_IMAGE_AS_STARTPAGE_BACKGROUND",
-      IDC_VIV_USE_IMAGE_AS_BACKGROUND},
-    {"DOCUMENT_RELOAD_IMAGE", IDC_VIV_RELOAD_IMAGE},
-    {"DOCUMENT_SEARCH_FOR IMAGE", IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE},
-    {"DOCUMENT_ADD_AS_SEARCH_ENGINE", IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE},
-    {"DOCUMENT_UNDO", IDC_CONTENT_CONTEXT_UNDO},
-    {"DOCUMENT_REDO", IDC_CONTENT_CONTEXT_REDO},
-    {"DOCUMENT_CUT", IDC_CONTENT_CONTEXT_CUT},
-    {"DOCUMENT_COPY", IDC_CONTENT_CONTEXT_COPY},
-    {"DOCUMENT_PASTE", IDC_CONTENT_CONTEXT_PASTE},
-    {"DOCUMENT_PASTE_AS_PLAIN_TEXT", IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE},
-    {"DOCUMENT_SELECT_ALL", IDC_CONTENT_CONTEXT_SELECTALL},
-    {"DOCUMENT_QR_CODE", IDC_CONTENT_CONTEXT_GENERATE_QR_CODE},
-    {"DOCUMENT_COPY_LINK_TEXT", IDC_CONTENT_CONTEXT_COPYLINKTEXT},
-    {"DOCUMENT_EMOJI", IDC_CONTENT_CONTEXT_EMOJI},
-    {"DOCUMENT_LANGUAGE_SETTINGS", IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS},
-    {"DOCUMENT_DIRECTION_DEFAULT", IDC_WRITING_DIRECTION_DEFAULT},
-    {"DOCUMENT_DIRECTION_LTR", IDC_WRITING_DIRECTION_LTR},
-    {"DOCUMENT_DIRECTION_RTL", IDC_WRITING_DIRECTION_RTL},
-    {"DOCUMENT_LOOP", IDC_CONTENT_CONTEXT_LOOP},
-    {"DOCUMENT_SHOW_CONTROLS", IDC_CONTENT_CONTEXT_CONTROLS},
-    {"DOCUMENT_OPEN_AV_NEW_TAB", IDC_CONTENT_CONTEXT_OPENAVNEWTAB},
-    {"DOCUMENT_SAVE_AV", IDC_CONTENT_CONTEXT_SAVEAVAS},
-    {"DOCUMENT_COPY_AV_ADDRESS", IDC_CONTENT_CONTEXT_COPYAVLOCATION},
-    {"DOCUMENT_PICTURE_IN_PICTURE", IDC_CONTENT_CONTEXT_PICTUREINPICTURE},
-    {"DOCUMENT_ROTATE_CLOCKWISE", IDC_CONTENT_CONTEXT_ROTATECW},
-    {"DOCUMENT_ROTATE_COUNTERCLOCKWISE", IDC_CONTENT_CONTEXT_ROTATECCW},
-    {"DOCUMENT_LOOK_UP", IDC_CONTENT_CONTEXT_LOOK_UP},
-    {"DOCUMENT_SUGGEST_PASSWORD", IDC_CONTENT_CONTEXT_GENERATEPASSWORD},
+  static const std::map<std::string, int> map{
+      {"DOCUMENT_BACK", IDC_BACK},
+      {"DOCUMENT_FORWARD", IDC_FORWARD},
+      {"DOCUMENT_RELOAD", IDC_RELOAD},
+      {"DOCUMENT_SAVE", IDC_SAVE_PAGE},
+      {"DOCUMENT_PRINT", IDC_PRINT},
+      {"DOCUMENT_CAST", IDC_ROUTE_MEDIA},
+      {"DOCUMENT_VIEW_SOURCE", IDC_VIEW_SOURCE},
+      {"DOCUMENT_VIEW_FRAME_SOURCE", IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE},
+      {"DOCUMENT_RELOAD_FRAME", IDC_CONTENT_CONTEXT_RELOADFRAME},
+      {"DOCUMENT_INSPECT", IDC_CONTENT_CONTEXT_INSPECTELEMENT},
+      {"DOCUMENT_OPEN_IN_NEW_TAB", IDC_CONTENT_CONTEXT_OPENLINKNEWTAB},
+      {"DOCUMENT_OPEN_IN_NEW_BACKGROUND_TAB", IDC_VIV_OPEN_LINK_BACKGROUND_TAB},
+      {"DOCUMENT_OPEN_IN_TAB", IDC_VIV_OPEN_LINK_CURRENT_TAB},
+      {"DOCUMENT_OPEN_IN_NEW_WINDOW", IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW},
+      {"DOCUMENT_OPEN_IN_PRIVATE_WINDOW",
+       IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD},
+      {"DOCUMENT_COPY_LINK_ADDRESS", IDC_CONTENT_CONTEXT_COPYLINKLOCATION},
+      {"DOCUMENT_SAVE_LINK", IDC_CONTENT_CONTEXT_SAVELINKAS},
+      {"DOCUMENT_COPY", IDC_CONTENT_CONTEXT_COPY},
+      {"DOCUMENT_PRINT", IDC_PRINT},
+      {"DOCUMENT_OPEN_IMAGE_IN_NEW_TAB", IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB},
+      {"DOCUMENT_OPEN_IMAGE_IN_NEW_BACKGROUND_TAB",
+       IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB},
+      {"DOCUMENT_OPEN_IMAGE_IN_TAB", IDC_VIV_OPEN_IMAGE_CURRENT_TAB},
+      {"DOCUMENT_OPEN_IMAGE_IN_NEW_WINDOW", IDC_VIV_OPEN_IMAGE_NEW_WINDOW},
+      {"DOCUMENT_OPEN_IMAGE_IN_PRIVATE_WINDOW",
+       IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW},
+      {"DOCUMENT_SAVE_IMAGE", IDC_CONTENT_CONTEXT_SAVEIMAGEAS},
+      {"DOCUMENT_COPY_IMAGE", IDC_CONTENT_CONTEXT_COPYIMAGE},
+      {"DOCUMENT_COPY_IMAGE_ADDRESS", IDC_CONTENT_CONTEXT_COPYIMAGELOCATION},
+      {"DOCUMENT_USE_IMAGE_AS_STARTPAGE_BACKGROUND",
+       IDC_VIV_USE_IMAGE_AS_BACKGROUND},
+      {"DOCUMENT_RELOAD_IMAGE", IDC_VIV_RELOAD_IMAGE},
+      {"DOCUMENT_SEARCH_FOR IMAGE", IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE},
+      {"DOCUMENT_ADD_AS_SEARCH_ENGINE",
+       IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE},
+      {"DOCUMENT_UNDO", IDC_CONTENT_CONTEXT_UNDO},
+      {"DOCUMENT_REDO", IDC_CONTENT_CONTEXT_REDO},
+      {"DOCUMENT_CUT", IDC_CONTENT_CONTEXT_CUT},
+      {"DOCUMENT_COPY", IDC_CONTENT_CONTEXT_COPY},
+      {"DOCUMENT_PASTE", IDC_CONTENT_CONTEXT_PASTE},
+      {"DOCUMENT_PASTE_AS_PLAIN_TEXT",
+       IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE},
+      {"DOCUMENT_SELECT_ALL", IDC_CONTENT_CONTEXT_SELECTALL},
+      {"DOCUMENT_QR_CODE", IDC_CONTENT_CONTEXT_GENERATE_QR_CODE},
+      {"DOCUMENT_COPY_LINK_TEXT", IDC_CONTENT_CONTEXT_COPYLINKTEXT},
+      {"DOCUMENT_EMOJI", IDC_CONTENT_CONTEXT_EMOJI},
+      {"DOCUMENT_LANGUAGE_SETTINGS", IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS},
+      {"DOCUMENT_DIRECTION_DEFAULT", IDC_WRITING_DIRECTION_DEFAULT},
+      {"DOCUMENT_DIRECTION_LTR", IDC_WRITING_DIRECTION_LTR},
+      {"DOCUMENT_DIRECTION_RTL", IDC_WRITING_DIRECTION_RTL},
+      {"DOCUMENT_LOOP", IDC_CONTENT_CONTEXT_LOOP},
+      {"DOCUMENT_SHOW_CONTROLS", IDC_CONTENT_CONTEXT_CONTROLS},
+      {"DOCUMENT_OPEN_AV_NEW_TAB", IDC_CONTENT_CONTEXT_OPENAVNEWTAB},
+      {"DOCUMENT_SAVE_AV", IDC_CONTENT_CONTEXT_SAVEAVAS},
+      {"DOCUMENT_COPY_AV_ADDRESS", IDC_CONTENT_CONTEXT_COPYAVLOCATION},
+      {"DOCUMENT_PICTURE_IN_PICTURE", IDC_CONTENT_CONTEXT_PICTUREINPICTURE},
+      {"DOCUMENT_ROTATE_CLOCKWISE", IDC_CONTENT_CONTEXT_ROTATECW},
+      {"DOCUMENT_ROTATE_COUNTERCLOCKWISE", IDC_CONTENT_CONTEXT_ROTATECCW},
+      {"DOCUMENT_LOOK_UP", IDC_CONTENT_CONTEXT_LOOK_UP},
+      {"DOCUMENT_SUGGEST_PASSWORD", IDC_CONTENT_CONTEXT_GENERATEPASSWORD},
   };
 
   auto it = map.find(command);

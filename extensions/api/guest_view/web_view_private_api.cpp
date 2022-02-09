@@ -33,7 +33,6 @@
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
 
-#include "components/datasource/vivaldi_data_source_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_frame_observer.h"
@@ -58,7 +57,7 @@ bool VivaldiWebViewWithGuestFunction::PreRunValidation(std::string* error) {
   if (!ExtensionFunction::PreRunValidation(error))
     return false;
 
-  absl::optional<int> instance_id = args_->GetList()[0].GetIfInt();
+  absl::optional<int> instance_id = args()[0].GetIfInt();
   EXTENSION_FUNCTION_PRERUN_VALIDATE(instance_id.has_value());
   guest_ = WebViewGuest::From(render_frame_host()->GetProcess()->GetID(),
                               instance_id.value());
@@ -85,7 +84,7 @@ WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() =
 ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::Run() {
   using vivaldi::web_view_private::GetThumbnail::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   return RunImpl(params->params);
@@ -186,7 +185,7 @@ void WebViewPrivateGetThumbnailFunction::SendResult() {
 ExtensionFunction::ResponseAction WebViewPrivateShowPageInfoFunction::Run() {
   using vivaldi::web_view_private::ShowPageInfo::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   gfx::Point pos(params->position.left, params->position.top);
@@ -197,7 +196,7 @@ ExtensionFunction::ResponseAction WebViewPrivateShowPageInfoFunction::Run() {
 ExtensionFunction::ResponseAction WebViewPrivateSetIsFullscreenFunction::Run() {
   using vivaldi::web_view_private::SetIsFullscreen::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   guest_->SetIsFullscreen(params->is_fullscreen);
@@ -208,7 +207,7 @@ ExtensionFunction::ResponseAction WebViewPrivateGetPageHistoryFunction::Run() {
   using vivaldi::web_view_private::GetPageHistory::Params;
   namespace Results = vivaldi::web_view_private::GetPageHistory::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::NavigationController& controller =
@@ -229,64 +228,11 @@ ExtensionFunction::ResponseAction WebViewPrivateGetPageHistoryFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(currentEntryIndex, history)));
 }
 
-WebViewPrivateGetFocusedElementInfoFunction::
-    WebViewPrivateGetFocusedElementInfoFunction() {}
-
-WebViewPrivateGetFocusedElementInfoFunction::
-    ~WebViewPrivateGetFocusedElementInfoFunction() {}
-
-void WebViewPrivateGetFocusedElementInfoFunction::FocusedElementInfoReceived(
-    const std::string& tagname,
-    const std::string& type,
-    bool editable,
-    const std::string& role) {
-  namespace Results = vivaldi::web_view_private::GetFocusedElementInfo::Results;
-
-  return Respond(ArgumentList(Results::Create(tagname, type, editable, role)));
-}
-
-ExtensionFunction::ResponseAction
-WebViewPrivateGetFocusedElementInfoFunction::Run() {
-  using vivaldi::web_view_private::GetFocusedElementInfo::Params;
-  namespace Results = vivaldi::web_view_private::GetFocusedElementInfo::Results;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  // A plugin like the PDF viewer will have its own embedded web contents,
-  // so we need to explicitly get the focused one.
-  WebContents *web_contents = guest_->web_contents();
-  if (web_contents) {
-    content::WebContentsImpl* impl =
-        static_cast<content::WebContentsImpl*>(web_contents);
-    web_contents = impl->GetFocusedWebContents();
-  }
-
-  if (!web_contents) {
-    return RespondNow(ArgumentList(Results::Create("", "", false, "")));
-  }
-
-  content::RenderFrameHost* render_frame_host = web_contents->GetFocusedFrame();
-  if (!render_frame_host) {
-    render_frame_host = web_contents->GetMainFrame();
-  }
-
-  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(render_frame_host);
-  rfhi->GetVivaldiFrameService()->GetFocusedElementInfo(
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&WebViewPrivateGetFocusedElementInfoFunction::
-                             FocusedElementInfoReceived,
-                         this),
-          "", "", false, ""));
-
-  return RespondLater();
-}
-
 ExtensionFunction::ResponseAction
 WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
   using vivaldi::web_view_private::AllowBlockedInsecureContent::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   guest_->AllowRunningInsecureContent();
@@ -296,7 +242,7 @@ WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
 ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
   using vivaldi::web_view_private::SendRequest::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ui::PageTransition transition =

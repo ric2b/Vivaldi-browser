@@ -42,7 +42,7 @@ const char kIdSeparator[] = "_";
 
 namespace syncer {
 
-LoopbackServerEntity::~LoopbackServerEntity() {}
+LoopbackServerEntity::~LoopbackServerEntity() = default;
 
 // static
 std::unique_ptr<LoopbackServerEntity>

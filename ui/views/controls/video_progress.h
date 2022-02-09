@@ -4,8 +4,8 @@
 #define UI_VIEWS_CONTROLS_VIDEO_PROGRESS_H_
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/i18n/time_formatting.h"
+#include "base/macros.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
@@ -18,12 +18,14 @@ class Label;
 namespace vivaldi {
 
 // Progress bar is a control that indicates progress visually.
-class VIEWS_EXPORT VideoProgress: public views::View {
+class VIEWS_EXPORT VideoProgress : public views::View {
  public:
   METADATA_HEADER(VideoProgress);
 
   VideoProgress();
   ~VideoProgress() override;
+  VideoProgress(const VideoProgress&) = delete;
+  VideoProgress& operator=(const VideoProgress&) = delete;
 
   void ToggleVisibility(bool is_visible);
   void SetForegroundColor(SkColor color);
@@ -42,7 +44,7 @@ class VIEWS_EXPORT VideoProgress: public views::View {
 
   bool HandleGestureEvent(ui::GestureEvent* event);
 
-private:
+ private:
   void SetBarProgress(double progress);
   void SetProgressTime(const std::u16string& time);
   void SetDuration(const std::u16string& duration);
@@ -65,10 +67,8 @@ private:
 
   // Timer to continually update the progress.
   base::RepeatingTimer update_progress_timer_;
-
-  DISALLOW_COPY_AND_ASSIGN(VideoProgress);
 };
 
-}  // namespace views
+}  // namespace vivaldi
 
 #endif  // UI_VIEWS_CONTROLS_VIDEO_PROGRESS_H_

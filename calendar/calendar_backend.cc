@@ -63,46 +63,6 @@ void CalendarBackend::NotifyEventCreated(const EventResult& event) {
     delegate_->NotifyEventCreated(event);
 }
 
-void CalendarBackend::NotifyEventModified(const EventResult& event) {
-  if (delegate_)
-    delegate_->NotifyEventModified(event);
-}
-
-void CalendarBackend::NotifyEventDeleted(const EventResult& event) {
-  if (delegate_)
-    delegate_->NotifyEventDeleted(event);
-}
-
-void CalendarBackend::NotifyCalendarCreated(const CalendarRow& row) {
-  if (delegate_)
-    delegate_->NotifyCalendarCreated(row);
-}
-
-void CalendarBackend::NotifyCalendarModified(const CalendarRow& row) {
-  if (delegate_)
-    delegate_->NotifyCalendarModified(row);
-}
-
-void CalendarBackend::NotifyCalendarDeleted(const CalendarRow& row) {
-  if (delegate_)
-    delegate_->NotifyCalendarDeleted(row);
-}
-
-void CalendarBackend::NotifyEventTypeCreated(const EventTypeRow& row) {
-  if (delegate_)
-    delegate_->NotifyEventTypeCreated(row);
-}
-
-void CalendarBackend::NotifyEventTypeModified(const EventTypeRow& row) {
-  if (delegate_)
-    delegate_->NotifyEventTypeModified(row);
-}
-
-void CalendarBackend::NotifyEventTypeDeleted(const EventTypeRow& row) {
-  if (delegate_)
-    delegate_->NotifyEventTypeDeleted(row);
-}
-
 void CalendarBackend::NotifyNotificationChanged(const NotificationRow& row) {
   if (delegate_)
     delegate_->NotifyNotificationChanged(row);
@@ -289,7 +249,7 @@ void CalendarBackend::CreateCalendarEvent(
         row.exception_event_id = exception_event_id;
         row.parent_event_id = id;
         row.exception_day = exception.exception_date;
-        row.cancelled = false;
+        row.cancelled = exception.cancelled;
         db_->CreateRecurrenceException(row);
       }
     }
@@ -318,7 +278,7 @@ void CalendarBackend::CreateCalendarEvent(
     result->success = true;
     EventResult res = FillEvent(id);
     result->event = res;
-    NotifyEventCreated(res);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -359,7 +319,7 @@ void CalendarBackend::CreateRecurrenceException(
     EventRow event_row;
     if (db_->GetRowForEvent(parent_event_id, &event_row)) {
       event_row.recurrence_exceptions = exception_rows;
-      NotifyEventModified(event_row);
+      NotifyCalendarChanged();
     }
     result->success = true;
     result->event = event_row;
@@ -447,7 +407,7 @@ void CalendarBackend::DeleteNotification(
   if (db_->DeleteNotification(notification_id)) {
     result->success = true;
     NotificationRow notification_row;
-    NotifyNotificationChanged(notification_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -461,7 +421,7 @@ void CalendarBackend::CreateInvite(calendar::InviteRow row,
     result->success = true;
     result->inviteRow = row;
     EventRow event_row;
-    NotifyEventModified(event_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -492,7 +452,7 @@ void CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row,
     if (result->success) {
       EventRow changed_row;
       if (db_->GetRowForEvent(invite_row.event_id, &changed_row)) {
-        NotifyEventModified(changed_row);
+        NotifyCalendarChanged();
       }
     }
   } else {
@@ -513,7 +473,7 @@ void CalendarBackend::DeleteInvite(InviteID invite_id,
   if (db_->DeleteInvite(invite_id)) {
     result->success = true;
     EventRow event_row;
-    NotifyEventModified(event_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -672,7 +632,7 @@ void CalendarBackend::UpdateEvent(EventID event_id,
     if (result->success) {
       EventRow changed_row;
       if (db_->GetRowForEvent(event_id, &changed_row)) {
-        NotifyEventModified(changed_row);
+        NotifyCalendarChanged();
       }
     }
   } else {
@@ -721,7 +681,7 @@ void CalendarBackend::UpdateEventType(
     if (result->success) {
       EventTypeRow changed_row;
       if (db_->GetRowForEventType(event_type_id, &changed_row)) {
-        NotifyEventTypeModified(changed_row);
+        NotifyCalendarChanged();
       }
     }
   } else {
@@ -742,7 +702,7 @@ void CalendarBackend::DeleteEventType(
   EventTypeRow event_type_row;
   if (db_->GetRowForEventType(event_type_id, &event_type_row)) {
     result->success = db_->DeleteEventType(event_type_id);
-    NotifyEventTypeDeleted(event_type_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -780,7 +740,7 @@ void CalendarBackend::DeleteEvent(EventID event_id,
     }
 
     result->success = db_->DeleteEvent(event_id);
-    NotifyEventDeleted(event_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -795,7 +755,7 @@ void CalendarBackend::CreateCalendar(
     calendar.set_id(id);
     result->success = true;
     result->createdRow = calendar;
-    NotifyCalendarCreated(calendar);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -862,7 +822,7 @@ void CalendarBackend::UpdateCalendar(
     if (result->success) {
       CalendarRow changed_row;
       if (db_->GetRowForCalendar(calendar_id, &changed_row)) {
-        NotifyCalendarModified(changed_row);
+        NotifyCalendarChanged();
       }
     }
   } else {
@@ -887,7 +847,7 @@ void CalendarBackend::DeleteCalendar(
     db_->DeleteInvitesForCalendar(calendar_id);
     db_->DeleteEventsForCalendar(calendar_id);
     result->success = db_->DeleteCalendar(calendar_id);
-    NotifyCalendarDeleted(calendar_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -901,7 +861,7 @@ void CalendarBackend::CreateEventType(
   if (id) {
     event_type_row.set_id(id);
     result->success = true;
-    NotifyEventTypeCreated(event_type_row);
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }

@@ -21,14 +21,16 @@ class NoteLocalChangesBuilder {
   // this object.
   NoteLocalChangesBuilder(SyncedNoteTracker* note_tracker,
                           vivaldi::NotesModel* notes_model);
+
+  NoteLocalChangesBuilder(const NoteLocalChangesBuilder&) = delete;
+  NoteLocalChangesBuilder& operator=(const NoteLocalChangesBuilder&) = delete;
+
   // Builds the commit requests list.
   syncer::CommitRequestDataList BuildCommitRequests(size_t max_entries) const;
 
  private:
   SyncedNoteTracker* const note_tracker_;
   vivaldi::NotesModel* const notes_model_;
-
-  DISALLOW_COPY_AND_ASSIGN(NoteLocalChangesBuilder);
 };
 
 }  // namespace sync_notes

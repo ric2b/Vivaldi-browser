@@ -6,6 +6,7 @@ package org.chromium.ui;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
@@ -88,6 +89,8 @@ public class KeyboardVisibilityDelegate {
     public void showKeyboard(View view) {
         final Handler handler = new Handler();
         final AtomicInteger attempt = new AtomicInteger();
+        // Note(david@vivaldi.com): Removes the white flash while opening keyboard (ref: VAB-4354).
+        view.getRootView().setBackgroundColor(Color.TRANSPARENT);
         Runnable openRunnable = new Runnable() {
             @Override
             public void run() {

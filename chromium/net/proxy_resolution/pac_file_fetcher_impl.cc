@@ -47,8 +47,7 @@ const int kDefaultMaxResponseBytes = 1048576;  // 1 megabyte
 //
 // 30 seconds is a compromise between those competing goals. This value also
 // appears to match Microsoft Edge (based on testing).
-constexpr base::TimeDelta kDefaultMaxDuration =
-    base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kDefaultMaxDuration = base::Seconds(30);
 
 // Returns true if |mime_type| is one of the known PAC mime type.
 bool IsPacMimeType(const std::string& mime_type) {
@@ -329,8 +328,8 @@ PacFileFetcherImpl::PacFileFetcherImpl(URLRequestContext* url_request_context)
 }
 
 bool PacFileFetcherImpl::IsUrlSchemeAllowed(const GURL& url) const {
-  // Always allow http://, https://, data:, and ftp://.
-  if (url.SchemeIsHTTPOrHTTPS() || url.SchemeIs("ftp") || url.SchemeIs("data"))
+  // Always allow http://, https://, and data:.
+  if (url.SchemeIsHTTPOrHTTPS() || url.SchemeIs("data"))
     return true;
 
   // Disallow any other URL scheme.

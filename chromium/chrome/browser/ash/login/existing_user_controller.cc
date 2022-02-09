@@ -32,6 +32,7 @@
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
+#include "chrome/browser/ash/boot_times_recorder.h"
 #include "chrome/browser/ash/crosapi/browser_data_migrator.h"
 #include "chrome/browser/ash/customization/customization_document.h"
 #include "chrome/browser/ash/login/auth/chrome_login_performer.h"
@@ -62,7 +63,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -73,13 +73,13 @@
 #include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
+#include "chrome/browser/ui/managed_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/encryption_migration_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/kiosk_autolaunch_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/kiosk_enable_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
-#include "chrome/browser/ui/webui/management/management_ui_handler.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -127,30 +127,16 @@
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/views/widget/widget.h"
 
-using RebootOnSignOutPolicy =
-    enterprise_management::DeviceRebootOnUserSignoutProto;
-
-namespace chromeos {
-
+namespace ash {
 namespace {
+
+using RebootOnSignOutPolicy =
+    ::enterprise_management::DeviceRebootOnUserSignoutProto;
 
 const char kAutoLaunchNotificationId[] =
     "chrome://managed_guest_session/auto_launch";
 
 const char kAutoLaunchNotifierId[] = "ash.managed_guest_session-auto_launch";
-
-// Enum types for Login.PasswordChangeFlow.
-// Don't change the existing values and update LoginPasswordChangeFlow in
-// histogram.xml when making changes here.
-enum LoginPasswordChangeFlow {
-  // User is sent to the password changed flow. This is the normal case.
-  LOGIN_PASSWORD_CHANGE_FLOW_PASSWORD_CHANGED = 0,
-  // User is sent to the unrecoverable cryptohome failure flow. This is the
-  // case when http://crbug.com/547857 happens.
-  LOGIN_PASSWORD_CHANGE_FLOW_CRYPTOHOME_FAILURE = 1,
-
-  LOGIN_PASSWORD_CHANGE_FLOW_COUNT,  // Must be the last entry.
-};
 
 // Delay for transferring the auth cache to the system profile.
 const long int kAuthCacheTransferDelayMs = 2000;
@@ -230,11 +216,6 @@ bool IsUpdateRequiredDeadlineReached() {
   return policy_handler && policy_handler->DeadlineReached();
 }
 
-void RecordPasswordChangeFlow(LoginPasswordChangeFlow flow) {
-  base::UmaHistogramEnumeration("Login.PasswordChangeFlow", flow,
-                                LOGIN_PASSWORD_CHANGE_FLOW_COUNT);
-}
-
 bool IsTestingMigrationUI() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kTestEncryptionMigrationUI);
@@ -273,13 +254,6 @@ LoginDisplay* GetLoginDisplay() {
   return GetLoginDisplayHost()->GetLoginDisplay();
 }
 
-void AllowOfflineLoginOnErrorScreen(bool allowed) {
-  if (!GetLoginDisplayHost()->GetOobeUI())
-    return;
-  GetLoginDisplayHost()->GetOobeUI()->GetErrorScreen()->AllowOfflineLogin(
-      allowed);
-}
-
 void SetLoginExtensionApiLaunchExtensionIdPref(const AccountId& account_id,
                                                const std::string extension_id) {
   const user_manager::User* user =
@@ -301,9 +275,8 @@ absl::optional<EncryptionMigrationMode> GetEncryptionMigrationMode(
   }
 
   if (user_context.GetUserType() == user_manager::USER_TYPE_CHILD) {
-    // TODO(https://crbug.com/1147009): Remove child user special case or
-    // implement finch experiment for child user migration mode.
-    return absl::nullopt;
+    // Force-migrate child users.
+    return EncryptionMigrationMode::START_MIGRATION;
   }
 
   const bool profile_has_policy =
@@ -470,7 +443,7 @@ void ExistingUserController::UpdateLoginDisplay(
   user_manager::UserManager* const user_manager =
       user_manager::UserManager::Get();
   // By default disable offline login from the error screen.
-  AllowOfflineLoginOnErrorScreen(false /* allowed */);
+  ErrorScreen::AllowOfflineLogin(false /* allowed */);
   for (auto* user : users) {
     // Skip kiosk apps for login screen user list. Kiosk apps as pods (aka new
     // kiosk UI) is currently disabled and it gets the apps directly from
@@ -482,7 +455,7 @@ void ExistingUserController::UpdateLoginDisplay(
     if (user->GetType() == user_manager::USER_TYPE_REGULAR ||
         user->GetType() == user_manager::USER_TYPE_CHILD ||
         user->GetType() == user_manager::USER_TYPE_ACTIVE_DIRECTORY) {
-      AllowOfflineLoginOnErrorScreen(true /* allowed */);
+      ErrorScreen::AllowOfflineLogin(true /* allowed */);
     }
     const bool meets_allowlist_requirements =
         !user->HasGaiaAccount() ||
@@ -543,7 +516,7 @@ void ExistingUserController::Observe(
   VLOG(1) << "Authentication was entered manually, possibly for proxyauth.";
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::BindOnce(&TransferHttpAuthCaches),
-      base::TimeDelta::FromMilliseconds(kAuthCacheTransferDelayMs));
+      base::Milliseconds(kAuthCacheTransferDelayMs));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -819,8 +792,6 @@ void ExistingUserController::ShowTPMError() {
 
 void ExistingUserController::ShowPasswordChangedDialog(
     const UserContext& user_context) {
-  RecordPasswordChangeFlow(LOGIN_PASSWORD_CHANGE_FLOW_PASSWORD_CHANGED);
-
   VLOG(1) << "Show password changed dialog"
           << ", count=" << login_performer_->password_changed_callback_count();
 
@@ -860,7 +831,7 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
         base::BindOnce(&SessionTerminationManager::StopSession,
                        base::Unretained(SessionTerminationManager::Get()),
                        login_manager::SessionStopReason::OWNER_REQUIRED),
-        base::TimeDelta::FromMilliseconds(kSafeModeRestartUiDelayMs));
+        base::Milliseconds(kSafeModeRestartUiDelayMs));
   } else if (failure.reason() == AuthFailure::TPM_ERROR) {
     ShowTPMError();
   } else if (failure.reason() == AuthFailure::TPM_UPDATE_REQUIRED) {
@@ -1001,7 +972,7 @@ void ExistingUserController::OnAuthSuccess(const UserContext& user_context) {
             ->GetBrokerForUser(user_id);
     bool privacy_warnings_enabled =
         g_browser_process->local_state()->GetBoolean(
-            ash::prefs::kManagedGuestSessionPrivacyWarningsEnabled);
+            prefs::kManagedGuestSessionPrivacyWarningsEnabled);
     if (ChromeUserManager::Get()->IsFullManagementDisclosureNeeded(broker) &&
         privacy_warnings_enabled) {
       ShowAutoLaunchManagedGuestSessionNotification();
@@ -1032,7 +1003,7 @@ void ExistingUserController::ShowAutoLaunchManagedGuestSessionNotification() {
             SystemTrayClientImpl::Get()->ShowEnterpriseInfo();
           }));
   std::unique_ptr<message_center::Notification> notification =
-      ash::CreateSystemNotification(
+      CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, kAutoLaunchNotificationId,
           title, message, std::u16string(), GURL(),
           message_center::NotifierId(
@@ -1053,7 +1024,7 @@ void ExistingUserController::OnProfilePrepared(Profile* profile,
   profile_prepared_ = true;
 
   chromeos::UserContext user_context =
-      UserContext(*chromeos::ProfileHelper::Get()->GetUserByProfile(profile));
+      UserContext(*ProfileHelper::Get()->GetUserByProfile(profile));
   auto* profile_connector = profile->GetProfilePolicyConnector();
   bool is_enterprise_managed =
       profile_connector->IsManaged() &&
@@ -1062,10 +1033,11 @@ void ExistingUserController::OnProfilePrepared(Profile* profile,
                                                    is_enterprise_managed);
 
   if (is_enterprise_managed) {
-    std::string manager = ManagementUIHandler::GetAccountManager(profile);
-    if (!manager.empty()) {
+    absl::optional<std::string> manager =
+        chrome::GetAccountManagerIdentity(profile);
+    if (manager) {
       user_manager::known_user::SetAccountManager(user_context.GetAccountId(),
-                                                  manager);
+                                                  *manager);
     }
   }
 
@@ -1208,8 +1180,8 @@ bool ExistingUserController::password_changed() const {
 user_manager::UserList ExistingUserController::ExtractLoginUsers(
     const user_manager::UserList& users) {
   bool show_users_on_signin;
-  chromeos::CrosSettings::Get()->GetBoolean(
-      chromeos::kAccountsPrefShowUserNamesOnSignIn, &show_users_on_signin);
+  CrosSettings::Get()->GetBoolean(chromeos::kAccountsPrefShowUserNamesOnSignIn,
+                                  &show_users_on_signin);
   user_manager::UserList filtered_users;
   for (auto* user : users) {
     // Skip kiosk apps for login screen user list. Kiosk apps as pods (aka new
@@ -1312,11 +1284,13 @@ void ExistingUserController::LoginAsPublicSessionWithPolicyStoreReady(
             ->store()
             ->policy_map()
             .Get(policy::key::kSessionLocales);
-    base::ListValue const* list = nullptr;
     if (entry && entry->level == policy::POLICY_LEVEL_RECOMMENDED &&
-        entry->value() && entry->value()->GetAsList(&list)) {
-      if (list->GetString(0, &locale))
+        entry->value() && entry->value()->is_list()) {
+      base::Value::ConstListView list = entry->value()->GetList();
+      if (!list.empty() && list[0].is_string()) {
+        locale = list[0].GetString();
         new_user_context.SetPublicSessionLocale(locale);
+      }
     }
   }
 
@@ -1487,7 +1461,7 @@ void ExistingUserController::StartAutoLoginTimer() {
   VLOG(2) << "Public session autologin will be fired in " << auto_login_delay_
           << "ms";
   auto_login_timer_->Start(
-      FROM_HERE, base::TimeDelta::FromMilliseconds(auto_login_delay_),
+      FROM_HERE, base::Milliseconds(auto_login_delay_),
       base::BindOnce(&ExistingUserController::OnPublicSessionAutoLoginTimerFire,
                      weak_factory_.GetWeakPtr()));
 }
@@ -1515,7 +1489,7 @@ void ExistingUserController::SetPublicSessionKeyboardLayoutAndLogin(
     std::unique_ptr<base::ListValue> keyboard_layouts) {
   UserContext new_user_context = user_context;
   std::string keyboard_layout;
-  for (size_t i = 0; i < keyboard_layouts->GetSize(); ++i) {
+  for (size_t i = 0; i < keyboard_layouts->GetList().size(); ++i) {
     base::DictionaryValue* entry = nullptr;
     keyboard_layouts->GetDictionary(i, &entry);
     bool selected = false;
@@ -1709,6 +1683,8 @@ void ExistingUserController::DoLogin(const UserContext& user_context,
   if (!user_context.HasCredentials()) {
     // If credentials are missing, refuse to log in.
 
+    // Ensure WebUI is loaded to allow security token dialog to pop up.
+    GetLoginDisplayHost()->GetWizardController();
     // Reenable clicking on other windows and status area.
     GetLoginDisplay()->SetUIEnabled(true);
     // Restart the auto-login timer.
@@ -1749,4 +1725,4 @@ AccountId ExistingUserController::GetLastLoginAttemptAccountId() const {
   return last_login_attempt_account_id_;
 }
 
-}  // namespace chromeos
+}  // namespace ash

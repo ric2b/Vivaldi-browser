@@ -52,6 +52,10 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
       base::flat_map<FrameSinkId, std::unique_ptr<HitTestQuery>>;
 
   HostFrameSinkManager();
+
+  HostFrameSinkManager(const HostFrameSinkManager&) = delete;
+  HostFrameSinkManager& operator=(const HostFrameSinkManager&) = delete;
+
   ~HostFrameSinkManager() override;
 
   const DisplayHitTestQueryMap& display_hit_test_query() const {
@@ -131,7 +135,6 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   // CreateBundledCompositorFrameSink with the same `bundle_id` value, rather
   // than using CreateCompositorFrameSink.
   void CreateFrameSinkBundle(
-      const FrameSinkId& parent_frame_sink_id,
       const FrameSinkBundleId& bundle_id,
       mojo::PendingReceiver<mojom::FrameSinkBundle> receiver,
       mojo::PendingRemote<mojom::FrameSinkBundleClient> client);
@@ -207,6 +210,11 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   uint32_t CacheBackBufferForRootSink(const FrameSinkId& root_sink_id);
   void EvictCachedBackBuffer(uint32_t cache_id);
 
+  void CreateHitTestQueryForSynchronousCompositor(
+      const FrameSinkId& frame_sink_id);
+  void EraseHitTestQueryForSynchronousCompositor(
+      const FrameSinkId& frame_sink_id);
+
   void UpdateDebugRendererSettings(const DebugRendererSettings& debug_settings);
 
   const DebugRendererSettings& debug_renderer_settings() const {
@@ -219,9 +227,14 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
 
   struct FrameSinkData {
     FrameSinkData();
+
+    FrameSinkData(const FrameSinkData&) = delete;
+    FrameSinkData& operator=(const FrameSinkData&) = delete;
+
     FrameSinkData(FrameSinkData&& other);
-    ~FrameSinkData();
     FrameSinkData& operator=(FrameSinkData&& other);
+
+    ~FrameSinkData();
 
     bool IsFrameSinkRegistered() const { return client != nullptr; }
 
@@ -254,9 +267,6 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
 
     // Track frame sink hierarchy.
     std::vector<FrameSinkId> children;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(FrameSinkData);
   };
 
   void CreateFrameSink(
@@ -314,8 +324,6 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   DebugRendererSettings debug_renderer_settings_;
 
   base::WeakPtrFactory<HostFrameSinkManager> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(HostFrameSinkManager);
 };
 
 }  // namespace viz

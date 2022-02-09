@@ -42,17 +42,8 @@ void ObjectPainter::PaintOutline(const PaintInfo& paint_info,
   if (outline_rects.IsEmpty())
     return;
 
-  if (DrawingRecorder::UseCachedDrawingIfPossible(
-          paint_info.context, layout_object_, paint_info.phase))
-    return;
-
-  IntRect visual_rect =
-      PixelSnappedIntRect(UnionRectEvenIfEmpty(outline_rects));
-  visual_rect.Inflate(style_to_use.OutlineOutsetExtent());
-  DrawingRecorder recorder(paint_info.context, layout_object_, paint_info.phase,
-                           visual_rect);
-  OutlinePainter::PaintOutlineRects(paint_info.context, outline_rects,
-                                    style_to_use);
+  OutlinePainter::PaintOutlineRects(paint_info, layout_object_, outline_rects,
+                                    style_to_use, layout_object_.GetDocument());
 }
 
 void ObjectPainter::PaintInlineChildrenOutlines(const PaintInfo& paint_info) {

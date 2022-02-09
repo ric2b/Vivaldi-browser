@@ -131,47 +131,47 @@ NotesModel* GetVerifierNotesModel() {
 }
 
 const NoteNode* AddNote(int profile,
-                          const std::string& content,
-                          const GURL& url) {
+                        const std::string& content,
+                        const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), 0, content, "", url);
 }
 
 const NoteNode* AddNote(int profile,
-                          const std::string& content,
-                          const std::string& title,
-                          const GURL& url) {
+                        const std::string& content,
+                        const std::string& title,
+                        const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), 0, content, title, url);
 }
 
 const NoteNode* AddNote(int profile,
-                          int index,
-                          const std::string& content,
-                          const GURL& url) {
+                        int index,
+                        const std::string& content,
+                        const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), index, content, "", url);
 }
 
 const NoteNode* AddNote(int profile,
-                          int index,
-                          const std::string& content,
-                          const std::string& title,
-                          const GURL& url) {
+                        int index,
+                        const std::string& content,
+                        const std::string& title,
+                        const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), index, content, title, url);
 }
 
 const NoteNode* AddNote(int profile,
-                          const NoteNode* parent,
-                          int index,
-                          const std::string& content,
-                          const GURL& url) {
+                        const NoteNode* parent,
+                        int index,
+                        const std::string& content,
+                        const GURL& url) {
   return AddNote(profile, parent, index, content, "", url);
 }
 
 const NoteNode* AddNote(int profile,
-                          const NoteNode* parent,
-                          int index,
-                          const std::string& content,
-                          const std::string& title,
-                          const GURL& url) {
+                        const NoteNode* parent,
+                        int index,
+                        const std::string& content,
+                        const std::string& title,
+                        const GURL& url) {
   NotesModel* model = GetNotesModel(profile);
   if (GetNotesNodeByID(model, parent->id()) != parent) {
     LOG(ERROR) << "Node " << parent->GetTitle() << " does not belong to "
@@ -208,9 +208,9 @@ const NoteNode* AddFolder(int profile, int index, const std::string& title) {
 }
 
 const NoteNode* AddFolder(int profile,
-                            const NoteNode* parent,
-                            int index,
-                            const std::string& title) {
+                          const NoteNode* parent,
+                          int index,
+                          const std::string& title) {
   NotesModel* model = GetNotesModel(profile);
   EXPECT_TRUE(model);
   EXPECT_TRUE(parent);
@@ -242,9 +242,7 @@ const NoteNode* AddFolder(int profile,
   return result;
 }
 
-void SetTitle(int profile,
-              const NoteNode* node,
-              const std::string& new_title) {
+void SetTitle(int profile, const NoteNode* node, const std::string& new_title) {
   NotesModel* model = GetNotesModel(profile);
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
@@ -272,9 +270,7 @@ void SetContent(int profile,
   model->SetContent(node, base::UTF8ToUTF16(new_content));
 }
 
-const NoteNode* SetURL(int profile,
-                         const NoteNode* node,
-                         const GURL& new_url) {
+const NoteNode* SetURL(int profile, const NoteNode* node, const GURL& new_url) {
   NotesModel* model = GetNotesModel(profile);
   if (GetNotesNodeByID(model, node->id()) != node) {
     LOG(ERROR) << "Node " << node->GetTitle() << " does not belong to "
@@ -477,8 +473,7 @@ int CountFoldersWithTitlesMatching(int profile, const std::string& title) {
   int count = 0;
   while (iterator.has_next()) {
     const NoteNode* node = iterator.Next();
-    if ((node->type() == NoteNode::FOLDER) &&
-        (node->GetTitle() == utf16_title))
+    if ((node->type() == NoteNode::FOLDER) && (node->GetTitle() == utf16_title))
       ++count;
   }
   return count;

@@ -31,8 +31,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/web_applications/components/web_app_shortcut.h"
-#include "chrome/browser/web_applications/components/web_app_shortcut_win.h"
+#include "chrome/browser/web_applications/web_app_shortcut.h"
+#include "chrome/browser/web_applications/web_app_shortcut_win.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -155,12 +155,14 @@ class BrowserTestWithProfileShortcutManager : public InProcessBrowserTest {
  public:
   BrowserTestWithProfileShortcutManager() {}
 
+  BrowserTestWithProfileShortcutManager(
+      const BrowserTestWithProfileShortcutManager&) = delete;
+  BrowserTestWithProfileShortcutManager& operator=(
+      const BrowserTestWithProfileShortcutManager&) = delete;
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kEnableProfileShortcutManager);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BrowserTestWithProfileShortcutManager);
 };
 
 // Check that the window properties on Windows are properly set.

@@ -41,6 +41,9 @@ class ModelTypeStoreBackend
   // must be called afterwards, which binds the instance to a certain sequence.
   static scoped_refptr<ModelTypeStoreBackend> CreateUninitialized();
 
+  ModelTypeStoreBackend(const ModelTypeStoreBackend&) = delete;
+  ModelTypeStoreBackend& operator=(const ModelTypeStoreBackend&) = delete;
+
   // Init opens database at |path|. If database doesn't exist it creates one.
   // It can be called from a sequence that is different to the constructing one,
   // but from this point on the backend is bound to the current sequence, and
@@ -67,11 +70,9 @@ class ModelTypeStoreBackend
       const std::string& prefix,
       ModelTypeStore::RecordList* record_list);
 
-  // Writes modifications accumulated in |write_batch| to database. If |outcome|
-  // is not null, it will contain the leveldb::Status of this operation.
+  // Writes modifications accumulated in |write_batch| to database.
   absl::optional<ModelError> WriteModifications(
-      std::unique_ptr<leveldb::WriteBatch> write_batch,
-      leveldb::Status* outcome = nullptr);
+      std::unique_ptr<leveldb::WriteBatch> write_batch);
 
   absl::optional<ModelError> DeleteDataAndMetadataForPrefix(
       const std::string& prefix);
@@ -170,8 +171,6 @@ class ModelTypeStoreBackend
   // Ensures that operations with backend are performed seqentially, not
   // concurrently.
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(ModelTypeStoreBackend);
 };
 
 }  // namespace syncer

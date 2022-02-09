@@ -678,7 +678,7 @@ WebLocalFrame* TestWebFrameClient::CreateChildFrame(
     const WebString& fallback_name,
     const FramePolicy& frame_policy,
     const WebFrameOwnerProperties&,
-    mojom::blink::FrameOwnerElementType,
+    FrameOwnerElementType,
     WebPolicyContainerBindParams policy_container_bind_params) {
   MockPolicyContainerHost mock_policy_container_host;
   mock_policy_container_host.BindWithNewEndpoint(
@@ -866,6 +866,8 @@ void TestWebFrameWidgetHost::UpdateTooltipFromKeyboard(
     const String& tooltip_text,
     base::i18n::TextDirection text_direction_hint,
     const gfx::Rect& bounds) {}
+
+void TestWebFrameWidgetHost::ClearKeyboardTriggeredTooltip() {}
 
 void TestWebFrameWidgetHost::TextInputStateChanged(
     ui::mojom::blink::TextInputStatePtr state) {

@@ -92,25 +92,6 @@ TEST_F(ComputedStyleTest, ClipPathEqual) {
   EXPECT_EQ(*style1, *style2);
 }
 
-TEST_F(ComputedStyleTest, FocusRingWidth) {
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  style->SetOutlineStyleIsAuto(static_cast<bool>(OutlineIsAuto::kOn));
-  EXPECT_EQ(3, style->FocusRingStrokeWidth());
-  EXPECT_EQ(2, style->FocusRingOuterStrokeWidth());
-  EXPECT_EQ(1, style->FocusRingInnerStrokeWidth());
-  style->SetEffectiveZoom(3.5);
-  style->SetOutlineWidth(4);
-  EXPECT_EQ(3.5, style->FocusRingStrokeWidth());
-}
-
-TEST_F(ComputedStyleTest, FocusRingOutset) {
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  style->SetOutlineStyle(EBorderStyle::kSolid);
-  style->SetOutlineStyleIsAuto(static_cast<bool>(OutlineIsAuto::kOn));
-  style->SetEffectiveZoom(4.75);
-  EXPECT_EQ(4, style->OutlineOutsetExtent());
-}
-
 TEST_F(ComputedStyleTest, SVGStackingContext) {
   scoped_refptr<ComputedStyle> style = CreateComputedStyle();
   style->UpdateIsStackingContextWithoutContainment(false, false, true);
@@ -399,32 +380,70 @@ TEST_F(ComputedStyleTest, BorderStyle) {
   EXPECT_TRUE(style->BorderSizeEquals(*other));
 
   style->SetBorderLeftStyle(EBorderStyle::kHidden);
+  EXPECT_EQ(LayoutUnit(), style->BorderLeftWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderLeftStyle(EBorderStyle::kNone);
+  EXPECT_EQ(LayoutUnit(), style->BorderLeftWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderLeftStyle(EBorderStyle::kSolid);
+  EXPECT_EQ(LayoutUnit(1), style->BorderLeftWidth());
   EXPECT_TRUE(style->BorderSizeEquals(*other));
 
   style->SetBorderTopStyle(EBorderStyle::kHidden);
+  EXPECT_EQ(LayoutUnit(), style->BorderTopWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderTopStyle(EBorderStyle::kNone);
+  EXPECT_EQ(LayoutUnit(), style->BorderTopWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderTopStyle(EBorderStyle::kSolid);
+  EXPECT_EQ(LayoutUnit(1), style->BorderTopWidth());
   EXPECT_TRUE(style->BorderSizeEquals(*other));
 
   style->SetBorderRightStyle(EBorderStyle::kHidden);
+  EXPECT_EQ(LayoutUnit(), style->BorderRightWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderRightStyle(EBorderStyle::kNone);
+  EXPECT_EQ(LayoutUnit(), style->BorderRightWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderRightStyle(EBorderStyle::kSolid);
+  EXPECT_EQ(LayoutUnit(1), style->BorderRightWidth());
   EXPECT_TRUE(style->BorderSizeEquals(*other));
 
   style->SetBorderBottomStyle(EBorderStyle::kHidden);
+  EXPECT_EQ(LayoutUnit(), style->BorderBottomWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderBottomStyle(EBorderStyle::kNone);
+  EXPECT_EQ(LayoutUnit(), style->BorderBottomWidth());
   EXPECT_FALSE(style->BorderSizeEquals(*other));
   style->SetBorderBottomStyle(EBorderStyle::kSolid);
+  EXPECT_EQ(LayoutUnit(1), style->BorderBottomWidth());
   EXPECT_TRUE(style->BorderSizeEquals(*other));
+
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderTopStyle(EBorderStyle::kHidden);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderRightStyle(EBorderStyle::kHidden);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderBottomStyle(EBorderStyle::kHidden);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderLeftStyle(EBorderStyle::kHidden);
+  EXPECT_FALSE(style->HasBorder());
+
+  style->SetBorderTopStyle(EBorderStyle::kSolid);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderRightStyle(EBorderStyle::kSolid);
+  style->SetBorderBottomStyle(EBorderStyle::kSolid);
+  style->SetBorderLeftStyle(EBorderStyle::kSolid);
+  EXPECT_TRUE(style->HasBorder());
+
+  style->SetBorderTopStyle(EBorderStyle::kNone);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderRightStyle(EBorderStyle::kNone);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderBottomStyle(EBorderStyle::kNone);
+  EXPECT_TRUE(style->HasBorder());
+  style->SetBorderLeftStyle(EBorderStyle::kNone);
+  EXPECT_FALSE(style->HasBorder());
 }
 
 #define TEST_ANIMATION_FLAG(flag, inherited)                               \
@@ -753,14 +772,11 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
   auto* dark_declaration = ParseDeclarationBlock("color-scheme:dark");
   auto* light_declaration = ParseDeclarationBlock("color-scheme:light");
 
-  EXPECT_FALSE(style->HasNonInheritedLightDarkValue());
-
   StyleCascade cascade1(state);
   cascade1.MutableMatchResult().AddMatchedProperties(bgimage_declaration);
   cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration);
   cascade1.Apply();
   EXPECT_TRUE(style->HasBackgroundImage());
-  EXPECT_TRUE(style->HasNonInheritedLightDarkValue());
 
   style = CreateComputedStyle();
   state.SetStyle(style);
@@ -770,7 +786,6 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
   cascade2.MutableMatchResult().AddMatchedProperties(light_declaration);
   cascade2.Apply();
   EXPECT_FALSE(style->HasBackgroundImage());
-  EXPECT_TRUE(style->HasNonInheritedLightDarkValue());
 }
 
 TEST_F(ComputedStyleTest, StrokeWidthZoomAndCalc) {

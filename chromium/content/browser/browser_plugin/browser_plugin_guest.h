@@ -53,6 +53,9 @@ class WebContentsImpl;
 class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                                           public WebContentsObserver {
  public:
+  BrowserPluginGuest(const BrowserPluginGuest&) = delete;
+  BrowserPluginGuest& operator=(const BrowserPluginGuest&) = delete;
+
   ~BrowserPluginGuest() override;
 
   // The WebContents passed into the factory method here has not been
@@ -151,8 +154,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   // Vivaldi
   bool allow_blocked_by_client_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserPluginGuest);
 };
 
 }  // namespace content

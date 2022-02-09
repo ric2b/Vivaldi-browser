@@ -45,8 +45,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+// Vivaldi
+import android.content.Intent;
+
 import org.vivaldi.browser.VivaldiNonSelectionActionModeCallback;
+import org.vivaldi.browser.notes.NoteAppendActivity;
 import org.vivaldi.browser.notes.NoteSelectionPopupController;
+import org.vivaldi.browser.notes.NotesModel;
 
 /**
  * A class that handles selection action mode for the active {@link Tab}.
@@ -226,14 +231,29 @@ public class ChromeActionModeHandler {
                                 .build(),
                         new ChromeShareExtras.Builder()
                                 .setSaveLastUsed(true)
-                                .setIsUserHighlightedText(true)
                                 .setRenderFrameHost(mHelper.getRenderFrameHost())
+                                .setDetailedContentType(
+                                        ChromeShareExtras.DetailedContentType.HIGHLIGHTED_TEXT)
                                 .build(),
                         ShareOrigin.MOBILE_ACTION_MODE);
             } else if (item.getItemId()
                     == org.chromium.chrome.R.id.select_action_menu_copy_to_note) { // Vivaldi
                 new NoteSelectionPopupController().addNoteFromSelection(
                         mHelper.getSelectedText(), mTab.getUrl().getSpec());
+                mHelper.finishActionMode();
+            } else if (item.getItemId()
+                    == org.chromium.chrome.R.id.select_action_menu_append_to_note) { // Vivaldi
+                NotesModel notesModel = new NotesModel();
+                int notesCount = notesModel.getChildCount(notesModel.getMainFolderId());
+                // Directly save the note if there are no notes already.
+                if (notesCount == 0) {
+                    new NoteSelectionPopupController().addNoteFromSelection(
+                            mHelper.getSelectedText(), mTab.getUrl().getSpec());
+                } else {
+                    Intent intent = new Intent(mTab.getContext(), NoteAppendActivity.class);
+                    intent.putExtra("APPEND_CONTENT", mHelper.getSelectedText());
+                    mTab.getContext().startActivity(intent);
+                }
                 mHelper.finishActionMode();
             } else {
                 return mHelper.onActionItemClicked(mode, item);

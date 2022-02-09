@@ -166,6 +166,7 @@ if (is_mac && !(defined(is_vivaldi) && is_vivaldi)) {
       "Vivaldi: $vivaldi_version_code",
     ]
     chrome_version_code = vivaldi_version_code
+    chrome_modern_version_code = vivaldi_version_code
   }
   write_file("$root_out_dir/android_chrome_versions.txt", lines_to_write)
 }

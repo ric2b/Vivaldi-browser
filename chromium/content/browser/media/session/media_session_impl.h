@@ -16,6 +16,7 @@
 #include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "content/browser/media/session/audio_focus_delegate.h"
 #include "content/browser/media/session/media_session_uma_helper.h"
 #include "content/common/content_export.h"
@@ -33,10 +34,6 @@
 #include "base/android/scoped_java_ref.h"
 #endif  // defined(OS_ANDROID)
 
-namespace media {
-enum class MediaContentType;
-}  // namespace media
-
 namespace media_session {
 struct MediaMetadata;
 }  // namespace media_session
@@ -45,6 +42,7 @@ namespace content {
 
 class AudioFocusManagerTest;
 class MediaSessionImplServiceRoutingTest;
+class MediaSessionImplServiceRoutingThrottleTest;
 class MediaSessionImplStateObserver;
 class MediaSessionImplVisibilityBrowserTest;
 class MediaSessionPlayerObserver;
@@ -80,6 +78,9 @@ class MediaSessionImpl : public MediaSession,
   // none is currently available.
   CONTENT_EXPORT static MediaSessionImpl* Get(WebContents* web_contents);
 
+  MediaSessionImpl(const MediaSessionImpl&) = delete;
+  MediaSessionImpl& operator=(const MediaSessionImpl&) = delete;
+
   ~MediaSessionImpl() override;
 
   CONTENT_EXPORT void SetDelegateForTests(
@@ -96,8 +97,7 @@ class MediaSessionImpl : public MediaSession,
   // player was successfully added. If it returns false, AddPlayer() should be
   // called again later.
   CONTENT_EXPORT bool AddPlayer(MediaSessionPlayerObserver* observer,
-                                int player_id,
-                                media::MediaContentType media_content_type);
+                                int player_id);
 
   // Removes the given player from the current media session. Abandons audio
   // focus if that was the last player in the session.
@@ -279,6 +279,9 @@ class MediaSessionImpl : public MediaSession,
   // Brings the associated tab into focus.
   void Raise() override;
 
+  // Mute or unmute the media player.
+  void SetMute(bool mute) override;
+
   // Downloads the bitmap version of a MediaImage at least |minimum_size_px|
   // and closest to |desired_size_px|. If the download failed, was too small or
   // the image did not come from the media session then returns a null image.
@@ -291,6 +294,8 @@ class MediaSessionImpl : public MediaSession,
   const base::UnguessableToken& audio_focus_group_id() const {
     return audio_focus_group_id_;
   }
+
+  void OnMediaMutedStatusChanged(bool mute);
 
   void OnPictureInPictureAvailabilityChanged();
 
@@ -318,9 +323,11 @@ class MediaSessionImpl : public MediaSession,
   friend class content::MediaSessionImplVisibilityBrowserTest;
   friend class content::AudioFocusManagerTest;
   friend class content::MediaSessionImplServiceRoutingTest;
+  friend class content::MediaSessionImplServiceRoutingThrottleTest;
   friend class content::MediaSessionImplStateObserver;
   friend class content::MediaSessionServiceImplBrowserTest;
   friend class MediaSessionImplTest;
+  friend class MediaSessionImplDurationThrottleTest;
   friend class MediaInternalsAudioFocusTest;
 
   CONTENT_EXPORT void RemoveAllPlayersForTest();
@@ -337,6 +344,7 @@ class MediaSessionImpl : public MediaSession,
     PlayerIdentifier& operator=(PlayerIdentifier&&) = default;
 
     bool operator==(const PlayerIdentifier& other) const;
+    bool operator!=(const PlayerIdentifier& other) const;
     bool operator<(const PlayerIdentifier& other) const;
 
     MediaSessionPlayerObserver* observer;
@@ -441,6 +449,26 @@ class MediaSessionImpl : public MediaSession,
   // with this media session.
   void ForAllPlayers(base::RepeatingCallback<void(const PlayerIdentifier&)>);
 
+  // Restrict duration update under certain frequency.
+  absl::optional<media_session::MediaPosition> MaybeGuardDurationUpdate(
+      absl::optional<media_session::MediaPosition> position);
+
+  void IncreaseDurationUpdateAllowance();
+
+  void ResetDurationUpdateGuard();
+
+  CONTENT_EXPORT void SetShouldThrottleDurationUpdateForTest(
+      bool should_throttle);
+
+  // Duration update allowance is inscreasing by 1 every 20 seconds, and
+  // capped at 3. Every duration updates will consume 1 allowance, and
+  // if updates happen when we have 0 allowance, we consider the media as
+  // a livestream and stop instreasing allowance until the time difference
+  // between two updates is greater than 20 seconds.
+  CONTENT_EXPORT static constexpr int kDurationUpdateMaxAllowance = 3;
+  CONTENT_EXPORT static constexpr base::TimeDelta
+      kDurationUpdateAllowanceIncreaseInterval = base::Seconds(20);
+
   // A set of actions supported by |routed_service_| and the current media
   // session.
   std::set<media_session::mojom::MediaSessionAction> actions_;
@@ -481,6 +509,8 @@ class MediaSessionImpl : public MediaSession,
   // True if the WebContents associated with this MediaSessionImpl is focused.
   bool focused_ = false;
 
+  bool is_muted_ = false;
+
   // Used to persist audio device selection between navigations on the same
   // origin.
   url::Origin origin_;
@@ -515,9 +545,20 @@ class MediaSessionImpl : public MediaSession,
 
   mojo::RemoteSet<media_session::mojom::MediaSessionObserver> observers_;
 
-  WEB_CONTENTS_USER_DATA_KEY_DECL();
+  base::RepeatingTimer duration_update_allowance_timer_;
 
-  DISALLOW_COPY_AND_ASSIGN(MediaSessionImpl);
+  bool is_throttling_ = false;
+
+  // This is guaranteed to be reset to |kDurationUpdateMaxAllowance| at
+  // first update because |guarding_player_id_| is always a mismatch
+  // at first, and will trigger a reset.
+  int duration_update_allowance_ = 0;
+
+  bool should_throttle_duration_update_ = false;
+
+  absl::optional<PlayerIdentifier> guarding_player_id_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 
 }  // namespace content

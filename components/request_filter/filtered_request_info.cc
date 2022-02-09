@@ -12,6 +12,7 @@ FilteredRequestInfo::FilteredRequestInfo(
     const network::ResourceRequest& request,
     content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
     bool is_async,
+    bool is_webtransport,
     absl::optional<int64_t> navigation_id)
     : id(request_id),
       request(request),
@@ -20,7 +21,10 @@ FilteredRequestInfo::FilteredRequestInfo(
       render_frame_id(render_frame_id),
       loader_factory_type(loader_factory_type),
       is_async(is_async),
+      is_webtransport(is_webtransport),
       navigation_id(std::move(navigation_id)) {}
+
+FilteredRequestInfo::FilteredRequestInfo(FilteredRequestInfo&&) = default;
 
 FilteredRequestInfo::~FilteredRequestInfo() = default;
 

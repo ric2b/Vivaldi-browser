@@ -58,6 +58,7 @@ class PhoneHubManagerImpl : public PhoneHubManager, public KeyedService {
 
   // PhoneHubManager:
   BrowserTabsModelProvider* GetBrowserTabsModelProvider() override;
+  CameraRollManager* GetCameraRollManager() override;
   ConnectionScheduler* GetConnectionScheduler() override;
   DoNotDisturbController* GetDoNotDisturbController() override;
   FeatureStatusProvider* GetFeatureStatusProvider() override;
@@ -68,6 +69,7 @@ class PhoneHubManagerImpl : public PhoneHubManager, public KeyedService {
   OnboardingUiTracker* GetOnboardingUiTracker() override;
   PhoneModel* GetPhoneModel() override;
   RecentAppsInteractionHandler* GetRecentAppsInteractionHandler() override;
+  ScreenLockManager* GetScreenLockManager() override;
   TetherController* GetTetherController() override;
   UserActionRecorder* GetUserActionRecorder() override;
 
@@ -86,6 +88,7 @@ class PhoneHubManagerImpl : public PhoneHubManager, public KeyedService {
   std::unique_ptr<ConnectionScheduler> connection_scheduler_;
   std::unique_ptr<FindMyDeviceController> find_my_device_controller_;
   std::unique_ptr<NotificationAccessManager> notification_access_manager_;
+  std::unique_ptr<ScreenLockManager> screen_lock_manager_;
   std::unique_ptr<NotificationInteractionHandler>
       notification_interaction_handler_;
   std::unique_ptr<NotificationManager> notification_manager_;

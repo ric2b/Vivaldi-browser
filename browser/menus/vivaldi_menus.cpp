@@ -45,7 +45,7 @@ bool GetFixedAcceleratorForCommandId(int command_id, ui::Accelerator* accel) {
     // entry will trigger the media save action. So I am disabling this shortcut
     // in the menu for now as it is wrong (same behaviour in chrome and viv).
     // https://www.w3schools.com/html/html5_video.asp has simple test.
-    //case IDC_CONTENT_CONTEXT_SAVEAVAS:
+    // case IDC_CONTENT_CONTEXT_SAVEAVAS:
     //  *accel = ui::Accelerator(ui::VKEY_S, ui::EF_CONTROL_DOWN);
     //  return true;
     default:

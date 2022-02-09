@@ -33,7 +33,7 @@ class ContextMenuPostitionDelegate;
 namespace views {
 class MenuItemView;
 class Widget;
-}
+}  // namespace views
 
 class ToolkitDelegateViews;
 
@@ -45,6 +45,9 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   VivaldiContextMenuViews(content::WebContents* web_contents,
                           ui::SimpleMenuModel* menu_model,
                           const gfx::Rect& rect);
+  VivaldiContextMenuViews(const VivaldiContextMenuViews&) = delete;
+  VivaldiContextMenuViews& operator=(const VivaldiContextMenuViews&) = delete;
+
   void Init(ui::SimpleMenuModel* menu_model,
             ContextMenuPostitionDelegate* delegate) override;
   bool Show() override;
@@ -63,10 +66,8 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   ui::SimpleMenuModel* menu_model_;
   views::MenuItemView* menu_view_;  // owned by toolkit_delegate_
   gfx::Rect rect_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuViews);
 };
 
-}  // namespace vivialdi
+}  // namespace vivaldi
 
 #endif  // UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_

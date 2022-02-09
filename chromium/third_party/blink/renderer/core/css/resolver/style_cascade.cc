@@ -149,6 +149,23 @@ bool IsInterpolation(CascadePriority priority) {
   }
 }
 
+#if DCHECK_IS_ON()
+
+bool HasUnresolvedReferences(CSSParserTokenRange range) {
+  while (!range.AtEnd()) {
+    switch (range.Consume().FunctionId()) {
+      case CSSValueID::kVar:
+      case CSSValueID::kEnv:
+        return true;
+      default:
+        continue;
+    }
+  }
+  return false;
+}
+
+#endif  // DCHECK_IS_ON()
+
 }  // namespace
 
 MatchResult& StyleCascade::MutableMatchResult() {
@@ -198,6 +215,14 @@ void StyleCascade::Apply(CascadeFilter filter) {
     if (resolver.AuthorFlags() & CSSProperty::kBorderRadius)
       state_.Style()->SetHasAuthorBorderRadius();
   }
+
+  // TODO(crbug.com/1024156): spec issue: user origin?
+  // TODO(crbug.com/1024156): https://github.com/w3c/csswg-drafts/issues/6386
+  if (resolver.AuthorFlags() & CSSProperty::kHighlightColors)
+    state_.Style()->SetHasAuthorHighlightColors();
+
+  if (resolver.Flags() & CSSProperty::kAnimation)
+    state_.SetCanAffectAnimations();
 }
 
 std::unique_ptr<CSSBitset> StyleCascade::GetImportantSet() {
@@ -306,7 +331,7 @@ void StyleCascade::AnalyzeInterpolations() {
       auto name = active_interpolation.key.GetCSSPropertyName();
       uint32_t position = EncodeInterpolationPosition(
           name.Id(), i, active_interpolation.key.IsPresentationAttribute());
-      CascadePriority priority(entries[i].origin, false, 0, position);
+      CascadePriority priority(entries[i].origin, false, 0, false, 0, position);
 
       CSSPropertyRef ref(name, GetDocument());
       DCHECK(ref.IsValid());
@@ -437,7 +462,7 @@ void StyleCascade::ApplyInterpolationMap(const ActiveInterpolationsMap& map,
     auto name = entry.key.GetCSSPropertyName();
     uint32_t position = EncodeInterpolationPosition(
         name.Id(), index, entry.key.IsPresentationAttribute());
-    CascadePriority priority(origin, false, 0, position);
+    CascadePriority priority(origin, false, 0, false, 0, position);
     priority = CascadePriority(priority, resolver.generation_);
 
     CSSPropertyRef ref(name, GetDocument());
@@ -617,7 +642,7 @@ const CSSValue* StyleCascade::Resolve(const CSSProperty& property,
   DCHECK(!property.IsSurrogate());
   if (IsRevert(value))
     return ResolveRevert(property, value, origin, resolver);
-  resolver.CollectAuthorFlags(property, origin);
+  resolver.CollectFlags(property, origin);
   if (const auto* v = DynamicTo<CSSCustomPropertyDeclaration>(value))
     return ResolveCustomProperty(property, *v, resolver);
   if (const auto* v = DynamicTo<CSSVariableReferenceValue>(value))
@@ -880,9 +905,22 @@ bool StyleCascade::ResolveEnvInto(CSSParserTokenRange range,
                                   CascadeResolver& resolver,
                                   TokenSequence& out) {
   AtomicString variable_name = ConsumeVariableName(range);
+  DCHECK(range.AtEnd() || (range.Peek().GetType() == kCommaToken) ||
+         (range.Peek().GetType() == kNumberToken));
+
+  WTF::Vector<unsigned> indices;
+  if (!range.AtEnd() && range.Peek().GetType() != kCommaToken) {
+    do {
+      const CSSParserToken& token = range.ConsumeIncludingWhitespace();
+      DCHECK(token.GetNumericValueType() == kIntegerValueType);
+      DCHECK(token.NumericValue() >= 0.);
+      indices.push_back(static_cast<unsigned>(token.NumericValue()));
+    } while (range.Peek().GetType() == kNumberToken);
+  }
+
   DCHECK(range.AtEnd() || (range.Peek().GetType() == kCommaToken));
 
-  CSSVariableData* data = GetEnvironmentVariable(variable_name);
+  CSSVariableData* data = GetEnvironmentVariable(variable_name, indices);
 
   if (!data) {
     if (ConsumeComma(range))
@@ -903,7 +941,8 @@ CSSVariableData* StyleCascade::GetVariableData(
 }
 
 CSSVariableData* StyleCascade::GetEnvironmentVariable(
-    const AtomicString& name) const {
+    const AtomicString& name,
+    WTF::Vector<unsigned> indices) const {
   // If we are in a User Agent Shadow DOM then we should not record metrics.
   ContainerNode& scope_root = state_.GetElement().GetTreeScope().RootNode();
   auto* shadow_root = DynamicTo<ShadowRoot>(&scope_root);
@@ -912,7 +951,7 @@ CSSVariableData* StyleCascade::GetEnvironmentVariable(
   return state_.GetDocument()
       .GetStyleEngine()
       .EnsureEnvironmentVariables()
-      .ResolveVariable(name, !is_ua_scope);
+      .ResolveVariable(name, std::move(indices), !is_ua_scope);
 }
 
 const CSSParserContext* StyleCascade::GetParserContext(
@@ -938,6 +977,9 @@ bool StyleCascade::HasFontSizeDependency(const CustomProperty& property,
 
 bool StyleCascade::ValidateFallback(const CustomProperty& property,
                                     CSSParserTokenRange range) const {
+#if DCHECK_IS_ON()
+  DCHECK(!HasUnresolvedReferences(range));
+#endif  // DCHECK_IS_ON()
   if (!property.IsRegistered())
     return true;
   auto context_mode =

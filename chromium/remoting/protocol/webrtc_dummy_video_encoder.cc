@@ -18,7 +18,7 @@
 #include "remoting/protocol/video_channel_state_observer.h"
 #include "remoting/protocol/webrtc_video_encoder_wrapper.h"
 #include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
-#include "third_party/webrtc/media/base/vp9_profile.h"
+#include "third_party/webrtc/api/video_codecs/vp9_profile.h"
 
 namespace remoting {
 namespace protocol {
@@ -101,7 +101,7 @@ void WebrtcDummyVideoEncoder::OnRttUpdate(int64_t rtt_ms) {
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&VideoChannelStateObserver::OnRttUpdate,
                                 video_channel_state_observer_,
-                                base::TimeDelta::FromMilliseconds(rtt_ms)));
+                                base::Milliseconds(rtt_ms)));
 }
 
 webrtc::EncodedImageCallback::Result WebrtcDummyVideoEncoder::SendEncodedFrame(

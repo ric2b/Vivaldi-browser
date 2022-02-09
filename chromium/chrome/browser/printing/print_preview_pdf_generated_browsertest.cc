@@ -250,12 +250,12 @@ class PrintPreviewDelegate : printing::PrintPreviewUI::TestDelegate {
     // 'UIFailedLoadingForTest' is sent when the setting could not be set. This
     // causes the browser test to fail.
     void RegisterMessages() override {
-      web_ui()->RegisterMessageCallback(
+      web_ui()->RegisterDeprecatedMessageCallback(
           "UILoadedForTest",
           base::BindRepeating(&UIDoneLoadingMessageHandler::HandleDone,
                               base::Unretained(this)));
 
-      web_ui()->RegisterMessageCallback(
+      web_ui()->RegisterDeprecatedMessageCallback(
           "UIFailedLoadingForTest",
           base::BindRepeating(&UIDoneLoadingMessageHandler::HandleFailure,
                               base::Unretained(this)));
@@ -292,6 +292,12 @@ class PrintPreviewDelegate : printing::PrintPreviewUI::TestDelegate {
 class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
  public:
   PrintPreviewPdfGeneratedBrowserTest() {}
+
+  PrintPreviewPdfGeneratedBrowserTest(
+      const PrintPreviewPdfGeneratedBrowserTest&) = delete;
+  PrintPreviewPdfGeneratedBrowserTest& operator=(
+      const PrintPreviewPdfGeneratedBrowserTest&) = delete;
+
   ~PrintPreviewPdfGeneratedBrowserTest() override {}
 
   // Navigates to the given web page, then initiates print preview and waits
@@ -302,7 +308,7 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
     base::FilePath path(file_name);
     GURL gurl = net::FilePathToFileURL(base::MakeAbsoluteFilePath(path));
 
-    ui_test_utils::NavigateToURL(browser(), gurl);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
 
     base::RunLoop loop;
     print_preview_delegate_->set_quit_closure(loop.QuitClosure());
@@ -539,8 +545,6 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
   // TODO(ivandavid): Keep it as a ScopedTempDir and change the layout test
   // framework so that it tells the browser test how many test files there are.
   base::ScopedTempDir tmp_dir_;
-
-  DISALLOW_COPY_AND_ASSIGN(PrintPreviewPdfGeneratedBrowserTest);
 };
 
 // This test acts as a driver for the layout test framework.

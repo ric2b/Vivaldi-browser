@@ -32,8 +32,13 @@
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gfx/skia_util.h"
-#include "v8/include/v8.h"
+#include "ui/gfx/geometry/skia_conversions.h"
+#include "v8/include/v8-container.h"
+#include "v8/include/v8-context.h"
+#include "v8/include/v8-isolate.h"
+#include "v8/include/v8-local-handle.h"
+#include "v8/include/v8-object.h"
+#include "v8/include/v8-primitive.h"
 
 namespace content {
 
@@ -72,10 +77,8 @@ std::unique_ptr<Picture> ParsePictureStr(v8::Isolate* isolate,
   if (!picture_value)
     return nullptr;
   // Decode the picture from base64.
-  std::string encoded;
-  if (!picture_value->GetAsString(&encoded))
-    return nullptr;
-  return CreatePictureFromEncodedString(encoded);
+  const std::string* encoded = picture_value->GetIfString();
+  return encoded ? CreatePictureFromEncodedString(*encoded) : nullptr;
 }
 
 std::unique_ptr<Picture> ParsePictureHash(v8::Isolate* isolate,

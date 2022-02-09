@@ -3,10 +3,10 @@
 #ifndef EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_
 #define EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_
 
-//std::string
+// std::string
 #include <string>
 
-//WindowOpenDisposition
+// WindowOpenDisposition
 #include "ui/base/window_open_disposition.h"
 
 namespace webview {

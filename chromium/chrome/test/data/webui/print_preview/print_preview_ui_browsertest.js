@@ -255,6 +255,10 @@ TEST_F('PrintPreviewPolicyTest', 'PrintPdfAsImageAvailability', function() {
 });
 GEN('#endif');
 
+TEST_F('PrintPreviewPolicyTest', 'PrintPdfAsImageDefault', function() {
+  this.runMochaTest(policy_tests.TestNames.PrintPdfAsImageDefault);
+});
+
 // eslint-disable-next-line no-var
 var PrintPreviewSettingsSelectTest = class extends PrintPreviewTest {
   /** @override */
@@ -575,12 +579,6 @@ var PrintPreviewInvalidSettingsBrowserTest = class extends PrintPreviewTest {
     return invalid_settings_browsertest.suiteName;
   }
 };
-
-TEST_F(
-    'PrintPreviewInvalidSettingsBrowserTest', 'NoPDFPluginError', function() {
-      this.runMochaTest(
-          invalid_settings_browsertest.TestNames.NoPDFPluginError);
-    });
 
 TEST_F(
     'PrintPreviewInvalidSettingsBrowserTest', 'InvalidSettingsError',

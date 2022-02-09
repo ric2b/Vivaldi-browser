@@ -175,6 +175,7 @@ if (enable_pdf) {
     public_deps = [
       "//printing/mojom",
       "//skia",
+      "//v8",
     ]
 
     deps = [
@@ -333,7 +334,6 @@ if (enable_pdf) {
       "//base",
       "//build:chromeos_buildflags",
       "//net",
-      "//pdf:buildflags",
       "//ppapi/cpp:objects",
       "//ppapi/cpp/private:internal_module",
       "//skia",
@@ -341,6 +341,7 @@ if (enable_pdf) {
       "//third_party/blink/public/common:headers",
       "//ui/base",
       "//ui/base/cursor/mojom:cursor_type",
+      "//url",
     ]
   }
 
@@ -401,6 +402,8 @@ if (enable_pdf) {
       "test/test_document_loader.h",
       "test/test_helpers.cc",
       "test/test_helpers.h",
+      "test/test_pdfium_engine.cc",
+      "test/test_pdfium_engine.h",
     ]
 
     configs += [ ":common" ]
@@ -410,9 +413,11 @@ if (enable_pdf) {
       ":ppapi_migration",
       "//base",
       "//ppapi/cpp:objects",
+      "//testing/gmock",
       "//testing/gtest",
-      "//ui/gfx:geometry_skia",
+      "//third_party/blink/public/common:headers",
       "//ui/gfx/range",
+      "//ui/latency:latency",
     ]
   }
 
@@ -498,9 +503,11 @@ if (enable_pdf) {
       "//third_party/blink/public/common:headers",
       "//third_party/pdfium",
       "//ui/base",
+      "//ui/events/blink:blink",
       "//ui/gfx:test_support",
       "//ui/gfx/geometry",
       "//ui/gfx/range",
+      "//v8",
     ]
 
     if (v8_use_external_startup_data) {

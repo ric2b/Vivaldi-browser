@@ -28,6 +28,7 @@ enum class AutocompleteFlag {
   kUsername,
   kCurrentPassword,
   kNewPassword,
+  kWebAuthn,
   // Represents the whole family of cc-* flags + OTP flag.
   kNonPassword
 };
@@ -118,6 +119,9 @@ class FormDataParser {
 
   FormDataParser();
 
+  FormDataParser(const FormDataParser&) = delete;
+  FormDataParser& operator=(const FormDataParser&) = delete;
+
   ~FormDataParser();
 
   void set_predictions(FormPredictions predictions) {
@@ -144,8 +148,6 @@ class FormDataParser {
   // Parse().
   ReadonlyPasswordFields readonly_status_ =
       ReadonlyPasswordFields::kNoHeuristics;
-
-  DISALLOW_COPY_AND_ASSIGN(FormDataParser);
 };
 
 // Returns the value of PasswordForm::signon_realm for an HTML form with the

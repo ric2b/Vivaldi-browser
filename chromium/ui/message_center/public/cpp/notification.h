@@ -16,9 +16,9 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/skia_util.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/message_center/public/cpp/message_center_public_export.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
@@ -474,6 +474,14 @@ class MESSAGE_CENTER_PUBLIC_EXPORT Notification {
   // associated with this notification will act as a container for all
   // notifications that are part of its group.
   void SetGroupParent();
+
+  // Set `group_child_` to false so it's back to it's
+  // default state.
+  void ClearGroupChild();
+
+  // Set `group_parent_` to false so it's back to it's
+  // default state.
+  void ClearGroupParent();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   void set_system_notification_warning_level(

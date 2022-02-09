@@ -20,8 +20,7 @@ PrintingSubmitJobFunction::~PrintingSubmitJobFunction() = default;
 void PrintingSubmitJobFunction::GetQuotaLimitHeuristics(
     QuotaLimitHeuristics* heuristics) const {
   QuotaLimitHeuristic::Config config = {
-      api::printing::MAX_SUBMIT_JOB_CALLS_PER_MINUTE,
-      base::TimeDelta::FromMinutes(1)};
+      api::printing::MAX_SUBMIT_JOB_CALLS_PER_MINUTE, base::Minutes(1)};
   heuristics->push_back(std::make_unique<QuotaService::TimedLimit>(
       config, std::make_unique<QuotaLimitHeuristic::SingletonBucketMapper>(),
       "MAX_SUBMIT_JOB_CALLS_PER_MINUTE"));
@@ -29,7 +28,7 @@ void PrintingSubmitJobFunction::GetQuotaLimitHeuristics(
 
 ExtensionFunction::ResponseAction PrintingSubmitJobFunction::Run() {
   std::unique_ptr<api::printing::SubmitJob::Params> params(
-      api::printing::SubmitJob::Params::Create(*args_));
+      api::printing::SubmitJob::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   PrintingAPIHandler::Get(browser_context())
       ->SubmitJob(ChromeExtensionFunctionDetails(this).GetNativeWindowForUI(),
@@ -59,7 +58,7 @@ PrintingCancelJobFunction::~PrintingCancelJobFunction() = default;
 
 ExtensionFunction::ResponseAction PrintingCancelJobFunction::Run() {
   std::unique_ptr<api::printing::CancelJob::Params> params(
-      api::printing::CancelJob::Params::Create(*args_));
+      api::printing::CancelJob::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   absl::optional<std::string> error =
       PrintingAPIHandler::Get(browser_context())
@@ -90,8 +89,7 @@ PrintingGetPrinterInfoFunction::~PrintingGetPrinterInfoFunction() = default;
 void PrintingGetPrinterInfoFunction::GetQuotaLimitHeuristics(
     QuotaLimitHeuristics* heuristics) const {
   QuotaLimitHeuristic::Config config = {
-      api::printing::MAX_GET_PRINTER_INFO_CALLS_PER_MINUTE,
-      base::TimeDelta::FromMinutes(1)};
+      api::printing::MAX_GET_PRINTER_INFO_CALLS_PER_MINUTE, base::Minutes(1)};
   heuristics->push_back(std::make_unique<QuotaService::TimedLimit>(
       config, std::make_unique<QuotaLimitHeuristic::SingletonBucketMapper>(),
       "MAX_GET_PRINTER_INFO_CALLS_PER_MINUTE"));
@@ -99,7 +97,7 @@ void PrintingGetPrinterInfoFunction::GetQuotaLimitHeuristics(
 
 ExtensionFunction::ResponseAction PrintingGetPrinterInfoFunction::Run() {
   std::unique_ptr<api::printing::GetPrinterInfo::Params> params(
-      api::printing::GetPrinterInfo::Params::Create(*args_));
+      api::printing::GetPrinterInfo::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
   PrintingAPIHandler::Get(browser_context())
       ->GetPrinterInfo(

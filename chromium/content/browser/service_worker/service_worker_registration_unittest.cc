@@ -45,6 +45,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/system/functions.h"
+#include "net/cookies/site_for_cookies.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
@@ -60,7 +61,7 @@ namespace content {
 namespace {
 
 // From service_worker_registration.cc.
-constexpr base::TimeDelta kMaxLameDuckTime = base::TimeDelta::FromMinutes(5);
+constexpr base::TimeDelta kMaxLameDuckTime = base::Minutes(5);
 
 int CreateInflightRequest(ServiceWorkerVersion* version) {
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, StartServiceWorker(version));
@@ -81,7 +82,7 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
  public:
   AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
       content::BrowserContext* context) override {
@@ -316,9 +317,11 @@ TEST_F(ServiceWorkerRegistrationTest, FailedRegistrationNoCrash) {
   // Prepare a ServiceWorkerContainerHost.
   ServiceWorkerRemoteContainerEndpoint remote_endpoint;
   base::WeakPtr<ServiceWorkerContainerHost> container_host =
-      CreateContainerHostForWindow(helper_->mock_render_process_id(),
-                                   true /* is_parent_frame_secure */,
-                                   context()->AsWeakPtr(), &remote_endpoint);
+      CreateContainerHostForWindow(
+          GlobalRenderFrameHostId(helper_->mock_render_process_id(),
+                                  /*mock frame_routing_id=*/1),
+          /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
+          &remote_endpoint);
   auto registration_object_host =
       std::make_unique<ServiceWorkerRegistrationObjectHost>(
           context()->AsWeakPtr(), container_host.get(), registration);
@@ -420,12 +423,14 @@ class ServiceWorkerActivationTest : public ServiceWorkerRegistrationTest,
 
     // Give the active version a controllee.
     container_host_ = CreateContainerHostForWindow(
-        helper_->mock_render_process_id(), true /* is_parent_frame_secure */,
-        context()->AsWeakPtr(), &remote_endpoint_);
+        GlobalRenderFrameHostId(helper_->mock_render_process_id(),
+                                /*mock frame_routing_id=*/1),
+        /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
+        &remote_endpoint_);
     DCHECK(remote_endpoint_.client_receiver()->is_valid());
     DCHECK(remote_endpoint_.host_remote()->is_bound());
     container_host_->UpdateUrls(kUrl, net::SiteForCookies::FromUrl(kUrl),
-                                url::Origin::Create(kUrl));
+                                url::Origin::Create(kUrl), kKey);
     container_host_->SetControllerRegistration(
         registration_, false /* notify_controllerchange */);
 
@@ -575,8 +580,7 @@ TEST_P(ServiceWorkerActivationTest, NoInflightRequest) {
   EXPECT_EQ(version_1.get(), reg->active_version());
   // The idle timer living in the renderer is requested to notify the idle state
   // to the browser ASAP.
-  EXPECT_EQ(base::TimeDelta::FromSeconds(0),
-            version_1_service_worker()->idle_delay().value());
+  EXPECT_EQ(base::Seconds(0), version_1_service_worker()->idle_delay().value());
 
   // Finish the request. Activation should happen.
   version_1->FinishRequest(inflight_request_id(), /*was_handled=*/true);
@@ -602,8 +606,7 @@ TEST_P(ServiceWorkerActivationTest, SkipWaitingWithInflightRequest) {
                                   skip_waiting_loop.QuitClosure());
   EXPECT_FALSE(result.has_value());
   EXPECT_EQ(version_1.get(), reg->active_version());
-  EXPECT_EQ(base::TimeDelta::FromSeconds(0),
-            version_1_service_worker()->idle_delay().value());
+  EXPECT_EQ(base::Seconds(0), version_1_service_worker()->idle_delay().value());
 
   // Finish the request. FinishRequest() doesn't immediately make the worker
   // reach the "no work" state. It needs to be notfied of the idle state by
@@ -639,8 +642,7 @@ TEST_P(ServiceWorkerActivationTest, SkipWaiting) {
   SimulateSkipWaitingWithCallback(version_2.get(), &result,
                                   skip_waiting_loop.QuitClosure());
 
-  EXPECT_EQ(base::TimeDelta::FromSeconds(0),
-            version_1_service_worker()->idle_delay().value());
+  EXPECT_EQ(base::Seconds(0), version_1_service_worker()->idle_delay().value());
   EXPECT_FALSE(result.has_value());
   EXPECT_EQ(version_1.get(), reg->active_version());
   RequestTermination(&version_1_client()->host());
@@ -670,21 +672,21 @@ TEST_P(ServiceWorkerActivationTest, TimeSinceSkipWaiting_Installing) {
   SimulateSkipWaiting(version.get(), &result);
   EXPECT_TRUE(result.has_value());
   EXPECT_TRUE(*result);
-  clock.Advance(base::TimeDelta::FromSeconds(11));
+  clock.Advance(base::Seconds(11));
   EXPECT_EQ(base::TimeDelta(), version->TimeSinceSkipWaiting());
 
   // Install the version. Now the skip waiting time starts ticking.
   version->SetStatus(ServiceWorkerVersion::INSTALLED);
   reg->SetWaitingVersion(version);
   base::RunLoop().RunUntilIdle();
-  clock.Advance(base::TimeDelta::FromSeconds(33));
-  EXPECT_EQ(base::TimeDelta::FromSeconds(33), version->TimeSinceSkipWaiting());
+  clock.Advance(base::Seconds(33));
+  EXPECT_EQ(base::Seconds(33), version->TimeSinceSkipWaiting());
 
   result.reset();
   // Call skipWaiting() again. It doesn't reset the time.
   SimulateSkipWaiting(version.get(), &result);
   EXPECT_FALSE(result.has_value());
-  EXPECT_EQ(base::TimeDelta::FromSeconds(33), version->TimeSinceSkipWaiting());
+  EXPECT_EQ(base::Seconds(33), version->TimeSinceSkipWaiting());
 }
 
 // Test lame duck timer triggered by skip waiting.
@@ -709,7 +711,7 @@ TEST_P(ServiceWorkerActivationTest, LameDuckTime_SkipWaiting) {
   EXPECT_TRUE(IsLameDuckTimerRunning());
 
   // Move forward by lame duck time.
-  clock_2.Advance(kMaxLameDuckTime + base::TimeDelta::FromSeconds(1));
+  clock_2.Advance(kMaxLameDuckTime + base::Seconds(1));
 
   // Activation should happen by the lame duck timer.
   RunLameDuckTimer();
@@ -747,7 +749,7 @@ TEST_P(ServiceWorkerActivationTest, LameDuckTime_NoControllee) {
   EXPECT_TRUE(IsLameDuckTimerRunning());
 
   // Move clock forward by a little bit.
-  constexpr base::TimeDelta kLittleBit = base::TimeDelta::FromMinutes(1);
+  constexpr base::TimeDelta kLittleBit = base::Minutes(1);
   clock_1.Advance(kLittleBit);
 
   // Add a controllee again to reset the lame duck period.
@@ -761,8 +763,7 @@ TEST_P(ServiceWorkerActivationTest, LameDuckTime_NoControllee) {
   EXPECT_TRUE(IsLameDuckTimerRunning());
 
   // Move clock forward to the next lame duck timer tick.
-  clock_1.Advance(kMaxLameDuckTime - kLittleBit +
-                  base::TimeDelta::FromSeconds(1));
+  clock_1.Advance(kMaxLameDuckTime - kLittleBit + base::Seconds(1));
 
   // Run the lame duck timer. Activation should not yet happen
   // since the lame duck period has not expired.
@@ -772,7 +773,7 @@ TEST_P(ServiceWorkerActivationTest, LameDuckTime_NoControllee) {
   EXPECT_TRUE(IsLameDuckTimerRunning());
 
   // Continue on to the next lame duck timer tick.
-  clock_1.Advance(kMaxLameDuckTime + base::TimeDelta::FromSeconds(1));
+  clock_1.Advance(kMaxLameDuckTime + base::Seconds(1));
 
   // Activation should happen by the lame duck timer.
   RunLameDuckTimer();
@@ -930,12 +931,15 @@ class ServiceWorkerRegistrationObjectHostTest
       base::WeakPtr<ServiceWorkerContainerHost>* out_container_host) {
     ServiceWorkerRemoteContainerEndpoint remote_endpoint;
     base::WeakPtr<ServiceWorkerContainerHost> container_host =
-        CreateContainerHostForWindow(helper_->mock_render_process_id(),
-                                     true /* is_parent_frame_secure */,
-                                     context()->AsWeakPtr(), &remote_endpoint);
-    container_host->UpdateUrls(document_url,
-                               net::SiteForCookies::FromUrl(document_url),
-                               url::Origin::Create(document_url));
+        CreateContainerHostForWindow(
+            GlobalRenderFrameHostId(helper_->mock_render_process_id(),
+                                    /*mock frame_routing_id=*/1),
+            /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
+            &remote_endpoint);
+    container_host->UpdateUrls(
+        document_url, net::SiteForCookies::FromUrl(document_url),
+        url::Origin::Create(document_url),
+        blink::StorageKey(url::Origin::Create(document_url)));
     if (out_container_host)
       *out_container_host = container_host;
     return remote_endpoint;
@@ -1040,7 +1044,8 @@ TEST_P(ServiceWorkerRegistrationObjectHostUpdateTest,
   ASSERT_TRUE(bad_messages_.empty());
   GURL url("https://does.not.exist/");
   container_host->UpdateUrls(url, net::SiteForCookies::FromUrl(url),
-                             url::Origin::Create(url));
+                             url::Origin::Create(url),
+                             blink::StorageKey(url::Origin::Create(url)));
   CallUpdate(registration_host.get(), /*out_error_msg=*/nullptr);
   EXPECT_EQ(1u, bad_messages_.size());
 }
@@ -1125,12 +1130,12 @@ TEST_P(ServiceWorkerRegistrationObjectHostUpdateTest,
   // eventually.
 
   // Set |self_update_delay| to a time so that update() will reject immediately.
-  registration->set_self_update_delay(base::TimeDelta::FromMinutes(5));
+  registration->set_self_update_delay(base::Minutes(5));
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorTimeout,
             CallDelayUpdate(
                 blink::mojom::ServiceWorkerContainerType::kForServiceWorker,
                 registration.get(), version.get()));
-  EXPECT_LE(base::TimeDelta::FromMinutes(5), registration->self_update_delay());
+  EXPECT_LE(base::Minutes(5), registration->self_update_delay());
 }
 
 TEST_P(ServiceWorkerRegistrationObjectHostUpdateTest,
@@ -1146,11 +1151,14 @@ TEST_P(ServiceWorkerRegistrationObjectHostUpdateTest,
 
   ServiceWorkerRemoteContainerEndpoint remote_endpoint;
   base::WeakPtr<ServiceWorkerContainerHost> container_host =
-      CreateContainerHostForWindow(helper_->mock_render_process_id(),
-                                   true /* is_parent_frame_secure */,
-                                   context()->AsWeakPtr(), &remote_endpoint);
+      CreateContainerHostForWindow(
+          GlobalRenderFrameHostId(helper_->mock_render_process_id(),
+                                  /*mock frame_routing_id=*/1),
+          /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
+          &remote_endpoint);
   container_host->UpdateUrls(kScope, net::SiteForCookies::FromUrl(kScope),
-                             url::Origin::Create(kScope));
+                             url::Origin::Create(kScope),
+                             blink::StorageKey(url::Origin::Create(kScope)));
   version->AddControllee(container_host.get());
 
   // Initially set |self_update_delay| to zero.
@@ -1163,12 +1171,12 @@ TEST_P(ServiceWorkerRegistrationObjectHostUpdateTest,
 
   // Set |self_update_delay| to a time so that update() will reject immediately
   // if the worker doesn't have at least one controlee.
-  registration->set_self_update_delay(base::TimeDelta::FromMinutes(5));
+  registration->set_self_update_delay(base::Minutes(5));
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk,
             CallDelayUpdate(
                 blink::mojom::ServiceWorkerContainerType::kForServiceWorker,
                 registration.get(), version.get()));
-  EXPECT_EQ(base::TimeDelta::FromMinutes(5), registration->self_update_delay());
+  EXPECT_EQ(base::Minutes(5), registration->self_update_delay());
 }
 
 TEST_F(ServiceWorkerRegistrationObjectHostTest, Unregister_Success) {
@@ -1221,7 +1229,8 @@ TEST_F(ServiceWorkerRegistrationObjectHostTest,
   container_host->UpdateUrls(
       GURL("https://does.not.exist/"),
       net::SiteForCookies::FromUrl(GURL("https://does.not.exist/")),
-      url::Origin::Create(GURL("https://does.not.exist/")));
+      url::Origin::Create(GURL("https://does.not.exist/")),
+      blink::StorageKey(url::Origin::Create(GURL("https://does.not.exist/"))));
   CallUnregister(registration_host.get());
   EXPECT_EQ(1u, bad_messages_.size());
 }

@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -14,36 +15,60 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_service_observer.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history_clusters/core/clustering_backend.h"
-#include "components/history_clusters/core/visit_data.h"
+#include "components/history_clusters/core/history_clusters_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/query_parser/query_parser.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
+class TemplateURLService;
+
+namespace optimization_guide {
+class EntityMetadataProvider;
+}  // namespace optimization_guide
+
 namespace history_clusters {
 
-// This Service is the API for UIs to fetch Chrome Memories.
+class HistoryClustersService;
+
+// Clears `HistoryClustersService`'s keyword cache when 1 or more history
+// entries are deleted.
+class VisitDeletionObserver : public history::HistoryServiceObserver {
+ public:
+  explicit VisitDeletionObserver(
+      HistoryClustersService* history_clusters_service);
+
+  ~VisitDeletionObserver() override;
+
+  // Starts observing a service for history deletions.
+  void AttachToHistoryService(history::HistoryService* history_service);
+
+  // history::HistoryServiceObserver
+  void OnURLsDeleted(history::HistoryService* history_service,
+                     const history::DeletionInfo& deletion_info) override;
+
+ private:
+  HistoryClustersService* history_clusters_service_;
+
+  // Tracks the observed history service, for cleanup.
+  base::ScopedObservation<history::HistoryService,
+                          history::HistoryServiceObserver>
+      history_service_observation_{this};
+};
+
+// This Service provides an API to the History Clusters for UI entry points.
 class HistoryClustersService : public KeyedService {
  public:
   class Observer : public base::CheckedObserver {
    public:
-    virtual void OnMemoriesDebugMessage(const std::string& message) = 0;
+    virtual void OnDebugMessage(const std::string& message) = 0;
   };
-
-  // The result data returned by `QueryClusters()`.
-  struct QueryClustersResult {
-    QueryClustersResult();
-    ~QueryClustersResult();
-    QueryClustersResult(const QueryClustersResult&);
-
-    std::vector<history::Cluster> clusters;
-    base::Time continuation_end_time;
-  };
-  using QueryClustersCallback = base::OnceCallback<void(QueryClustersResult)>;
 
   // Used to track incomplete, unpersisted visits.
   using IncompleteVisitMap =
@@ -52,8 +77,10 @@ class HistoryClustersService : public KeyedService {
   // `url_loader_factory` is allowed to be nullptr, like in unit tests.
   // In that case, HistoryClustersService will never instantiate a clustering
   // backend that requires it, such as the RemoteClusteringBackend.
-  explicit HistoryClustersService(
+  HistoryClustersService(
       history::HistoryService* history_service,
+      TemplateURLService* template_url_service,
+      optimization_guide::EntityMetadataProvider* entity_metadata_provider,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   HistoryClustersService(const HistoryClustersService&) = delete;
   HistoryClustersService& operator=(const HistoryClustersService&) = delete;
@@ -106,19 +133,32 @@ class HistoryClustersService : public KeyedService {
                     base::OnceClosure closure,
                     base::CancelableTaskTracker* task_tracker);
 
-  // Returns true synchronously if `query` matches a cluster keyword.
+  // Returns true synchronously if `query` matches a cluster keyword. This
+  // ignores clusters with only one visit to avoid overtriggering.
   // Note: This depends on the cache state, so this may kick off a cache refresh
   // request while immediately returning false. It's expected that on the next
   // keystroke, the cache may be ready and return true then.
   bool DoesQueryMatchAnyCluster(const std::string& query);
 
+  // Converts the vector of history::Cluster types to history_clusters::Cluster
+  // by collapsing all the duplicate visits into the canonical visits, thereby
+  // "unflattening" the output of the backend. Exposed for testing.
+  std::vector<Cluster> CollapseDuplicateVisits(
+      const std::vector<history::Cluster>& raw_clusters) const;
+
+  // Clears `all_keywords_cache_` and cancels any pending tasks to populate it.
+  void ClearKeywordCache();
+
  private:
   friend class HistoryClustersServiceTestApi;
 
   // This is a callback used for the `QueryClusters()` call from
-  // `DoesQueryMatchAnyCluster()`. Populates the cluster keyword cache from the
-  // keywords in `clusters`.
-  void PopulateClusterKeywordCache(QueryClustersResult result);
+  // `DoesQueryMatchAnyCluster()`. Accumulates the keywords in `result` within
+  // `keyword_accumulator`. If History is not yet exhausted, will request
+  // another batch of clusters. Otherwise, will update the keyword cache.
+  void PopulateClusterKeywordCache(
+      std::unique_ptr<std::set<std::u16string>> keyword_accumulator,
+      QueryClustersResult result);
 
   // Internally used callback for `QueryClusters()`.
   void OnGotHistoryVisits(const std::string& query,
@@ -129,6 +169,7 @@ class HistoryClustersService : public KeyedService {
   // Internally used callback for `OnGotHistoryVisits()`.
   void OnGotClusters(const std::string& query,
                      base::Time continuation_end_time,
+                     base::TimeTicks cluster_start_time,
                      QueryClustersCallback callback,
                      const std::vector<history::Cluster>& clusters) const;
 
@@ -154,10 +195,8 @@ class HistoryClustersService : public KeyedService {
   // A list of observers for this service.
   base::ObserverList<Observer> observers_;
 
-  // Used to asyncly call into `backend_` after async history request. This can
-  // be nullptr.
-  std::unique_ptr<base::WeakPtrFactory<ClusteringBackend>>
-      backend_weak_factory_;
+  VisitDeletionObserver visit_deletion_observer_;
+
   // Weak pointers issued from this factory never get invalidated before the
   // service is destroyed.
   base::WeakPtrFactory<HistoryClustersService> weak_ptr_factory_{this};

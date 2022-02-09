@@ -45,7 +45,9 @@ void LaunchHatsSurveyWithProductSpecificData(Profile* profile,
   hats_service->LaunchDelayedSurveyForWebContents(
       trigger, web_contents, 20000,
       {{"3P cookies blocked", third_party_cookies_blocked},
-       {"Privacy Sandbox enabled", privacy_sandbox_enabled}});
+       {"Privacy Sandbox enabled", privacy_sandbox_enabled}},
+      /*product_specific_string_data=*/{},
+      /*require_same_origin=*/true);
 }
 
 }  // namespace
@@ -57,7 +59,7 @@ HatsHandler::HatsHandler() = default;
 HatsHandler::~HatsHandler() = default;
 
 void HatsHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "trustSafetyInteractionOccurred",
       base::BindRepeating(&HatsHandler::HandleTrustSafetyInteractionOccurred,
                           base::Unretained(this)));
@@ -67,7 +69,7 @@ void HatsHandler::HandleTrustSafetyInteractionOccurred(
     const base::ListValue* args) {
   AllowJavascript();
 
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   auto interaction =
       static_cast<TrustSafetyInteraction>(args->GetList()[0].GetInt());
 

@@ -31,14 +31,6 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
  * The First Run Experience fragment that allows the user to opt in to Data Saver.
  */
 public class DataReductionProxyFirstRunFragment extends Fragment implements FirstRunFragment {
-    /** FRE page that instantiates this fragment. */
-    public static class Page implements FirstRunPage<DataReductionProxyFirstRunFragment> {
-        @Override
-        public DataReductionProxyFirstRunFragment instantiateFragment() {
-            return new DataReductionProxyFirstRunFragment();
-        }
-    }
-
     @Override
     public View onCreateView(
             LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {

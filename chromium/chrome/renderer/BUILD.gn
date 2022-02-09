@@ -287,6 +287,7 @@ static_library("renderer") {
     deps += [
       "//components/pdf/common",
       "//components/pdf/renderer",
+      "//pdf:features",
     ]
 
     if (is_linux || is_chromeos) {
@@ -362,6 +363,7 @@ static_library("renderer") {
   if (enable_basic_printing) {
     deps += [
       "//components/printing/renderer",
+      "//pdf:features",
       "//printing",
     ]
     sources += [
@@ -399,7 +401,6 @@ static_library("renderer") {
       "extensions/file_manager_private_custom_bindings.h",
     ]
     if (use_cups) {
-      configs += [ "//printing:cups" ]
       sources += [
         "extensions/printing_hooks_delegate.cc",
         "extensions/printing_hooks_delegate.h",
@@ -411,6 +412,8 @@ static_library("renderer") {
     sources += [
       "cart/commerce_hint_agent.cc",
       "cart/commerce_hint_agent.h",
+      "cart/commerce_renderer_feature_list.cc",
+      "cart/commerce_renderer_feature_list.h",
       "media/chrome_speech_recognition_client.cc",
       "media/chrome_speech_recognition_client.h",
       "searchbox/searchbox.cc",
@@ -421,8 +424,6 @@ static_library("renderer") {
 
     deps += [
       "//chrome/common/cart:mojo_bindings",
-      "//chrome/common/search:generate_chrome_colors_info",
-      "//chrome/common/search:generate_colors_info",
       "//components/crx_file",
       "//components/search:search",
     ]

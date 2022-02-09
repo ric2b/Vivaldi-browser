@@ -23,17 +23,16 @@ class PhoneHubManager;
 
 namespace eche_app {
 
+class LaunchAppHelper;
+
 // Handles recent app clicks originating from Phone Hub recent apps.
 class EcheRecentAppClickHandler : public phonehub::NotificationClickHandler,
                                   public FeatureStatusProvider::Observer,
                                   public phonehub::RecentAppClickObserver {
  public:
-  using LaunchEcheAppFunction =
-      base::RepeatingCallback<void(const std::string& package_name)>;
-
   EcheRecentAppClickHandler(phonehub::PhoneHubManager* phone_hub_manager,
                             FeatureStatusProvider* feature_status_provider,
-                            LaunchEcheAppFunction launch_eche_app_function);
+                            LaunchAppHelper* launch_app_helper);
   ~EcheRecentAppClickHandler() override;
 
   EcheRecentAppClickHandler(const EcheRecentAppClickHandler&) = delete;
@@ -46,7 +45,9 @@ class EcheRecentAppClickHandler : public phonehub::NotificationClickHandler,
       const phonehub::Notification::AppMetadata& app_metadata) override;
 
   // phonehub::RecentAppClickObserver:
-  void OnRecentAppClicked(const std::string& recent_app_package_name) override;
+  void OnRecentAppClicked(
+      const std::string& recent_app_package_name,
+      const std::u16string& recent_app_visible_name) override;
 
   // FeatureStatusProvider::Observer:
   void OnFeatureStatusChanged() override;
@@ -57,7 +58,7 @@ class EcheRecentAppClickHandler : public phonehub::NotificationClickHandler,
   phonehub::NotificationInteractionHandler* notification_handler_;
   phonehub::RecentAppsInteractionHandler* recent_apps_handler_;
   FeatureStatusProvider* feature_status_provider_;
-  LaunchEcheAppFunction launch_eche_app_function_;
+  LaunchAppHelper* launch_app_helper_;
   bool is_click_handler_set_ = false;
 };
 

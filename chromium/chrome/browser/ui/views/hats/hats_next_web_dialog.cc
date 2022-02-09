@@ -131,7 +131,7 @@ HatsNextWebDialog::HatsNextWebDialog(
           browser,
           trigger_id,
           GURL("https://storage.googleapis.com/chrome_hats_staging/index.html"),
-          base::TimeDelta::FromSeconds(10),
+          base::Seconds(10),
           std::move(success_callback),
           std::move(failure_callback),
           product_specific_bits_data,
@@ -241,7 +241,7 @@ GURL HatsNextWebDialog::GetParameterizedHatsURL() const {
   // only the application locale is provided here to ensure that the survey
   // matches the native UI language.
   base::ListValue language_list;
-  language_list.AppendString(g_browser_process->GetApplicationLocale());
+  language_list.Append(g_browser_process->GetApplicationLocale());
 
   std::string language_list_json;
   base::JSONWriter::Write(language_list, &language_list_json);

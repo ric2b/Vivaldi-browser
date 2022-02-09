@@ -172,7 +172,7 @@ TEST_F(AdverseAdFiltering, LotsAurls) {
     domain_prefix << "foo" << i << ".";
   }
 
-  for (i = 0; i < 1000000; i+=2) {
+  for (i = 0; i < 1000000; i += 2) {
     {
       std::ostringstream domain_name;
       domain_name << "subdomain-" << i << ".example.com";
@@ -182,13 +182,15 @@ TEST_F(AdverseAdFiltering, LotsAurls) {
     }
     {
       std::ostringstream domain_name;
-      domain_name << "subdomain-" << i+1 << ".example.org";
+      domain_name << "subdomain-" << i + 1 << ".example.org";
       ASSERT_FALSE(filter_list_->IsSiteInList(
           CreateURL(domain_prefix.str() + domain_name.str())))
           << domain_prefix.str() + domain_name.str();
     }
   }
   base::Time test_time = base::Time::Now();
-  LOG(INFO) << "Test time " << (test_time - init_time).InMilliseconds() << " ms";
-  LOG(INFO) << "Total time " << (test_time - start_time).InMilliseconds() << " ms";
+  LOG(INFO) << "Test time " << (test_time - init_time).InMilliseconds()
+            << " ms";
+  LOG(INFO) << "Total time " << (test_time - start_time).InMilliseconds()
+            << " ms";
 }

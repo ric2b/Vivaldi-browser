@@ -35,6 +35,11 @@ constexpr bool kIsTrapHandlerSupported = false;
 class WasmTrapHandlerBrowserTest : public InProcessBrowserTest {
  public:
   WasmTrapHandlerBrowserTest() {}
+
+  WasmTrapHandlerBrowserTest(const WasmTrapHandlerBrowserTest&) = delete;
+  WasmTrapHandlerBrowserTest& operator=(const WasmTrapHandlerBrowserTest&) =
+      delete;
+
   ~WasmTrapHandlerBrowserTest() override {}
 
  protected:
@@ -84,14 +89,12 @@ class WasmTrapHandlerBrowserTest : public InProcessBrowserTest {
     command_line->AppendSwitchASCII(switches::kJavaScriptFlags,
                                     "--allow-natives-syntax");
   }
-
-  DISALLOW_COPY_AND_ASSIGN(WasmTrapHandlerBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(WasmTrapHandlerBrowserTest, OutOfBounds) {
   ASSERT_TRUE(embedded_test_server()->Start());
   const auto& url = embedded_test_server()->GetURL("/wasm/out_of_bounds.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   ASSERT_NO_FATAL_FAILURE(RunJSTest("peek_in_bounds()"));
   ASSERT_NO_FATAL_FAILURE(

@@ -53,6 +53,10 @@ class ExternalProcessImporterClient
       uint16_t items,
       InProcessImporterBridge* bridge);
 
+  ExternalProcessImporterClient(const ExternalProcessImporterClient&) = delete;
+  ExternalProcessImporterClient& operator=(
+      const ExternalProcessImporterClient&) = delete;
+
   // Launches the task to start the external process.
   void Start();
 
@@ -177,8 +181,6 @@ class ExternalProcessImporterClient
 
   // Total number of speed dial to import.
   size_t total_speeddial_count_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExternalProcessImporterClient);
 };
 
 #endif  // CHROME_BROWSER_IMPORTER_EXTERNAL_PROCESS_IMPORTER_CLIENT_H_

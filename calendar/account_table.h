@@ -34,6 +34,8 @@ class AccountTable {
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
   virtual ~AccountTable();
+  AccountTable(const AccountTable&) = delete;
+  AccountTable& operator=(const AccountTable&) = delete;
 
   bool CreateAccountTable();
   AccountID CreateDefaultAccount();
@@ -52,8 +54,6 @@ class AccountTable {
  private:
   std::string GURLToDatabaseURL(const GURL& gurl);
   bool DoesLocalAccountExist();
-
-  DISALLOW_COPY_AND_ASSIGN(AccountTable);
 };
 
 #define ACCOUNT_ROW_FIELDS \

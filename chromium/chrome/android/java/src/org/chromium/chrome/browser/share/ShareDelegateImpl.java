@@ -44,6 +44,9 @@ import org.chromium.url.GURL;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Implementation of share interface. Mostly a wrapper around ShareSheetCoordinator.
  */
@@ -248,6 +251,8 @@ public class ShareDelegateImpl implements ShareDelegate {
 
     @Override
     public boolean isSharingHubEnabled() {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
         return !mIsCustomTab;
     }
 

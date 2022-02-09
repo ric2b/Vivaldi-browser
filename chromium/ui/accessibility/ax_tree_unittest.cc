@@ -24,7 +24,7 @@
 #include "ui/accessibility/ax_tree_observer.h"
 #include "ui/accessibility/ax_tree_serializer.h"
 #include "ui/accessibility/test_ax_tree_manager.h"
-#include "ui/gfx/transform.h"
+#include "ui/gfx/geometry/transform.h"
 
 // Helper macro for testing selection values and maintain
 // correct stack tracing and failure causality.
@@ -363,17 +363,17 @@ TEST(AXTreeTest, SerializeSimpleAXTree) {
   const AXNode* root_node = dst_tree.root();
   ASSERT_TRUE(root_node != nullptr);
   EXPECT_EQ(root.id, root_node->id());
-  EXPECT_EQ(root.role, root_node->data().role);
+  EXPECT_EQ(root.role, root_node->GetRole());
 
   ASSERT_EQ(2u, root_node->children().size());
 
   const AXNode* button_node = root_node->children()[0];
   EXPECT_EQ(button.id, button_node->id());
-  EXPECT_EQ(button.role, button_node->data().role);
+  EXPECT_EQ(button.role, button_node->GetRole());
 
   const AXNode* checkbox_node = root_node->children()[1];
   EXPECT_EQ(checkbox.id, checkbox_node->id());
-  EXPECT_EQ(checkbox.role, checkbox_node->data().role);
+  EXPECT_EQ(checkbox.role, checkbox_node->GetRole());
 
   EXPECT_EQ(
       "AXTree title=Title\n"
@@ -1098,8 +1098,8 @@ TEST(AXTreeTest, MultipleIgnoredChangesDoesNotBreakCache) {
 
   EXPECT_TRUE(tree.Unserialize(update)) << tree.error();
   EXPECT_EQ(0u, tree.GetFromId(2)->GetUnignoredChildCount());
-  EXPECT_FALSE(tree.GetFromId(2)->data().HasState(ax::mojom::State::kIgnored));
-  EXPECT_TRUE(tree.GetFromId(3)->data().HasState(ax::mojom::State::kIgnored));
+  EXPECT_FALSE(tree.GetFromId(2)->HasState(ax::mojom::State::kIgnored));
+  EXPECT_TRUE(tree.GetFromId(3)->HasState(ax::mojom::State::kIgnored));
 }
 
 TEST(AXTreeTest, NodeToClearUpdatesParentUnignoredCount) {

@@ -14,6 +14,9 @@ import android.view.ViewGroup.MarginLayoutParams;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
@@ -47,6 +50,8 @@ public class NoteCreationDialog extends DialogFragment {
     private Toast mToast;
     private boolean mIsPublishAvailable;
     private int mNbTemplateSwitches;
+    private boolean mInitialized;
+    private Runnable mExecuteActionForAccessibility;
 
     interface NoteDialogObserver {
         void onViewCreated(View view);
@@ -54,32 +59,34 @@ public class NoteCreationDialog extends DialogFragment {
     private NoteDialogObserver mNoteDialogObserver;
 
     public void initDialog(NoteDialogObserver noteDialogObserver, String urlDomain, String title,
-            String selectedText, boolean isPublishAvailable) {
+            String selectedText, boolean isPublishAvailable,
+            Runnable executeActionForAccessibility) {
         mNoteDialogObserver = noteDialogObserver;
         mUrlDomain = urlDomain;
         mTitle = title;
         mSelectedText = selectedText;
         mIsPublishAvailable = isPublishAvailable;
+        mInitialized = true;
+        mExecuteActionForAccessibility = executeActionForAccessibility;
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        // Don't create dialog before it is initialized.
+        if (!mInitialized) dismiss();
     }
 
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         AlertDialog.Builder builder =
-                new AlertDialog.Builder(getActivity(), R.style.Theme_Chromium_Fullscreen);
+                new AlertDialog.Builder(getActivity(), R.style.ThemeOverlay_BrowserUI_Fullscreen);
         mContentView = getActivity().getLayoutInflater().inflate(R.layout.creation_dialog, null);
         builder.setView(mContentView);
 
-        // Push down the note title depending on screensize.
-        int minTopMargin = getActivity().getResources().getDimensionPixelSize(
-                R.dimen.note_title_min_top_margin);
-        int screenHeight = getActivity().getResources().getDisplayMetrics().heightPixels;
-        int topMarginOffset = getActivity().getResources().getDimensionPixelSize(
-                R.dimen.note_title_top_margin_offset);
-        View titleView = mContentView.findViewById(R.id.title);
-        MarginLayoutParams params = (MarginLayoutParams) titleView.getLayoutParams();
-        params.topMargin = (int) (minTopMargin + (screenHeight - topMarginOffset) * 0.15f);
-        titleView.setLayoutParams(params);
-        titleView.requestLayout();
+        setTitleTopMargin();
+        addOrRemoveScrollView();
 
         if (mIsPublishAvailable) {
             Button publishButton = (Button) mContentView.findViewById(R.id.publish);
@@ -98,10 +105,16 @@ public class NoteCreationDialog extends DialogFragment {
         // There is a corner case where this function can be triggered by toggling the battery saver
         // state, resulting in all the variables being reset. The only way out is to destroy this
         // dialog to bring the user back to the web page.
-        if (mTitle == null) {
-            onDestroyView();
+        if (!mInitialized) {
+            dismiss();
             return;
         }
+
+        // Title top margin depends on screen orientation.
+        setTitleTopMargin();
+
+        // Add or remove scroll view as needed.
+        addOrRemoveScrollView();
 
         // Force recycler view to redraw to recalculate the left/right paddings for first/last
         // items.
@@ -221,8 +234,12 @@ public class NoteCreationDialog extends DialogFragment {
                 int position;
                 switch (event.getEventType()) {
                     case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED:
+                        host.setClickable(true);
                         mSelectedItemIndex = (Integer) host.getTag();
                         centerCurrentNote();
+                        break;
+                    case AccessibilityEvent.TYPE_VIEW_CLICKED:
+                        mExecuteActionForAccessibility.run();
                         break;
                 }
 
@@ -308,5 +325,58 @@ public class NoteCreationDialog extends DialogFragment {
                 - getNoteViewAt(mSelectedItemIndex).getWidth() / 2
                 - getActivity().getResources().getDimensionPixelSize(R.dimen.note_side_padding);
         layoutManager.scrollToPositionWithOffset(mSelectedItemIndex, centerOfScreen);
+    }
+
+    private void setTitleTopMargin() {
+        // Push down the note title depending on screensize.
+        int minTopMargin = getActivity().getResources().getDimensionPixelSize(
+                R.dimen.note_title_min_top_margin);
+        int screenHeight = getActivity().getResources().getDisplayMetrics().heightPixels;
+        int topMarginOffset = getActivity().getResources().getDimensionPixelSize(
+                R.dimen.note_title_top_margin_offset);
+        View titleView = mContentView.findViewById(R.id.title);
+        MarginLayoutParams params = (MarginLayoutParams) titleView.getLayoutParams();
+        params.topMargin = (int) (minTopMargin + (screenHeight - topMarginOffset) * 0.15f);
+        titleView.setLayoutParams(params);
+        titleView.requestLayout();
+    }
+
+    private void addScrollView() {
+        assert mContentView.findViewById(R.id.scrollview) == null;
+
+        ScrollView scrollView = new ScrollView(getActivity());
+        scrollView.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        scrollView.setId(R.id.scrollview);
+
+        LinearLayout dialogLayout = mContentView.findViewById(R.id.dialog_layout);
+        RelativeLayout mainContent = dialogLayout.findViewById(R.id.main_content);
+        dialogLayout.removeView(mainContent);
+        scrollView.addView(mainContent);
+        dialogLayout.addView(scrollView);
+    }
+
+    private void removeScrollView() {
+        assert mContentView.findViewById(R.id.scrollview) != null;
+
+        LinearLayout dialogLayout = mContentView.findViewById(R.id.dialog_layout);
+        RelativeLayout mainContent = dialogLayout.findViewById(R.id.main_content);
+        ScrollView scrollView = dialogLayout.findViewById(R.id.scrollview);
+        scrollView.removeView(mainContent);
+        dialogLayout.removeView(scrollView);
+        dialogLayout.addView(mainContent);
+    }
+
+    private void addOrRemoveScrollView() {
+        int screenHeight = getActivity().getResources().getDisplayMetrics().heightPixels;
+        int dialogHeight =
+                (int) getActivity().getResources().getDimension(R.dimen.min_dialog_height);
+        if (dialogHeight < screenHeight && mContentView.findViewById(R.id.scrollview) != null) {
+            removeScrollView();
+        }
+
+        if (dialogHeight > screenHeight && mContentView.findViewById(R.id.scrollview) == null) {
+            addScrollView();
+        }
     }
 }

@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_revert_value.h"
 #include "third_party/blink/renderer/core/css/css_unset_value.h"
+#include "third_party/blink/renderer/core/css/css_value_clamping_utils.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_idioms.h"
 #include "third_party/blink/renderer/core/css/parser/css_property_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
@@ -106,7 +107,7 @@ static inline bool ParseSimpleLength(const CharacterType* characters,
   number = CharactersToDouble(characters, length, &ok);
   if (!ok)
     return false;
-  number = clampTo<double>(number, -std::numeric_limits<float>::max(),
+  number = ClampTo<double>(number, -std::numeric_limits<float>::max(),
                            std::numeric_limits<float>::max());
   return true;
 }
@@ -812,7 +813,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kVisible ||
              value_id == CSSValueID::kHidden ||
              value_id == CSSValueID::kCollapse;
-    case CSSPropertyID::kWebkitAppRegion:
+    case CSSPropertyID::kAppRegion:
       return (value_id >= CSSValueID::kDrag &&
               value_id <= CSSValueID::kNoDrag) ||
              value_id == CSSValueID::kNone;
@@ -916,6 +917,15 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNormal ||
              value_id == CSSValueID::kNone;
     case CSSPropertyID::kFontOpticalSizing:
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone;
+    case CSSPropertyID::kFontSynthesisWeight:
+      DCHECK(RuntimeEnabledFeatures::FontSynthesisEnabled());
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone;
+    case CSSPropertyID::kFontSynthesisStyle:
+      DCHECK(RuntimeEnabledFeatures::FontSynthesisEnabled());
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone;
+    case CSSPropertyID::kFontSynthesisSmallCaps:
+      DCHECK(RuntimeEnabledFeatures::FontSynthesisEnabled());
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone;
     case CSSPropertyID::kWebkitFontSmoothing:
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone ||
@@ -1076,7 +1086,7 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kUnicodeBidi:
     case CSSPropertyID::kVectorEffect:
     case CSSPropertyID::kVisibility:
-    case CSSPropertyID::kWebkitAppRegion:
+    case CSSPropertyID::kAppRegion:
     case CSSPropertyID::kBackfaceVisibility:
     case CSSPropertyID::kBorderBlockEndStyle:
     case CSSPropertyID::kBorderBlockStartStyle:
@@ -1093,6 +1103,9 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kFlexWrap:
     case CSSPropertyID::kFontKerning:
     case CSSPropertyID::kFontOpticalSizing:
+    case CSSPropertyID::kFontSynthesisWeight:
+    case CSSPropertyID::kFontSynthesisStyle:
+    case CSSPropertyID::kFontSynthesisSmallCaps:
     case CSSPropertyID::kWebkitFontSmoothing:
     case CSSPropertyID::kLineBreak:
     case CSSPropertyID::kWebkitLineBreak:
@@ -1203,7 +1216,8 @@ static bool ParseTransformNumberArguments(CharType*& pos,
       return false;
     unsigned argument_length = static_cast<unsigned>(delimiter);
     bool ok;
-    double number = CharactersToDouble(pos, argument_length, &ok);
+    double number = CSSValueClampingUtils::ClampDouble(
+        CharactersToDouble(pos, argument_length, &ok));
     if (!ok)
       return false;
     transform_value->Append(*CSSNumericLiteralValue::Create(

@@ -6,8 +6,11 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/shelf_item_delegate.h"
+#include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
@@ -35,18 +38,17 @@ AppServiceAppItem::AppServiceAppItem(
       is_platform_app_(false) {
   OnAppUpdate(app_update, true);
   if (sync_item && sync_item->item_ordinal.IsValid()) {
-    UpdateFromSync(sync_item);
-  } else if (app_type_ == apps::mojom::AppType::kRemote) {
-    ash::RemoteAppsManager* remote_apps_manager =
-        ash::RemoteAppsManagerFactory::GetForProfile(profile);
-
-    if (remote_apps_manager->ShouldAddToFront(app_update.AppId())) {
-      SetPosition(model_updater->GetPositionBeforeFirstItem());
-    } else {
-      SetDefaultPositionIfApplicable(model_updater);
-    }
+    InitFromSync(sync_item);
   } else {
-    SetDefaultPositionIfApplicable(model_updater);
+    syncer::StringOrdinal default_position;
+    if (app_type_ == apps::mojom::AppType::kRemote &&
+        ash::RemoteAppsManagerFactory::GetForProfile(profile)->ShouldAddToFront(
+            app_update.AppId())) {
+      default_position = model_updater->GetPositionBeforeFirstItem();
+    } else {
+      default_position = CalculateDefaultPositionIfApplicable(model_updater);
+    }
+    SetPosition(default_position);
 
     // Crostini apps and the Terminal System App start in the crostini folder.
     if (app_type_ == apps::mojom::AppType::kCrostini ||
@@ -121,10 +123,16 @@ void AppServiceAppItem::Activate(int event_flags) {
         }
       });
   if (is_active_app) {
-    ChromeShelfController::instance()->ActivateApp(
-        id(), ash::LAUNCH_FROM_APP_LIST, event_flags,
-        GetController()->GetAppListDisplayId());
-    return;
+    ash::ShelfID shelf_id(id());
+    ash::ShelfModel* model = ChromeShelfController::instance()->shelf_model();
+    ash::ShelfItemDelegate* delegate = model->GetShelfItemDelegate(shelf_id);
+    if (delegate) {
+      delegate->ItemSelected(
+          /*event=*/nullptr, GetController()->GetAppListDisplayId(),
+          ash::LAUNCH_FROM_APP_LIST, /*callback=*/base::DoNothing(),
+          /*filter_predicate=*/base::NullCallback());
+      return;
+    }
   }
   Launch(event_flags, apps::mojom::LaunchSource::kFromAppListGrid);
 }

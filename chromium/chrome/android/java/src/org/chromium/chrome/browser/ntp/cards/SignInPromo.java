@@ -98,10 +98,6 @@ public abstract class SignInPromo {
 
     /**
      * @return Whether the {@link SignInPromo} should be created.
-     *
-     * Note: This checks the pref SIGNIN_PROMO_NTP_PROMO_DISMISSED. This is written if the
-     * promo has been dismissed before. Due to changes in NTP architecture, it is no longer
-     * possible to dismiss the promo, but we still honor the previous setting if it exists.
      */
     public static boolean shouldCreatePromo() {
         return !sDisablePromoForTests
@@ -147,12 +143,20 @@ public abstract class SignInPromo {
      * Updates visibility status. Overridden by subclasses that want to track visibility changes.
      */
     protected void setVisibilityInternal(boolean visibility) {
+        if (!mIsVisible && visibility) mSigninPromoController.increasePromoShowCount();
         mIsVisible = visibility;
     }
 
     /** Returns current visibility status of the underlying promo view. */
     public boolean isVisible() {
         return mIsVisible;
+    }
+
+    public void onDismissPromo() {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_DISMISSED, true);
+        mSigninPromoController.detach();
+        setVisibilityInternal(false);
     }
 
     @VisibleForTesting

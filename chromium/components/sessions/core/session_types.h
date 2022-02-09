@@ -35,6 +35,10 @@ namespace sessions {
 // SessionTab corresponds to a NavigationController.
 struct SESSIONS_EXPORT SessionTab {
   SessionTab();
+
+  SessionTab(const SessionTab&) = delete;
+  SessionTab& operator=(const SessionTab&) = delete;
+
   ~SessionTab();
 
   // Since the current_navigation_index can be larger than the index for number
@@ -108,9 +112,6 @@ struct SESSIONS_EXPORT SessionTab {
 
   // Data associated with the tab by the embedder.
   std::map<std::string, std::string> data;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SessionTab);
 };
 
 // SessionTabGroup -----------------------------------------------------------
@@ -120,6 +121,10 @@ struct SESSIONS_EXPORT SessionTab {
 // visually obvious.
 struct SESSIONS_EXPORT SessionTabGroup {
   explicit SessionTabGroup(const tab_groups::TabGroupId& id);
+
+  SessionTabGroup(const SessionTabGroup&) = delete;
+  SessionTabGroup& operator=(const SessionTabGroup&) = delete;
+
   ~SessionTabGroup();
 
   // Uniquely identifies this group. Initialized to zero and must be set be
@@ -128,9 +133,6 @@ struct SESSIONS_EXPORT SessionTabGroup {
   tab_groups::TabGroupId id;
 
   tab_groups::TabGroupVisualData visual_data;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SessionTabGroup);
 };
 
 // SessionWindow -------------------------------------------------------------
@@ -138,6 +140,10 @@ struct SESSIONS_EXPORT SessionTabGroup {
 // Describes a saved window.
 struct SESSIONS_EXPORT SessionWindow {
   SessionWindow();
+
+  SessionWindow(const SessionWindow&) = delete;
+  SessionWindow& operator=(const SessionWindow&) = delete;
+
   ~SessionWindow();
 
   // Possible window types which can be stored here. Note that these values will
@@ -203,9 +209,6 @@ struct SESSIONS_EXPORT SessionWindow {
   std::string user_title;
 
   std::string ext_data;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SessionWindow);
 };
 
 }  // namespace sessions

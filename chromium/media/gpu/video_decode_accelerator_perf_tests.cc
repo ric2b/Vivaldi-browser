@@ -30,7 +30,7 @@ namespace {
 constexpr const char* usage_msg =
     "usage: video_decode_accelerator_perf_tests\n"
     "           [-v=<level>] [--vmodule=<config>] [--output_folder]\n"
-    "           ([--use-legacy][--use_vd]|[--use_vd_vda]) [--gtest_help]\n"
+    "           ([--use-legacy]|[--use_vd]|[--use_vd_vda]) [--gtest_help]\n"
     "           [--help] [<video path>] [<video metadata path>]\n";
 
 // Video decoder perf tests help message.
@@ -49,9 +49,8 @@ constexpr const char* help_msg =
     "                       performance metrics, if not specified results\n"
     "                       will be stored in the current working directory.\n"
     "  --use-legacy         use the legacy VDA-based video decoders.\n"
+    "  --use_vd             use the new VD-based video decoders.\n"
     "                       (enabled by default)\n"
-    "  --use_vd             use the new VD-based video decoders, instead of\n"
-    "                       the default VDA-based video decoders.\n"
     "  --use_vd_vda         use the new VD-based video decoders with a\n"
     "                       wrapper that translates to the VDA interface,\n"
     "                       used to test interaction with older components\n"
@@ -309,8 +308,8 @@ class VideoDecoderTest : public ::testing::Test {
     base::TimeDelta frame_duration;
     base::TimeDelta vsync_interval_duration;
     if (render_frame_rate > 0) {
-      frame_duration = base::TimeDelta::FromSeconds(1) / render_frame_rate;
-      vsync_interval_duration = base::TimeDelta::FromSeconds(1) / vsync_rate;
+      frame_duration = base::Seconds(1) / render_frame_rate;
+      vsync_interval_duration = base::Seconds(1) / vsync_rate;
     }
     auto frame_renderer =
         FrameRendererDummy::Create(frame_duration, vsync_interval_duration);
@@ -441,7 +440,7 @@ int main(int argc, char** argv) {
   bool use_vd = false;
   bool use_vd_vda = false;
   media::test::DecoderImplementation implementation =
-      media::test::DecoderImplementation::kVDA;
+      media::test::DecoderImplementation::kVD;
   base::CommandLine::SwitchMap switches = cmd_line->GetSwitches();
   for (base::CommandLine::SwitchMap::const_iterator it = switches.begin();
        it != switches.end(); ++it) {

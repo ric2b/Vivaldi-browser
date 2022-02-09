@@ -2,38 +2,24 @@
 
 #include "components/bookmarks/vivaldi_partners.h"
 
-#if defined(OS_ANDROID)
-#include "base/android/apk_assets.h"
-#endif
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
-#include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 
+#include "components/datasource/resource_reader.h"
+
 namespace vivaldi_partners {
+
+const char kBookmarkResourceDir[] = "default-bookmarks";
 
 namespace {
 
-#if defined(OS_ANDROID)
-const char kAssetsDir[] = "assets/default-bookmarks/";
-#else
-#if !defined(OS_MAC)
-const base::FilePath::CharType kResources[] = FILE_PATH_LITERAL("resources");
-#endif
-const base::FilePath::CharType kVivaldi[] = FILE_PATH_LITERAL("vivaldi");
-const base::FilePath::CharType kDefBookmarks[] =
-    FILE_PATH_LITERAL("default-bookmarks");
-#endif  // !OS_ANDROID
-
 const char kPartnerDBFile[] = "partners.json";
 const char kPartnerLocaleMapFile[] = "partners-locale-map.json";
-
-const char kPartnerThumbnailUrlPrefix[] = "/resources/";
 
 // JSON keys
 const char kBookmarksKey[] = "bookmarks";
@@ -133,9 +119,8 @@ bool ParsePartnerDatabaseDetailsList(
         // For convenience of partners.json maintainence allow but ignore an
         // empty thumbnail.
         if (!v.GetString().empty()) {
-          if (!HasPartnerThumbnailPrefix(v.GetString()))
-            return error(property + " value does not start with " +
-                         kPartnerThumbnailUrlPrefix);
+          if (!ResourceReader::IsResourceURL(v.GetString()))
+            return error(property + " value is not a browser resource URL.");
           details.thumbnail = std::move(v.GetString());
         }
         bookmark_only = true;
@@ -171,65 +156,6 @@ bool ParsePartnerDatabaseDetailsList(
 
 }  // namespace
 
-bool HasPartnerThumbnailPrefix(base::StringPiece url) {
-  return base::StartsWith(url, kPartnerThumbnailUrlPrefix);
-}
-
-AssetReader::AssetReader() = default;
-AssetReader::~AssetReader() = default;
-
-std::string AssetReader::GetPath() const {
-#if defined(OS_ANDROID)
-  return path_;
-#else
-  return path_.AsUTF8Unsafe();
-#endif  //  OS_ANDROID
-}
-
-absl::optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
-  base::StringPiece json_text;
-#if defined(OS_ANDROID)
-  path_ = kAssetsDir;
-  path_.append(name.data(), name.length());
-
-  base::MemoryMappedFile::Region region;
-  base::MemoryMappedFile mapped_file;
-  int json_fd = base::android::OpenApkAsset(path_, &region);
-  if (json_fd < 0) {
-    LOG(ERROR) << "failed to open the asset at " << path_;
-    return absl::nullopt;
-  }
-  if (!mapped_file.Initialize(base::File(json_fd), region)) {
-    LOG(ERROR) << "failed to initialize memory mapping for " << path_;
-    return absl::nullopt;
-  }
-  json_text = base::StringPiece(reinterpret_cast<char*>(mapped_file.data()),
-                                mapped_file.length());
-#else
-  if (asset_dir_.empty()) {
-    base::PathService::Get(base::DIR_ASSETS, &asset_dir_);
-#if !defined(OS_MAC)
-    asset_dir_ = asset_dir_.Append(kResources);
-#endif  // if !defined(OS_MAC)
-    asset_dir_ = asset_dir_.Append(kVivaldi).Append(kDefBookmarks);
-  }
-  path_ = asset_dir_.AppendASCII(name);
-  std::string json_buffer;
-  if (!base::ReadFileToString(path_, &json_buffer)) {
-    LOG(ERROR) << "failed to read " << path_;
-    return absl::nullopt;
-  }
-  json_text = base::StringPiece(json_buffer);
-#endif  //  OS_ANDROID
-  base::JSONReader::ValueWithError v =
-      base::JSONReader::ReadAndReturnValueWithError(json_text);
-  if (!v.value) {
-    LOG(ERROR) << GetPath() << ":" << v.error_line << ":" << v.error_column
-               << ": JSON error - " << v.error_message;
-  }
-  return std::move(v.value);
-}
-
 PartnerDetails::PartnerDetails() = default;
 PartnerDetails::PartnerDetails(PartnerDetails&&) = default;
 PartnerDetails::~PartnerDetails() = default;
@@ -241,6 +167,10 @@ class PartnerDatabase {
  public:
   PartnerDatabase() = default;
   ~PartnerDatabase() = default;
+
+  // The maps below contain references, so prevent copy/assignment for safety.
+  PartnerDatabase(const PartnerDatabase&) = delete;
+  PartnerDatabase& operator=(const PartnerDatabase&) = delete;
 
   static std::unique_ptr<PartnerDatabase> Read();
 
@@ -286,9 +216,6 @@ class PartnerDatabase {
   // Map old locale-based partner id to the guid or guid2 if the old id is for
   // an url under Bookmarks folder.
   base::flat_map<base::GUID, base::GUID> locale_id_guid_map_;
-
-  // The maps above contains references, so prevent copy/assignment for safety.
-  DISALLOW_COPY_AND_ASSIGN(PartnerDatabase);
 };
 
 // Global singleton.
@@ -296,14 +223,13 @@ const PartnerDatabase* g_partner_db = nullptr;
 
 // static
 std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
-  AssetReader reader;
   absl::optional<base::Value> partner_db_value =
-      reader.ReadJson(kPartnerDBFile);
+      ResourceReader::ReadJSON(kBookmarkResourceDir, kPartnerDBFile);
   if (!partner_db_value)
     return nullptr;
 
   absl::optional<base::Value> partners_locale_value =
-      reader.ReadJson(kPartnerLocaleMapFile);
+      ResourceReader::ReadJSON(kBookmarkResourceDir, kPartnerLocaleMapFile);
   if (!partners_locale_value)
     return nullptr;
 

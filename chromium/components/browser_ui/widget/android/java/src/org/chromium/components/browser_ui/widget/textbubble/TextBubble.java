@@ -12,6 +12,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnTouchListener;
 import android.view.ViewGroup.LayoutParams;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.PopupWindow;
@@ -25,6 +26,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.MathUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.components.browser_ui.widget.R;
 import org.chromium.ui.widget.AnchoredPopupWindow;
 import org.chromium.ui.widget.RectProvider;
@@ -62,6 +64,13 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
 
     /** The {@link Drawable} that precedes the text in the bubble. */
     protected final Drawable mImageDrawable;
+
+    /** Runnables for snoozable text bubble option. */
+    private final Runnable mSnoozeRunnable;
+    private final Runnable mSnoozeDismissRunnable;
+
+    /** Time tracking for histograms. */
+    private long mBubbleShowStartTime;
 
     private final Runnable mDismissRunnable = new Runnable() {
         @Override
@@ -247,12 +256,43 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
             String accessibilityString, boolean showArrow, RectProvider anchorRectProvider,
             @Nullable Drawable imageDrawable, boolean isRoundBubble, boolean inverseColor,
             boolean isAccessibilityEnabled) {
+        this(context, rootView, contentString, accessibilityString, showArrow, anchorRectProvider,
+                imageDrawable, isRoundBubble, inverseColor, isAccessibilityEnabled, null, null);
+    }
+
+    /**
+     * Constructs a {@link TextBubble} instance.
+     * @param context  Context to draw resources from.
+     * @param rootView The {@link View} to use for size calculations and for display.
+     * @param contentString The string for the text that should be shown.
+     * @param accessibilityString The string shown in the bubble when accessibility is enabled.
+     * @param showArrow Whether the bubble should have an arrow. Should be false if {@code
+     *         isRoundBubble} is true.
+     * @param anchorRectProvider The {@link RectProvider} used to anchor the text bubble.
+     * @param imageDrawable The image to show at the start of the text bubble, or null if there
+     *         should be no image.
+     * @param isRoundBubble Whether the bubble should be round.
+     * @param inverseColor Whether the background and icon/text colors should be inverted.
+     * @param isAccessibilityEnabled Whether accessibility mode is enabled. Used to determine bubble
+     *         text and dismiss UX.
+     * At most one of the two following arguments will be non-null. Used in Snooze IPH experiment.
+     * @param snoozeRunnable The callback for when snooze button is clicked.
+     * @param snoozeDismissRunnable The callback to be invoked when dismiss button is clicked.
+     */
+    public TextBubble(Context context, View rootView, String contentString,
+            String accessibilityString, boolean showArrow, RectProvider anchorRectProvider,
+            @Nullable Drawable imageDrawable, boolean isRoundBubble, boolean inverseColor,
+            boolean isAccessibilityEnabled, @Nullable Runnable snoozeRunnable,
+            @Nullable Runnable snoozeDismissRunnable) {
+        assert snoozeRunnable == null || snoozeDismissRunnable == null;
         mContext = context;
         mString = contentString;
         mAccessibilityString = accessibilityString;
         mImageDrawable = imageDrawable;
         mInverseColor = inverseColor;
         mIsAccessibilityEnabled = isAccessibilityEnabled;
+        mSnoozeRunnable = snoozeRunnable;
+        mSnoozeDismissRunnable = snoozeDismissRunnable;
 
         // For round, arrowless bubbles, we use a specialized background instead of the
         // ArrowBubbleDrawable.
@@ -306,6 +346,7 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
 
         mPopupWindow.show();
         sBubbles.add(this);
+        mBubbleShowStartTime = System.currentTimeMillis();
     }
 
     /**
@@ -314,6 +355,12 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
      */
     public void dismiss() {
         mPopupWindow.dismiss();
+
+        if (mBubbleShowStartTime != 0) {
+            RecordHistogram.recordTimesHistogram("InProductHelp.TextBubble.ShownTime",
+                    System.currentTimeMillis() - mBubbleShowStartTime);
+            mBubbleShowStartTime = 0;
+        }
     }
 
     /**
@@ -385,8 +432,8 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
 
     /**
      * @param dismiss Whether or not to dismiss this bubble when the screen is tapped.  This will
-     *                happen for both taps inside and outside the popup.  The default is
-     *                {@code false}.
+     *                happen for both taps inside and outside the popup except when a tap is handled
+     *                by child views. The default is {@code false}.
      */
     public void setDismissOnTouchInteraction(boolean dismiss) {
         // For accessibility mode, since there is no timeout value, the bubble can be dismissed
@@ -432,7 +479,30 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
     private View createContentView() {
         if (mImageDrawable == null) {
             View view = LayoutInflater.from(mContext).inflate(R.layout.textbubble_text, null);
-            setText((TextView) view);
+            setText(view.findViewById(R.id.message));
+
+            // Set different paddings for when snooze feature is present.
+            if (mSnoozeRunnable != null || mSnoozeDismissRunnable != null) {
+                int paddingStart = mContext.getResources().getDimensionPixelSize(
+                        R.dimen.text_bubble_with_snooze_padding_horizontal);
+                view.setPadding(paddingStart, view.getPaddingTop(), 0, view.getPaddingBottom());
+            }
+
+            if (mSnoozeRunnable != null) {
+                Button snoozeButton = (Button) view.findViewById(R.id.button_snooze);
+                snoozeButton.setVisibility(View.VISIBLE);
+                snoozeButton.setOnClickListener(v -> {
+                    mSnoozeRunnable.run();
+                    mDismissRunnable.run();
+                });
+            } else if (mSnoozeDismissRunnable != null) {
+                Button dismissButton = (Button) view.findViewById(R.id.button_dismiss);
+                dismissButton.setVisibility(View.VISIBLE);
+                dismissButton.setOnClickListener(v -> {
+                    mSnoozeDismissRunnable.run();
+                    mDismissRunnable.run();
+                });
+            }
             return view;
         }
         View view =

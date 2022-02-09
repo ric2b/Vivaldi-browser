@@ -112,6 +112,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
     public static void startAddFolderActivity(BookmarkFolderSelectActivity activity,
             List<BookmarkId> bookmarksToMove) {
         if (ChromeApplicationImpl.isVivaldi()) {
+            assert false;
             VivaldiBookmarkAddEditFolderActivity.startAddFolderActivity(activity, bookmarksToMove);
             return;
         }

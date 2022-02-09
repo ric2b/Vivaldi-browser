@@ -37,6 +37,7 @@
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
+#include "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #include "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -160,6 +161,7 @@ class ClearBrowsingDataManagerTest : public PlatformTest {
 
  protected:
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   TableViewModel* model_;
   std::unique_ptr<BrowsingDataRemover> remover_;
@@ -415,11 +417,11 @@ TEST_F(ClearBrowsingDataManagerTest, TestCustomTextSignedIn) {
   const std::string kEngineC1Name = "custom-1";
   const GURL kEngineC1Url = GURL("https://c1.com?q={searchTerms}");
 
-  AddCustomSearchEngine(/* short_name */ kEngineC1Name,
-                        /* searchable_url */ kEngineC1Url,
-                        /* last_visited_time */ base::Time::Now() -
-                            base::TimeDelta::FromSeconds(10),
-                        /* set_default */ true);
+  AddCustomSearchEngine(
+      /* short_name */ kEngineC1Name,
+      /* searchable_url */ kEngineC1Url,
+      /* last_visited_time */ base::Time::Now() - base::Seconds(10),
+      /* set_default */ true);
 
   [manager_ loadModel:model_];
 
@@ -453,11 +455,11 @@ TEST_F(ClearBrowsingDataManagerTest, TestCustomeTextSignedOut) {
   const std::string kEngineC1Name = "custom-1";
   const GURL kEngineC1Url = GURL("https://c1.com?q={searchTerms}");
 
-  AddCustomSearchEngine(/* short_name */ kEngineC1Name,
-                        /* searchable_url */ kEngineC1Url,
-                        /* last_visited_time */ base::Time::Now() -
-                            base::TimeDelta::FromSeconds(10),
-                        /* set_default */ true);
+  AddCustomSearchEngine(
+      /* short_name */ kEngineC1Name,
+      /* searchable_url */ kEngineC1Url,
+      /* last_visited_time */ base::Time::Now() - base::Seconds(10),
+      /* set_default */ true);
 
   [manager_ loadModel:model_];
 

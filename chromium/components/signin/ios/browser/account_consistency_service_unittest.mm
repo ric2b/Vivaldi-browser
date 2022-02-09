@@ -118,8 +118,8 @@ class FakeWebState : public web::FakeWebState {
         base::BindOnce(^(web::WebStatePolicyDecider::PolicyDecision decision) {
           policyDecision = decision;
         });
-    decider_->ShouldAllowResponse(response, for_main_frame,
-                                  std::move(callback));
+    web::WebStatePolicyDecider::ResponseInfo response_info(for_main_frame);
+    decider_->ShouldAllowResponse(response, response_info, std::move(callback));
     return policyDecision.ShouldAllowNavigation();
   }
   void WebStateDestroyed() {
@@ -458,9 +458,6 @@ TEST_F(AccountConsistencyServiceTest, ChromeManageAccountsDefault) {
 // Tests that the ManageAccountsDelegate is notified when a navigation on Gaia
 // signon realm returns with a X-Auto-Login header.
 TEST_F(AccountConsistencyServiceTest, ChromeShowConsistencyPromo) {
-  base::test::ScopedFeatureList consistency_feature_list;
-  consistency_feature_list.InitAndEnableFeature(
-      signin::kMobileIdentityConsistency);
   base::test::ScopedFeatureList websignin_feature_list;
   websignin_feature_list.InitAndEnableFeature(signin::kMICEWebSignIn);
 
@@ -485,8 +482,6 @@ TEST_F(AccountConsistencyServiceTest, ChromeShowConsistencyPromo) {
 // Tests that the consistency promo is not displayed when a page fails to load.
 TEST_F(AccountConsistencyServiceTest,
        ChromeNotShowConsistencyPromoOnPageLoadFailure) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(signin::kMobileIdentityConsistency);
   id delegate =
       [OCMockObject mockForProtocol:@protocol(ManageAccountsDelegate)];
   [[[delegate reject] ignoringNonObjectArgs] onShowConsistencyPromo:GURL()
@@ -509,9 +504,6 @@ TEST_F(AccountConsistencyServiceTest,
 // and user chooses another action.
 TEST_F(AccountConsistencyServiceTest,
        ChromeNotShowConsistencyPromoOnPageLoadFailureRedirect) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(signin::kMobileIdentityConsistency);
-
   id delegate =
       [OCMockObject mockForProtocol:@protocol(ManageAccountsDelegate)];
   [[delegate expect] onAddAccount];
@@ -674,13 +666,13 @@ TEST_F(AccountConsistencyServiceTest, GAIACookieMissingOnSignin) {
                                         signin::GAIA_SERVICE_TYPE_ADDSESSION))
       .Times(2);
 
-  SimulateNavigateToURLWithInterruption(response, delegate);
+  SimulateNavigateToURL(response, delegate);
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectTotalCount(kGAIACookieOnNavigationHistogram, 0);
 
   SimulateExternalSourceRemovesAllGoogleDomainCookies();
 
-  [[delegate expect] onAddAccount];
+  // Gaia cookie is not restored due to one-hour time restriction.
   SimulateNavigateToURLWithInterruption(response, delegate);
   histogram_tester.ExpectTotalCount(kGAIACookieOnNavigationHistogram, 1);
 
@@ -726,12 +718,9 @@ TEST_F(AccountConsistencyServiceTest, SetChromeConnectedCookiesAfterDelete) {
 }
 
 // Ensures that CHROME_CONNECTED cookies are not set on google.com when the user
-// is signed out and navigating to google.com for |kMobileIdentityConsistency|
-// experiment.
+// is signed out and navigating to google.com.
 TEST_F(AccountConsistencyServiceTest,
        SetChromeConnectedCookiesSignedOutGoogleVisitor) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(signin::kMobileIdentityConsistency);
   id delegate =
       [OCMockObject mockForProtocol:@protocol(ManageAccountsDelegate)];
 
@@ -756,9 +745,6 @@ TEST_F(AccountConsistencyServiceTest,
 // after the sign-in promo is shown.
 TEST_F(AccountConsistencyServiceTest,
        SetChromeConnectedCookiesSignedOutGaiaVisitor) {
-  base::test::ScopedFeatureList consistency_feature_list;
-  consistency_feature_list.InitAndEnableFeature(
-      signin::kMobileIdentityConsistency);
   base::test::ScopedFeatureList websignin_feature_list;
   websignin_feature_list.InitAndEnableFeature(signin::kMICEWebSignIn);
   id delegate =
@@ -803,7 +789,7 @@ TEST_F(AccountConsistencyServiceTest, SetGaiaCookieUpdateBeforeDelay) {
   SimulateNavigateToURL(response, nil);
 
   // Advance clock, but stay within the one-hour Gaia update time.
-  base::TimeDelta oneMinuteDelta = base::TimeDelta::FromMinutes(1);
+  base::TimeDelta oneMinuteDelta = base::Minutes(1);
   task_environment_.FastForwardBy(oneMinuteDelta);
   SimulateNavigateToURLWithInterruption(response, nil);
 
@@ -829,7 +815,7 @@ TEST_F(AccountConsistencyServiceTest, SetGaiaCookieUpdateAfterDelay) {
   SimulateNavigateToURL(response, nil);
 
   // Advance clock past the one-hour Gaia update time.
-  base::TimeDelta twoHourDelta = base::TimeDelta::FromHours(2);
+  base::TimeDelta twoHourDelta = base::Hours(2);
   task_environment_.FastForwardBy(twoHourDelta);
   SimulateNavigateToURL(response, nil);
 

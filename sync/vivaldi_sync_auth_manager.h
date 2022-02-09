@@ -27,6 +27,8 @@ class VivaldiSyncAuthManager : public syncer::SyncAuthManager,
       VivaldiAccountManager* account_manager);
 
   ~VivaldiSyncAuthManager() override;
+  VivaldiSyncAuthManager(const VivaldiSyncAuthManager&) = delete;
+  VivaldiSyncAuthManager& operator=(const VivaldiSyncAuthManager&) = delete;
 
   void RegisterForAuthNotifications() override;
   syncer::SyncTokenStatus GetSyncTokenStatus() const override;
@@ -43,8 +45,6 @@ class VivaldiSyncAuthManager : public syncer::SyncAuthManager,
  private:
   VivaldiAccountManager* account_manager_;  // Not owning.
   bool registered_for_account_notifications_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSyncAuthManager);
 };
 
 }  // namespace vivaldi

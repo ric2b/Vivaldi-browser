@@ -17,11 +17,11 @@ class ScopedGroupNotesActions {
  public:
   explicit ScopedGroupNotesActions(NotesModel* model);
   ~ScopedGroupNotesActions();
+  ScopedGroupNotesActions(const ScopedGroupNotesActions&) = delete;
+  ScopedGroupNotesActions& operator=(const ScopedGroupNotesActions&) = delete;
 
  private:
   NotesModel* model_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedGroupNotesActions);
 };
 }  // namespace vivaldi
 

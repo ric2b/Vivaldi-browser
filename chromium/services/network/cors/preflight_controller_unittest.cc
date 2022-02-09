@@ -13,6 +13,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
+#include "net/log/net_log_with_source.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -228,14 +229,14 @@ TEST(PreflightControllerOptionsTest, CheckOptions) {
       request, WithTrustedHeaderClient(false),
       WithNonWildcardRequestHeadersSupport(false), false /* tainted */,
       TRAFFIC_ANNOTATION_FOR_TESTS, &url_loader_factory, net::IsolationInfo(),
-      /*devtools_observer=*/mojo::NullRemote());
+      /*devtools_observer=*/mojo::NullRemote(), net::NetLogWithSource());
 
   preflight_controller.PerformPreflightCheck(
       base::BindOnce([](int, absl::optional<CorsErrorStatus>, bool) {}),
       request, WithTrustedHeaderClient(true),
       WithNonWildcardRequestHeadersSupport(false), false /* tainted */,
       TRAFFIC_ANNOTATION_FOR_TESTS, &url_loader_factory, net::IsolationInfo(),
-      /*devtools_observer=*/mojo::NullRemote());
+      /*devtools_observer=*/mojo::NullRemote(), net::NetLogWithSource());
 
   ASSERT_EQ(2, url_loader_factory.NumPending());
   EXPECT_EQ(mojom::kURLLoadOptionAsCorsPreflight,
@@ -275,7 +276,8 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
   const network::mojom::URLRequestDevToolsInfoPtr& preflight_request() const {
     return preflight_request_info_;
   }
-  const network::mojom::URLResponseHeadPtr& preflight_response() const {
+  const network::mojom::URLResponseHeadDevToolsInfoPtr& preflight_response()
+      const {
     return preflight_response_;
   }
   const absl::optional<network::URLLoaderCompletionStatus>& preflight_status()
@@ -292,6 +294,7 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
       const std::string& devtools_request_id,
       const net::CookieAccessResultList& cookies_with_access_result,
       std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
+      const base::TimeTicks timestamp,
       network::mojom::ClientSecurityStatePtr client_security_state) override {
     on_raw_request_called_ = true;
   }
@@ -316,7 +319,7 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
   void OnCorsPreflightResponse(
       const base::UnguessableToken& devtool_request_id,
       const GURL& url,
-      network::mojom::URLResponseHeadPtr head) override {
+      network::mojom::URLResponseHeadDevToolsInfoPtr head) override {
     preflight_response_ = std::move(head);
   }
   void OnCorsPreflightRequestCompleted(
@@ -368,7 +371,7 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
   bool on_raw_request_called_ = false;
   bool on_raw_response_called_ = false;
   network::mojom::URLRequestDevToolsInfoPtr preflight_request_info_;
-  network::mojom::URLResponseHeadPtr preflight_response_;
+  network::mojom::URLResponseHeadDevToolsInfoPtr preflight_response_;
   absl::optional<network::URLLoaderCompletionStatus> preflight_status_;
   std::string initiator_devtools_request_id_;
 
@@ -440,7 +443,7 @@ class PreflightControllerTest : public testing::Test {
         request, WithTrustedHeaderClient(false),
         with_non_wildcard_request_headers_support_, tainted,
         TRAFFIC_ANNOTATION_FOR_TESTS, url_loader_factory_remote_.get(),
-        isolation_info, devtools_observer_->Bind());
+        isolation_info, devtools_observer_->Bind(), net::NetLogWithSource());
     run_loop_->Run();
   }
 
@@ -747,6 +750,61 @@ TEST_F(PreflightControllerTest, AuthorizationIsNotCoveredByWildcard) {
             status()->cors_error);
   EXPECT_EQ(1u, access_count());
   EXPECT_TRUE(has_authorization_covered_by_wildcard());
+}
+
+TEST_F(PreflightControllerTest, CheckPreflightAccessDetectsErrorStatus) {
+  const GURL response_url("http://example.com/data");
+  const url::Origin origin = url::Origin::Create(GURL("http://google.com"));
+  const std::string allow_all_header("*");
+
+  // Status 200-299 should pass.
+  EXPECT_FALSE(PreflightController::CheckPreflightAccessForTesting(
+      response_url, 200, allow_all_header,
+      absl::nullopt /* allow_credentials_header */,
+      network::mojom::CredentialsMode::kOmit, origin));
+  EXPECT_FALSE(PreflightController::CheckPreflightAccessForTesting(
+      response_url, 299, allow_all_header,
+      absl::nullopt /* allow_credentials_header */,
+      network::mojom::CredentialsMode::kOmit, origin));
+
+  // Status 300 should fail.
+  absl::optional<CorsErrorStatus> invalid_status_error =
+      PreflightController::CheckPreflightAccessForTesting(
+          response_url, 300, allow_all_header,
+          absl::nullopt /* allow_credentials_header */,
+          network::mojom::CredentialsMode::kOmit, origin);
+  ASSERT_TRUE(invalid_status_error);
+  EXPECT_EQ(mojom::CorsError::kPreflightInvalidStatus,
+            invalid_status_error->cors_error);
+
+  // Status 0 should fail too.
+  invalid_status_error = PreflightController::CheckPreflightAccessForTesting(
+      response_url, 0, allow_all_header,
+      absl::nullopt /* allow_credentials_header */,
+      network::mojom::CredentialsMode::kOmit, origin);
+  ASSERT_TRUE(invalid_status_error);
+  EXPECT_EQ(mojom::CorsError::kPreflightInvalidStatus,
+            invalid_status_error->cors_error);
+}
+
+TEST_F(PreflightControllerTest, CheckExternalPreflightErrors) {
+  EXPECT_FALSE(PreflightController::CheckExternalPreflightForTesting(
+      std::string("true")));
+
+  absl::optional<CorsErrorStatus> error2 =
+      PreflightController::CheckExternalPreflightForTesting(absl::nullopt);
+  ASSERT_TRUE(error2);
+  EXPECT_EQ(mojom::CorsError::kPreflightMissingAllowExternal,
+            error2->cors_error);
+  EXPECT_EQ("", error2->failed_parameter);
+
+  absl::optional<CorsErrorStatus> error3 =
+      PreflightController::CheckExternalPreflightForTesting(
+          std::string("TRUE"));
+  ASSERT_TRUE(error3);
+  EXPECT_EQ(mojom::CorsError::kPreflightInvalidAllowExternal,
+            error3->cors_error);
+  EXPECT_EQ("TRUE", error3->failed_parameter);
 }
 
 }  // namespace

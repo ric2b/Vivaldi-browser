@@ -17,6 +17,8 @@
       <include name="VIVALDI_PIP_JS_CSS" file="../../components/picture-in-picture/picture-in-picture.css" type="BINDATA" />
       <include name="VIVALDI_PIP_JS_CONFIG" file="../../components/picture-in-picture/config.json" type="BINDATA" />
       <include name="VIVALDI_TRANSLATE_JS" file="resources/vivaldi/translate-bundle.js" type="BINDATA" />
+      <include name="VIVALDI_THEMESTORE_MANIFEST" file="../../components/theme-store/manifest.json" type="BINDATA" />
+      <include name="VIVALDI_THEMESTORE_JS_MAIN" file="../../components/theme-store/theme-store.js" type="BINDATA" />
     </includes>
   </release>
 </grit>

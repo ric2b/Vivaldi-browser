@@ -26,8 +26,10 @@
 
 class OperaBookmarkReader : public OperaAdrFileReader {
  public:
-  OperaBookmarkReader() {}
-  ~OperaBookmarkReader() override {}
+  OperaBookmarkReader() = default;
+  ~OperaBookmarkReader() override = default;
+  OperaBookmarkReader(const OperaBookmarkReader&) = delete;
+  OperaBookmarkReader& operator=(const OperaBookmarkReader&) = delete;
 
   void AddBookmark(const std::vector<std::u16string>& current_folder,
                    const base::DictionaryValue& entries,
@@ -45,8 +47,6 @@ class OperaBookmarkReader : public OperaAdrFileReader {
  private:
   std::vector<std::u16string> current_folder;
   std::vector<ImportedBookmarkEntry> bookmarks;
-
-  DISALLOW_COPY_AND_ASSIGN(OperaBookmarkReader);
 };
 
 void OperaBookmarkReader::HandleEntry(const std::string& category,

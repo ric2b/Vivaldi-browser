@@ -27,12 +27,12 @@
 
 class PrefRegistrySimple;
 
-class VivaldiSubresourceFilterTest
-    : public AdverseAdFilterTestHarness {
+class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
  public:
   void SetUp() override {
     vivaldi::ForceVivaldiRunning(true);
-    ChromeContentBrowserClient::RegisterLocalStatePrefs(local_state_.registry());
+    ChromeContentBrowserClient::RegisterLocalStatePrefs(
+        local_state_.registry());
     safe_browsing::RegisterLocalStatePrefs(local_state_.registry());
     vivaldi::RegisterLocalState(local_state_.registry());
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
@@ -44,11 +44,9 @@ class VivaldiSubresourceFilterTest
     content::SetBrowserClientForTesting(browser_content_client_.get());
 
     PasswordStoreFactory::GetInstance()->SetTestingFactory(
-        profile(),
-        base::BindRepeating(
-            &::password_manager::BuildPasswordStore<
-                content::BrowserContext, ::password_manager::TestPasswordStore>));
-
+        profile(), base::BindRepeating(&::password_manager::BuildPasswordStore<
+                                       content::BrowserContext,
+                                       ::password_manager::TestPasswordStore>));
   }
   void TearDown() override {
     TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
@@ -65,7 +63,6 @@ class VivaldiSubresourceFilterTest
     VivaldiSubresourceFilterAdblockingThrottleManager::FromWebContents(
         web_contents())
         ->set_adblock_list(adblock_);
-
 
     adblock_->ClearSiteList();
     adblock_->AddBlockItem(url.host());

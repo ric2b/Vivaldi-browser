@@ -65,7 +65,7 @@ class FakeTrustedVaultAccessTokenFetcher
     absl::optional<signin::AccessTokenInfo> access_token_info;
     if (access_token_) {
       access_token_info = signin::AccessTokenInfo(
-          *access_token_, base::Time::Now() + base::TimeDelta::FromHours(1),
+          *access_token_, base::Time::Now() + base::Hours(1),
           /*id_token=*/std::string());
     }
     std::move(callback).Run(access_token_info);
@@ -91,10 +91,10 @@ class TrustedVaultRequestTest : public testing::Test {
     FakeTrustedVaultAccessTokenFetcher access_token_fetcher(access_token);
 
     auto request = std::make_unique<TrustedVaultRequest>(
-        http_method, GURL(kRequestUrl), request_body);
-    request->FetchAccessTokenAndSendRequest(
-        account_id, shared_url_loader_factory_, &access_token_fetcher,
-        std::move(completion_callback));
+        http_method, GURL(kRequestUrl), request_body,
+        shared_url_loader_factory_);
+    request->FetchAccessTokenAndSendRequest(account_id, &access_token_fetcher,
+                                            std::move(completion_callback));
     return request;
   }
 

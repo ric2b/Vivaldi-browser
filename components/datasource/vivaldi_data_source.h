@@ -34,6 +34,8 @@ class VivaldiDataSource : public content::URLDataSource {
  public:
   explicit VivaldiDataSource(Profile* profile);
   ~VivaldiDataSource() override;
+  VivaldiDataSource(const VivaldiDataSource&) = delete;
+  VivaldiDataSource& operator=(const VivaldiDataSource&) = delete;
 
   // content::URLDataSource implementation.
   std::string GetSource() override;
@@ -51,20 +53,17 @@ class VivaldiDataSource : public content::URLDataSource {
   base::flat_map<vivaldi_data_url_utils::PathType,
                  std::unique_ptr<VivaldiDataClassHandler>>
       data_class_handlers_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiDataSource);
 };
 
 class VivaldiThumbDataSource : public VivaldiDataSource {
  public:
   explicit VivaldiThumbDataSource(Profile* profile);
   ~VivaldiThumbDataSource() override;
+  VivaldiThumbDataSource(const VivaldiThumbDataSource&) = delete;
+  VivaldiThumbDataSource& operator=(const VivaldiThumbDataSource&) = delete;
 
-    // content::URLDataSource implementation.
+  // content::URLDataSource implementation.
   std::string GetSource() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VivaldiThumbDataSource);
 };
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_SOURCE_H_

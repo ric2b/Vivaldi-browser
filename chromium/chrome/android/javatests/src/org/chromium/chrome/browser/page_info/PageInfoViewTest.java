@@ -89,6 +89,7 @@ import org.chromium.net.test.EmbeddedTestServerRule;
 import org.chromium.net.test.ServerCertificate;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
 import org.chromium.ui.test.util.RenderTestRule;
+import org.chromium.url.GURL;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -107,7 +108,6 @@ import java.util.concurrent.TimeoutException;
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, ChromeSwitches.DISABLE_STARTUP_PROMOS,
         ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
 @Batch(PER_CLASS)
-@Batch.SplitByFeature
 public class PageInfoViewTest {
     private static final String TAG = "PageInfoViewTest";
 
@@ -207,8 +207,8 @@ public class PageInfoViewTest {
         Tab tab = activity.getActivityTab();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             new ChromePageInfo(activity.getModalDialogManagerSupplier(), null,
-                    PageInfoController.OpenedFromSource.TOOLBAR)
-                    .show(tab, highlightedPermission);
+                    PageInfoController.OpenedFromSource.TOOLBAR, null)
+                    .show(tab, highlightedPermission, /*fromStoreIcon=*/false);
         });
         onViewWaiting(allOf(withId(R.id.page_info_url_wrapper), isDisplayed()));
     }
@@ -245,12 +245,15 @@ public class PageInfoViewTest {
         }
     }
 
-    private void addSomePermissions(String url) {
+    private void addSomePermissions(String urlString) {
+        GURL url = new GURL(urlString);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
-                    ContentSettingsType.GEOLOCATION, url, "*", ContentSettingValues.ALLOW);
-            WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
-                    ContentSettingsType.NOTIFICATIONS, url, "*", ContentSettingValues.BLOCK);
+            WebsitePreferenceBridge.setContentSettingDefaultScope(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.GEOLOCATION, url, url,
+                    ContentSettingValues.ALLOW);
+            WebsitePreferenceBridge.setContentSettingDefaultScope(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.NOTIFICATIONS, url,
+                    url, ContentSettingValues.BLOCK);
         });
     }
 
@@ -262,22 +265,25 @@ public class PageInfoViewTest {
         int expectBlock = hasPermissions ? ContentSettingValues.BLOCK : ContentSettingValues.ASK;
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             assertEquals(expectBlock,
-                    WebsitePreferenceBridgeJni.get().getSettingForOrigin(
+                    WebsitePreferenceBridgeJni.get().getPermissionSettingForOrigin(
                             Profile.getLastUsedRegularProfile(), ContentSettingsType.NOTIFICATIONS,
                             url, url));
             assertEquals(expectAllow,
-                    WebsitePreferenceBridgeJni.get().getSettingForOrigin(
+                    WebsitePreferenceBridgeJni.get().getPermissionSettingForOrigin(
                             Profile.getLastUsedRegularProfile(), ContentSettingsType.GEOLOCATION,
                             url, "*"));
         });
     }
 
-    private void addDefaultSettingPermissions(String url) {
+    private void addDefaultSettingPermissions(String urlString) {
+        GURL url = new GURL(urlString);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
-                    ContentSettingsType.MEDIASTREAM_MIC, url, "*", ContentSettingValues.DEFAULT);
-            WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
-                    ContentSettingsType.MEDIASTREAM_CAMERA, url, "*", ContentSettingValues.ASK);
+            WebsitePreferenceBridge.setContentSettingDefaultScope(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.MEDIASTREAM_MIC, url,
+                    url, ContentSettingValues.DEFAULT);
+            WebsitePreferenceBridge.setContentSettingDefaultScope(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.MEDIASTREAM_CAMERA,
+                    url, url, ContentSettingValues.ASK);
         });
     }
 
@@ -312,8 +318,6 @@ public class PageInfoViewTest {
     @After
     public void tearDown() throws TimeoutException {
         LocationUtils.setFactory(null);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(null); });
         // Notification channels don't get cleaned up automatically.
         // TODO(crbug.com/951402): Find a general solution to avoid leaking channels between tests.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -452,9 +456,9 @@ public class PageInfoViewTest {
         mTestServerRule.setServerUsesHttps(false);
         loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(sSimpleHtml));
         onView(withId(R.id.page_info_connection_row)).perform(click());
-        onViewWaiting(allOf(
-                withText(containsString("The identity of this website has not been verified.")),
-                isDisplayed()));
+        onViewWaiting(
+                allOf(withText(containsString("The identity of this website isn't verified.")),
+                        isDisplayed()));
         mRenderTestRule.render(getPageInfoView(), "PageInfo_ConnectionInfoSubpageInsecure");
     }
 
@@ -503,6 +507,24 @@ public class PageInfoViewTest {
     }
 
     /**
+     * Tests the permissions page of the PageInfo UI with sound permissions.
+     */
+    @Test
+    @MediumTest
+    public void testShowPermissionsSubpageWithSound() throws IOException {
+        GURL url = new GURL(mTestServerRule.getServer().getURL("/"));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            WebsitePreferenceBridge.setContentSettingDefaultScope(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.SOUND, url, url,
+                    ContentSettingValues.BLOCK);
+        });
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(sSimpleHtml));
+        onView(withId(R.id.page_info_permissions_row)).perform(click());
+        onViewWaiting(allOf(withText("Control this site's access to your device"), isDisplayed()));
+        onView(allOf(withText(containsString("Sound")), isDisplayed()));
+    }
+
+    /**
      * Tests the cookies page of the PageInfo UI.
      */
     @Test
@@ -529,7 +551,7 @@ public class PageInfoViewTest {
         loadUrlAndOpenPageInfo(
                 mTestServerRule.getServer().getURLWithHostName("www.example.com", "/"));
         onViewWaiting(allOf(withText(containsString("Last visited")), isDisplayed()));
-        onView(withId(R.id.page_info_history_row)).perform(click());
+        onView(withId(PageInfoHistoryController.HISTORY_ROW_ID)).perform(click());
         onViewWaiting(allOf(withText(containsString("Jun 4, 2021")), isDisplayed()));
         mRenderTestRule.render(getPageInfoView(), "PageInfo_HistorySubpage");
     }
@@ -608,7 +630,8 @@ public class PageInfoViewTest {
             ChromePageInfoControllerDelegate pageInfoControllerDelegate =
                     new ChromePageInfoControllerDelegate(activity, tab.getWebContents(),
                             activity::getModalDialogManager,
-                            new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab)) {
+                            new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab), null,
+                            /*pageInfoOpenedFromStoreIcon=*/false) {
                         @Override
                         public boolean isShowingPaintPreviewPage() {
                             return true;
@@ -626,7 +649,6 @@ public class PageInfoViewTest {
      */
     @Test
     @MediumTest
-    @Features.EnableFeatures(PageInfoFeatures.PAGE_INFO_DISCOVERABILITY_NAME)
     public void testShowWithPermissionsAndWithoutHighlight() throws IOException {
         addSomePermissions(mTestServerRule.getServer().getURL("/"));
         loadUrlAndOpenPageInfoWithPermission(mTestServerRule.getServer().getURL(sSimpleHtml),
@@ -641,7 +663,6 @@ public class PageInfoViewTest {
      */
     @Test
     @MediumTest
-    @Features.EnableFeatures(PageInfoFeatures.PAGE_INFO_DISCOVERABILITY_NAME)
     public void testShowWithPermissionsAndHighlight() throws IOException {
         addSomePermissions(mTestServerRule.getServer().getURL("/"));
         loadUrlAndOpenPageInfoWithPermission(
@@ -656,7 +677,6 @@ public class PageInfoViewTest {
      */
     @Test
     @MediumTest
-    @Features.EnableFeatures(PageInfoFeatures.PAGE_INFO_DISCOVERABILITY_NAME)
     public void testShowPermissionsSubpageWithHighlight() throws IOException {
         addSomePermissions(mTestServerRule.getServer().getURL("/"));
         loadUrlAndOpenPageInfoWithPermission(
@@ -684,6 +704,8 @@ public class PageInfoViewTest {
         assertTrue(controller.isDialogShowingForTesting());
         onView(withId(R.id.page_info_close)).perform(click());
         assertFalse(controller.isDialogShowingForTesting());
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(null); });
     }
 
     /**
@@ -730,7 +752,7 @@ public class PageInfoViewTest {
             };
         });
         onViewWaiting(allOf(withText(containsString("Last visited")), isDisplayed()));
-        onView(withId(R.id.page_info_history_row)).perform(click());
+        onView(withId(PageInfoHistoryController.HISTORY_ROW_ID)).perform(click());
         onViewWaiting(allOf(withText(containsString("Jun 4, 2021")), isDisplayed()));
         int callCount = onDidStartNavigationHelper.getCallCount();
         onView(withText("www.example.com")).perform(click());

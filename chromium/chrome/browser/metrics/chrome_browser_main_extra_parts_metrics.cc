@@ -30,6 +30,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/chrome_browser_main.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/metrics/bluetooth_available_utility.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -40,7 +41,6 @@
 #include "chrome/browser/shell_integration.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/policy/core/common/management/management_service.h"
-#include "components/policy/core/common/management/platform_management_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
@@ -67,18 +67,16 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/version.h"
-#if defined(USE_X11)
-#include "ui/base/ui_base_features.h"
-#include "ui/base/x/x11_util.h"
-#endif
 #endif  // defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
-#if defined(USE_OZONE) || defined(USE_X11)
+#if defined(USE_OZONE)
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/input_device_event_observer.h"
-#endif  // defined(USE_OZONE) || defined(USE_X11)
+#endif  // defined(USE_OZONE)
 
 #if defined(OS_WIN)
+#include <windows.h>
+
 #include "base/win/base_win_buildflags.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
@@ -384,7 +382,7 @@ void RecordTouchEventState() {
                                 UMA_TOUCH_EVENT_FEATURE_DETECTION_STATE_COUNT);
 }
 
-#if defined(USE_OZONE) || defined(USE_X11)
+#if defined(USE_OZONE)
 
 // Asynchronously records the touch event state when the ui::DeviceDataManager
 // completes a device scan.
@@ -392,13 +390,16 @@ class AsynchronousTouchEventStateRecorder
     : public ui::InputDeviceEventObserver {
  public:
   AsynchronousTouchEventStateRecorder();
+
+  AsynchronousTouchEventStateRecorder(
+      const AsynchronousTouchEventStateRecorder&) = delete;
+  AsynchronousTouchEventStateRecorder& operator=(
+      const AsynchronousTouchEventStateRecorder&) = delete;
+
   ~AsynchronousTouchEventStateRecorder() override;
 
   // ui::InputDeviceEventObserver overrides.
   void OnDeviceListsComplete() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AsynchronousTouchEventStateRecorder);
 };
 
 AsynchronousTouchEventStateRecorder::AsynchronousTouchEventStateRecorder() {
@@ -414,7 +415,7 @@ void AsynchronousTouchEventStateRecorder::OnDeviceListsComplete() {
   RecordTouchEventState();
 }
 
-#endif  // defined(USE_OZONE) || defined(USE_X11)
+#endif  // defined(USE_OZONE)
 
 #if defined(OS_WIN)
 void RecordPinnedToTaskbarProcessError(bool error) {
@@ -511,11 +512,9 @@ bool HasEnterpriseBrandCode() {
 // Returns whether the instance is domain joined. This doesn't include CBCM
 // (EnterpriseManagementAuthority::DOMAIN_LOCAL).
 bool IsDomainJoined() {
-  auto enterprise_management_authorities =
-      policy::PlatformManagementService::GetInstance()
-          .GetManagementAuthorities();
-  return enterprise_management_authorities.contains(
-      policy::EnterpriseManagementAuthority::DOMAIN_LOCAL);
+  return policy::ManagementServiceFactory::GetForPlatform()
+      ->HasManagementAuthority(
+          policy::EnterpriseManagementAuthority::DOMAIN_LOCAL);
 }
 #endif  // !defined(OS_ANDROID)
 
@@ -627,7 +626,7 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
   // misrepresent it as enabled here (and later ignored when analyzing results),
   // in order to keep each population at 33%.
   //
-  // Alsto note that USE_BACKUP_REF_PTR_FAKE is only used to fake that the
+  // Also note that USE_BACKUP_REF_PTR_FAKE is only used to fake that the
   // feature is enabled for the purpose of this Finch setting, while in fact
   // there are no behavior changes.
   ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
@@ -639,6 +638,22 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
           base::features::kPartitionAllocPCScanBrowserOnly)
           ? "PCScanEnabled"
           : "Disabled"
+#endif  // BUILDFLAG(USE_BACKUP_REF_PTR) || BUILDFLAG(USE_BACKUP_REF_PTR_FAKE)
+  );
+
+  // This synthetic Finch setting reflects the new USE_BACKUP_REF_PTR behavior,
+  // which simply compiles in the BackupRefPtr support, but keeps it disabled at
+  // run-time (which can be further enabled via Finch).
+  //
+  // Also note that USE_BACKUP_REF_PTR_FAKE is only used to fake that the
+  // feature is enabled for the purpose of this Finch setting, while in fact
+  // there are no behavior changes.
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      "BackupRefPtrSupport",
+#if BUILDFLAG(USE_BACKUP_REF_PTR) || BUILDFLAG(USE_BACKUP_REF_PTR_FAKE)
+      "CompiledIn"
+#else
+      "Disabled"
 #endif  // BUILDFLAG(USE_BACKUP_REF_PTR) || BUILDFLAG(USE_BACKUP_REF_PTR_FAKE)
   );
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
@@ -709,13 +724,6 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   RecordMemoryMetricsAfterDelay();
   RecordLinuxGlibcVersion();
-#if defined(USE_X11)
-  if (!features::IsUsingOzonePlatform()) {
-    // Ozone writes this histogram upon platform initialisation.
-    base::UmaHistogramEnumeration("Linux.WindowManager",
-                                  ui::GetWindowManagerUMA());
-  }
-#endif
 
   constexpr base::TaskTraits kBestEffortTaskTraits = {
       base::MayBlock(), base::TaskPriority::BEST_EFFORT,
@@ -727,10 +735,10 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
                              base::BindOnce(&RecordLinuxDistro));
 #endif
 
-#if defined(USE_OZONE) || defined(USE_X11)
-  // The touch event state for X11 and Ozone based event sub-systems are based
-  // on device scans that happen asynchronously. So we may need to attach an
-  // observer to wait until these scans complete.
+#if defined(USE_OZONE)
+  // The touch event state for Ozone based event sub-systems are based on device
+  // scans that happen asynchronously. So we may need to attach an observer to
+  // wait until these scans complete.
   if (ui::DeviceDataManager::GetInstance()->AreDeviceListsComplete()) {
     RecordTouchEventState();
   } else {
@@ -739,7 +747,7 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   }
 #else
   RecordTouchEventState();
-#endif  // defined(USE_OZONE) || defined(USE_X11)
+#endif  // defined(USE_OZONE)
 
 #if defined(OS_MAC)
   RecordMacMetrics();
@@ -768,7 +776,7 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   if (base::RandGenerator(100) == 0) {
     background_task_runner->PostDelayedTask(
         FROM_HERE, base::BindOnce(&RecordIsPinnedToTaskbarHistogram),
-        base::TimeDelta::FromSeconds(45));
+        base::Seconds(45));
   }
 #endif  // defined(OS_WIN)
 

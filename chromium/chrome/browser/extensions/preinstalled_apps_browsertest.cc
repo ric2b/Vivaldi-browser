@@ -15,16 +15,16 @@
 #include "build/branding_buildflags.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/pending_extension_manager.h"
-#include "chrome/browser/web_applications/components/preinstalled_app_install_features.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/extension_status_utils.h"
 #include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
+#include "chrome/browser/web_applications/preinstalled_app_install_features.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_utils.h"
-#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
-#include "chrome/browser/web_applications/test/test_web_app_provider.h"
+#include "chrome/browser/web_applications/test/fake_os_integration_manager.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_installation_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -130,8 +130,8 @@ class PreinstalledAppsMigrationBrowserTest
     : public PreinstalledAppsBrowserTest {
  public:
   PreinstalledAppsMigrationBrowserTest()
-      : test_web_app_provider_creator_(base::BindRepeating(
-            &PreinstalledAppsMigrationBrowserTest::CreateTestWebAppProvider,
+      : fake_web_app_provider_creator_(base::BindRepeating(
+            &PreinstalledAppsMigrationBrowserTest::CreateFakeWebAppProvider,
             base::Unretained(this))) {
     // Skip migration on startup because we override the configs used, and need
     // to do that a little later (because we need the embedded test server up
@@ -198,7 +198,7 @@ class PreinstalledAppsMigrationBrowserTest
 
     {
       web_app::PreinstalledWebAppManager& web_app_manager =
-          web_app::WebAppProvider::Get(profile())
+          web_app::WebAppProvider::GetForTest(profile())
               ->preinstalled_web_app_manager();
       base::RunLoop run_loop;
       auto quit =
@@ -240,15 +240,17 @@ class PreinstalledAppsMigrationBrowserTest
   bool IsWebAppCurrentlyInstalled() {
     const web_app::AppId app_id =
         web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, GetAppUrl());
-    return web_app::WebAppProvider::Get(profile())->registrar().IsInstalled(
-        app_id);
+    return web_app::WebAppProvider::GetForTest(profile())
+        ->registrar()
+        .IsInstalled(app_id);
   }
 
   bool CanWebAppAlwaysUpdateIdentity() {
     const web_app::AppId app_id =
         web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, GetAppUrl());
     const web_app::WebApp* web_app =
-        web_app::WebAppProvider::Get(profile())->registrar().GetAppById(app_id);
+        web_app::WebAppProvider::GetForTest(profile())->registrar().GetAppById(
+            app_id);
     return CanWebAppUpdateIdentity(web_app);
   }
 
@@ -256,16 +258,16 @@ class PreinstalledAppsMigrationBrowserTest
 
  protected:
   web_app::TestShortcutManager* shortcut_manager_;
-  web_app::TestOsIntegrationManager* os_integration_manager_;
+  web_app::FakeOsIntegrationManager* os_integration_manager_;
 
  private:
-  std::unique_ptr<KeyedService> CreateTestWebAppProvider(Profile* profile) {
-    auto provider = std::make_unique<web_app::TestWebAppProvider>(profile);
+  std::unique_ptr<KeyedService> CreateFakeWebAppProvider(Profile* profile) {
+    auto provider = std::make_unique<web_app::FakeWebAppProvider>(profile);
     auto shortcut_manager =
         std::make_unique<web_app::TestShortcutManager>(profile);
     shortcut_manager_ = shortcut_manager.get();
     auto os_integration_manager =
-        std::make_unique<web_app::TestOsIntegrationManager>(
+        std::make_unique<web_app::FakeOsIntegrationManager>(
             profile, std::move(shortcut_manager), nullptr, nullptr, nullptr);
     os_integration_manager_ = os_integration_manager.get();
     provider->SetOsIntegrationManager(std::move(os_integration_manager));
@@ -273,7 +275,7 @@ class PreinstalledAppsMigrationBrowserTest
     return provider;
   }
 
-  web_app::TestWebAppProviderCreator test_web_app_provider_creator_;
+  web_app::FakeWebAppProviderCreator fake_web_app_provider_creator_;
   std::vector<base::Value> app_configs_;
   std::map<GURL, web_app::ExternallyManagedAppManager::InstallResult>
       install_results_;
@@ -321,6 +323,7 @@ IN_PROC_BROWSER_TEST_F(PreinstalledAppsBrowserTest, TestUninstall) {
   EXPECT_FALSE(registry()->enabled_extensions().GetByID(kDefaultInstalledId));
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // A fun back-and-forth with enabling-and-disabling the web app migration
 // feature. This is designed to exercise the flow needed in case of a rollback.
 IN_PROC_BROWSER_TEST_F(PreinstalledAppsMigrationBrowserTest,
@@ -452,6 +455,7 @@ IN_PROC_BROWSER_TEST_F(PreinstalledAppsMigrationBrowserTest,
 
   EXPECT_FALSE(registry()->enabled_extensions().GetByID(kDefaultInstalledId));
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 IN_PROC_BROWSER_TEST_F(PreinstalledAppsMigrationEnabledBrowserTest,
                        PRE_TestAppInstalled) {

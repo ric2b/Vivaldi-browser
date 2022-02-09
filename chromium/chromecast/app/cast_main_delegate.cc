@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/debug/leak_annotations.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -213,19 +214,28 @@ void CastMainDelegate::PostEarlyInitialization(bool is_running_tests) {
   DCHECK(cast_feature_list_creator_);
 
 #if !defined(OS_ANDROID)
-  // PrefService requires home directory to be created before the pref
-  // store can be initialized properly.
+  // PrefService requires the home directory to be created before the pref store
+  // can be initialized properly.
   base::FilePath home_dir;
   CHECK(base::PathService::Get(DIR_CAST_HOME, &home_dir));
   CHECK(base::CreateDirectory(home_dir));
 #endif  // !defined(OS_ANDROID)
 
-  // The |FieldTrialList| is a dependency of the feature list. In tests, it
-  // gets constructed as part of the test suite.
+  // TODO(crbug/1249485): If we're able to create the MetricsStateManager
+  // earlier, clean up the below if and else blocks and call
+  // MetricsStateManager::InstantiateFieldTrialList().
+  //
+  // The FieldTrialList is a dependency of the feature list. In tests, it is
+  // constructed as part of the test suite.
   if (is_running_tests) {
     DCHECK(base::FieldTrialList::GetInstance());
   } else {
-    field_trial_list_ = std::make_unique<base::FieldTrialList>(nullptr);
+    // This is intentionally leaked since it needs to live for the duration of
+    // the browser process and there's no benefit to cleaning it up at exit.
+    base::FieldTrialList* leaked_field_trial_list =
+        new base::FieldTrialList(nullptr);
+    ANNOTATE_LEAKING_OBJECT_PTR(leaked_field_trial_list);
+    ignore_result(leaked_field_trial_list);
   }
 
   // Initialize the base::FeatureList and the PrefService (which it depends on),
@@ -250,7 +260,7 @@ void CastMainDelegate::InitializeResourceBundle() {
     ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
         android_pak_file.Duplicate(), pak_region);
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-        std::move(android_pak_file), pak_region, ui::SCALE_FACTOR_100P);
+        std::move(android_pak_file), pak_region, ui::k100Percent);
     return;
   } else {
     pak_fd = base::android::OpenApkAsset("assets/cast_shell.pak", &pak_region);
@@ -276,10 +286,10 @@ void CastMainDelegate::InitializeResourceBundle() {
 
 #if defined(OS_ANDROID)
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-      base::File(pak_fd), pak_region, ui::SCALE_FACTOR_NONE);
+      base::File(pak_fd), pak_region, ui::kScaleFactorNone);
 #else
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-      pak_file, ui::SCALE_FACTOR_NONE);
+      pak_file, ui::kScaleFactorNone);
 #endif  // defined(OS_ANDROID)
 }
 

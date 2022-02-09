@@ -28,7 +28,6 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
-#include "chrome/browser/plugins/flash_temporary_permission_tracker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -508,17 +507,6 @@ WebViewPermissionHelper::SetPermission(
   PermissionResponseInfo& info = request_itr->second;
   bool allow = (action == ALLOW) ||
       ((action == DEFAULT) && info.allowed_by_default);
-
-  // Will temporary enable Flash for this site.
-  if (allow && info.permission_type == WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN) {
-
-    Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
-    DCHECK(browser);
-    Profile* profile = browser->profile();
-
-    FlashTemporaryPermissionTracker::Get(profile)->FlashEnabledForWebContents(
-      web_contents());
-  }
 
   std::move(info.callback).Run(allow, user_input);
 

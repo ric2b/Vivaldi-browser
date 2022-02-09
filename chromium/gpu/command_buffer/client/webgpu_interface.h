@@ -72,7 +72,9 @@ class WebGPUInterface : public InterfaceBase {
   virtual void RequestDeviceAsync(
       uint32_t adapter_service_id,
       const WGPUDeviceProperties& requested_device_properties,
-      base::OnceCallback<void(WGPUDevice)> request_device_callback) = 0;
+      base::OnceCallback<void(WGPUDevice,
+                              const WGPUSupportedLimits*,
+                              const char*)> request_device_callback) = 0;
 
   // Gets or creates a usable WGPUDevice synchronously. It really should not
   // be used, and the async request adapter and request device APIs should be
@@ -83,6 +85,16 @@ class WebGPUInterface : public InterfaceBase {
 // it means we can easily edit the non-auto generated parts right here in
 // this file instead of having to edit some template or the code generator.
 #include "gpu/command_buffer/client/webgpu_interface_autogen.h"
+
+  void AssociateMailbox(GLuint device_id,
+                        GLuint device_generation,
+                        GLuint id,
+                        GLuint generation,
+                        GLuint usage,
+                        const GLbyte* mailbox) {
+    AssociateMailbox(device_id, device_generation, id, generation, usage,
+                     WEBGPU_MAILBOX_NONE, mailbox);
+  }
 };
 
 }  // namespace webgpu

@@ -38,8 +38,12 @@ import org.chromium.ui.util.ColorUtils;
 
 import java.util.List;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * {@link StripLayoutTab} is used to keep track of the strip position and rendering information for
@@ -164,6 +168,12 @@ public class StripLayoutTab implements VirtualView {
 
     private ObserverList<Observer> mObservers = new ObserverList<>();
 
+    // Vivaldi
+    private boolean mIsStackStrip;
+    private TabModelSelector mTabModelSelector;
+    private float mAlpha;
+    private static final int TITLE_SPACE_OFFSET = 12;
+
     /**
      * Create a {@link StripLayoutTab} that represents the {@link Tab} with an id of
      * {@code id}.
@@ -199,6 +209,9 @@ public class StripLayoutTab implements VirtualView {
         mCloseButton.setIncognito(mIncognito);
         mCloseButton.setBounds(getCloseRect());
         mCloseButton.setClickSlop(0.f);
+
+        // Vivaldi
+        mAlpha = 1.f;
     }
 
     /** @param observer The observer to add. */
@@ -268,8 +281,42 @@ public class StripLayoutTab implements VirtualView {
      * @return The Android resource that represents the tab background.
      */
     public int getResourceId() {
-        // Note(david@vivaldi.com): Get appropriate resource when toolbar is at the bottom.
+        // Note(david@vivaldi.com): Get appropriate resources and set the opacity.
+        if (mTabModelSelector != null) {
+            int selectedTabId = mTabModelSelector.getCurrentTabId();
+            boolean isTabSelected = mId == selectedTabId;
+            boolean inNightMode = ColorUtils.inNightMode(mContext);
+            float backgroundTabAlpha = inNightMode ? (mIsStackStrip ? 0.25f : 0.35f) : 0.5f;
+            mAlpha = mId == selectedTabId ? 1.f : backgroundTabAlpha;
+            // Set close button opacity for background tabs. Only show it when setting is turned on.
+            boolean showCloseButton = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
+            mCloseButton.setOpacity(!isTabSelected && !showCloseButton ? 0.f : 1.f);
+            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext) && !mIsStackStrip) {
+                int tabCount = mTabModelSelector.getTabModelFilterProvider()
+                                       .getCurrentTabModelFilter(true)
+                                       .getRelatedTabList(mId)
+                                       .size();
+                if (tabCount > 1) {
+                    if (!isTabSelected) {
+                        // The opacity of the stacked tab is handled by the png. This is a special
+                        // case, due to that we apply full opacity here.
+                        mAlpha = 1.f;
+                        if (VivaldiUtils.isTopToolbarOn())
+                            return R.drawable.bg_tabstrip_stack_tab;
+                        else
+                            return R.drawable.bg_tabstrip_stack_tab_bottom;
+                    } else {
+                        if (VivaldiUtils.isTopToolbarOn())
+                            return R.drawable.bg_tabstrip_stack_tab_active;
+                        else
+                            return R.drawable.bg_tabstrip_stack_tab_bottom_active;
+                    }
+                }
+            }
+        }
         if (!VivaldiUtils.isTopToolbarOn()) return R.drawable.bg_tabstrip_tab_bottom;
+
         return R.drawable.bg_tabstrip_tab;
     }
 
@@ -622,12 +669,20 @@ public class StripLayoutTab implements VirtualView {
     }
 
     private RectF getCloseRect() {
+        // Vivaldi: Bounds offset for shifted close button.
+        final int vivaldiOffset = 5;
         if (!LocalizationUtils.isLayoutRtl()) {
             mClosePlacement.left = getWidth() - CLOSE_BUTTON_WIDTH_DP;
             mClosePlacement.right = mClosePlacement.left + CLOSE_BUTTON_WIDTH_DP;
+            // Vivaldi: Add offset here as the button is shifted in Vivaldi.
+            mClosePlacement.left += vivaldiOffset;
+            mClosePlacement.right += vivaldiOffset;
         } else {
             mClosePlacement.left = 0;
             mClosePlacement.right = CLOSE_BUTTON_WIDTH_DP;
+            // Vivaldi: Add offset here as the button is shifted in Vivaldi.
+            mClosePlacement.left -= vivaldiOffset;
+            mClosePlacement.right -= vivaldiOffset;
         }
 
         mClosePlacement.top = 0;
@@ -674,5 +729,42 @@ public class StripLayoutTab implements VirtualView {
             mShowingCloseButton = shouldShow;
             if (!mShowingCloseButton) mCloseButton.setPressed(false);
         }
+    }
+
+    /** Vivaldi **/
+    public void setIsStackStrip(boolean isStackStrip) {
+        mIsStackStrip = isStackStrip;
+    }
+
+    /** Vivaldi **/
+    public void setTabModelSelector(TabModelSelector tabModelSelector) {
+        mTabModelSelector = tabModelSelector;
+    }
+
+    /** Vivaldi **/
+    public float getAlpha() {
+        return mAlpha;
+    }
+
+    /**
+     * Vivaldi: For foreground tabs the close button is always visible, for background tabs we read
+     * the appropriate setting.
+     */
+    public boolean isCloseButtonVisible() {
+        if (mTabModelSelector != null) {
+            int selectedTabId = mTabModelSelector.getCurrentTabId();
+            boolean isTabSelected = mId == selectedTabId;
+            if (isTabSelected) return true;
+            return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
+        }
+        return false;
+    }
+
+    /**
+     * Vivaldi: Gets the title offset.
+     */
+    public float getTitleOffset() {
+        return TITLE_SPACE_OFFSET;
     }
 }

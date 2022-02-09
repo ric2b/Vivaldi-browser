@@ -184,7 +184,7 @@ class StorageQueueStressTest : public ::testing::TestWithParam<size_t> {
   }
 
   QueueOptions BuildStorageQueueOptionsPeriodic(
-      base::TimeDelta upload_period = base::TimeDelta::FromSeconds(1)) const {
+      base::TimeDelta upload_period = base::Seconds(1)) const {
     return BuildStorageQueueOptionsImmediate().set_upload_period(upload_period);
   }
 
@@ -193,7 +193,9 @@ class StorageQueueStressTest : public ::testing::TestWithParam<size_t> {
   }
 
   void AsyncStartTestUploader(
+      UploaderInterface::UploadReason reason,
       UploaderInterface::UploaderInterfaceResultCb start_uploader_cb) {
+    // Ignore reason for stress test.
     std::move(start_uploader_cb)
         .Run(std::make_unique<TestUploadClient>(&last_record_digest_map_));
   }

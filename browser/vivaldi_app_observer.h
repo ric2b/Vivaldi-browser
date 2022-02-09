@@ -16,6 +16,8 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
  public:
   explicit VivaldiAppObserver(content::BrowserContext* context);
   ~VivaldiAppObserver() override;
+  VivaldiAppObserver(const VivaldiAppObserver&) = delete;
+  VivaldiAppObserver& operator=(const VivaldiAppObserver&) = delete;
 
   static extensions::BrowserContextKeyedAPIFactory<VivaldiAppObserver>*
   GetFactoryInstance();
@@ -30,7 +32,7 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
   void OnWindowShown(VivaldiBrowserWindow* window, bool was_hidden);
 
  private:
-  friend class extensions::BrowserContextKeyedAPIFactory<VivaldiAppObserver>;
+  friend extensions::BrowserContextKeyedAPIFactory<VivaldiAppObserver>;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiAppObserver"; }
@@ -40,8 +42,6 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
   NSInteger tag_ = 0;
   Browser* browser_ = nullptr;
   content::BrowserContext* browser_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAppObserver);
 };
 
 }  // namespace vivaldi

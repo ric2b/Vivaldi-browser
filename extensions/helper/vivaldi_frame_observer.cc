@@ -10,7 +10,7 @@
 
 namespace vivaldi {
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiFrameObserver)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiFrameObserver);
 
 VivaldiFrameObserver::VivaldiFrameObserver(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {

@@ -9,6 +9,8 @@
 #include "chrome/browser/apps/app_service/app_platform_metrics.h"
 #include "chrome/browser/apps/app_service/app_platform_metrics_service.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
+#include "chrome/browser/apps/app_service/browser_app_instance_registry.h"
+#include "chrome/browser/apps/app_service/browser_app_instance_tracker.h"
 #include "chrome/browser/apps/app_service/publishers/borealis_apps.h"
 #include "chrome/browser/apps/app_service/publishers/built_in_chromeos_apps.h"
 #include "chrome/browser/apps/app_service/publishers/crostini_apps.h"
@@ -16,19 +18,19 @@
 #include "chrome/browser/apps/app_service/publishers/plugin_vm_apps.h"
 #include "chrome/browser/apps/app_service/publishers/standalone_browser_apps.h"
 #include "chrome/browser/apps/app_service/uninstall_dialog.h"
+#include "chrome/browser/ash/app_restore/full_restore_service.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_time_limit_interface.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
-#include "chrome/browser/ash/full_restore/full_restore_service.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/grit/supervised_user_unscaled_resources.h"
-#include "chrome/browser/web_applications/app_service/web_apps_chromeos.h"
+#include "chrome/browser/web_applications/app_service/web_apps.h"
 #include "chrome/common/chrome_features.h"
 #include "components/account_id/account_id.h"
-#include "components/full_restore/features.h"
-#include "components/full_restore/full_restore_save_handler.h"
-#include "components/full_restore/full_restore_utils.h"
+#include "components/app_restore/features.h"
+#include "components/app_restore/full_restore_save_handler.h"
+#include "components/app_restore/full_restore_utils.h"
 #include "components/services/app_service/app_service_impl.h"
 #include "components/services/app_service/public/cpp/app_capability_access_cache_wrapper.h"
 #include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
@@ -47,6 +49,14 @@ bool g_omit_plugin_vm_apps_for_testing_ = false;
 
 AppServiceProxyChromeOs::AppServiceProxyChromeOs(Profile* profile)
     : AppServiceProxyBase(profile) {
+  if (features::IsBrowserAppInstanceTrackingEnabled()) {
+    browser_app_instance_tracker_ =
+        std::make_unique<apps::BrowserAppInstanceTracker>(profile_,
+                                                          app_registry_cache_);
+    browser_app_instance_registry_ =
+        std::make_unique<apps::BrowserAppInstanceRegistry>(
+            *browser_app_instance_tracker_);
+  }
   Initialize();
 }
 
@@ -98,6 +108,8 @@ void AppServiceProxyChromeOs::Initialize() {
     return;
   }
 
+  Observe(&AppRegistryCache());
+
   // The AppServiceProxy is also a publisher, of a variety of app types. That
   // responsibility isn't intrinsically part of the AppServiceProxy, but doing
   // that here, for each such app type, is as good a place as any.
@@ -121,11 +133,11 @@ void AppServiceProxyChromeOs::Initialize() {
   // profile and ensures there is only one instance of StandaloneBrowserApps.
   if (crosapi::browser_util::IsLacrosEnabled() &&
       chromeos::ProfileHelper::IsPrimaryProfile(profile_)) {
-    standalone_browser_apps_ =
-        std::make_unique<StandaloneBrowserApps>(app_service_, profile_);
+    standalone_browser_apps_ = std::make_unique<StandaloneBrowserApps>(
+        app_service_, profile_, browser_app_instance_registry_.get());
   }
-  web_apps_ = std::make_unique<web_app::WebAppsChromeOs>(app_service_, profile_,
-                                                         &instance_registry_);
+  web_apps_ = std::make_unique<web_app::WebApps>(app_service_,
+                                                 &instance_registry_, profile_);
 
   if (!profile_->AsTestingProfile()) {
     app_platform_metrics_service_ =
@@ -145,6 +157,16 @@ void AppServiceProxyChromeOs::Initialize() {
 
 apps::InstanceRegistry& AppServiceProxyChromeOs::InstanceRegistry() {
   return instance_registry_;
+}
+
+apps::BrowserAppInstanceTracker*
+AppServiceProxyChromeOs::BrowserAppInstanceTracker() {
+  return browser_app_instance_tracker_.get();
+}
+
+apps::BrowserAppInstanceRegistry*
+AppServiceProxyChromeOs::BrowserAppInstanceRegistry() {
+  return browser_app_instance_registry_.get();
 }
 
 apps::AppPlatformMetrics* AppServiceProxyChromeOs::AppPlatformMetrics() {
@@ -472,8 +494,11 @@ void AppServiceProxyChromeOs::OnAppUpdate(const apps::AppUpdate& update) {
        !apps_util::IsInstalled(update.Readiness()))) {
     pending_pause_requests_.MaybeRemoveApp(update.AppId());
   }
+}
 
-  AppServiceProxyBase::OnAppUpdate(update);
+void AppServiceProxyChromeOs::OnAppRegistryCacheWillBeDestroyed(
+    apps::AppRegistryCache* cache) {
+  Observe(nullptr);
 }
 
 void AppServiceProxyChromeOs::RecordAppPlatformMetrics(

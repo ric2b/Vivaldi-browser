@@ -92,6 +92,10 @@ content::WebContents* CreateAndAppendWebContentsWithHistory(
 }  // namespace
 
 class TabsApiUnitTest : public ExtensionServiceTestBase {
+ public:
+  TabsApiUnitTest(const TabsApiUnitTest&) = delete;
+  TabsApiUnitTest& operator=(const TabsApiUnitTest&) = delete;
+
  protected:
   TabsApiUnitTest() {}
   ~TabsApiUnitTest() override {}
@@ -113,8 +117,6 @@ class TabsApiUnitTest : public ExtensionServiceTestBase {
   display::test::TestScreen test_screen_;
 
   std::unique_ptr<ScopedScreenOverride> scoped_screen_override_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsApiUnitTest);
 };
 
 void TabsApiUnitTest::SetUp() {
@@ -284,7 +286,7 @@ TEST_F(TabsApiUnitTest, QueryWithoutTabsPermission) {
   std::unique_ptr<base::ListValue> tabs_list_without_permission(
       RunTabsQueryFunction(browser(), extension.get(), kTitleAndURLQueryInfo));
   ASSERT_TRUE(tabs_list_without_permission);
-  EXPECT_EQ(0u, tabs_list_without_permission->GetSize());
+  EXPECT_EQ(0u, tabs_list_without_permission->GetList().size());
 
   // An extension with "tabs" permission however will see the third tab.
   scoped_refptr<const Extension> extension_with_permission =
@@ -301,7 +303,7 @@ TEST_F(TabsApiUnitTest, QueryWithoutTabsPermission) {
       RunTabsQueryFunction(browser(), extension_with_permission.get(),
                            kTitleAndURLQueryInfo));
   ASSERT_TRUE(tabs_list_with_permission);
-  ASSERT_EQ(1u, tabs_list_with_permission->GetSize());
+  ASSERT_EQ(1u, tabs_list_with_permission->GetList().size());
 
   const base::DictionaryValue* third_tab_info;
   ASSERT_TRUE(tabs_list_with_permission->GetDictionary(0, &third_tab_info));
@@ -358,7 +360,7 @@ TEST_F(TabsApiUnitTest, QueryWithHostPermission) {
         RunTabsQueryFunction(browser(), extension_with_permission.get(),
                              kTitleAndURLQueryInfo));
     ASSERT_TRUE(tabs_list_with_permission);
-    ASSERT_EQ(1u, tabs_list_with_permission->GetSize());
+    ASSERT_EQ(1u, tabs_list_with_permission->GetList().size());
 
     const base::DictionaryValue* third_tab_info;
     ASSERT_TRUE(tabs_list_with_permission->GetDictionary(0, &third_tab_info));
@@ -374,7 +376,7 @@ TEST_F(TabsApiUnitTest, QueryWithHostPermission) {
         RunTabsQueryFunction(browser(), extension_with_permission.get(),
                              kURLQueryInfo));
     ASSERT_TRUE(tabs_list_with_permission);
-    ASSERT_EQ(2u, tabs_list_with_permission->GetSize());
+    ASSERT_EQ(2u, tabs_list_with_permission->GetList().size());
 
     const base::DictionaryValue* first_tab_info;
     const base::DictionaryValue* third_tab_info;
@@ -431,10 +433,10 @@ TEST_F(TabsApiUnitTest, PDFExtensionNavigation) {
 
   scoped_refptr<TabsUpdateFunction> function = new TabsUpdateFunction();
   function->set_extension(extension.get());
-  std::unique_ptr<base::ListValue> args(
+  function->SetArgs(
       extension_function_test_utils::ParseList(
-          base::StringPrintf(R"([%d, {"url":"http://example.com"}])", tab_id)));
-  function->SetArgs(base::Value::FromUniquePtrValue(std::move(args)));
+          base::StringPrintf(R"([%d, {"url":"http://example.com"}])", tab_id))
+          .value());
   api_test_utils::SendResponseHelper response_helper(function.get());
   function->RunWithValidation()->Execute();
 
@@ -1189,7 +1191,7 @@ TEST_F(TabsApiUnitTest, ScreenshotsRestricted) {
   policy::MockDlpContentManager mock_dlp_content_manager;
   policy::ScopedDlpContentManagerForTesting scoped_dlp_content_manager_(
       &mock_dlp_content_manager);
-  EXPECT_CALL(mock_dlp_content_manager, IsScreenshotRestricted(testing::_))
+  EXPECT_CALL(mock_dlp_content_manager, IsScreenshotApiRestricted(testing::_))
       .Times(1)
       .WillOnce(testing::Return(true));
 

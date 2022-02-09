@@ -19,6 +19,8 @@
 #include "ash/system/accessibility/unified_accessibility_detailed_view_controller.h"
 #include "ash/system/audio/unified_audio_detailed_view_controller.h"
 #include "ash/system/audio/unified_volume_slider_controller.h"
+#include "ash/system/bluetooth/bluetooth_detailed_view_controller.h"
+#include "ash/system/bluetooth/bluetooth_feature_pod_controller.h"
 #include "ash/system/bluetooth/bluetooth_feature_pod_controller_legacy.h"
 #include "ash/system/bluetooth/unified_bluetooth_detailed_view_controller.h"
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
@@ -99,13 +101,12 @@ UnifiedSystemTrayController::UnifiedSystemTrayController(
       bubble_(bubble),
       animation_(std::make_unique<gfx::SlideAnimation>(this)) {
   animation_->Reset(model_->IsExpandedOnOpen() ? 1.0 : 0.0);
-  animation_->SetSlideDuration(base::TimeDelta::FromMilliseconds(
-      kSystemMenuCollapseExpandAnimationDurationMs));
+  animation_->SetSlideDuration(
+      base::Milliseconds(kSystemMenuCollapseExpandAnimationDurationMs));
   animation_->SetTweenType(gfx::Tween::EASE_IN_OUT);
 
-  model_->pagination_model()->SetTransitionDurations(
-      base::TimeDelta::FromMilliseconds(250),
-      base::TimeDelta::FromMilliseconds(50));
+  model_->pagination_model()->SetTransitionDurations(base::Milliseconds(250),
+                                                     base::Milliseconds(50));
 
   pagination_controller_ = std::make_unique<PaginationController>(
       model_->pagination_model(), PaginationController::SCROLL_AXIS_HORIZONTAL,
@@ -133,8 +134,8 @@ UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
         media_controls_controller_->CreateView());
   }
 
-  volume_slider_controller_ = std::make_unique<UnifiedVolumeSliderController>(
-      this, false /* in_bubble */);
+  volume_slider_controller_ =
+      std::make_unique<UnifiedVolumeSliderController>(this);
   unified_view_->AddSliderView(volume_slider_controller_->CreateView());
 
   brightness_slider_controller_ =
@@ -324,8 +325,12 @@ void UnifiedSystemTrayController::ShowBluetoothDetailedView() {
 
   Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DETAILED_BLUETOOTH_VIEW);
-  ShowDetailedView(
-      std::make_unique<UnifiedBluetoothDetailedViewController>(this));
+  if (ash::features::IsBluetoothRevampEnabled()) {
+    ShowDetailedView(std::make_unique<BluetoothDetailedViewController>(this));
+  } else {
+    ShowDetailedView(
+        std::make_unique<UnifiedBluetoothDetailedViewController>(this));
+  }
 }
 
 void UnifiedSystemTrayController::ShowCastDetailedView() {
@@ -450,8 +455,12 @@ void UnifiedSystemTrayController::OnMediaControlsViewClicked() {
 
 void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<NetworkFeaturePodController>(this));
-  AddFeaturePodItem(
-      std::make_unique<BluetoothFeaturePodControllerLegacy>(this));
+  if (ash::features::IsBluetoothRevampEnabled()) {
+    AddFeaturePodItem(std::make_unique<BluetoothFeaturePodController>(this));
+  } else {
+    AddFeaturePodItem(
+        std::make_unique<BluetoothFeaturePodControllerLegacy>(this));
+  }
   AddFeaturePodItem(std::make_unique<AccessibilityFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<QuietModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
@@ -581,8 +590,7 @@ bool UnifiedSystemTrayController::IsMessageCenterCollapseRequired() const {
 
 base::TimeDelta UnifiedSystemTrayController::GetAnimationDurationForReporting()
     const {
-  return base::TimeDelta::FromMilliseconds(
-      kSystemMenuCollapseExpandAnimationDurationMs);
+  return base::Milliseconds(kSystemMenuCollapseExpandAnimationDurationMs);
 }
 
 }  // namespace ash

@@ -19,14 +19,14 @@
 #include "cc/test/pixel_test_utils.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
-#include "chrome/browser/web_applications/components/app_registry_controller.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/components/web_app_icon_generator.h"
+#include "chrome/browser/web_applications/test/fake_web_app_registry_controller.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
-#include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -506,36 +506,18 @@ class WebAppIconFactoryTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    web_app_provider_ = web_app::WebAppProvider::Get(profile());
+    web_app_provider_ = web_app::WebAppProvider::GetForTest(profile());
     ASSERT_TRUE(web_app_provider_);
 
     base::RunLoop run_loop;
-    web_app_provider_->registry_controller().AsWebAppSyncBridge()->Init(
-        run_loop.QuitClosure());
+    web_app_provider_->sync_bridge().Init(run_loop.QuitClosure());
     run_loop.Run();
 
     icon_manager_ = static_cast<web_app::WebAppIconManager*>(
         &(web_app_provider_->icon_manager()));
     ASSERT_TRUE(icon_manager_);
 
-    sync_bridge_ =
-        web_app_provider_->registry_controller().AsWebAppSyncBridge();
-    ASSERT_TRUE(sync_bridge_);
-  }
-
-  std::unique_ptr<web_app::WebApp> CreateWebApp() {
-    const GURL app_url("https://example.com/path");
-    const std::string app_id =
-        web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, app_url);
-
-    auto web_app = std::make_unique<web_app::WebApp>(app_id);
-    web_app->AddSource(web_app::Source::kSync);
-    web_app->SetDisplayMode(web_app::DisplayMode::kStandalone);
-    web_app->SetUserDisplayMode(web_app::DisplayMode::kStandalone);
-    web_app->SetName("Name");
-    web_app->SetStartUrl(app_url);
-
-    return web_app;
+    sync_bridge_ = &web_app_provider_->sync_bridge();
   }
 
   void RegisterApp(std::unique_ptr<web_app::WebApp> web_app) {
@@ -700,7 +682,7 @@ class WebAppIconFactoryTest : public ChromeRenderViewHostTestHarness {
 };
 
 TEST_F(WebAppIconFactoryTest, LoadNonMaskableIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 96;
@@ -731,7 +713,7 @@ TEST_F(WebAppIconFactoryTest, LoadNonMaskableIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadNonMaskableCompressedIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 96;
@@ -763,7 +745,7 @@ TEST_F(WebAppIconFactoryTest, LoadNonMaskableCompressedIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadMaskableIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 128;
@@ -808,7 +790,7 @@ TEST_F(WebAppIconFactoryTest, LoadMaskableIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadMaskableCompressedIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 128;
@@ -853,7 +835,7 @@ TEST_F(WebAppIconFactoryTest, LoadMaskableCompressedIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadNonMaskableIconWithMaskableIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 96;
@@ -887,7 +869,7 @@ TEST_F(WebAppIconFactoryTest, LoadNonMaskableIconWithMaskableIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadSmallMaskableIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 128;
@@ -919,7 +901,7 @@ TEST_F(WebAppIconFactoryTest, LoadSmallMaskableIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadExactSizeIcon) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 48;
@@ -955,7 +937,7 @@ TEST_F(WebAppIconFactoryTest, LoadExactSizeIcon) {
 }
 
 TEST_F(WebAppIconFactoryTest, LoadIconFailed) {
-  auto web_app = CreateWebApp();
+  auto web_app = web_app::test::CreateWebApp();
   const std::string app_id = web_app->app_id();
 
   const int kIconSize1 = 48;

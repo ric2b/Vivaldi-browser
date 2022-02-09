@@ -13,7 +13,7 @@
             android:title="@string/bookmark_action_bar_edit_folder"
             android:visible="false"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/vivaldiIconTint" />
+            app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <item
             android:id="@+id/search_menu_id"
 
@@ -21,14 +21,14 @@
             android:title="@string/search"
             android:visible="false"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/vivaldiIconTint" />
+            app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <!-- Vivaldi -->
         <item
             android:id="@+id/sort_bookmarks_id"
             android:title="@string/panel_sort"
             android:icon="@drawable/vivaldi_sort_button_24dp"
             app:showAsAction="always"
-            app:iconTint="?attr/vivaldiIconTint"
+            app:iconTint="@color/default_icon_color_secondary_tint_list"
             >
             <menu>
                 <group
@@ -65,7 +65,7 @@
             android:icon="@drawable/vivaldi_close_mobile_24dp"
             android:title="@string/panel_close"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/vivaldiIconTint" />
+            app:iconTint="@color/default_icon_color_secondary_tint_list" />
     </group>
     <group
         android:id="@+id/selection_mode_menu_group"
@@ -75,17 +75,17 @@
             android:icon="@drawable/bookmark_edit_active"
             android:title="@null"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/default_icon_color_inverse" />
+            app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <item
             android:id="@+id/selection_mode_move_menu_id"
             android:icon="@drawable/bookmark_move_active"
             android:title="@null"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/default_icon_color_inverse" />
+            app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <item
             android:id="@+id/selection_mode_delete_menu_id"
             android:icon="@drawable/vivaldi_mobile_trash_24dp"
-            app:iconTint="@color/default_icon_color_inverse"
+            app:iconTint="@color/default_icon_color_secondary_tint_list"
             android:title="@null"
             app:showAsAction="ifRoom" />
         <item

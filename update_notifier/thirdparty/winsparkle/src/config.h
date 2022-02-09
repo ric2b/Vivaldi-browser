@@ -55,8 +55,6 @@ base::FilePath GetExeDir();
 // Get setup.exe path for the current installation if any.
 base::FilePath GetSetupExePath();
 
-bool IsUsingTaskScheduler();
-
 // Return true if update checks are run as a system service.
 bool DoesRunAsSystemService();
 

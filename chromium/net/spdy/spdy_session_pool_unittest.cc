@@ -17,6 +17,7 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
+#include "net/base/proxy_string_util.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/public/secure_dns_policy.h"
@@ -96,6 +97,11 @@ class SpdySessionRequestDelegate
     : public SpdySessionPool::SpdySessionRequest::Delegate {
  public:
   SpdySessionRequestDelegate() = default;
+
+  SpdySessionRequestDelegate(const SpdySessionRequestDelegate&) = delete;
+  SpdySessionRequestDelegate& operator=(const SpdySessionRequestDelegate&) =
+      delete;
+
   ~SpdySessionRequestDelegate() override = default;
 
   void OnSpdySessionAvailable(
@@ -112,8 +118,6 @@ class SpdySessionRequestDelegate
  private:
   bool callback_invoked_ = false;
   base::WeakPtr<SpdySession> spdy_session_;
-
-  DISALLOW_COPY_AND_ASSIGN(SpdySessionRequestDelegate);
 };
 
 // Attempts to set up an alias for |key| using an already existing session in
@@ -504,7 +508,7 @@ void SpdySessionPoolTest::RunIPPoolingTest(
   // the IP list matches.
   SpdySessionKey proxy_key(
       test_hosts[1].key.host_port_pair(),
-      ProxyServer::FromPacString("HTTP http://proxy.foo.com/"),
+      PacResultElementToProxyServer("HTTP http://proxy.foo.com/"),
       PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
       SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   EXPECT_FALSE(TryCreateAliasedSpdySession(spdy_session_pool_, proxy_key,
@@ -1068,66 +1072,6 @@ TEST_F(SpdySessionPoolTest, HandleGracefulGoawayThenShutdown) {
   data.AllWriteDataConsumed();
 }
 
-class SpdySessionMemoryDumpTest
-    : public SpdySessionPoolTest,
-      public testing::WithParamInterface<
-          base::trace_event::MemoryDumpLevelOfDetail> {};
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    SpdySessionMemoryDumpTest,
-    ::testing::Values(base::trace_event::MemoryDumpLevelOfDetail::DETAILED,
-                      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND));
-
-TEST_P(SpdySessionMemoryDumpTest, DumpMemoryStats) {
-  SpdySessionKey key(HostPortPair("www.example.org", 443),
-                     ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow);
-
-  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
-  StaticSocketDataProvider data(reads, base::span<MockWrite>());
-  data.set_connect_data(MockConnect(SYNCHRONOUS, OK));
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
-
-  SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
-  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
-
-  CreateNetworkSession();
-
-  base::WeakPtr<SpdySession> session =
-      CreateSpdySession(http_session_.get(), key, NetLogWithSource());
-
-  // Flush the SpdySession::OnReadComplete() task.
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key));
-  base::trace_event::MemoryDumpArgs dump_args = {GetParam()};
-  auto process_memory_dump =
-      std::make_unique<base::trace_event::ProcessMemoryDump>(dump_args);
-  base::trace_event::MemoryAllocatorDump* parent_dump =
-      process_memory_dump->CreateAllocatorDump(
-          "net/http_network_session_0x123");
-  spdy_session_pool_->DumpMemoryStats(process_memory_dump.get(),
-                                      parent_dump->absolute_name());
-
-  // Whether SpdySession::DumpMemoryStats() is invoked.
-  bool did_dump = false;
-  const base::trace_event::ProcessMemoryDump::AllocatorDumpsMap&
-      allocator_dumps = process_memory_dump->allocator_dumps();
-  for (const auto& pair : allocator_dumps) {
-    const std::string& dump_name = pair.first;
-    if (dump_name.find("spdy_session_pool") == std::string::npos)
-      continue;
-    MemoryAllocatorDump::Entry expected("active_session_count",
-                                        MemoryAllocatorDump::kUnitsObjects, 0);
-    ASSERT_THAT(pair.second->entries(), Contains(Eq(ByRef(expected))));
-    did_dump = true;
-  }
-  EXPECT_TRUE(did_dump);
-  spdy_session_pool_->CloseCurrentSessions(ERR_ABORTED);
-}
-
 TEST_F(SpdySessionPoolTest, IPConnectionPoolingWithWebSockets) {
   // Define two hosts with identical IP address.
   const int kTestPort = 443;
@@ -1254,6 +1198,11 @@ TEST_F(SpdySessionPoolTest, IPConnectionPoolingWithWebSockets) {
 class TestOnRequestDeletedCallback {
  public:
   TestOnRequestDeletedCallback() = default;
+
+  TestOnRequestDeletedCallback(const TestOnRequestDeletedCallback&) = delete;
+  TestOnRequestDeletedCallback& operator=(const TestOnRequestDeletedCallback&) =
+      delete;
+
   ~TestOnRequestDeletedCallback() = default;
 
   base::RepeatingClosure Callback() {
@@ -1283,22 +1232,21 @@ class TestOnRequestDeletedCallback {
   base::RunLoop run_loop_;
 
   base::OnceClosure request_deleted_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestOnRequestDeletedCallback);
 };
 
 class TestRequestDelegate
     : public SpdySessionPool::SpdySessionRequest::Delegate {
  public:
   TestRequestDelegate() = default;
+
+  TestRequestDelegate(const TestRequestDelegate&) = delete;
+  TestRequestDelegate& operator=(const TestRequestDelegate&) = delete;
+
   ~TestRequestDelegate() override = default;
 
   // SpdySessionPool::SpdySessionRequest::Delegate implementation:
   void OnSpdySessionAvailable(
       base::WeakPtr<SpdySession> spdy_session) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestRequestDelegate);
 };
 
 TEST_F(SpdySessionPoolTest, RequestSessionWithNoSessions) {
@@ -1494,7 +1442,7 @@ TEST_F(SpdySessionPoolTest, SSLConfigForServerChanged) {
   for (size_t i = 0; i < num_tests; i++) {
     SpdySessionKey key(
         HostPortPair::FromURL(GURL(kSSLServerTests[i].url)),
-        ProxyServer::FromPacString(kSSLServerTests[i].proxy_pac_string),
+        PacResultElementToProxyServer(kSSLServerTests[i].proxy_pac_string),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
         SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
     sessions.push_back(

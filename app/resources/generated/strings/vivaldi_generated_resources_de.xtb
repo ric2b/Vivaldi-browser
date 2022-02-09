@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Bilder-Cache</translation>
 <translation id="1601560923496285236">Übernehmen</translation>
 <translation id="1603914832182249871">(Privat)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Dateideskriptoren</translation>
 <translation id="1682548588986054654">Neues privates Fenster</translation>
-<translation id="1706625117072057435">Zoomstufen</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
 <translation id="1723824996674794290">Neues &amp;Fenster</translation>
-<translation id="1725149567830788547">&amp;Steuerelemente anzeigen</translation>
 <translation id="1729533290416704613">Die Erweiterung legt auch fest, welche Seite bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="174123615272205933">Eigene</translation>
 <translation id="1744108098763830590">Hintergrundseite</translation>
@@ -85,15 +82,13 @@
 <translation id="241082044617551207">Unbekanntes Plug-in</translation>
 <translation id="2423578206845792524">Bi&amp;ld speichern unter...</translation>
 <translation id="2439110203301358333">Ein anderes Programm auf Ihrem Computer hat eine Erweiterung hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
-<translation id="2443487764245141020">Websites müssen möglicherweise Ihr Gerät auch anhand einer eindeutigen Kennung identifizieren können</translation>
+<translation id="2443487764245141020">Websites müssen Ihr Gerät möglicherweise auch anhand einer eindeutigen Kennung erkennen</translation>
 <translation id="2445081178310039857">Stammverzeichnis der Erweiterung ist erforderlich.</translation>
 <translation id="2470702053775288986">Nicht unterstützte Erweiterungen deaktiviert</translation>
 <translation id="2476578072172137802">Website-Einstellungen</translation>
-<translation id="2482878487686419369">Benachrichtigungen</translation>
 <translation id="2498539833203011245">Im Dock ablegen</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
 <translation id="253557089021624350">Keepalive-Zahl</translation>
-<translation id="2546283357679194313">Cookies und Websitedaten</translation>
 <translation id="2550212893339833758">Swap-Speicher</translation>
 <translation id="2553440850688409052">Dieses Plug-in ausblenden</translation>
 <translation id="26224892172169984">Verarbeitung von Protokollen für keine Website zulassen</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">CSS-Cache</translation>
 <translation id="3008272652534848354">Berechtigungen zurücksetzen</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
-<translation id="3013291976881901233">MIDI-Geräte</translation>
 <translation id="3021678814754966447">Frame-Quelltext &amp;anzeigen</translation>
 <translation id="3036546437875325427">Flash aktivieren</translation>
 <translation id="3046910703532196514">Webseite, vollständig</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Link öffnen als</translation>
 <translation id="3154429428035006212">Seit über einem Monat offline</translation>
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
 <translation id="3285322247471302225">Neuer &amp;Tab</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">Geschlossene Websites dürfen den Datenversand oder -empfang nicht abschließen</translation>
 <translation id="3711931198657368127">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="3727187387656390258">Pop-up prüfen</translation>
-<translation id="3744111561329211289">Hintergrundsynchronisation</translation>
 <translation id="3760460896538743390">&amp;Hintergrundseite prüfen</translation>
 <translation id="3797900183766075808">Mit <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" suchen</translation>
 <translation id="3800806661949714323">Alle anzeigen (empfohlen)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Seit über einem Jahr offline</translation>
 <translation id="3905761538810670789">App reparieren</translation>
 <translation id="3908501907586732282">Erweiterung aktivieren</translation>
+<translation id="3909701002594999354">Alle &amp;Steuerelemente anzeigen</translation>
 <translation id="3909791450649380159">&amp;Ausschneiden</translation>
 <translation id="3927932062596804919">Ablehnen</translation>
 <translation id="3936390757709632190">&amp;Audio in neuem Tab öffnen</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Deaktivieren</translation>
 <translation id="4409697491990005945">Ränder</translation>
 <translation id="4423376891418188461">Einstellungen wiederherstellen</translation>
-<translation id="4434045419905280838">Pop-ups und Weiterleitungen</translation>
 <translation id="4478664379124702289">Lin&amp;k speichern unter...</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" /> kann nicht gestreamt werden.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> öffnen</translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Protokoll</translation>
 <translation id="5627086634964711283">Die Erweiterung legt auch fest, welche Seite beim Klick auf die Schaltfläche "Startseite" erscheint.</translation>
 <translation id="563535393368633106">Vor dem Zugriff nachfragen (empfohlen)</translation>
-<translation id="5649053991847567735">Automatische Downloads</translation>
 <translation id="5677928146339483299">Blockiert</translation>
-<translation id="5689516760719285838">Standort</translation>
 <translation id="5707185214361380026">Fehler beim Laden der Erweiterung aus:</translation>
 <translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Als PDF speichern</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">Übersetzen nach <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Websitedaten löschen</translation>
 <translation id="6042308850641462728">Mehr</translation>
-<translation id="6059925163896151826">USB-Geräte</translation>
 <translation id="6086846494333236931">Von Ihrem Administrator installiert</translation>
 <translation id="6101226222197207147">Neue App hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ihre Internetverbindung wird beeinflusst</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Bild ko&amp;pieren</translation>
 <translation id="6550675742724504774">Optionen</translation>
-<translation id="6612358246767739896">Geschützte Inhalte</translation>
+<translation id="6579369886355986318">Alle &amp;Steuerelemente anzeigen</translation>
 <translation id="6639554308659482635">SQLite-Speicher</translation>
 <translation id="6686817083349815241">Passwort speichern</translation>
 <translation id="6691936601825168937">&amp;Vorwärts</translation>
@@ -359,8 +348,6 @@
 <translation id="7270858098575133036">Nachfragen, wenn eine Website versucht, mit systemexklusiven Meldungen auf MIDI-Geräte zuzugreifen</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
-<translation id="7374461526650987610">Protokoll-Handler</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">Seitenquelltext &amp;anzeigen</translation>
@@ -368,7 +355,6 @@
 <translation id="7427348830195639090">Hintergrundseite: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Durch die Auswahl dieses Druckers berechtigen Sie die folgende Erweiterung, auf Ihren Drucker zuzugreifen:</translation>
 <translation id="749028671485790643">Profil <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Prozess beenden</translation>
 <translation id="7576690715254076113">Sortieren</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
@@ -419,7 +405,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1 {Download wird ausgeführt} other {Downloads werden ausgeführt}}</translation>
 <translation id="8230134520748321204">Passwort für <ph name="ORIGIN" /> speichern?</translation>
 <translation id="8261378640211443080">Diese Erweiterung ist nicht im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> aufgeführt und wurde möglicherweise ohne Ihr Wissen hinzugefügt.</translation>
-<translation id="8270242299912238708">PDF-Dokumente</translation>
 <translation id="8339059274628563283">Für <ph name="SITE" /> lokal gespeicherte Daten</translation>
 <translation id="8351419472474436977">Diese Erweiterung hat die Kontrolle über Ihre Proxyeinstellungen übernommen. Das bedeutet, dass sie sämtliche Online-Aktivitäten ändern, stören oder überwachen kann. Wenn Sie nicht sicher sind, wie es zu dieser Änderung gekommen ist, war sie wahrscheinlich nicht gewollt.</translation>
 <translation id="8382913212082956454">E-Mail-Adr&amp;esse kopieren</translation>
@@ -467,8 +452,8 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="9170848237812810038">&amp;Rückgängig</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" hinzugefügt</translation>
 <translation id="9218430445555521422">Als Standard festlegen</translation>
-<translation id="9219103736887031265">Bilder</translation>
 <translation id="93766956588638423">Erweiterung reparieren</translation>
+<translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Querformat</translation>
 <translation id="994289308992179865">Sch&amp;leife</translation>
 <translation id="998747458861718449">Untersuchen</translation>

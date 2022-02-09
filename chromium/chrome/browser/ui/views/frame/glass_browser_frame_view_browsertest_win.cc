@@ -15,12 +15,13 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/glass_browser_caption_button_container.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/common/content_features.h"
@@ -111,7 +112,7 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, MaximizedLayout) {
   static_cast<views::View*>(glass_frame_view_)->Layout();
 
   DCHECK_GT(glass_frame_view_->window_title_for_testing()->x(), 0);
-  DCHECK_GT(glass_frame_view_->web_app_frame_toolbar_for_testing()->y(), 0);
+  DCHECK_GE(glass_frame_view_->web_app_frame_toolbar_for_testing()->y(), 0);
 }
 
 IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, RTLTopRightHitTest) {
@@ -141,6 +142,25 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, Fullscreen) {
     EXPECT_EQ(views::IsViewClass<views::ClientView>(child),
               child->GetVisible());
   }
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, ContainerHeight) {
+  if (!InstallAndLaunchWebApp())
+    return;
+
+  static_cast<views::View*>(glass_frame_view_)
+      ->GetWidget()
+      ->LayoutRootViewIfNecessary();
+
+  EXPECT_EQ(
+      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      glass_frame_view_->caption_button_container_for_testing()->height());
+
+  glass_frame_view_->frame()->Maximize();
+
+  EXPECT_EQ(
+      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      glass_frame_view_->caption_button_container_for_testing()->height());
 }
 
 class WebAppGlassBrowserFrameViewWindowControlsOverlayTest
@@ -204,7 +224,7 @@ class WebAppGlassBrowserFrameViewWindowControlsOverlayTest
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
-    web_app_info->open_as_window = true;
+    web_app_info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
     web_app_info->title = u"A Web App";
     web_app_info->display_override = display_overrides;
 
@@ -429,8 +449,8 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewWindowControlsOverlayTest,
 
   // Validate that the draggable region is reset on navigation and the point is
   // no longer draggable.
-  ui_test_utils::NavigateToURL(browser_view_->browser(),
-                               GURL("http://example.test/"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser_view_->browser(),
+                                           GURL("http://example.test/")));
   EXPECT_NE(glass_frame_view_->NonClientHitTest(kPoint), HTCAPTION);
   EXPECT_TRUE(browser_view_->ShouldDescendIntoChildForEventHandling(
       browser_view_->GetNativeWindow(), kPoint));
@@ -623,4 +643,22 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewWindowControlsOverlayTest,
   // Validate bounds are cleared.
   EXPECT_EQ(false, EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
                           "window.navigator.windowControlsOverlay.visible"));
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewWindowControlsOverlayTest,
+                       ContainerHeight) {
+  if (!InstallAndLaunchWebAppWithWindowControlsOverlay())
+    return;
+
+  ToggleWindowControlsOverlayEnabledAndWait();
+
+  EXPECT_EQ(
+      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      glass_frame_view_->caption_button_container_for_testing()->height());
+
+  glass_frame_view_->frame()->Maximize();
+
+  EXPECT_EQ(
+      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      glass_frame_view_->caption_button_container_for_testing()->height());
 }

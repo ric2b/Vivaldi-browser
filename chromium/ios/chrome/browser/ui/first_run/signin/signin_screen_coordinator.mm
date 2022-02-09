@@ -16,9 +16,10 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
-#import "ios/chrome/browser/ui/authentication/signin/add_account_signin/add_account_signin_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
+#import "ios/chrome/browser/ui/authentication/enterprise/user_policy_signout/user_policy_signout_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
-#import "ios/chrome/browser/ui/authentication/signin/user_signin/user_policy_signout_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
@@ -29,8 +30,6 @@
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_mediator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_view_controller.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -65,6 +64,8 @@
 // to policy.
 @property(nonatomic, strong)
     UserPolicySignoutCoordinator* policySignoutPromptCoordinator;
+// Account manager service to retrieve Chrome identities.
+@property(nonatomic, assign) ChromeAccountManagerService* accountManagerService;
 
 @end
 
@@ -80,6 +81,7 @@
   self = [super initWithBaseViewController:navigationController
                                    browser:browser];
   if (self) {
+    DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
     _baseNavigationController = navigationController;
     _delegate = delegate;
     _policyWatcherObserverBridge =
@@ -89,8 +91,7 @@
 }
 
 - (void)start {
-  if (!signin::IsSigninAllowedByPolicy(
-          self.browser->GetBrowserState()->GetPrefs())) {
+  if (!signin::IsSigninAllowedByPolicy()) {
     self.attemptStatus = first_run::SignInAttemptStatus::SKIPPED_BY_POLICY;
     [self finishPresentingAndSkipRemainingScreens:NO];
     return;
@@ -114,25 +115,26 @@
 
   self.viewController = [[SigninScreenViewController alloc] init];
   self.viewController.delegate = self;
+  self.viewController.enterpriseSignInRestrictions =
+      GetEnterpriseSignInRestrictions();
 
-  ChromeAccountManagerService* accountManagerService =
+  self.accountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState());
 
   self.mediator = [[SigninScreenMediator alloc]
-      initWithAccountManagerService:accountManagerService
+      initWithAccountManagerService:self.accountManagerService
               authenticationService:authenticationService];
 
-  self.mediator.selectedIdentity = accountManagerService->GetDefaultIdentity();
-  self.hadIdentitiesAtStartup = accountManagerService->HasIdentities();
+  self.mediator.selectedIdentity =
+      self.accountManagerService->GetDefaultIdentity();
+  self.hadIdentitiesAtStartup = self.accountManagerService->HasIdentities();
 
   self.mediator.consumer = self.viewController;
   BOOL animated = self.baseNavigationController.topViewController != nil;
   [self.baseNavigationController setViewControllers:@[ self.viewController ]
                                            animated:animated];
-  if (@available(iOS 13, *)) {
-    self.viewController.modalInPresentation = YES;
-  }
+  self.viewController.modalInPresentation = YES;
 
   base::UmaHistogramEnumeration("FirstRun.Stage",
                                 first_run::kSignInScreenStart);
@@ -292,7 +294,9 @@
                                 (SigninCompletionInfo*)signinCompletionInfo {
   [self.addAccountSigninCoordinator stop];
   self.addAccountSigninCoordinator = nil;
-  if (signinResult == SigninCoordinatorResultSuccess) {
+  if (signinResult == SigninCoordinatorResultSuccess &&
+      self.accountManagerService->IsValidIdentity(
+          signinCompletionInfo.identity)) {
     self.mediator.selectedIdentity = signinCompletionInfo.identity;
     self.mediator.addedAccount = YES;
   }
@@ -304,11 +308,24 @@
 
   self.attemptStatus = first_run::SignInAttemptStatus::ATTEMPTED;
 
-  [self.mediator startSignIn];
-
-  [self finishPresentingAndSkipRemainingScreens:NO];
-  base::UmaHistogramEnumeration("FirstRun.Stage",
-                                first_run::kSignInScreenCompletionWithSignIn);
+  DCHECK(self.mediator.selectedIdentity);
+  AuthenticationFlow* authenticationFlow =
+      [[AuthenticationFlow alloc] initWithBrowser:self.browser
+                                         identity:self.mediator.selectedIdentity
+                                  shouldClearData:SHOULD_CLEAR_DATA_USER_CHOICE
+                                 postSignInAction:POST_SIGNIN_ACTION_NONE
+                         presentingViewController:self.viewController];
+  __weak __typeof(self) weakSelf = self;
+  [self.mediator
+      startSignInWithAuthenticationFlow:authenticationFlow
+                             completion:^() {
+                               [weakSelf
+                                   finishPresentingAndSkipRemainingScreens:NO];
+                               base::UmaHistogramEnumeration(
+                                   "FirstRun.Stage",
+                                   first_run::
+                                       kSignInScreenCompletionWithSignIn);
+                             }];
 }
 
 @end

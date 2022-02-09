@@ -7,10 +7,12 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
+#include "chrome/browser/ash/app_restore/app_restore_arc_task_handler.h"
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 #include "chrome/browser/ash/arc/accessibility/arc_accessibility_helper_bridge.h"
 #include "chrome/browser/ash/arc/adbd/arc_adbd_monitor_bridge.h"
@@ -51,7 +53,6 @@
 #include "chrome/browser/ash/arc/user_session/arc_user_session_service.h"
 #include "chrome/browser/ash/arc/video/gpu_arc_video_service_host.h"
 #include "chrome/browser/ash/arc/wallpaper/arc_wallpaper_service.h"
-#include "chrome/browser/ash/full_restore/full_restore_arc_task_handler.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -70,6 +71,7 @@
 #include "components/arc/dark_theme/arc_dark_theme_bridge.h"
 #include "components/arc/disk_quota/arc_disk_quota_bridge.h"
 #include "components/arc/ime/arc_ime_service.h"
+#include "components/arc/input_overlay/arc_input_overlay_manager.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/arc/keyboard_shortcut/arc_keyboard_shortcut_bridge.h"
 #include "components/arc/lock_screen/arc_lock_screen_bridge.h"
@@ -99,7 +101,7 @@
 namespace arc {
 namespace {
 
-// ChromeBrowserMainPartsChromeos owns.
+// `ChromeBrowserMainPartsAsh` owns.
 ArcServiceLauncher* g_arc_service_launcher = nullptr;
 
 std::unique_ptr<ArcSessionManager> CreateArcSessionManager(
@@ -129,7 +131,7 @@ ArcServiceLauncher::ArcServiceLauncher(
   DCHECK(g_arc_service_launcher == nullptr);
   g_arc_service_launcher = this;
 
-  if (!chromeos::StartupUtils::IsOobeCompleted()) {
+  if (!ash::StartupUtils::IsOobeCompleted()) {
     arc_demo_mode_preference_handler_ =
         ArcDemoModePreferenceHandler::Create(arc_session_manager_.get());
   }
@@ -208,6 +210,8 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcIioSensorBridge::GetForBrowserContext(profile);
   ArcImeService::GetForBrowserContext(profile);
   ArcInputMethodManagerService::GetForBrowserContext(profile);
+  if (ash::features::IsArcInputOverlayEnabled())
+    ArcInputOverlayManager::GetForBrowserContext(profile);
   ArcInstanceThrottle::GetForBrowserContext(profile);
   ArcIntentHelperBridge::GetForBrowserContext(profile)->SetDelegate(
       std::make_unique<FactoryResetDelegate>());
@@ -255,7 +259,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   CertStoreService::GetForBrowserContext(profile);
   apps::ArcAppsFactory::GetForProfile(profile);
   ash::ApkWebAppService::Get(profile);
-  ash::full_restore::FullRestoreArcTaskHandler::GetForProfile(profile);
+  ash::app_restore::AppRestoreArcTaskHandler::GetForProfile(profile);
 
   if (arc::IsArcVmEnabled()) {
     // ARCVM-only services.

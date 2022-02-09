@@ -232,9 +232,8 @@ class H264VideoToolboxEncoderTest : public ::testing::Test {
   }
 
   void AdvanceClockAndVideoFrameTimestamp() {
-    clock_.Advance(base::TimeDelta::FromMilliseconds(33));
-    frame_->set_timestamp(frame_->timestamp() +
-                          base::TimeDelta::FromMilliseconds(33));
+    clock_.Advance(base::Milliseconds(33));
+    frame_->set_timestamp(frame_->timestamp() + base::Milliseconds(33));
   }
 
   static void SetUpTestCase() {
@@ -306,7 +305,7 @@ TEST_F(H264VideoToolboxEncoderTest, DISABLED_CheckFramesAreDecodable) {
                               ? VideoDecoderConfig::AlphaMode::kIsOpaque
                               : VideoDecoderConfig::AlphaMode::kHasAlpha;
   VideoDecoderConfig config(
-      kCodecH264, H264PROFILE_MAIN, alpha_mode, VideoColorSpace(),
+      VideoCodec::kH264, H264PROFILE_MAIN, alpha_mode, VideoColorSpace(),
       kNoTransformation, frame_->coded_size(), frame_->visible_rect(),
       frame_->natural_size(), EmptyExtraData(), EncryptionScheme::kUnencrypted);
   scoped_refptr<EndToEndFrameChecker> checker(new EndToEndFrameChecker(config));

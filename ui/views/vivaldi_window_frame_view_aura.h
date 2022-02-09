@@ -18,7 +18,7 @@ class VivaldiNativeAppWindowViews;
 namespace gfx {
 class Canvas;
 class Point;
-}
+}  // namespace gfx
 
 namespace ui {
 class Event;
@@ -27,7 +27,7 @@ class Event;
 namespace views {
 class ImageButton;
 class Widget;
-}
+}  // namespace views
 
 // VivaldiWindowFrameViewAura is used to draw frames for app windows when a
 // non standard frame is needed. This occurs if there is no frame needed, or
@@ -44,6 +44,9 @@ class VivaldiWindowFrameViewAura : public views::NonClientFrameView {
   // if there is a frame color.
   VivaldiWindowFrameViewAura(VivaldiNativeAppWindowViews* views);
   ~VivaldiWindowFrameViewAura() override;
+  VivaldiWindowFrameViewAura(const VivaldiWindowFrameViewAura&) = delete;
+  VivaldiWindowFrameViewAura& operator=(const VivaldiWindowFrameViewAura&) =
+      delete;
 
   int resize_inside_bounds_size() const { return resize_inside_bounds_size_; }
 
@@ -76,8 +79,6 @@ class VivaldiWindowFrameViewAura : public views::NonClientFrameView {
 
   // Size in pixels of the lower-right corner resize handle.
   int resize_area_corner_size_ = 16;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWindowFrameViewAura);
 };
 
 #endif  // UI_VIEWS_VIVALDI_WINDOW_FRAME_VIEW_AURA_H_

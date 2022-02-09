@@ -21,6 +21,8 @@ class UpdateNotifierWindow {
 
   UpdateNotifierWindow();
   ~UpdateNotifierWindow();
+  UpdateNotifierWindow(const UpdateNotifierWindow&) = delete;
+  UpdateNotifierWindow& operator=(const UpdateNotifierWindow&) = delete;
 
   void ShowNotification(const std::wstring& version);
 
@@ -43,9 +45,8 @@ class UpdateNotifierWindow {
   NativeMenu notification_menu_;
 
   HWND hwnd_;
-
-  DISALLOW_COPY_AND_ASSIGN(UpdateNotifierWindow);
 };
+
 }  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_UPDATE_NOTIFIER_WINDOW_H_

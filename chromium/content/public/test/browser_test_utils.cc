@@ -40,6 +40,7 @@
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/file_system/file_system_manager_impl.h"
+#include "content/browser/file_system_access/file_system_access_manager_impl.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
@@ -113,8 +114,10 @@
 #include "storage/browser/file_system/file_system_context.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -542,6 +545,10 @@ class CommitOriginInterceptor : public DidCommitNavigationInterceptor {
         target_url_(target_url),
         new_url_(new_url),
         new_origin_(new_origin) {}
+
+  CommitOriginInterceptor(const CommitOriginInterceptor&) = delete;
+  CommitOriginInterceptor& operator=(const CommitOriginInterceptor&) = delete;
+
   ~CommitOriginInterceptor() override = default;
 
   // WebContentsObserver:
@@ -565,8 +572,6 @@ class CommitOriginInterceptor : public DidCommitNavigationInterceptor {
   GURL target_url_;
   GURL new_url_;
   url::Origin new_origin_;
-
-  DISALLOW_COPY_AND_ASSIGN(CommitOriginInterceptor);
 };
 
 // Observer which waits for a visual update in a RenderWidgetHost to meet some
@@ -676,7 +681,9 @@ bool NavigateToURL(WebContents* web_contents, const GURL& url) {
 bool NavigateToURL(WebContents* web_contents,
                    const GURL& url,
                    const GURL& expected_commit_url) {
-  NavigateToURLBlockUntilNavigationsComplete(web_contents, url, 1);
+  NavigateToURLBlockUntilNavigationsComplete(
+      web_contents, url, 1,
+      /*ignore_uncommitted_navigations=*/false);
   if (!IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL))
     return false;
 
@@ -754,6 +761,8 @@ void NavigateToURLBlockUntilNavigationsComplete(
       web_contents, number_of_navigations,
       MessageLoopRunner::QuitMode::IMMEDIATE,
       /*ignore_uncommitted_navigations=*/ignore_uncommitted_navigations);
+  if (!blink::IsRendererDebugURL(url) && number_of_navigations == 1)
+    same_tab_observer.set_expected_initial_url(url);
 
   // This mimics behavior of Shell::LoadURL...
   NavigationController::LoadURLParams params(url);
@@ -876,14 +885,18 @@ bool WaitForLoadStop(WebContents* web_contents) {
 
 void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
                                      bool trigger_user_activation) {
-  for (auto* frame : web_contents->GetAllFrames()) {
-    if (trigger_user_activation)
-      frame->ExecuteJavaScriptWithUserGestureForTests(std::u16string());
+  web_contents->GetMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
+      [](bool trigger_user_activation, RenderFrameHost* render_frame_host) {
+        if (trigger_user_activation) {
+          render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
+              std::u16string());
+        }
 
-    // Disable the hang monitor, otherwise there will be a race between the
-    // beforeunload dialog and the beforeunload hang timer.
-    frame->DisableBeforeUnloadHangMonitorForTesting();
-  }
+        // Disable the hang monitor, otherwise there will be a race between the
+        // beforeunload dialog and the beforeunload hang timer.
+        render_frame_host->DisableBeforeUnloadHangMonitorForTesting();
+      },
+      trigger_user_activation));
 }
 
 bool IsLastCommittedEntryOfPageType(WebContents* web_contents,
@@ -921,7 +934,7 @@ void SimulateUnresponsiveRenderer(WebContents* web_contents,
                                   RenderWidgetHost* widget) {
   static_cast<WebContentsImpl*>(web_contents)
       ->RendererUnresponsive(RenderWidgetHostImpl::From(widget),
-                             base::DoNothing::Repeatedly());
+                             base::DoNothing());
 }
 
 #if defined(USE_AURA)
@@ -1851,8 +1864,9 @@ bool FrameHasSourceUrl(const GURL& url, RenderFrameHost* frame) {
   return frame->GetLastCommittedURL() == url;
 }
 
-RenderFrameHost* ChildFrameAt(RenderFrameHost* frame, size_t index) {
-  RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(frame);
+RenderFrameHost* ChildFrameAt(const ToRenderFrameHost& adapter, size_t index) {
+  RenderFrameHostImpl* rfh =
+      static_cast<RenderFrameHostImpl*>(adapter.render_frame_host());
   if (index >= rfh->frame_tree_node()->child_count())
     return nullptr;
   return rfh->frame_tree_node()->child_at(index)->current_frame_host();
@@ -1864,6 +1878,10 @@ std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
   starting_rfh->ForEachRenderFrameHost(base::BindLambdaForTesting(
       [&](RenderFrameHost* rfh) { visited_frames.push_back(rfh); }));
   return visited_frames;
+}
+
+std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(Page& page) {
+  return CollectAllRenderFrameHosts(&page.GetMainDocument());
 }
 
 std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
@@ -1933,7 +1951,7 @@ std::string GetCookies(BrowserContext* browser_context,
   net::CookieOptions options;
   options.set_same_site_cookie_context(context);
   cookie_manager->GetCookieList(
-      url, options,
+      url, options, net::CookiePartitionKeychain(),
       base::BindOnce(
           [](std::string* cookies_out, base::RunLoop* run_loop,
              const net::CookieAccessResultList& cookies,
@@ -1960,7 +1978,7 @@ std::vector<net::CanonicalCookie> GetCanonicalCookies(
   options.set_same_site_cookie_context(
       net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   cookie_manager->GetCookieList(
-      url, options,
+      url, options, net::CookiePartitionKeychain(),
       base::BindOnce(
           [](base::RunLoop* run_loop,
              std::vector<net::CanonicalCookie>* cookies_out,
@@ -2031,15 +2049,14 @@ uint32_t DeleteCookies(BrowserContext* browser_context,
 }
 
 void FetchHistogramsFromChildProcesses() {
-  // Wait for all the renderer processes to be initialized before fetching
-  // histograms for the first time.
+  // Wait for all initialized processes to be ready before fetching histograms
+  // for the first time.
   for (RenderProcessHost::iterator it(RenderProcessHost::AllHostsIterator());
        !it.IsAtEnd(); it.Advance()) {
-    if (!it.GetCurrentValue()->IsReady()) {
-      RenderProcessHost* render_process_host = it.GetCurrentValue();
+    RenderProcessHost* process = it.GetCurrentValue();
+    if (process->IsInitializedAndNotDead() && !process->IsReady()) {
       RenderProcessHostWatcher ready_watcher(
-          render_process_host,
-          RenderProcessHostWatcher::WATCH_FOR_PROCESS_READY);
+          process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_READY);
       ready_watcher.Wait();
     }
   }
@@ -2059,6 +2076,15 @@ void FetchHistogramsFromChildProcesses() {
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server) {
   embedded_test_server->RegisterRequestHandler(base::BindRepeating(
       &CrossSiteRedirectResponseHandler, embedded_test_server));
+}
+
+void SetFileSystemAccessPermissionContext(
+    BrowserContext* browser_context,
+    FileSystemAccessPermissionContext* permission_context) {
+  static_cast<content::FileSystemAccessManagerImpl*>(
+      browser_context->GetDefaultStoragePartition()
+          ->GetFileSystemAccessEntryFactory())
+      ->SetPermissionContextForTesting(permission_context);
 }
 
 bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
@@ -2154,6 +2180,13 @@ ui::AXTreeUpdate GetAccessibilityTreeSnapshot(WebContents* web_contents) {
   if (!manager)
     return ui::AXTreeUpdate();
   return manager->SnapshotAXTreeForTesting();
+}
+
+ui::AXTreeUpdate GetAccessibilityTreeSnapshotFromId(
+    const ui::AXTreeID& tree_id) {
+  BrowserAccessibilityManager* manager =
+      BrowserAccessibilityManager::FromID(tree_id);
+  return manager ? manager->SnapshotAXTreeForTesting() : ui::AXTreeUpdate();
 }
 
 ui::AXPlatformNodeDelegate* GetRootAccessibilityNode(
@@ -3220,10 +3253,12 @@ mojo::Remote<blink::mojom::FileSystemManager> GetFileSystemManager(
   FileSystemManagerImpl* file_system = static_cast<RenderProcessHostImpl*>(rph)
                                            ->GetFileSystemManagerForTesting();
   mojo::Remote<blink::mojom::FileSystemManager> file_system_manager_remote;
+  // TODO(https://crbug.com/1243348): Pipe in the proper third-party StorageKey
+  // value for the LegacyFileSystem; replace the empty construction below.
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&FileSystemManagerImpl::BindReceiver,
-                     base::Unretained(file_system),
+                     base::Unretained(file_system), blink::StorageKey(),
                      file_system_manager_remote.BindNewPipeAndPassReceiver()));
   return file_system_manager_remote;
 }
@@ -3290,6 +3325,9 @@ class EvictionStateWaiter : public DelegatedFrameHost::Observer {
     delegated_frame_host_->AddObserverForTesting(this);
   }
 
+  EvictionStateWaiter(const EvictionStateWaiter&) = delete;
+  EvictionStateWaiter& operator=(const EvictionStateWaiter&) = delete;
+
   ~EvictionStateWaiter() override {
     delegated_frame_host_->RemoveObserverForTesting(this);
   }
@@ -3315,8 +3353,6 @@ class EvictionStateWaiter : public DelegatedFrameHost::Observer {
   DelegatedFrameHost* delegated_frame_host_;
   DelegatedFrameHost::FrameEvictionState waited_eviction_state_;
   base::OnceClosure quit_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(EvictionStateWaiter);
 };
 
 }  // namespace
@@ -3613,13 +3649,13 @@ void SynchronizeVisualPropertiesInterceptor::SynchronizeVisualProperties(
 
   gfx::Rect screen_space_rect_in_dip = visual_properties.screen_space_rect;
   if (IsUseZoomForDSFEnabled()) {
+    const float dsf =
+        visual_properties.screen_infos.current().device_scale_factor;
     screen_space_rect_in_dip =
         gfx::Rect(gfx::ScaleToFlooredPoint(
-                      visual_properties.screen_space_rect.origin(),
-                      1.f / visual_properties.screen_info.device_scale_factor),
+                      visual_properties.screen_space_rect.origin(), 1.f / dsf),
                   gfx::ScaleToCeiledSize(
-                      visual_properties.screen_space_rect.size(),
-                      1.f / visual_properties.screen_info.device_scale_factor));
+                      visual_properties.screen_space_rect.size(), 1.f / dsf));
   }
   // Track each rect updates.
   GetUIThreadTaskRunner({})->PostTask(
@@ -3732,7 +3768,8 @@ void ProxyDSFObserver::OnCreation(RenderFrameProxyHost* rfph) {
   // Not all RenderFrameProxyHosts will be created with a
   // CrossProcessFrameConnector. We're only interested in the ones that do.
   if (auto* cpfc = rfph->cross_process_frame_connector()) {
-    proxy_host_created_dsf_.push_back(cpfc->screen_info().device_scale_factor);
+    proxy_host_created_dsf_.push_back(
+        cpfc->screen_infos().current().device_scale_factor);
   }
   if (runner_)
     runner_->Quit();

@@ -150,8 +150,8 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_pref_names.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
+#include "chrome/browser/ash/note_taking_helper.h"
 #include "chrome/browser/ash/system/timezone_resolver_manager.h"
-#include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
@@ -206,7 +206,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_Disable3DAPIs) {
   if (!content::GpuDataManager::GetInstance()->HardwareAccelerationEnabled())
     return;
 
-  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
   // WebGL is enabled by default.
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -318,7 +319,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest,
   // occurred yet.
   g_browser_process->local_state()->SetInt64(
       prefs::kSessionStartTime,
-      (base::Time::Now() - base::TimeDelta::FromHours(2)).ToInternalValue());
+      (base::Time::Now() - base::Hours(2)).ToInternalValue());
 }
 
 // Disabled, see http://crbug.com/554728.
@@ -353,7 +354,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, PRE_WaitForInitialUserActivitySatisfied) {
   // Indicate that initial user activity in this session occurred 2 hours ago.
   g_browser_process->local_state()->SetInt64(
       prefs::kSessionStartTime,
-      (base::Time::Now() - base::TimeDelta::FromHours(2)).ToInternalValue());
+      (base::Time::Now() - base::Hours(2)).ToInternalValue());
   g_browser_process->local_state()->SetBoolean(prefs::kSessionUserActivitySeen,
                                                true);
 }
@@ -455,7 +456,8 @@ IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest,
 
   // Navigate to a page with a certificate date error and then check that a
   // network time query was not sent.
-  ui_test_utils::NavigateToURL(browser(), https_server_expired_.GetURL("/"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           https_server_expired_.GetURL("/")));
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   WaitForInterstitial(tab);
@@ -466,7 +468,8 @@ IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, base::Value(true),
                nullptr);
   UpdateProviderPolicy(policies);
-  ui_test_utils::NavigateToURL(browser(), https_server_expired_.GetURL("/"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           https_server_expired_.GetURL("/")));
   EXPECT_TRUE(IsShowingInterstitial(tab));
   EXPECT_EQ(1u, num_requests());
 }

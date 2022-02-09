@@ -35,6 +35,11 @@
 class WinAccessibilityEventMonitor {
  public:
   WinAccessibilityEventMonitor(UINT event_min, UINT event_max);
+
+  WinAccessibilityEventMonitor(const WinAccessibilityEventMonitor&) = delete;
+  WinAccessibilityEventMonitor& operator=(const WinAccessibilityEventMonitor&) =
+      delete;
+
   ~WinAccessibilityEventMonitor();
 
   // Blocks until the next event is received. When it's received, it
@@ -76,8 +81,6 @@ class WinAccessibilityEventMonitor {
   scoped_refptr<content::MessageLoopRunner> loop_runner_;
   HWINEVENTHOOK win_event_hook_handle_;
   static WinAccessibilityEventMonitor* instance_;
-
-  DISALLOW_COPY_AND_ASSIGN(WinAccessibilityEventMonitor);
 };
 
 // static
@@ -180,6 +183,11 @@ void CALLBACK WinAccessibilityEventMonitor::WinEventHookThunk(
 }
 
 class NavigationAccessibilityTest : public InProcessBrowserTest {
+ public:
+  NavigationAccessibilityTest(const NavigationAccessibilityTest&) = delete;
+  NavigationAccessibilityTest& operator=(const NavigationAccessibilityTest&) =
+      delete;
+
  protected:
   NavigationAccessibilityTest() {}
   ~NavigationAccessibilityTest() override {}
@@ -198,8 +206,6 @@ class NavigationAccessibilityTest : public InProcessBrowserTest {
 
  private:
   base::win::ScopedCOMInitializer com_initializer_;
-
-  DISALLOW_COPY_AND_ASSIGN(NavigationAccessibilityTest);
 };
 
 // Tests that when focus is in the omnibox and the user types a url and
@@ -210,9 +216,9 @@ IN_PROC_BROWSER_TEST_F(NavigationAccessibilityTest,
                        DISABLED_TestNavigateToNewUrl) {
   content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
 
-  ui_test_utils::NavigateToURL(browser(),
-                               GURL("data:text/html;charset=utf-8,"
-                                    "<head><title>First Page</title></head>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), GURL("data:text/html;charset=utf-8,"
+                      "<head><title>First Page</title></head>")));
 
   chrome::ExecuteCommand(browser(), IDC_FOCUS_LOCATION);
 

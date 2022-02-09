@@ -67,6 +67,9 @@ import org.chromium.ui.touch_selection.TouchSelectionDraggableType;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Implementation of the interface {@link SelectionPopupController}.
  */
@@ -848,6 +851,10 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             menu.removeItem(R.id.select_action_menu_copy);
             menu.removeItem(R.id.select_action_menu_cut);
         }
+
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
+            menu.removeItem(R.id.select_action_menu_share);
     }
 
     /**
@@ -1148,7 +1155,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         try {
             mWindowAndroid.showIntent(intent, new WindowAndroid.IntentCallback() {
                 @Override
-                public void onIntentCompleted(WindowAndroid window, int resultCode, Intent data) {
+                public void onIntentCompleted(int resultCode, Intent data) {
                     onReceivedProcessTextResult(resultCode, data);
                 }
             }, null);

@@ -13,8 +13,8 @@
 
 using notes_helper::GetNotesModel;
 using vivaldi::NotesModel;
-using vivaldi::NotesModelObserver;
 using vivaldi::NotesModelFactory;
+using vivaldi::NotesModelObserver;
 
 // NotesLoadObserver is used when blocking until the NotesModel finishes
 // loading. As soon as the NotesModel finishes loading the message loop is
@@ -23,14 +23,14 @@ class NotesLoadObserver : public NotesModelObserver {
  public:
   explicit NotesLoadObserver(base::OnceClosure quit_task);
   ~NotesLoadObserver() override;
+  NotesLoadObserver(const NotesLoadObserver&) = delete;
+  NotesLoadObserver& operator=(const NotesLoadObserver&) = delete;
 
  private:
   // NotesBaseModelObserver:
   void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
 
   base::OnceClosure quit_task_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesLoadObserver);
 };
 
 NotesLoadObserver::NotesLoadObserver(base::OnceClosure quit_task)
@@ -79,7 +79,8 @@ bool NotesSyncTest::SetupClients() {
     return false;
 
   if (UseVerifier())
-    WaitForNotesModelToLoad(NotesModelFactory::GetForBrowserContext(verifier()));
+    WaitForNotesModelToLoad(
+        NotesModelFactory::GetForBrowserContext(verifier()));
 
   return true;
 }

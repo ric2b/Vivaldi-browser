@@ -10,10 +10,10 @@
 #define COMPONENTS_BLINK_VIVALDI_ADD_SEARCH_CONTEXT_MENU_H_
 
 namespace blink {
-  class FrameSelection;
-  class HTMLInputElement;
-  class WebURL;
-}
+class FrameSelection;
+class HTMLInputElement;
+class WebURL;
+}  // namespace blink
 
 using blink::FrameSelection;
 using blink::HTMLInputElement;

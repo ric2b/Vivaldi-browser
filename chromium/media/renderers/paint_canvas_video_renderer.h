@@ -46,6 +46,10 @@ class VideoTextureBacking;
 class MEDIA_EXPORT PaintCanvasVideoRenderer {
  public:
   PaintCanvasVideoRenderer();
+
+  PaintCanvasVideoRenderer(const PaintCanvasVideoRenderer&) = delete;
+  PaintCanvasVideoRenderer& operator=(const PaintCanvasVideoRenderer&) = delete;
+
   ~PaintCanvasVideoRenderer();
 
   // Paints |video_frame| translated and scaled to |dest_rect| on |canvas|.
@@ -103,7 +107,8 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
       bool premultiply_alpha,
       bool flip_y);
 
-  bool PrepareVideoFrameForWebGL(
+  // TODO(776222): Remove this function from PaintCanvasVideoRenderer.
+  static bool PrepareVideoFrameForWebGL(
       viz::RasterContextProvider* raster_context_provider,
       gpu::gles2::GLES2Interface* gl,
       scoped_refptr<VideoFrame> video_frame,
@@ -277,8 +282,6 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
     gpu::SyncToken sync_token;
   };
   YUVTextureCache yuv_cache_;
-
-  DISALLOW_COPY_AND_ASSIGN(PaintCanvasVideoRenderer);
 };
 
 }  // namespace media

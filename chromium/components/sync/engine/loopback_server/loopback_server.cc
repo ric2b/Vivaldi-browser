@@ -126,7 +126,7 @@ class UpdateSieve {
   UpdateSieve(const sync_pb::GetUpdatesMessage& message,
               const std::map<ModelType, int>& server_migration_versions)
       : UpdateSieve(MessageToVersionMap(message, server_migration_versions)) {}
-  ~UpdateSieve() {}
+  ~UpdateSieve() = default;
 
   // Verifies if MIGRATION_DONE should be exercised. It intentionally returns
   // migrations in the order that they were triggered.  Doing it this way
@@ -810,7 +810,7 @@ LoopbackServer::GetEntitiesAsDictionaryValue() {
     // TODO(pvalenzuela): Store more data for each entity so additional
     // verification can be performed. One example of additional verification
     // is checking the correctness of the bookmark hierarchy.
-    list_value->AppendString(entity.GetName());
+    list_value->Append(entity.GetName());
   }
 
   return dictionary;

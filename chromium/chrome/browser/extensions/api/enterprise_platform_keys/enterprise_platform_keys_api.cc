@@ -146,15 +146,27 @@ EnterprisePlatformKeysInternalGenerateKeyFunction::
 
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysInternalGenerateKeyFunction::Run() {
+  std::unique_ptr<api_epki::GenerateKey::Params> params(
+      api_epki::GenerateKey::Params::Create(args()));
+
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(b/191958380): Lift the restriction when *.platformKeys.* APIs are
   // implemented for secondary profiles in Lacros.
   if (!Profile::FromBrowserContext(browser_context())->IsMainProfile())
     return RespondNow(Error(kUnsupportedProfile));
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-  std::unique_ptr<api_epki::GenerateKey::Params> params(
-      api_epki::GenerateKey::Params::Create(*args_));
+  if (params->software_backed) {
+    // Software-backed RSA keys are only supported starting with KeyStore
+    // interface version 16.
+    // TODO(https://crbug.com/1252410): Remove this code with M-100.
+    const uint32_t kSoftwareBackedRsaMinVersion = 16;
+    std::string error =
+        ValidateCrosapi(kSoftwareBackedRsaMinVersion, browser_context());
+    if (!error.empty()) {
+      return RespondNow(Error(error));
+    }
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   EXTENSION_FUNCTION_VALIDATE(params);
   absl::optional<chromeos::platform_keys::TokenId> platform_keys_token_id =
@@ -173,7 +185,7 @@ EnterprisePlatformKeysInternalGenerateKeyFunction::Run() {
                                 *(params->algorithm.modulus_length) >= 0);
     service->GenerateRSAKey(
         platform_keys_token_id.value(), *(params->algorithm.modulus_length),
-        extension_id(),
+        params->software_backed, extension_id(),
         base::BindOnce(
             &EnterprisePlatformKeysInternalGenerateKeyFunction::OnGeneratedKey,
             this));
@@ -210,7 +222,7 @@ void EnterprisePlatformKeysInternalGenerateKeyFunction::OnGeneratedKey(
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysGetCertificatesFunction::Run() {
   std::unique_ptr<api_epk::GetCertificates::Params> params(
-      api_epk::GetCertificates::Params::Create(*args_));
+      api_epk::GetCertificates::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error =
@@ -256,7 +268,7 @@ void EnterprisePlatformKeysGetCertificatesFunction::OnGetCertificates(
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysImportCertificateFunction::Run() {
   std::unique_ptr<api_epk::ImportCertificate::Params> params(
-      api_epk::ImportCertificate::Params::Create(*args_));
+      api_epk::ImportCertificate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error = ValidateCrosapi(
@@ -290,7 +302,7 @@ void EnterprisePlatformKeysImportCertificateFunction::OnAddCertificate(
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysRemoveCertificateFunction::Run() {
   std::unique_ptr<api_epk::RemoveCertificate::Params> params(
-      api_epk::RemoveCertificate::Params::Create(*args_));
+      api_epk::RemoveCertificate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error =
@@ -326,7 +338,7 @@ void EnterprisePlatformKeysRemoveCertificateFunction::OnRemoveCertificate(
 
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysInternalGetTokensFunction::Run() {
-  EXTENSION_FUNCTION_VALIDATE(args_->GetList().empty());
+  EXTENSION_FUNCTION_VALIDATE(args().empty());
 
   std::string error = ValidateCrosapi(
       KeystoreService::kDEPRECATED_GetKeyStoresMinVersion, browser_context());
@@ -372,7 +384,7 @@ void EnterprisePlatformKeysInternalGetTokensFunction::OnGetKeyStores(
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysChallengeMachineKeyFunction::Run() {
   std::unique_ptr<api_epk::ChallengeMachineKey::Params> params(
-      api_epk::ChallengeMachineKey::Params::Create(*args_));
+      api_epk::ChallengeMachineKey::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const std::string error = ValidateCrosapi(
@@ -416,7 +428,7 @@ void EnterprisePlatformKeysChallengeMachineKeyFunction::
 ExtensionFunction::ResponseAction
 EnterprisePlatformKeysChallengeUserKeyFunction::Run() {
   std::unique_ptr<api_epk::ChallengeUserKey::Params> params(
-      api_epk::ChallengeUserKey::Params::Create(*args_));
+      api_epk::ChallengeUserKey::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const std::string error = ValidateCrosapi(

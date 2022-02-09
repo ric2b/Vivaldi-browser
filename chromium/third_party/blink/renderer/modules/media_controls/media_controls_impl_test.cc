@@ -13,6 +13,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event_init.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/document_style_environment_variables.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
@@ -94,17 +95,6 @@ class MockWebMediaPlayerForImpl : public EmptyWebMediaPlayer {
 
   bool has_audio_ = false;
   WebTimeRanges seekable_;
-};
-
-class MockLayoutObject : public LayoutObject {
- public:
-  MockLayoutObject(Node* node) : LayoutObject(node) {}
-
-  const char* GetName() const override { return "MockLayoutObject"; }
-  void UpdateLayout() override {}
-  FloatRect LocalBoundingBoxRectForAccessibility() const override {
-    return FloatRect();
-  }
 };
 
 class StubLocalFrameClientForImpl : public EmptyLocalFrameClient {
@@ -190,6 +180,10 @@ class MediaControlsImplTest : public PageTestBase,
     GetFrame().GetSettings()->SetScriptEnabled(true);
   }
 
+  void SetMediaControlsFromElement(HTMLMediaElement& elm) {
+    media_controls_ = static_cast<MediaControlsImpl*>(elm.GetMediaControls());
+  }
+
   void SimulateRouteAvailable() {
     RemotePlayback::From(media_controls_->MediaElement())
         .AvailabilityChangedForTesting(/* screen_is_available */ true);
@@ -216,6 +210,13 @@ class MediaControlsImplTest : public PageTestBase,
   void SimulateMediaControlPlaying() {
     MediaControls().MediaElement().SetReadyState(
         HTMLMediaElement::kHaveEnoughData);
+    MediaControls().MediaElement().SetNetworkState(
+        WebMediaPlayer::NetworkState::kNetworkStateLoading);
+  }
+
+  void SimulateMediaControlPlayingForFutureData() {
+    MediaControls().MediaElement().SetReadyState(
+        HTMLMediaElement::kHaveFutureData);
     MediaControls().MediaElement().SetNetworkState(
         WebMediaPlayer::NetworkState::kNetworkStateLoading);
   }
@@ -332,6 +333,11 @@ class MediaControlsImplTest : public PageTestBase,
       return false;
 
     return true;
+  }
+
+  PointerEvent* CreatePointerEvent(const AtomicString& name) {
+    PointerEventInit* init = PointerEventInit::Create();
+    return PointerEvent::Create(name, init);
   }
 
  private:
@@ -970,7 +976,7 @@ TEST_F(MediaControlsImplTestWithMockScheduler,
   MediaControls().DispatchEvent(*Event::Create("focusin"));
   MediaControls().MediaElement().SetFocused(true,
                                             mojom::blink::FocusType::kNone);
-  MediaControls().DispatchEvent(*Event::Create("pointermove"));
+  MediaControls().DispatchEvent(*CreatePointerEvent("pointermove"));
 
   // Controls should remain visible
   platform()->RunForPeriodSeconds(2);
@@ -1021,7 +1027,7 @@ TEST_F(MediaControlsImplTestWithMockScheduler, CursorHidesWhenControlsHide) {
 
   // If the mouse moves, the controls are shown and the cursor is no longer
   // hidden.
-  MediaControls().DispatchEvent(*Event::Create("pointermove"));
+  MediaControls().DispatchEvent(*CreatePointerEvent("pointermove"));
   EXPECT_FALSE(IsCursorHidden());
 
   // Once the controls hide again, the cursor is hidden again.
@@ -1282,9 +1288,11 @@ TEST_F(MediaControlsImplTest, CastOverlayShowsOnSomeEvents) {
   SimulateHideMediaControlsTimerFired();
   EXPECT_FALSE(IsElementVisible(*cast_overlay_button));
 
-  for (auto* const event_name :
+  for (const AtomicString event_name :
        {"gesturetap", "click", "pointerover", "pointermove"}) {
-    overlay_enclosure->DispatchEvent(*Event::Create(event_name));
+    overlay_enclosure->DispatchEvent(event_name == "gesturetap"
+                                         ? *Event::Create(event_name)
+                                         : *CreatePointerEvent(event_name));
     EXPECT_TRUE(IsElementVisible(*cast_overlay_button));
 
     SimulateHideMediaControlsTimerFired();
@@ -1309,13 +1317,13 @@ TEST_F(MediaControlsImplTest, ControlsShouldUseSafeAreaInsets) {
   }
 
   GetStyleEngine().EnsureEnvironmentVariables().SetVariable(
-      "safe-area-inset-top", "1px");
+      UADefinedVariable::kSafeAreaInsetTop, "1px");
   GetStyleEngine().EnsureEnvironmentVariables().SetVariable(
-      "safe-area-inset-left", "2px");
+      UADefinedVariable::kSafeAreaInsetLeft, "2px");
   GetStyleEngine().EnsureEnvironmentVariables().SetVariable(
-      "safe-area-inset-bottom", "3px");
+      UADefinedVariable::kSafeAreaInsetBottom, "3px");
   GetStyleEngine().EnsureEnvironmentVariables().SetVariable(
-      "safe-area-inset-right", "4px");
+      UADefinedVariable::kSafeAreaInsetRight, "4px");
 
   EXPECT_TRUE(GetDocument().NeedsLayoutTreeUpdate());
   UpdateAllLifecyclePhasesForTest();
@@ -1503,6 +1511,39 @@ TEST_F(MediaControlsImplTest, HideControlsDefersStyleCalculationOnWaiting) {
   UpdateAllLifecyclePhasesForTest();
   new_element_count = document.GetStyleEngine().StyleForElementCount();
   EXPECT_LT(old_element_count, new_element_count);
+}
+
+TEST_F(MediaControlsImplTest, CheckStateOnPlayingForFutureData) {
+  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
+  MediaControls().MediaElement().Play();
+  test::RunPendingTasks();
+  UpdateAllLifecyclePhasesForTest();
+
+  SimulateMediaControlPlayingForFutureData();
+  EXPECT_EQ(MediaControls().State(),
+            MediaControlsImpl::ControlsState::kPlaying);
+}
+
+TEST_F(MediaControlsImplTest, OverflowMenuInPaintContainment) {
+  // crbug.com/1244130
+  auto page_holder = std::make_unique<DummyPageHolder>();
+  page_holder->GetDocument().write("<audio controls style='contain:paint'>");
+  page_holder->GetDocument().Parser()->Finish();
+  test::RunPendingTasks();
+  UpdateAllLifecyclePhasesForTest();
+  SetMediaControlsFromElement(
+      To<HTMLMediaElement>(*page_holder->GetDocument().QuerySelector("audio")));
+
+  MediaControls().ToggleOverflowMenu();
+  UpdateAllLifecyclePhasesForTest();
+  Element* overflow_list = GetElementByShadowPseudoId(
+      MediaControls(), "-internal-media-controls-overflow-menu-list");
+  ASSERT_TRUE(overflow_list);
+  EXPECT_TRUE(overflow_list->IsInTopLayer());
+
+  MediaControls().ToggleOverflowMenu();
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(overflow_list->IsInTopLayer());
 }
 
 }  // namespace blink

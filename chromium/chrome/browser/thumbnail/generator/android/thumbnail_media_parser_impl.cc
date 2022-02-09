@@ -29,7 +29,7 @@
 namespace {
 
 // The maximum duration to parse media file.
-const base::TimeDelta kTimeOut = base::TimeDelta::FromSeconds(8);
+const base::TimeDelta kTimeOut = base::Seconds(8);
 
 // Returns if the mime type is video or audio.
 bool IsSupportedMediaMimeType(const std::string& mime_type) {
@@ -297,14 +297,18 @@ void ThumbnailMediaParserImpl::NotifyComplete(SkBitmap bitmap) {
   DCHECK(metadata_);
   DCHECK(parse_complete_cb_);
   RecordMediaParserEvent(MediaParserEvent::kSuccess);
-  std::move(parse_complete_cb_)
-      .Run(true, std::move(metadata_), std::move(bitmap));
+  if (parse_complete_cb_) {
+    std::move(parse_complete_cb_)
+        .Run(true, std::move(metadata_), std::move(bitmap));
+  }
 }
 
 void ThumbnailMediaParserImpl::OnError(MediaParserEvent event) {
   DCHECK(parse_complete_cb_);
   RecordMediaParserEvent(MediaParserEvent::kFailure);
   RecordMediaParserEvent(event);
-  std::move(parse_complete_cb_)
-      .Run(false, chrome::mojom::MediaMetadata::New(), SkBitmap());
+  if (parse_complete_cb_) {
+    std::move(parse_complete_cb_)
+        .Run(false, chrome::mojom::MediaMetadata::New(), SkBitmap());
+  }
 }

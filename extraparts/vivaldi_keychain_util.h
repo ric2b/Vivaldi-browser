@@ -8,6 +8,6 @@ namespace vivaldi {
 bool HasKeychainAccess();
 void MaybeSetupVivaldiKeychain();
 
-} // namespace vivaldi
+}  // namespace vivaldi
 
-#endif //EXTRAPARTS_VIVALDI_KEYCHAIN_UTIL_H_
+#endif  // EXTRAPARTS_VIVALDI_KEYCHAIN_UTIL_H_

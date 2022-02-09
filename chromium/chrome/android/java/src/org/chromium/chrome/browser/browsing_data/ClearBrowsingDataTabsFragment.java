@@ -29,6 +29,11 @@ import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.ui.base.DeviceFormFactor;
+import androidx.appcompat.widget.Toolbar;
+
 /**
  * Fragment with a {@link TabLayout} containing a basic and an advanced version of the CBD dialog.
  */
@@ -76,12 +81,25 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
             tab.select();
         }
         tabLayout.addOnTabSelectedListener(new TabSelectListener());
-
+        if (!ChromeApplicationImpl.isVivaldi() || getActivity() instanceof SettingsActivity) {
         // Set outline provider to null to prevent shadow from being drawn between title and tabs.
         SettingsActivity activity = (SettingsActivity) getActivity();
         AppBarLayout appBarLayout = activity.findViewById(R.id.app_bar_layout);
         appBarLayout.setOutlineProvider(null);
+        }
 
+        if (ChromeApplicationImpl.isVivaldi() && DeviceFormFactor
+                .isNonMultiDisplayContextOnTablet(getContext())) {
+            Toolbar toolbar = view.findViewById(R.id.toolbar);
+            toolbar.setNavigationIcon(R.drawable.vivaldi_nav_button_back);
+            toolbar.setNavigationOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    getParentFragmentManager().popBackStack();
+                }
+            });
+            toolbar.setSubtitle(R.string.clear_browsing_data_title);
+        }
         return view;
     }
 

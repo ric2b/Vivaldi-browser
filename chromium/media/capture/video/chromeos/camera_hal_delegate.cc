@@ -36,8 +36,7 @@ namespace {
 constexpr int32_t kDefaultFps = 30;
 constexpr char kVirtualPrefix[] = "VIRTUAL_";
 
-constexpr base::TimeDelta kEventWaitTimeoutSecs =
-    base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kEventWaitTimeoutSecs = base::Seconds(1);
 
 class LocalCameraClientObserver : public CameraClientObserver {
  public:
@@ -646,6 +645,7 @@ void CameraHalDelegate::OnGotCameraInfoOnIpcThread(
   DVLOG(1) << "Got camera info of camera " << camera_id;
   if (result) {
     LOG(ERROR) << "Failed to get camera info. Camera id: " << camera_id;
+    return;
   }
   SortCameraMetadata(&camera_info->static_camera_characteristics);
 

@@ -24,9 +24,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
-#include "base/trace_event/memory_allocator_dump.h"
-#include "base/trace_event/memory_usage_estimator.h"
-#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "crypto/openssl_util.h"
@@ -242,6 +239,10 @@ class QuicStreamFactory::QuicCryptoClientConfigOwner {
     DCHECK(quic_stream_factory_);
   }
 
+  QuicCryptoClientConfigOwner(const QuicCryptoClientConfigOwner&) = delete;
+  QuicCryptoClientConfigOwner& operator=(const QuicCryptoClientConfigOwner&) =
+      delete;
+
   ~QuicCryptoClientConfigOwner() { DCHECK_EQ(num_refs_, 0); }
 
   quic::QuicCryptoClientConfig* config() { return &config_; }
@@ -268,8 +269,6 @@ class QuicStreamFactory::QuicCryptoClientConfigOwner {
   int num_refs_ = 0;
   quic::QuicCryptoClientConfig config_;
   QuicStreamFactory* const quic_stream_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicCryptoClientConfigOwner);
 };
 
 // Class that owns a reference to a QuicCryptoClientConfigOwner. Handles
@@ -288,6 +287,8 @@ class QuicStreamFactory::CryptoClientConfigHandle
   explicit CryptoClientConfigHandle(const CryptoClientConfigHandle& other)
       : CryptoClientConfigHandle(other.map_iterator_) {}
 
+  CryptoClientConfigHandle& operator=(const CryptoClientConfigHandle&) = delete;
+
   ~CryptoClientConfigHandle() override {
     DCHECK_GT(map_iterator_->second->num_refs(), 0);
     map_iterator_->second->ReleaseRef();
@@ -303,8 +304,6 @@ class QuicStreamFactory::CryptoClientConfigHandle
 
  private:
   QuicCryptoClientConfigMap::iterator map_iterator_;
-
-  DISALLOW_ASSIGN(CryptoClientConfigHandle);
 };
 
 // Responsible for creating a new QUIC session to the specified server, and
@@ -325,6 +324,9 @@ class QuicStreamFactory::Job {
       bool use_dns_aliases,
       int cert_verify_flags,
       const NetLogWithSource& net_log);
+
+  Job(const Job&) = delete;
+  Job& operator=(const Job&) = delete;
 
   ~Job();
 
@@ -481,8 +483,6 @@ class QuicStreamFactory::Job {
   base::TimeTicks quic_connection_start_time_;
   std::set<QuicStreamRequest*> stream_requests_;
   base::WeakPtrFactory<Job> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(Job);
 };
 
 QuicStreamFactory::Job::Job(
@@ -1647,22 +1647,7 @@ base::TimeDelta QuicStreamFactory::GetTimeDelayForWaitingJob(
   const int kDefaultRTT = 300 * quic::kNumMicrosPerMilli;
   if (!srtt)
     srtt = kDefaultRTT;
-  return base::TimeDelta::FromMicroseconds(srtt);
-}
-
-void QuicStreamFactory::DumpMemoryStats(
-    base::trace_event::ProcessMemoryDump* pmd,
-    const std::string& parent_absolute_name) const {
-  if (all_sessions_.empty() && active_jobs_.empty())
-    return;
-  base::trace_event::MemoryAllocatorDump* factory_dump =
-      pmd->CreateAllocatorDump(parent_absolute_name + "/quic_stream_factory");
-  factory_dump->AddScalar("all_sessions",
-                          base::trace_event::MemoryAllocatorDump::kUnitsObjects,
-                          all_sessions_.size());
-  factory_dump->AddScalar("active_jobs",
-                          base::trace_event::MemoryAllocatorDump::kUnitsObjects,
-                          active_jobs_.size());
+  return base::Microseconds(srtt);
 }
 
 const std::vector<std::string>& QuicStreamFactory::GetDnsAliasesForSessionKey(
@@ -1921,21 +1906,18 @@ void QuicStreamFactory::ConfigureInitialRttEstimate(
   NetworkChangeNotifier::ConnectionType type =
       network_connection_.connection_type();
   if (type == NetworkChangeNotifier::CONNECTION_2G) {
-    SetInitialRttEstimate(base::TimeDelta::FromMilliseconds(1200),
-                          INITIAL_RTT_CACHED, config);
+    SetInitialRttEstimate(base::Milliseconds(1200), INITIAL_RTT_CACHED, config);
     return;
   }
 
   if (type == NetworkChangeNotifier::CONNECTION_3G) {
-    SetInitialRttEstimate(base::TimeDelta::FromMilliseconds(400),
-                          INITIAL_RTT_CACHED, config);
+    SetInitialRttEstimate(base::Milliseconds(400), INITIAL_RTT_CACHED, config);
     return;
   }
 
   if (params_.initial_rtt_for_handshake > base::TimeDelta()) {
     SetInitialRttEstimate(
-        base::TimeDelta::FromMicroseconds(
-            params_.initial_rtt_for_handshake.InMicroseconds()),
+        base::Microseconds(params_.initial_rtt_for_handshake.InMicroseconds()),
         INITIAL_RTT_DEFAULT, config);
     return;
   }
@@ -2100,7 +2082,7 @@ void QuicStreamFactory::ProcessGoingAwaySession(
         alternative_service,
         session->quic_session_key().network_isolation_key());
     ServerNetworkStats network_stats;
-    network_stats.srtt = base::TimeDelta::FromMicroseconds(stats.srtt_us);
+    network_stats.srtt = base::Microseconds(stats.srtt_us);
     network_stats.bandwidth_estimate = stats.estimated_bandwidth;
     http_server_properties_->SetServerNetworkStats(
         server, session->quic_session_key().network_isolation_key(),

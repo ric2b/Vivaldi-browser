@@ -14,6 +14,8 @@ class DuckDuckGoRulesParser {
  public:
   explicit DuckDuckGoRulesParser(ParseResult* parse_result);
   ~DuckDuckGoRulesParser();
+  DuckDuckGoRulesParser(const DuckDuckGoRulesParser&) = delete;
+  DuckDuckGoRulesParser& operator=(const DuckDuckGoRulesParser&) = delete;
 
   void Parse(const base::Value& root);
 
@@ -29,8 +31,6 @@ class DuckDuckGoRulesParser {
   absl::optional<std::vector<std::string>> GetDomains(
       const base::Value* rule_properties);
   ParseResult* parse_result_;
-
-  DISALLOW_COPY_AND_ASSIGN(DuckDuckGoRulesParser);
 };
 }  // namespace adblock_filter
 

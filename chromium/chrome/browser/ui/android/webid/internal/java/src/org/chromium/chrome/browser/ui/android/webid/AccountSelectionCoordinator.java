@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
+import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
@@ -93,6 +94,12 @@ public class AccountSelectionCoordinator implements AccountSelectionComponent {
         adapter.registerType(AccountSelectionProperties.ItemType.CONTINUE_BUTTON,
                 AccountSelectionCoordinator::buildContinueButtonView,
                 AccountSelectionViewBinder::bindContinueButtonView);
+        adapter.registerType(AccountSelectionProperties.ItemType.AUTO_SIGN_IN_CANCEL_BUTTON,
+                AccountSelectionCoordinator::buildAutoSignInCancelButtonView,
+                AccountSelectionViewBinder::bindAutoSignInCancelButtonView);
+        adapter.registerType(AccountSelectionProperties.ItemType.DATA_SHARING_CONSENT,
+                AccountSelectionCoordinator::buildDataSharingConsentView,
+                AccountSelectionViewBinder::bindDataSharingConsentView);
         sheetItemListView.setAdapter(adapter);
 
         return contentView;
@@ -108,13 +115,24 @@ public class AccountSelectionCoordinator implements AccountSelectionComponent {
                 .inflate(R.layout.account_selection_account_item, parent, false);
     }
 
+    static View buildDataSharingConsentView(ViewGroup parent) {
+        return LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.account_selection_data_sharing_consent_item, parent, false);
+    }
+
     static View buildContinueButtonView(ViewGroup parent) {
         return LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.account_selection_continue_button, parent, false);
     }
 
+    static View buildAutoSignInCancelButtonView(ViewGroup parent) {
+        return LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.auto_sign_in_cancel_button, parent, false);
+    }
+
     @Override
-    public void showAccounts(String url, List<Account> accounts) {
-        mMediator.showAccounts(url, accounts);
+    public void showAccounts(
+            String url, List<Account> accounts, ClientIdMetadata metadata, boolean isAutoSignIn) {
+        mMediator.showAccounts(url, accounts, metadata, isAutoSignIn);
     }
 }

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/metrics/histogram_functions.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
@@ -29,6 +30,9 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/html/html_div_element.h"
+#include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/modules/mediastream/identifiability_metrics.h"
 #include "third_party/blink/renderer/modules/mediastream/input_device_info.h"
 #include "third_party/blink/renderer/modules/mediastream/media_error_state.h"
@@ -36,6 +40,7 @@
 #include "third_party/blink/renderer/modules/mediastream/navigator_media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_controller.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mediastream/webrtc_uma_histograms.h"
@@ -53,13 +58,35 @@ const char kFeaturePolicyBlocked[] =
 
 class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
  public:
-  explicit PromiseResolverCallbacks(ScriptPromiseResolver* resolver)
-      : resolver_(resolver) {}
+  PromiseResolverCallbacks(
+      ScriptPromiseResolver* resolver,
+      base::OnceCallback<void(const String&, MediaStreamTrack*)>
+          on_success_follow_up)
+      : resolver_(resolver),
+        on_success_follow_up_(std::move(on_success_follow_up)) {}
   ~PromiseResolverCallbacks() override = default;
 
-  void OnSuccess(ScriptWrappable* callback_this_value,
-                 MediaStream* stream) override {
+  void OnSuccess(MediaStream* stream) override {
+    DCHECK(stream);
+
+    MediaStreamTrack* video_track = nullptr;
+
+    if (on_success_follow_up_) {
+      // Only getDisplayMedia() calls set |on_success_follow_up_|.
+      // Successful invocations of getDisplayMedia() always have exactly
+      // one video track.
+      MediaStreamTrackVector video_tracks = stream->getVideoTracks();
+      DCHECK_EQ(video_tracks.size(), 1u);
+      video_track = video_tracks[0];
+    }
+
+    // Resolve Promise<MediaStream> on a microtask.
     resolver_->Resolve(stream);
+
+    // Enqueue the follow-up microtask, if any is intended.
+    if (on_success_follow_up_ && video_track) {
+      std::move(on_success_follow_up_).Run(stream->id(), video_track);
+    }
   }
   void OnError(ScriptWrappable* callback_this_value,
                const V8MediaStreamError* error) override {
@@ -73,6 +100,8 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
 
  private:
   Member<ScriptPromiseResolver> resolver_;
+  base::OnceCallback<void(const String&, MediaStreamTrack*)>
+      on_success_follow_up_;
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -153,7 +182,19 @@ ScriptPromise MediaDevices::SendUserMediaRequest(
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  auto* callbacks = MakeGarbageCollected<PromiseResolverCallbacks>(resolver);
+
+  base::OnceCallback<void(const String&, MediaStreamTrack*)>
+      on_success_follow_up;
+#if !defined(OS_ANDROID)
+  if (media_type == UserMediaRequest::MediaType::kDisplayMedia) {
+    on_success_follow_up = WTF::Bind(
+        &MediaDevices::EnqueueMicrotaskToCloseFocusWindowOfOpportunity,
+        WrapWeakPersistent(this));
+  }
+#endif
+
+  auto* callbacks = MakeGarbageCollected<PromiseResolverCallbacks>(
+      resolver, std::move(on_success_follow_up));
 
   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
   UserMediaController* user_media = UserMediaController::From(window);
@@ -196,7 +237,7 @@ ScriptPromise MediaDevices::getDisplayMedia(
     ScriptState* script_state,
     const MediaStreamConstraints* options,
     ExceptionState& exception_state) {
-  const ExecutionContext* const context = GetExecutionContext();
+  ExecutionContext* const context = GetExecutionContext();
   if (!context) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -290,6 +331,32 @@ void MediaDevices::setCaptureHandleConfig(ScriptState* script_state,
 
   GetDispatcherHost(window->GetFrame())
       ->SetCaptureHandleConfig(std::move(config_ptr));
+}
+
+ScriptPromise MediaDevices::produceCropId(
+    ScriptState* script_state,
+    V8UnionHTMLDivElementOrHTMLIFrameElement* element_union,
+    ExceptionState& exception_state) {
+  if (!script_state->ContextIsValid()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      "Current frame is detached.");
+    return ScriptPromise();
+  }
+
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  ScriptPromise promise = resolver->Promise();
+  auto* element =
+      element_union->IsHTMLDivElement()
+          ? static_cast<Element*>(element_union->GetAsHTMLDivElement())
+          : static_cast<Element*>(element_union->GetAsHTMLIFrameElement());
+  const base::UnguessableToken token = element->MarkWithRegionCaptureCropId();
+  DCHECK(!token.is_empty());
+
+  // TODO(crbug.com/1247761): Delay resolution until ack from Viz received.
+  const std::string stringified_token = token.ToString();
+  resolver->Resolve(
+      WTF::String(stringified_token.c_str(), stringified_token.length()));
+  return promise;
 }
 
 const AtomicString& MediaDevices::InterfaceName() const {
@@ -412,7 +479,7 @@ void RecordEnumeratedDevices(ScriptPromiseResolver* resolver,
     // Ignore group_id since that is varies per-site.
   }
   IdentifiabilityMetricBuilder(document->UkmSourceID())
-      .SetWebfeature(WebFeature::kIdentifiabilityMediaDevicesEnumerateDevices,
+      .AddWebFeature(WebFeature::kIdentifiabilityMediaDevicesEnumerateDevices,
                      builder.GetToken())
       .Record(document->UkmRecorder());
 }
@@ -541,5 +608,37 @@ void MediaDevices::Trace(Visitor* visitor) const {
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }
+
+#if !defined(OS_ANDROID)
+void MediaDevices::EnqueueMicrotaskToCloseFocusWindowOfOpportunity(
+    const String& id,
+    MediaStreamTrack* track) {
+  Microtask::EnqueueMicrotask(
+      WTF::Bind(&MediaDevices::CloseFocusWindowOfOpportunity,
+                WrapWeakPersistent(this), id, WrapWeakPersistent(track)));
+}
+
+void MediaDevices::CloseFocusWindowOfOpportunity(const String& id,
+                                                 MediaStreamTrack* track) {
+  if (!track) {
+    return;
+  }
+
+  ExecutionContext* const context = GetExecutionContext();
+  if (!context) {
+    return;  // Note: We're still back by the browser-side timer.
+  }
+
+  LocalDOMWindow* const window = To<LocalDOMWindow>(context);
+  if (!window) {
+    return;
+  }
+
+  // Inform the track that further calls to focus() should raise an exception.
+  track->CloseFocusWindowOfOpportunity();
+
+  GetDispatcherHost(window->GetFrame())->CloseFocusWindowOfOpportunity(id);
+}
+#endif
 
 }  // namespace blink

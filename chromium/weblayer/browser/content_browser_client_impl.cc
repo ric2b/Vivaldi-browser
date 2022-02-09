@@ -70,11 +70,13 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/window_container_type.mojom.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
+#include "net/cert/x509_certificate.h"
+#include "net/cookies/site_for_cookies.h"
 #include "net/proxy_resolution/proxy_config.h"
 #include "net/ssl/client_cert_identity.h"
+#include "net/ssl/ssl_private_key.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/network_service.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
@@ -126,8 +128,10 @@
 #include "components/embedder_support/android/metrics/android_metrics_service_client.h"
 #include "components/media_router/browser/presentation/presentation_service_delegate_impl.h"  // nogncheck
 #include "components/navigation_interception/intercept_navigation_delegate.h"
+#include "components/permissions/bluetooth_delegate_impl.h"
 #include "components/safe_browsing/core/browser/realtime/policy_engine.h"  // nogncheck
 #include "components/safe_browsing/core/browser/realtime/url_lookup_service.h"  // nogncheck
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/spellcheck/browser/spell_check_host_impl.h"  // nogncheck
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -136,6 +140,7 @@
 #include "weblayer/browser/android/metrics/weblayer_metrics_navigation_throttle.h"
 #include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/android_descriptors.h"
+#include "weblayer/browser/bluetooth/weblayer_bluetooth_delegate_impl_client.h"
 #include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/devtools_manager_delegate_android.h"
 #include "weblayer/browser/http_auth_handler_impl.h"
@@ -184,8 +189,9 @@ bool IsSafebrowsingSupported() {
   // TODO(timvolodine): consider refactoring this out into safe_browsing/.
 #if defined(OS_ANDROID)
   return true;
-#endif
+#else
   return false;
+#endif
 }
 
 bool IsNetworkErrorAutoReloadEnabled() {
@@ -271,6 +277,7 @@ void RegisterPrefs(PrefRegistrySimple* pref_registry) {
   pref_registry->RegisterIntegerPref(kDownloadNextIDPref, 0);
 #if defined(OS_ANDROID)
   metrics::AndroidMetricsServiceClient::RegisterPrefs(pref_registry);
+  safe_browsing::RegisterLocalStatePrefs(pref_registry);
 #else
   // Call MetricsService::RegisterPrefs() as VariationsService::RegisterPrefs()
   // CHECKs that kVariationsCrashStreak has already been registered.
@@ -324,7 +331,7 @@ std::string ContentBrowserClientImpl::GetAcceptLangs(
 
 bool ContentBrowserClientImpl::AllowAppCache(
     const GURL& manifest_url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<url::Origin>& top_frame_origin,
     content::BrowserContext* context) {
   return embedder_support::AllowAppCache(
@@ -334,7 +341,7 @@ bool ContentBrowserClientImpl::AllowAppCache(
 
 content::AllowServiceWorkerResult ContentBrowserClientImpl::AllowServiceWorker(
     const GURL& scope,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<url::Origin>& top_frame_origin,
     const GURL& script_url,
     content::BrowserContext* context) {
@@ -346,7 +353,7 @@ content::AllowServiceWorkerResult ContentBrowserClientImpl::AllowServiceWorker(
 
 bool ContentBrowserClientImpl::AllowSharedWorker(
     const GURL& worker_url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<url::Origin>& top_frame_origin,
     const std::string& name,
     const blink::StorageKey& storage_key,
@@ -463,9 +470,10 @@ void ContentBrowserClientImpl::ConfigureNetworkContextParams(
   context_params->allow_any_cors_exempt_header_for_browser = true;
   context_params->accept_language = GetAcceptLangs(context);
   if (!context->IsOffTheRecord()) {
-    base::FilePath cookie_path = context->GetPath();
-    cookie_path = cookie_path.Append(FILE_PATH_LITERAL("Cookies"));
-    context_params->cookie_path = cookie_path;
+    context_params->file_paths = network::mojom::NetworkContextFilePaths::New();
+    context_params->file_paths->data_path = context->GetPath();
+    context_params->file_paths->cookie_database_name =
+        base::FilePath(FILE_PATH_LITERAL("Cookies"));
     context_params->http_cache_path =
         ProfileImpl::GetCachePath(context).Append(FILE_PATH_LITERAL("Cache"));
   }
@@ -485,8 +493,7 @@ void ContentBrowserClientImpl::ConfigureNetworkContextParams(
         net::DefineNetworkTrafficAnnotation("undefined", "Nothing here yet."));
   }
   if (command_line->HasSwitch(embedder_support::kShortReportingDelay)) {
-    context_params->reporting_delivery_interval =
-        base::TimeDelta::FromMilliseconds(100);
+    context_params->reporting_delivery_interval = base::Milliseconds(100);
   }
 }
 
@@ -593,13 +600,6 @@ bool ContentBrowserClientImpl::IsHandledURL(const GURL& url) {
       return true;
   }
 
-#if !BUILDFLAG(DISABLE_FTP_SUPPORT)
-  if (scheme == url::kFtpScheme &&
-      base::FeatureList::IsEnabled(network::features::kFtpProtocol)) {
-    return true;
-  }
-#endif  // !BUILDFLAG(DISABLE_FTP_SUPPORT)
-
   return false;
 }
 
@@ -642,9 +642,10 @@ void ContentBrowserClientImpl::OverridePageVisibilityState(
   }
 }
 
-bool ContentBrowserClientImpl::ShouldDisableSiteIsolation() {
+bool ContentBrowserClientImpl::ShouldDisableSiteIsolation(
+    content::SiteIsolationMode site_isolation_mode) {
   return site_isolation::SiteIsolationPolicy::
-      ShouldDisableSiteIsolationDueToMemoryThreshold();
+      ShouldDisableSiteIsolationDueToMemoryThreshold(site_isolation_mode);
 }
 
 std::vector<std::string>
@@ -1173,6 +1174,14 @@ bool ContentBrowserClientImpl::
   // embedded in a scrollable container and we need to update the position of
   // any DialogOverlays.
   return true;
+}
+
+content::BluetoothDelegate* ContentBrowserClientImpl::GetBluetoothDelegate() {
+  if (!bluetooth_delegate_) {
+    bluetooth_delegate_ = std::make_unique<permissions::BluetoothDelegateImpl>(
+        std::make_unique<WebLayerBluetoothDelegateImplClient>());
+  }
+  return bluetooth_delegate_.get();
 }
 
 #endif  // OS_ANDROID

@@ -22,6 +22,10 @@ class XDGPopupWrapperImpl : public ShellPopupWrapper {
   XDGPopupWrapperImpl(std::unique_ptr<XDGSurfaceWrapperImpl> surface,
                       WaylandWindow* wayland_window,
                       WaylandConnection* connection);
+
+  XDGPopupWrapperImpl(const XDGPopupWrapperImpl&) = delete;
+  XDGPopupWrapperImpl& operator=(const XDGPopupWrapperImpl&) = delete;
+
   ~XDGPopupWrapperImpl() override;
 
   // XDGPopupWrapper:
@@ -29,6 +33,8 @@ class XDGPopupWrapperImpl : public ShellPopupWrapper {
   void AckConfigure(uint32_t serial) override;
   bool IsConfigured() override;
   bool SetBounds(const gfx::Rect& new_bounds) override;
+  void SetWindowGeometry(const gfx::Rect& bounds) override;
+  void Grab(uint32_t serial) override;
 
  private:
   struct xdg_positioner* CreatePositioner(WaylandWindow* parent_window);
@@ -61,8 +67,6 @@ class XDGPopupWrapperImpl : public ShellPopupWrapper {
   ShellPopupParams params_;
 
   uint32_t next_reposition_token_ = 1;
-
-  DISALLOW_COPY_AND_ASSIGN(XDGPopupWrapperImpl);
 };
 
 }  // namespace ui

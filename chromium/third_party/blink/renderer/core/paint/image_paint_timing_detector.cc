@@ -165,8 +165,6 @@ void ImagePaintTimingDetector::OnPaintFinished() {
 void ImagePaintTimingDetector::NotifyImageRemoved(
     const LayoutObject& object,
     const ImageResourceContent* cached_image) {
-  if (!is_recording_)
-    return;
   RecordId record_id = std::make_pair(&object, cached_image);
   records_manager_.RemoveImageFinishedRecord(record_id);
   records_manager_.RemoveInvisibleRecordIfNeeded(record_id);
@@ -177,7 +175,9 @@ void ImagePaintTimingDetector::NotifyImageRemoved(
 }
 
 void ImagePaintTimingDetector::StopRecordEntries() {
-  is_recording_ = false;
+  // Clear the records queued for presentation callback to ensure no new updates
+  // occur.
+  records_manager_.ClearImagesQueuedForPaintTime();
   if (frame_view_->GetFrame().IsMainFrame()) {
     DCHECK(frame_view_->GetFrame().GetDocument());
     ukm::builders::Blink_PaintTiming(
@@ -192,20 +192,15 @@ void ImagePaintTimingDetector::RegisterNotifyPresentationTime() {
                             WrapCrossThreadWeakPersistent(this),
                             last_registered_frame_index_);
   callback_manager_->RegisterCallback(std::move(callback));
-  num_pending_presentation_callbacks_++;
 }
 
 void ImagePaintTimingDetector::ReportPresentationTime(
     unsigned last_queued_frame_index,
     base::TimeTicks timestamp) {
-  if (!is_recording_)
-    return;
   // The callback is safe from race-condition only when running on main-thread.
   DCHECK(ThreadState::Current()->IsMainThread());
   records_manager_.AssignPaintTimeToRegisteredQueuedRecords(
       timestamp, last_queued_frame_index);
-  num_pending_presentation_callbacks_--;
-  DCHECK_GE(num_pending_presentation_callbacks_, 0);
 }
 
 void ImageRecordsManager::AssignPaintTimeToRegisteredQueuedRecords(
@@ -236,9 +231,23 @@ void ImagePaintTimingDetector::RecordImage(
   if (!node)
     return;
 
-  RecordId record_id = std::make_pair(&object, &cached_image);
-  if (records_manager_.IsRecordedInvisibleImage(record_id))
+  // Before the image resource starts loading, <img> has no size info. We wait
+  // until the size is known.
+  if (image_border.IsEmpty())
     return;
+
+  RecordId record_id = std::make_pair(&object, &cached_image);
+
+  if (!base::FeatureList::IsEnabled(
+          features::kIncludeInitiallyInvisibleImagesInLCP) &&
+      records_manager_.IsRecordedInvisibleImage(record_id)) {
+    // Ignore images that are initially invisible, even if they later become
+    // visible. This is done as an optimization, to reduce LCP calculation
+    // costs.
+    // Note that this results in correctness issues:
+    // https://crbug.com/1249622
+    return;
+  }
   bool is_recorded_visible_image =
       records_manager_.IsRecordedVisibleImage(record_id);
 
@@ -276,13 +285,9 @@ void ImagePaintTimingDetector::RecordImage(
     return;
   }
 
-  if (is_recorded_visible_image || !is_recording_)
+  if (is_recorded_visible_image)
     return;
 
-  // Before the image resource starts loading, <img> has no size info. We wait
-  // until the size is known.
-  if (image_border.IsEmpty())
-    return;
   FloatRect mapped_visual_rect =
       frame_view_->GetPaintTimingDetector().CalculateVisualRect(
           image_border, current_paint_chunk_properties);
@@ -367,8 +372,11 @@ void ImageRecordsManager::OnImageLoaded(const RecordId& record_id,
   base::WeakPtr<ImageRecord> record = FindVisibleRecord(record_id);
   DCHECK(record);
   if (!style_image) {
-    record->load_time = image_finished_times_.at(record_id);
-    DCHECK(!record->load_time.is_null());
+    auto it = image_finished_times_.find(record_id);
+    if (it != image_finished_times_.end()) {
+      record->load_time = it->value;
+      DCHECK(!record->load_time.is_null());
+    }
   } else {
     Document* document = frame_view_->GetFrame().GetDocument();
     if (document && document->domWindow()) {
@@ -449,6 +457,10 @@ ImageRecord* ImageRecordsManager::FindLargestPaintCandidate() const {
   if (size_ordered_set_.size() == 0)
     return nullptr;
   return size_ordered_set_.begin()->get();
+}
+
+void ImageRecordsManager::ClearImagesQueuedForPaintTime() {
+  images_queued_for_paint_time_.clear();
 }
 
 void ImageRecordsManager::Trace(Visitor* visitor) const {

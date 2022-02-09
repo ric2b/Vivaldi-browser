@@ -72,6 +72,9 @@
       const viz::SurfaceId&,
       const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
+  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
+      content::RenderFrameHost* frame,
+      content::EyeDropperListener* listener) override;
 
   blink::SecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
@@ -145,8 +148,9 @@
     void Hide();
 
     CursorHider(aura::Window* window);
-
     ~CursorHider();
+    CursorHider(const CursorHider&) = delete;
+    CursorHider& operator=(const CursorHider&) = delete;
 
     // Reset and stop the hide timer.
     void Reset() { hide_timer_.Reset(); }
@@ -157,8 +161,6 @@
 
     // A timer to delay hiding the mouse.
     base::RepeatingTimer hide_timer_;
-
-    DISALLOW_COPY_AND_ASSIGN(CursorHider);
   };
 
   // The object to hide cursor when going into fullscreen mode.

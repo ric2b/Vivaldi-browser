@@ -125,6 +125,8 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param isStartSurfaceEnabled Whether start surface is enabled via a feature flag.
      * @param isTabGroupsAndroidContinuationEnabled Whether flag TabGroupsContinuationAndroid is
      *         enabled.
+     * @param initializeWithIncognitoColors Whether the toolbar should be initialized with incognito
+     *         colors.
      */
     public TopToolbarCoordinator(ToolbarControlContainer controlContainer,
             ToolbarLayout toolbarLayout, ToolbarDataProvider toolbarDataProvider,
@@ -147,7 +149,8 @@ public class TopToolbarCoordinator implements Toolbar {
             BooleanSupplier isIncognitoModeEnabledSupplier, boolean isGridTabSwitcherEnabled,
             boolean isTabToGtsAnimationEnabled, boolean isStartSurfaceEnabled,
             boolean isTabGroupsAndroidContinuationEnabled, HistoryDelegate historyDelegate,
-            BooleanSupplier partnerHomepageEnabledSupplier, OfflineDownloader offlineDownloader) {
+            BooleanSupplier partnerHomepageEnabledSupplier, OfflineDownloader offlineDownloader,
+            boolean initializeWithIncognitoColors) {
         mControlContainer = controlContainer;
         mToolbarLayout = toolbarLayout;
         mMenuButtonCoordinator = browsingModeMenuButtonCoordinator;
@@ -184,7 +187,7 @@ public class TopToolbarCoordinator implements Toolbar {
             }
         }
         mIsGridTabSwitcherEnabled = isGridTabSwitcherEnabled;
-        controlContainer.setToolbar(this);
+        controlContainer.setToolbar(this, initializeWithIncognitoColors);
         mToolbarLayout.initialize(toolbarDataProvider, tabController, mMenuButtonCoordinator,
                 isProgressBarVisibleSupplier, historyDelegate, partnerHomepageEnabledSupplier,
                 offlineDownloader);

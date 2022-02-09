@@ -26,8 +26,6 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1601560923496285236">Öbernäh</translation>
 <translation id="1603914832182249871">(Privat)</translation>
-<translation id="1620510694547887537">Kamera</translation>
-<translation id="1706625117072057435">Vergrösserigsstufe</translation>
 <translation id="1708338024780164500">(ned verwendet)</translation>
 <translation id="1723824996674794290">&amp;Neus Fenster</translation>
 <translation id="1729533290416704613">Sie kontrolliert au, welli Site bi dä Suechi öber d'Adressleiste ahzegt werd.</translation>
@@ -66,7 +64,6 @@
 <translation id="2445081178310039857">Stammverzeichnis vo dä Erwiterig esch erforderlech.</translation>
 <translation id="2470702053775288986">Ned onderstötzti Erwiiterig deaktiviert</translation>
 <translation id="2476578072172137802">Siite-Ihstellige</translation>
-<translation id="2482878487686419369">Nachricht</translation>
 <translation id="2498539833203011245">Verchlinere</translation>
 <translation id="2509495747794740764">Dä Wert för d'Skalierig moss zwösche 10 ond 200 legge.</translation>
 <translation id="26224892172169984">Verarbeitig vo Protokoll för kei Internetsite zueloh</translation>
@@ -84,7 +81,6 @@
 <translation id="2941112035454246133">Nedrig</translation>
 <translation id="2972581237482394796">&amp;Wederholle</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
-<translation id="3013291976881901233">MIDI Grät</translation>
 <translation id="3021678814754966447">Frame-Quelltext &amp;ahzeige</translation>
 <translation id="3036546437875325427">Flash aktiviere</translation>
 <translation id="3046910703532196514">Internetsite, vollständig</translation>
@@ -95,7 +91,6 @@
 <translation id="3129173833825111527">Lenke Rand</translation>
 <translation id="3154429428035006212">Set öber nem Monät offline</translation>
 <translation id="3222066309010235055">Vorrendere: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wähled Sie s'Stammverzeichnis vo dä Erwiterig, wo verpackt werde sell. Zor Aktualisierig vonere Erwiterig, wählet Sie en privati Schlösseldatei zom Wederverwende.</translation>
 <translation id="3288047731229977326">Erwiterige em Entwecklermodus chönd uf Ehrem Computer Schade mache. Wenn Sie kei Entweckler send, settet Sie die Erwiterige em Entwecklermodus usschalte, om secher z'si.</translation>
 <translation id="329838636886466101">Flicke</translation>
@@ -113,7 +108,6 @@
 <translation id="3587482841069643663">Alli</translation>
 <translation id="3678156199662914018">Erwiterig: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ahfrog zor Beldschermfreigab dörr <ph name="APP_NAME" /></translation>
-<translation id="3744111561329211289">Abgliche im Hentergrond</translation>
 <translation id="3797900183766075808">&amp;Met <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" sueche</translation>
 <translation id="3800806661949714323">Alli ahzeige (empfohle)</translation>
 <translation id="3810973564298564668">Verwalte</translation>
@@ -190,9 +184,7 @@
 <translation id="5623842676595125836">Protokoll</translation>
 <translation id="5627086634964711283">Sie bestemmt au, welli Site bim Klick uf "Startsite" chond.</translation>
 <translation id="563535393368633106">Vor em Zuegreff nachefroge (empfohle)</translation>
-<translation id="5649053991847567735">Automatischs Abelade</translation>
 <translation id="5677928146339483299">Verbote</translation>
-<translation id="5689516760719285838">Standort</translation>
 <translation id="5707185214361380026">Fähler bem Lade vo dä Erwiterig us:</translation>
 <translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Als PDF speichere</translation>
@@ -208,7 +200,6 @@
 <translation id="5979421442488174909">Öbersetze uf <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Internetsite-Date lösche</translation>
 <translation id="6042308850641462728">Meh</translation>
-<translation id="6059925163896151826">USB Grät</translation>
 <translation id="6101226222197207147">Neui App dezue doh (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ehri Internetsiite werd beiiflosst</translation>
 <translation id="6147020289383635445">Drockvorschau fählgschlage.</translation>
@@ -251,7 +242,6 @@
 <translation id="7427348830195639090">Hentergrondsite: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Dörr d'Uswahl vo dem Drocker erlaubet Sie dä folgende Erwiterig, uf Ehre Drocker zue z'grife:</translation>
 <translation id="749028671485790643">Profil <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7576690715254076113">Sortiere</translation>
 <translation id="7629827748548208700">Riter: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Ufhöre</translation>
@@ -286,7 +276,6 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="8071432093239591881">Als Beld drocke</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8261378640211443080">Die Erwiiterig esch ned im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ufgfüehrt ond esch vellecht ohni Ehres Wösse dezue gfüegt worde.</translation>
-<translation id="8270242299912238708">PDF-Dokument</translation>
 <translation id="8339059274628563283">För <ph name="SITE" /> lokal gspeicherti Date</translation>
 <translation id="8351419472474436977">Die Erwiterig het d'Kontrolle öber Ehri Proxyihstellige öbernoh. Das heisst, dass sie alli Onlineaktivitäte chan ändere, störe oder öberwache. Wenn Sie ned secher send, wieso die Änderig passiert esch, eschs bestemmt kei Absecht gsi.</translation>
 <translation id="8413385045638830869">Erst froge (empfohle)</translation>
@@ -313,7 +302,6 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="9170848237812810038">&amp;Röckgängig</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" dezue doh</translation>
 <translation id="9218430445555521422">Als Standard festlegge</translation>
-<translation id="9219103736887031265">Belder</translation>
 <translation id="93766956588638423">Erwiiterig repariere</translation>
 <translation id="98515147261107953">Querformat</translation>
 <translation id="994289308992179865">Sch&amp;leife</translation>

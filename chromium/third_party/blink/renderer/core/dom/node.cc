@@ -1003,9 +1003,7 @@ Node* Node::cloneNode(bool deep, ExceptionState& exception_state) const {
   // true, and the clone shadows flag set if this is a DocumentFragment whose
   // host is an HTML template element.
   auto* fragment = DynamicTo<DocumentFragment>(this);
-  bool clone_shadows_flag = fragment && fragment->IsTemplateContent() &&
-                            RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
-                                GetExecutionContext());
+  bool clone_shadows_flag = fragment && fragment->IsTemplateContent();
   return Clone(GetDocument(),
                deep ? (clone_shadows_flag ? CloneChildrenFlag::kCloneWithShadows
                                           : CloneChildrenFlag::kClone)
@@ -1043,6 +1041,8 @@ void Node::SetLayoutObject(LayoutObject* layout_object) {
   NodeRenderingData* node_layout_data =
       HasRareData() ? DataAsNodeRareData()->GetNodeRenderingData()
                     : DataAsNodeRenderingData();
+
+  DCHECK(!layout_object || layout_object->GetNode() == this);
 
   // Already pointing to a non empty NodeRenderingData so just set the pointer
   // to the new LayoutObject.
@@ -1155,11 +1155,6 @@ bool Node::IsClosedShadowHiddenFrom(const Node& other) const {
   return true;
 }
 
-void Node::UpdateDistributionForUnknownReasons() {
-  if (isConnected())
-    GetDocument().GetSlotAssignmentEngine().RecalcSlotAssignments();
-}
-
 void Node::SetIsLink(bool is_link) {
   SetFlag(is_link && !SVGImage::IsInSVGImage(To<Element>(this)), kIsLinkFlag);
 }
@@ -1248,6 +1243,7 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
     ancestor->SetChildNeedsStyleRecalc();
     if (ancestor->IsDirtyForStyleRecalc())
       break;
+
     // If we reach a locked ancestor, we should abort since the ancestor marking
     // will be done when the lock is committed.
     if (RuntimeEnabledFeatures::CSSContentVisibilityEnabled()) {
@@ -1397,7 +1393,8 @@ bool Node::IsInert() const {
       element = FlatTreeTraversal::ParentElement(*this);
 
     while (element) {
-      if (element->FastHasAttribute(html_names::kInertAttr))
+      if (element->FastHasAttribute(html_names::kInertAttr) &&
+          element->IsHTMLElement())
         return true;
       element = FlatTreeTraversal::ParentElement(*element);
     }
@@ -1613,7 +1610,7 @@ void Node::DetachLayoutTree(bool performing_reattach) {
     ReattachHookScope::NotifyDetach(*this);
 
   if (GetLayoutObject())
-    GetLayoutObject()->DestroyAndCleanupAnonymousWrappers();
+    GetLayoutObject()->DestroyAndCleanupAnonymousWrappers(performing_reattach);
   SetLayoutObject(nullptr);
   if (!performing_reattach) {
     // We are clearing the ComputedStyle for elements, which means we should not
@@ -1660,10 +1657,16 @@ void Node::SetForceReattachLayoutTree() {
   }
 }
 
+bool Node::WhitespaceChildrenMayChange() const {
+  if (const auto* layout_object = GetLayoutObject())
+    return layout_object->WhitespaceChildrenMayChange();
+  return false;
+}
+
 // FIXME: Shouldn't these functions be in the editing code?  Code that asks
 // questions about HTML in the core DOM class is obviously misplaced.
 bool Node::CanStartSelection() const {
-  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*this))
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*this))
     GetDocument().UpdateStyleAndLayoutTreeForNode(this);
   if (HasEditableStyle(*this))
     return true;
@@ -2690,8 +2693,25 @@ void Node::RemoveAllEventListenersRecursively() {
   }
 }
 
+namespace {
+
+// Helper object to allocate EventTargetData which is otherwise only used
+// through EventTargetWithInlineData.
+class EventTargetDataObject final
+    : public GarbageCollected<EventTargetDataObject> {
+ public:
+  void Trace(Visitor* visitor) const { visitor->Trace(data_); }
+
+  EventTargetData& GetEventTargetData() { return data_; }
+
+ private:
+  EventTargetData data_;
+};
+
+}  // namespace
+
 using EventTargetDataMap =
-    HeapHashMap<WeakMember<Node>, Member<EventTargetData>>;
+    HeapHashMap<WeakMember<Node>, Member<EventTargetDataObject>>;
 static EventTargetDataMap& GetEventTargetDataMap() {
   DEFINE_STATIC_LOCAL(Persistent<EventTargetDataMap>, map,
                       (MakeGarbageCollected<EventTargetDataMap>()));
@@ -2699,30 +2719,19 @@ static EventTargetDataMap& GetEventTargetDataMap() {
 }
 
 EventTargetData* Node::GetEventTargetData() {
-  return HasEventTargetData() ? GetEventTargetDataMap().at(this) : nullptr;
+  return HasEventTargetData()
+             ? &GetEventTargetDataMap().at(this)->GetEventTargetData()
+             : nullptr;
 }
-
-namespace {
-
-// Helper object to allocate EventTargetData which is otherwise only used
-// through EventTargetWithInlineData.
-class EventTargetDataObject final
-    : public GarbageCollected<EventTargetDataObject>,
-      public EventTargetData {
- public:
-  void Trace(Visitor* visitor) const final { EventTargetData::Trace(visitor); }
-};
-
-}  // namespace
 
 EventTargetData& Node::EnsureEventTargetData() {
   if (HasEventTargetData())
-    return *GetEventTargetDataMap().at(this);
+    return GetEventTargetDataMap().at(this)->GetEventTargetData();
   DCHECK(!GetEventTargetDataMap().Contains(this));
   auto* data = MakeGarbageCollected<EventTargetDataObject>();
   GetEventTargetDataMap().Set(this, data);
   SetHasEventTargetData(true);
-  return *data;
+  return data->GetEventTargetData();
 }
 
 const HeapVector<Member<MutationObserverRegistration>>*
@@ -3250,7 +3259,7 @@ void Node::CheckSlotChange(SlotChangeType slot_change_type) {
     // Checking for fallback content if the node is in a shadow tree.
     if (auto* parent_slot = DynamicTo<HTMLSlotElement>(parentElement())) {
       // The parent_slot's assigned nodes might not be calculated because they
-      // are lazy evaluated later at UpdateDistribution() so we have to check it
+      // are lazy evaluated later in RecalcAssignment(), so we have to check
       // here. Also, parent_slot may have already been removed, if this was the
       // removal of nested slots, e.g.
       //   <slot name=parent-slot><slot name=this-slot>fallback</slot></slot>.
@@ -3351,10 +3360,15 @@ void Node::AddCandidateDirectionalityForSlot() {
 }
 
 void Node::RemovedFromFlatTree() {
+  StyleEngine& engine = GetDocument().GetStyleEngine();
+  StyleEngine::DetachLayoutTreeScope detach_scope(engine);
   // This node was previously part of the flat tree, but due to slot re-
   // assignment it no longer is. We need to detach the layout tree and notify
   // the StyleEngine in case the StyleRecalcRoot is removed from the flat tree.
-  DetachLayoutTree();
+  {
+    StyleEngine::DOMRemovalScope style_scope(engine);
+    DetachLayoutTree();
+  }
   GetDocument().GetStyleEngine().RemovedFromFlatTree(*this);
 }
 
@@ -3387,21 +3401,21 @@ void Node::Trace(Visitor* visitor) const {
 
 #if DCHECK_IS_ON()
 
-void showNode(const blink::Node* node) {
+void ShowNode(const blink::Node* node) {
   if (node)
     LOG(INFO) << *node;
   else
     LOG(INFO) << "Cannot showNode for <null>";
 }
 
-void showTree(const blink::Node* node) {
+void ShowTree(const blink::Node* node) {
   if (node)
     LOG(INFO) << "\n" << node->ToTreeStringForThis().Utf8();
   else
     LOG(INFO) << "Cannot showTree for <null>";
 }
 
-void showNodePath(const blink::Node* node) {
+void ShowNodePath(const blink::Node* node) {
   if (node) {
     std::stringstream stream;
     node->PrintNodePathTo(stream);

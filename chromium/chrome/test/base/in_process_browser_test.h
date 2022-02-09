@@ -25,7 +25,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/full_restore/full_restore_app_launch_handler.h"
+#include "chrome/browser/ash/app_restore/full_restore_app_launch_handler.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace base {
@@ -213,8 +213,8 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // successful.
   virtual bool SetUpUserDataDirectory() WARN_UNUSED_RESULT;
 
-  // Initializes the display::Screen instance on X11.
-  virtual void SetScreenInstance();
+  // Initializes the display::Screen instance.
+  virtual void SetScreenInstance() {}
 
   // BrowserTestBase:
   void PreRunTestOnMainThread() override;

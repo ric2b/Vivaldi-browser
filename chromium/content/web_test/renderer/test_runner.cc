@@ -24,6 +24,7 @@
 #include "cc/paint/paint_canvas.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -78,11 +79,12 @@
 #include "third_party/blink/public/web/web_view_observer.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/test/icc_profiles.h"
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
@@ -229,6 +231,21 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   blink::WebLocalFrame* GetWebFrame() { return frame_->GetWebFrame(); }
 
  private:
+  // Watches for the RenderFrame that the TestRunnerBindings is attached to
+  // being destroyed.
+  class TestRunnerBindingsRenderFrameObserver : public RenderFrameObserver {
+   public:
+    TestRunnerBindingsRenderFrameObserver(TestRunnerBindings* bindings,
+                                          RenderFrame* frame)
+        : RenderFrameObserver(frame), bindings_(bindings) {}
+
+    // RenderFrameObserver implementation.
+    void OnDestruct() override { bindings_->OnFrameDestroyed(); }
+
+   private:
+    TestRunnerBindings* const bindings_;
+  };
+
   explicit TestRunnerBindings(TestRunner* test_runner,
                               WebFrameTestProxy* frame,
                               SpellCheckClient* spell_check);
@@ -314,6 +331,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetBluetoothFakeAdapter(const std::string& adapter_name,
                                v8::Local<v8::Function> callback);
   void SetBluetoothManualChooser(bool enable);
+  void SetBrowserHandlesFocus(bool enable);
   void SetCaretBrowsingEnabled();
   void SetColorProfile(const std::string& name,
                        v8::Local<v8::Function> callback);
@@ -404,6 +422,9 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void OnFrameDestroyed() {
     invalid_ = true;
   }
+
+  // Observer for the |frame_| the TestRunningBindings is bound to.
+  TestRunnerBindingsRenderFrameObserver frame_observer_;
 
   // Becomes true when the underlying frame is destroyed. Then the class should
   // stop doing anything.
@@ -502,7 +523,10 @@ void TestRunnerBindings::Install(TestRunner* test_runner,
 TestRunnerBindings::TestRunnerBindings(TestRunner* runner,
                                        WebFrameTestProxy* frame,
                                        SpellCheckClient* spell_check)
-    : runner_(runner), frame_(frame), spell_check_(spell_check) {}
+    : frame_observer_(this, frame),
+      runner_(runner),
+      frame_(frame),
+      spell_check_(spell_check) {}
 
 TestRunnerBindings::~TestRunnerBindings() = default;
 
@@ -704,6 +728,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       // Otherwise falls back to the browser's default chooser.
       .SetMethod("setBluetoothManualChooser",
                  &TestRunnerBindings::SetBluetoothManualChooser)
+      .SetMethod("setBrowserHandlesFocus",
+                 &TestRunnerBindings::SetBrowserHandlesFocus)
       .SetMethod("setCallCloseOnWebViews", &TestRunnerBindings::NotImplemented)
       .SetMethod("setCaretBrowsingEnabled",
                  &TestRunnerBindings::SetCaretBrowsingEnabled)
@@ -1758,6 +1784,12 @@ void TestRunnerBindings::GetBluetoothManualChooserEvents(
                      WrapV8Callback(std::move(callback))));
 }
 
+void TestRunnerBindings::SetBrowserHandlesFocus(bool enable) {
+  if (invalid_)
+    return;
+  blink::SetBrowserCanHandleFocusForWebTest(enable);
+}
+
 void TestRunnerBindings::SendBluetoothManualChooserEvent(
     const std::string& event,
     const std::string& argument) {
@@ -1936,8 +1968,10 @@ void TestRunnerBindings::CopyImageThen(int x,
                                         &sequence_number_after);
   }
 
+  mojo_base::BigBuffer png_data;
+  remote_clipboard->ReadPng(ui::ClipboardBuffer::kCopyPaste, &png_data);
   SkBitmap bitmap;
-  remote_clipboard->ReadImage(ui::ClipboardBuffer::kCopyPaste, &bitmap);
+  gfx::PNGCodec::Decode(png_data.data(), png_data.size(), &bitmap);
 
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
@@ -2327,6 +2361,7 @@ void TestRunner::Reset() {
 #endif
   blink::ResetDomainRelaxationForTest();
 
+  blink::SetBrowserCanHandleFocusForWebTest(false);
   setlocale(LC_ALL, "");
   setlocale(LC_NUMERIC, "C");
 

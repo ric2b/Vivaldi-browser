@@ -24,13 +24,13 @@ class PWALinkMenuController;
 class ProfileMenuController;
 class SpeechMenuController;
 
-class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
+class VivaldiRenderViewContextMenu : public RenderViewContextMenu {
  public:
   using Container = extensions::vivaldi::context_menu::Container;
 
   VivaldiRenderViewContextMenu(content::RenderFrameHost* render_frame_host,
-                         const content::ContextMenuParams& params,
-                         gfx::NativeView parent_view);
+                               const content::ContextMenuParams& params,
+                               gfx::NativeView parent_view);
   ~VivaldiRenderViewContextMenu() override;
 
   class Delegate {
@@ -76,7 +76,6 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   void AddSpellCheckServiceItem(bool is_checked) override;
   void AddAccessibilityLabelsServiceItem(bool is_checked) override;
 
-
   // SimpleMenuModel::Delegate implementation.
   bool IsCommandIdVisible(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
@@ -94,7 +93,8 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
       RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate);
   void ContainerWillOpen(ui::SimpleMenuModel* menu_model);
   bool HasContainerContent(const Container& container);
-  void PopulateContainer(const Container& container, int id,
+  void PopulateContainer(const Container& container,
+                         int id,
                          ui::SimpleMenuModel* menu_model);
 
   // RenderViewContextMenu (we do not use the menu part, just handler functions)
@@ -103,7 +103,7 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   void InitMenu() override;
 
   // Access to private members of RenderViewContextMenu for device controller
-  const GURL& GetLinkUrl() const {return params_.link_url; }
+  const GURL& GetLinkUrl() const { return params_.link_url; }
   void SetLinkUrl(const GURL& url) { params_.link_url = url; }
   // Access to private members of RenderViewContextMenu for speech controller
   const std::u16string& GetSelectedText() const {
@@ -121,9 +121,7 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   void SetModelDelegate(ui::SimpleMenuModel::Delegate* delegate) {
     model_delegate_ = delegate;
   }
-  void SetMenuDelegate(Delegate* delegate) {
-    menu_delegate_ = delegate;
-  }
+  void SetMenuDelegate(Delegate* delegate) { menu_delegate_ = delegate; }
 
  private:
   enum ActionChain {
@@ -166,7 +164,8 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   void AddMenuModelToMap(int command_id, ui::SimpleMenuModel* menu_model);
   ui::SimpleMenuModel* GetMappedMenuModel(int command_id);
 
-  void AddNotesController(ui::SimpleMenuModel* menu_model, int id,
+  void AddNotesController(ui::SimpleMenuModel* menu_model,
+                          int id,
                           bool is_folder);
 };
 

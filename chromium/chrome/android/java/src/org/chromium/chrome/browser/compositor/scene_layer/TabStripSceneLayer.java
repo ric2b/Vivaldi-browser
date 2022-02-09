@@ -37,6 +37,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
 
     // Vivaldi
     private boolean mShouldHideOverlay;
+    private boolean mIsStackStrip;
 
     public TabStripSceneLayer(Context context) {
         mDpToPx = context.getResources().getDisplayMetrics().density;
@@ -75,10 +76,13 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             StripLayoutTab[] stripLayoutTabsToRender, float yOffset, int selectedTabId) {
         if (mNativePtr == 0) return;
 
-        // Vivaldi
-        boolean visible = yOffset > -layoutHelper.getHeight();
+        // Note(david@vivaldi.com): If we have a stack the offset is twice as big.
+        float stackOffset = VivaldiUtils.isTabStackVisible() ? 2 * mDpToPx : 1;
+        boolean visible = yOffset > -(layoutHelper.getHeight() * stackOffset); // Vivaldi
         visible = visible && VivaldiUtils.isTabStripOn() && !mShouldHideOverlay;
 
+        // Note(david@vivaldi.com): We only show the stacking strip when we are in a tab stack.
+        if(mIsStackStrip && !VivaldiUtils.isTabStackVisible()) visible = false;
         // This will hide the tab strips if necessary.
         TabStripSceneLayerJni.get().beginBuildingFrame(
                 mNativePtr, TabStripSceneLayer.this, visible);
@@ -108,7 +112,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     private void pushButtonsAndBackground(StripLayoutHelperManager layoutHelper,
             ResourceManager resourceManager, float yOffset) {
         final float width = layoutHelper.getWidth() * mDpToPx;
-        final float height = layoutHelper.getHeight() * mDpToPx;
+        float height = layoutHelper.getHeight() * mDpToPx; // Vivaldi
+        // Note(david@vivaldi.com): This will fix the empty line which only occurs on certain
+        // devices between the bottom tab strip bar and the navigation bar. Still not 100% sure why
+        // that happens but by adding the offset it fixes it. See ref. VAB-4399.
+        height += VivaldiUtils.isTopToolbarOn() ? 0 : 1;
         TabStripSceneLayerJni.get().updateTabStripLayer(mNativePtr, TabStripSceneLayer.this, width,
                 height, yOffset * mDpToPx, layoutHelper.getBackgroundTabBrightness(),
                 layoutHelper.getBrightness(), shouldReaddBackground(layoutHelper.getOrientation()));
@@ -157,7 +165,10 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                     st.getDrawX() * mDpToPx, st.getDrawY() * mDpToPx, st.getWidth() * mDpToPx,
                     st.getHeight() * mDpToPx, st.getContentOffsetX() * mDpToPx,
                     st.getCloseButton().getOpacity(), st.isLoading(),
-                    st.getLoadingSpinnerRotation(), layerTitleCache, resourceManager);
+                    st.getLoadingSpinnerRotation(), layerTitleCache, resourceManager,
+                    // Note(david@vivaldi.com): From here we pass the Vivaldi parameters.
+                    st.getAlpha(), layoutHelper.getActiveStripLayoutHelper().showTabsAsFavIcon(),
+                    st.getTitleOffset() * mDpToPx);
         }
     }
 
@@ -178,6 +189,12 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     /** Vivaldi **/
     public void shouldHideOverlay(boolean value) {
         mShouldHideOverlay = value;
+    }
+
+    /** Vivaldi **/
+    public void setIsStackStrip(boolean isStackStrip) {
+        mIsStackStrip = isStackStrip;
+        TabStripSceneLayerJni.get().setIsStackStrip(mNativePtr, this, mIsStackStrip);
     }
 
     @NativeMethods
@@ -205,11 +222,15 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 boolean closePressed, float toolbarWidth, float x, float y, float width,
                 float height, float contentOffsetX, float closeButtonAlpha, boolean isLoading,
                 float spinnerRotation, LayerTitleCache layerTitleCache,
-                ResourceManager resourceManager);
+                ResourceManager resourceManager,
+                float tabAlpha, boolean isShownAsFavicon, float titleOffset); // Vivaldi
         void setContentTree(
                 long nativeTabStripSceneLayer, TabStripSceneLayer caller, SceneLayer contentTree);
         // Vivaldi
         void setTabStripBackgroundColor(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
                 int nativeTabStripBackgroundColor, boolean nativeUseLightForegroundOnBackground);
+        // Vivaldi
+        void setIsStackStrip(
+                long nativeTabStripSceneLayer, TabStripSceneLayer caller, boolean isStackStrip);
     }
 }

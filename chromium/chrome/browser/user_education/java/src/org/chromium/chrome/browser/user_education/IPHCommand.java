@@ -10,17 +10,13 @@ import android.view.View;
 import androidx.annotation.Nullable;
 
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
+import org.chromium.ui.widget.AnchoredPopupWindow;
 import org.chromium.ui.widget.ViewRectProvider;
 
 /**
  * Class encapsulating the data needed to show in-product help (IPH).
  */
 public class IPHCommand {
-    /**
-     * Feature name associated with the IPH. If null, the IPH will be always shown and any calls to
-     * the {@link Tracker} will be avoided.
-     */
-    @Nullable
     public final String featureName;
     public final String contentString;
     public final String accessibilityText;
@@ -39,12 +35,15 @@ public class IPHCommand {
     public final HighlightParams highlightParams;
     public final Rect anchorRect;
     public final boolean removeArrow;
+    @AnchoredPopupWindow.VerticalOrientation
+    public final int preferredVerticalOrientation;
 
-    IPHCommand(@Nullable String featureName, String contentString, String accessibilityText,
+    IPHCommand(String featureName, String contentString, String accessibilityText,
             boolean dismissOnTouch, View anchorView, Runnable onDismissCallback,
             Runnable onShowCallback, Runnable onBlockedCallback, Rect insetRect,
             long autoDismissTimeout, ViewRectProvider viewRectProvider, HighlightParams params,
-            Rect anchorRect, boolean removeArrow) {
+            Rect anchorRect, boolean removeArrow,
+            @AnchoredPopupWindow.VerticalOrientation int preferredVerticalOrientation) {
         this.featureName = featureName;
         this.contentString = contentString;
         this.accessibilityText = accessibilityText;
@@ -59,5 +58,6 @@ public class IPHCommand {
         this.highlightParams = params;
         this.anchorRect = anchorRect;
         this.removeArrow = removeArrow;
+        this.preferredVerticalOrientation = preferredVerticalOrientation;
     }
 }

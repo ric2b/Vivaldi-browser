@@ -50,7 +50,11 @@ import java.util.List;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * This class handles managing the positions and behavior of all tabs in a tab strip.  It is
@@ -87,7 +91,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     // Visibility Constants
     private static final float TAB_STACK_WIDTH_DP = 4.f;
     private static final float TAB_OVERLAP_WIDTH_DP = 24.f;
-    private static final float MIN_TAB_WIDTH_DP = 150.f;
+    private static final float MIN_TAB_WIDTH_DP = 90.f; // Vivaldi
     private static final float MAX_TAB_WIDTH_DP = 265.f;
     private static final float REORDER_MOVE_START_THRESHOLD_DP = 50.f;
     private static final float REORDER_EDGE_SCROLL_MAX_SPEED_DP = 1000.f;
@@ -164,6 +168,13 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     /** Vivaldi **/
     private TabModelObserver mModelObserver;
     private int mOrientation;
+    private boolean mIsStackStrip;
+    private TabModelSelector mTabModelSelector;
+    private TabGroupModelFilter mTabGroupModelFilter;
+    public boolean mShowTabsAsFavIcon;
+
+    private static float NO_X_BUTTON_OFFSET_DP = 20;
+
     /**
      * Creates an instance of the {@link StripLayoutHelper}.
      * @param context         The current Android {@link Context}.
@@ -208,6 +219,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
         // Vivaldi
         updateNewTabButtonState();
+        mShowTabsAsFavIcon = false;
 
         mContext = context;
         mIncognito = incognito;
@@ -541,6 +553,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
      * @param newIndex The new index of the tab in the {@link TabModel}.
      */
     public void tabMoved(long time, int id, int oldIndex, int newIndex) {
+        // Note(david@vivaldi.com): While tab groups are enabled we return here as the strip will be
+        // updated with the next layout update.
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext))
+            return;
         reorderTab(id, oldIndex, newIndex, false);
 
         updateVisualTabOrdering();
@@ -612,6 +628,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             allowLeftExpand = true;
             canExpandSelectedTab = true;
         }
+
+        // Note(david@vivaldi.com): No expanding required when groups are enabled.
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext))
+            canExpandSelectedTab = false;
 
         // 4. Scroll the stack so that the fast expand tab is visible.
         if (fastExpandTab != null) {
@@ -1043,6 +1063,15 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             // When tabs aren't cascaded, they're non-animating width weight is always 1.0 so it
             // doesn't need to be included in this calculation.
             tabsWidth = mStripTabs.length * (mCachedTabWidth - mTabOverlapWidth);
+            // Note(david@vivaldi): Substract the offset here in regards to our setting. This
+            // applies only when tab is shown as favicon.
+            if (mShowTabsAsFavIcon) {
+                boolean showXButton = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
+                tabsWidth = !showXButton
+                        ? tabsWidth - ((mStripTabs.length - 1) * NO_X_BUTTON_OFFSET_DP)
+                        : tabsWidth;
+            }
         }
 
         // 3. Correct fencepost error in tabswidth;
@@ -1057,6 +1086,12 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     }
 
     private void computeAndUpdateTabOrders(boolean delayResize) {
+        // Note(david@vivaldi.com): Always update.
+        if (ChromeApplicationImpl.isVivaldi()) {
+            computeAndUpdateTabOrders();
+            return;
+        }
+
         final int count = mModel.getCount();
         StripLayoutTab[] tabs = new StripLayoutTab[count];
 
@@ -1157,15 +1192,23 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
         for (int i = 0; i < mStripTabs.length; i++) {
             StripLayoutTab tab = mStripTabs[i];
+            // Note(david@vivaldi.com): Calculate the correct tab width here.
+            setShowTabAsFavIcon(mCachedTabWidth <= MIN_TAB_WIDTH_DP);
+            mCachedTabWidth = mShowTabsAsFavIcon ? MIN_TAB_WIDTH_DP : mCachedTabWidth;
+            float newWidth = mCachedTabWidth;
+            tab.setTabModelSelector(mTabModelSelector);
+            if (mShowTabsAsFavIcon && !tab.isCloseButtonVisible())
+                newWidth -= NO_X_BUTTON_OFFSET_DP;
+
             if (tab.isDying()) continue;
 
             if (resizeAnimationList != null) {
                 CompositorAnimator animator = CompositorAnimator.ofFloatProperty(
                         mUpdateHost.getAnimationHandler(), tab, StripLayoutTab.WIDTH,
-                        tab.getWidth(), mCachedTabWidth, ANIM_TAB_RESIZE_MS);
+                        tab.getWidth(), newWidth, ANIM_TAB_RESIZE_MS); // Vivaldi: Apply new width.
                 resizeAnimationList.add(animator);
             } else {
-                mStripTabs[i].setWidth(mCachedTabWidth);
+                mStripTabs[i].setWidth(newWidth); // Vivaldi: Apply new width.
             }
         }
 
@@ -1180,6 +1223,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     private void updateStrip() {
         if (mModel == null) return;
 
+        // Note(david@vivaldi.com: Make sure we always update.
+        if (ChromeApplicationImpl.isVivaldi())
+            computeAndUpdateTabOrders(false);
+        else
         // TODO(dtrainor): Remove this once tabCreated() is refactored to be called even from
         // restore.
         if (mStripTabs == null || mModel.getCount() != mStripTabs.length) {
@@ -1244,6 +1291,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         // 3. Populate it with the visible tabs.
         int renderIndex = 0;
         for (int i = 0; i < mStripTabsVisuallyOrdered.length; ++i) {
+            // Note(david@vivaldi.com): Pass required parameters to the tab.
+            mStripTabsVisuallyOrdered[i].setIsStackStrip(mIsStackStrip);
+            mStripTabsVisuallyOrdered[i].setTabModelSelector(mTabModelSelector);
             if (mStripTabsVisuallyOrdered[i].isVisible()) {
                 mStripTabsToRender[renderIndex++] = mStripTabsVisuallyOrdered[i];
             }
@@ -1454,9 +1504,43 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                     LocalizationUtils.isLayoutRtl() ? destIndex < curIndex : destIndex > curIndex;
             offset += MathUtils.flipSignIf(flipWidth, shouldFlip);
 
+            // Note(david@vivaldi.com): Here we calculate the model index to where we move the
+            // current selected tab and finally swap it. This only applies when tab group is
+            // enabled as the model destination index is different to destination index of the
+            // current (main or stack) tab strip.
+            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)) {
+                int modelDestIndex = destIndex;
+                // When moving right update modelDestIndex to point to the proper element.
+                if (pastRightThreshold && isNotRightMost) modelDestIndex--;
+                int destinationTabId = mStripTabs[modelDestIndex].getId();
+                if (mIsStackStrip) { // Stack strip
+                    int newDestIndex = 0;
+                    // Get the new destination index in the tab model.
+                    for (int i = 0; i < mModel.getCount(); i++)
+                        if (mModel.getTabAt(i).getId() == destinationTabId) newDestIndex = i;
+                    // When moving right update destIndex to point to the proper element.
+                    if (pastRightThreshold && isNotRightMost) newDestIndex++;
+                    // Swap the tabs.
+                    reorderTab(mInteractingTab.getId(), curIndex, destIndex, true);
+                    // Move the tab within the model.
+                    mModel.moveTab(mInteractingTab.getId(), newDestIndex);
+                } else { // Main strip
+                    List<Tab> destTabGroup =
+                            mTabGroupModelFilter.getRelatedTabList(destinationTabId);
+                    int newDestIndex = mModel.indexOf(destTabGroup.get(0));
+                    if (pastRightThreshold && isNotRightMost)
+                        newDestIndex =
+                                mModel.indexOf(destTabGroup.get(destTabGroup.size() - 1)) + 1;
+                    // Swap the tabs.
+                    reorderTab(mInteractingTab.getId(), curIndex, destIndex, true);
+                    // We move a group here, also when there is only one tab.
+                    mTabGroupModelFilter.moveRelatedTabs(mInteractingTab.getId(), newDestIndex);
+                }
+            } else {
             // 3.b. Swap the tabs.
             reorderTab(mInteractingTab.getId(), curIndex, destIndex, true);
             mModel.moveTab(mInteractingTab.getId(), destIndex);
+            }
 
             // 3.c. Update our curIndex as we have just moved the tab.
             curIndex += destIndex > curIndex ? 1 : -1;
@@ -1866,5 +1950,100 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 }
             }
         }
+    }
+
+    /**
+     * Vivaldi: Computes the tab order for main and tab stack strip.
+     */
+    private void computeAndUpdateTabOrders() {
+        Tab selectedTab = mModel.getTabAt(mModel.index());
+        if (mTabModelSelector != null)
+            mTabGroupModelFilter =
+                    (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
+                            .getCurrentTabModelFilter(true);
+        if (mTabGroupModelFilter == null) return;
+
+        List<Tab> stackedTabs = new ArrayList<>();
+        List<Tab> mainTabs = new ArrayList<>();
+
+        if (selectedTab == null) return;
+
+        // Stacked tabs
+        List<Tab> relatedTabs = mTabGroupModelFilter.getRelatedTabList(selectedTab.getId());
+        if (relatedTabs.size() > 1) {
+            for (int i = 0; i < relatedTabs.size(); i++) stackedTabs.add(relatedTabs.get(i));
+        }
+        List<Tab> ignoreList = new ArrayList<>();
+        // Main tabs
+        for (int i = 0; i < mModel.getCount(); i++) {
+            final Tab tab = mModel.getTabAt(i);
+            final List<Tab> relatedTabList = mTabGroupModelFilter.getRelatedTabList(tab.getId());
+            final int lastShownTabId = mTabGroupModelFilter.getLastShownTabId(tab);
+            boolean canIgnoreTab = false;
+            // First check if we can ignore this tab.
+            for (Tab ignoreTab : ignoreList) {
+                if (ignoreTab.getId() == tab.getId()) canIgnoreTab = true;
+            }
+            if (canIgnoreTab) continue;
+            // When tab is not a group add it.
+            if (relatedTabList.size() == 1) {
+                mainTabs.add(tab);
+            } else {
+                // Add the current tab to the appropriate list.
+                for (Tab relatedTab : relatedTabList) {
+                    if (relatedTab.getId() == selectedTab.getId()
+                            || relatedTab.getId() == lastShownTabId)
+                        mainTabs.add(relatedTab);
+                    // Always add the related tab to the ignore list.
+                    ignoreList.add(relatedTab);
+                }
+            }
+        }
+
+        // Populate all tabs which will be rendered.
+        List<Tab> tabs = mIsStackStrip ? stackedTabs : mainTabs;
+        // When tab stacking is off populate all tabs in the model.
+        if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)) {
+            tabs.clear();
+            for (int i = 0; i < mModel.getCount(); i++) tabs.add(mModel.getTabAt(i));
+        }
+
+        List<StripLayoutTab> stripTabs = new ArrayList<>();
+        for (Tab tab : tabs) {
+            final int id = tab.getId();
+            final StripLayoutTab oldTab = findTabById(id);
+            stripTabs.add(oldTab != null ? oldTab : createStripTab(id));
+            setAccessibilityDescription(stripTabs.get(stripTabs.size() - 1), tab);
+        }
+
+        int oldStripLength = mStripTabs.length;
+        mStripTabs = stripTabs.toArray(new StripLayoutTab[0]);
+
+        if (mStripTabs.length != oldStripLength) resizeTabStrip(false);
+
+        updateVisualTabOrdering();
+        computeAndUpdateTabWidth(false);
+    }
+
+    /** Vivaldi **/
+    public void setIsStackStrip(boolean isStackStrip) {
+        mIsStackStrip = isStackStrip;
+    }
+
+    /** Vivaldi **/
+    public void setTabModelSelector(TabModelSelector tabModelSelector) {
+        mTabModelSelector = tabModelSelector;
+    }
+
+    /** Vivaldi **/
+    private void setShowTabAsFavIcon(boolean show) {
+        mShowTabsAsFavIcon = show;
+        mShowTabsAsFavIcon |= VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.SHOW_TAB_AS_FAVICON, false);
+    }
+
+    /** Vivaldi **/
+    public boolean showTabsAsFavIcon() {
+        return mShowTabsAsFavIcon;
     }
 }

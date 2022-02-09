@@ -10,9 +10,10 @@
 // #import {flush, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {Router, Route, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {assertTrue} from '../../../chai_assert.js';
-// #import {createDefaultBluetoothDevice, FakeBluetoothConfig,} from './fake_bluetooth_config.m.js';
+// #import {createDefaultBluetoothDevice, FakeBluetoothConfig,} from 'chrome://test/cr_components/chromeos/bluetooth/fake_bluetooth_config.js';
 // #import {setBluetoothConfigForTesting} from 'chrome://resources/cr_components/chromeos/bluetooth/cros_bluetooth_config.js';
 // #import {mojoString16ToString} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_utils.js';
+// #import {eventToPromise} from 'chrome://test/test_util.m.js';
 // clang-format on
 
 suite('OsBluetoothSummaryTest', function() {
@@ -151,12 +152,12 @@ suite('OsBluetoothSummaryTest', function() {
 
     const device1 = createDefaultBluetoothDevice(
         /*id=*/ '123456789', /*publicName=*/ 'BeatsX', /*connected=*/ true,
-        /*nickname=*/ 'device1');
+        /*opt_nickname=*/ 'device1');
     const device2 = createDefaultBluetoothDevice(
         /*id=*/ '987654321', /*publicName=*/ 'MX 3', /*connected=*/ true);
     const device3 = createDefaultBluetoothDevice(
         /*id=*/ '456789', /*publicName=*/ 'Radio head', /*connected=*/ true,
-        /*nickname=*/ 'device3');
+        /*opt_nickname=*/ 'device3');
 
     const mockPairedBluetoothDeviceProperties = [
       device1,
@@ -204,5 +205,20 @@ suite('OsBluetoothSummaryTest', function() {
     label = bluetoothSecondaryLabel.textContent.trim();
     assertEquals(bluetoothSummary.i18n('bluetoothSummaryPageOn'), label);
     assertEquals('cr:bluetooth', getBluetoothStatusIcon().icon);
+  });
+
+  test('start-pairing is fired on pairNewDeviceBtn click', async function() {
+    init();
+    bluetoothConfig.setBluetoothEnabledState(/*enabled=*/ true);
+    await flushAsync();
+
+    const toggleBluetoothPairingUiPromise =
+        test_util.eventToPromise('start-pairing', bluetoothSummary);
+    const getPairNewDeviceBtn = () => bluetoothSummary.$$('#pairNewDeviceBtn');
+
+    assertTrue(!!getPairNewDeviceBtn());
+    getPairNewDeviceBtn().click();
+
+    await toggleBluetoothPairingUiPromise;
   });
 });

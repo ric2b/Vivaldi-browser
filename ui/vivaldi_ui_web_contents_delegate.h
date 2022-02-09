@@ -16,53 +16,58 @@ class VivaldiBrowserWindow;
 
 // WebContents delegate for Vivaldi UI in the browser window.
 class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
-  public content::WebContentsObserver {
+                                     public content::WebContentsObserver {
  public:
   VivaldiUIWebContentsDelegate(VivaldiBrowserWindow* window);
   ~VivaldiUIWebContentsDelegate() override;
+  VivaldiUIWebContentsDelegate(const VivaldiUIWebContentsDelegate&) = delete;
+  VivaldiUIWebContentsDelegate& operator=(const VivaldiUIWebContentsDelegate&) =
+      delete;
 
   void Initialize();
 
   // Overridden from WebContentsDelegate
   bool HandleKeyboardEvent(
-    content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) override;
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
   void ContentsMouseEvent(content::WebContents* source,
-    bool motion,
-    bool exited) override;
+                          bool motion,
+                          bool exited) override;
   bool PreHandleGestureEvent(content::WebContents* source,
-    const blink::WebGestureEvent& event) override;
+                             const blink::WebGestureEvent& event) override;
 #if defined(OS_ANDROID)
   std::unique_ptr<content::ColorChooser> OpenColorChooser(
-    content::WebContents* web_contents,
-    SkColor color,
-    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) override;
+      content::WebContents* web_contents,
+      SkColor color,
+      const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions)
+      override;
 #endif
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
   void NavigationStateChanged(content::WebContents* source,
-    content::InvalidateTypes changed_flags) override;
+                              content::InvalidateTypes changed_flags) override;
   void RequestMediaAccessPermission(
-    content::WebContents* web_contents,
-    const content::MediaStreamRequest& request,
-    content::MediaResponseCallback callback) override;
+      content::WebContents* web_contents,
+      const content::MediaStreamRequest& request,
+      content::MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
-    const GURL& security_origin,
-    blink::mojom::MediaStreamType type) override;
+                                  const GURL& security_origin,
+                                  blink::mojom::MediaStreamType type) override;
   content::PictureInPictureResult EnterPictureInPicture(
-    content::WebContents* web_contents,
-    const viz::SurfaceId& surface_id,
-    const gfx::Size& natural_size) override;
+      content::WebContents* web_contents,
+      const viz::SurfaceId& surface_id,
+      const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
   void PrintCrossProcessSubframe(
-    content::WebContents* web_contents,
-    const gfx::Rect& rect,
-    int document_cookie,
-    content::RenderFrameHost* subframe_host) const override;
+      content::WebContents* web_contents,
+      const gfx::Rect& rect,
+      int document_cookie,
+      content::RenderFrameHost* subframe_host) const override;
   void ActivateContents(content::WebContents* contents) override;
 
-  void DidStartNavigation(content::NavigationHandle* navigation_handle) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
  private:
   // content::WebContentsObserver
@@ -71,19 +76,17 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                              content::RenderViewHost* new_host) override;
   void RenderProcessGone(base::TerminationStatus status) override;
   bool OnMessageReceived(const IPC::Message& message,
-    content::RenderFrameHost* sender) override;
+                         content::RenderFrameHost* sender) override;
   void DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) override;
+      content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url) override;
+                     const GURL& validated_url) override;
 
   void UpdateDraggableRegions(
-    content::RenderFrameHost* sender,
-    const std::vector<extensions::DraggableRegion>& regions);
+      content::RenderFrameHost* sender,
+      const std::vector<extensions::DraggableRegion>& regions);
 
   VivaldiBrowserWindow* window_;  // owner
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiUIWebContentsDelegate);
 };
 
 #endif  // UI_VIVALDI_APP_WINDOW_CONTENTS_H_

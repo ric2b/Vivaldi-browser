@@ -31,17 +31,13 @@ class MenubarSetupFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("menubar.setup", MENUBAR_SETUP)
   MenubarSetupFunction() = default;
 
- protected:
+ private:
   ~MenubarSetupFunction() override = default;
 
   // ExtensionFunction
   ExtensionFunction::ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MenubarSetupFunction);
 };
 
 }  // namespace extensions
-
 
 #endif  // EXTENSIONS_API_MENUBAR_API_H_

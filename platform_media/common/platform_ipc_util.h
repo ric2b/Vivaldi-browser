@@ -25,6 +25,6 @@ constexpr size_t RoundUpTo4kPage(size_t size) {
   return (size + page_mask) & ~page_mask;
 }
 
-}
+}  // namespace media
 
 #endif  // PLATFORM_MEDIA_COMMON_PLATFORM_IPC_UTIL_H_

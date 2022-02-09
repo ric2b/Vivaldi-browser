@@ -70,13 +70,11 @@
 #endif
 
 #if defined(USE_OZONE)
-#include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
 
-using base::TimeDelta;
 using ui::OSExchangeData;
 
 namespace views {
@@ -119,20 +117,19 @@ bool ShouldIgnoreScreenBoundsForMenus() {
 #if defined(USE_OZONE)
   // Wayland requires placing menus is screen coordinates. See comment in
   // ozone_platform_wayland.cc.
-  if (features::IsUsingOzonePlatform())
-    return ui::OzonePlatform::GetInstance()
-        ->GetPlatformProperties()
-        .ignore_screen_bounds_for_menus;
-#endif
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .ignore_screen_bounds_for_menus;
+#else
   return false;
+#endif
 }
 
 // The amount of time the mouse should be down before a mouse release is
 // considered intentional. This is to prevent spurious mouse releases from
 // activating controls, especially when some UI element is revealed under the
 // source of the activation (ex. menus showing underneath menu buttons).
-base::TimeDelta menu_selection_hold_time =
-    base::TimeDelta::FromMilliseconds(200);
+base::TimeDelta menu_selection_hold_time = base::Milliseconds(200);
 
 // Amount of time from when the drop exits the menu and the menu is hidden.
 constexpr int kCloseOnExitTime = 1200;
@@ -152,7 +149,7 @@ constexpr float kMaximumLengthMovedToActivate = 4.0f;
 
 // Time to complete a cycle of the menu item alert animation.
 constexpr base::TimeDelta kAlertAnimationThrobDuration =
-    base::TimeDelta::FromMilliseconds(1000);
+    base::Milliseconds(1000);
 
 // Returns true if the mnemonic of |menu| matches key.
 bool MatchesMnemonic(MenuItemView* menu, char16_t key) {
@@ -363,6 +360,9 @@ class MenuController::MenuScrollTask {
     pixels_per_second_ = MenuItemView::pref_menu_height() * 20;
   }
 
+  MenuScrollTask(const MenuScrollTask&) = delete;
+  MenuScrollTask& operator=(const MenuScrollTask&) = delete;
+
   void Update(const MenuController::MenuPart& part) {
     if (!part.is_scroll()) {
       StopScrolling();
@@ -380,7 +380,7 @@ class MenuController::MenuScrollTask {
     is_scrolling_up_ = new_is_up;
 
     if (!scrolling_timer_.IsRunning()) {
-      scrolling_timer_.Start(FROM_HERE, TimeDelta::FromMilliseconds(30), this,
+      scrolling_timer_.Start(FROM_HERE, base::Milliseconds(30), this,
                              &MenuScrollTask::Run);
     }
   }
@@ -426,8 +426,6 @@ class MenuController::MenuScrollTask {
 
   // Y-coordinate of submenu_view_ when scrolling started.
   int start_y_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuScrollTask);
 };
 
 // MenuController:SelectByCharDetails ----------------------------------------
@@ -1114,6 +1112,15 @@ void MenuController::OnDragExited(SubmenuView* source) {
 ui::mojom::DragOperation MenuController::OnPerformDrop(
     SubmenuView* source,
     const ui::DropTargetEvent& event) {
+  auto drop_cb = GetDropCallback(source, event);
+  ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
+  std::move(drop_cb).Run(event, output_drag_op);
+  return output_drag_op;
+}
+
+views::View::DropCallback MenuController::GetDropCallback(
+    SubmenuView* source,
+    const ui::DropTargetEvent& event) {
   DCHECK(drop_target_);
   // NOTE: the delegate may delete us after invoking OnPerformDrop, as such
   // we don't call cancel here.
@@ -1144,8 +1151,8 @@ ui::mojom::DragOperation MenuController::OnPerformDrop(
 
   // WARNING: the call to MenuClosed deletes us.
 
-  return drop_target->GetDelegate()->OnPerformDrop(drop_target, drop_position,
-                                                   event);
+  return drop_target->GetDelegate()->GetDropCallback(drop_target, drop_position,
+                                                     event);
 }
 
 void MenuController::OnDragEnteredScrollButton(SubmenuView* source,
@@ -1507,7 +1514,7 @@ void MenuController::StartDrag(SubmenuView* source,
 
   float raster_scale = ScaleFactorForDragFromWidget(source->GetWidget());
   gfx::Canvas canvas(item->size(), raster_scale, false /* opaque */);
-  item->PaintButton(&canvas, MenuItemView::PaintButtonMode::kForDrag);
+  item->PaintForDrag(&canvas);
   gfx::ImageSkia image =
       gfx::ImageSkia::CreateFromBitmap(canvas.GetBitmap(), raster_scale);
 
@@ -2204,14 +2211,25 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
       item->AddEmptyMenus();
     }
   }
+  const MenuConfig& menu_config = MenuConfig::instance();
   bool prefer_leading =
       state_.open_leading.empty() ? true : state_.open_leading.back();
   bool resulting_direction;
+  // Anchor for calculated bounds. Can be alternatively used by a system
+  // compositor for better positioning.
+  ui::OwnedWindowAnchor anchor;
+  // While the Windows 11 style menus uses the same bubble border as "touch-
+  // style" menus, some positioning calculations are different. Testing for that
+  // condition separately will allow those subtle positioning differences to be
+  // taken into account within CalculateBubbleMenuBounds() and elsewhere.
   gfx::Rect bounds =
-      MenuItemView::IsBubble(state_.anchor)
+      MenuItemView::IsBubble(state_.anchor) ||
+              (menu_config.win11_style_menus &&
+               menu_config.CornerRadiusForMenu(this))
           ? CalculateBubbleMenuBounds(item, prefer_leading,
-                                      &resulting_direction)
-          : CalculateMenuBounds(item, prefer_leading, &resulting_direction);
+                                      &resulting_direction, &anchor)
+          : CalculateMenuBounds(item, prefer_leading, &resulting_direction,
+                                &anchor);
   state_.open_leading.push_back(resulting_direction);
   bool do_capture = (!did_capture_ && !for_drop_ && !IsEditableCombobox());
   showing_submenu_ = true;
@@ -2229,6 +2247,7 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
     params.bounds = bounds;
     params.do_capture = do_capture;
     params.native_view_for_gestures = native_view_for_gestures_;
+    params.owned_window_anchor = anchor;
 
     if (item->GetParentMenuItem()) {
       params.context = state_.item->GetWidget();
@@ -2271,7 +2290,7 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
     // Set the selection indices for this menu level based on traversal order.
     SetSelectionIndices(item);
   } else {
-    item->GetSubmenu()->Reposition(bounds);
+    item->GetSubmenu()->Reposition(bounds, anchor);
   }
   showing_submenu_ = false;
 }
@@ -2323,9 +2342,9 @@ void MenuController::BuildMenuItemPath(MenuItemView* item,
 }
 
 void MenuController::StartShowTimer() {
-  show_timer_.Start(
-      FROM_HERE, TimeDelta::FromMilliseconds(MenuConfig::instance().show_delay),
-      this, &MenuController::CommitPendingSelection);
+  show_timer_.Start(FROM_HERE,
+                    base::Milliseconds(MenuConfig::instance().show_delay), this,
+                    &MenuController::CommitPendingSelection);
 }
 
 void MenuController::StopShowTimer() {
@@ -2334,7 +2353,7 @@ void MenuController::StopShowTimer() {
 
 void MenuController::StartCancelAllTimer() {
   cancel_all_timer_.Start(
-      FROM_HERE, TimeDelta::FromMilliseconds(kCloseOnExitTime),
+      FROM_HERE, base::Milliseconds(kCloseOnExitTime),
       base::BindOnce(&MenuController::Cancel, base::Unretained(this),
                      ExitType::kAll));
 }
@@ -2345,11 +2364,22 @@ void MenuController::StopCancelAllTimer() {
 
 gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
                                               bool prefer_leading,
-                                              bool* is_leading) {
+                                              bool* is_leading,
+                                              ui::OwnedWindowAnchor* anchor) {
   DCHECK(item);
+  DCHECK(anchor);
 
   SubmenuView* submenu = item->GetSubmenu();
   DCHECK(submenu);
+
+  // For the first menu, anchor_rect is initial bounds. If |item| is a child
+  // menu, anchor_rect will be recalculated.
+  anchor->anchor_rect = state_.initial_bounds;
+
+  gfx::Point item_loc;
+  View::ConvertPointToScreen(item, &item_loc);
+  // Sets additional anchor parameters.
+  SetAnchorParametersForItem(item, item_loc, anchor);
 
   gfx::Rect menu_bounds =
       gfx::Rect(submenu->GetScrollViewContainer()->GetPreferredSize());
@@ -2376,12 +2406,9 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
 
   const MenuConfig& menu_config = MenuConfig::instance();
 
+  // Not the first menu; position it relative to the bounds of its parent menu
+  // item.
   if (item->GetParentMenuItem()) {
-    // Not the first menu; position it relative to the bounds of its parent menu
-    // item.
-    gfx::Point item_loc;
-    View::ConvertPointToScreen(item, &item_loc);
-
     // We must make sure we take into account the UI layout. If the layout is
     // RTL, then a 'leading' menu is positioned to the left of the parent menu
     // item and not to the right.
@@ -2400,6 +2427,16 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
 
     // Assume the menu can be placed in the preferred location.
     menu_bounds.set_x(create_on_right ? right_of_parent : left_of_parent);
+
+    // Calculate anchor for |menu_bounds|. Screen bounds must be ignored here
+    // as system compositors that do not provide global screen coordinates will
+    // use this anchor (instead of bounds) and check if the window fits the
+    // screen area (if it's constrained, etc).
+    anchor->anchor_rect = menu_bounds;
+    anchor->anchor_rect.set_size({1, 1});
+    // TODO(1163646): handle RTL layout.
+    anchor->anchor_rect.set_x(left_of_parent + menu_bounds.width());
+    anchor->anchor_rect.set_width(menu_bounds.x() - anchor->anchor_rect.x());
 
     // Everything after this check requires monitor bounds to be non-empty.
     if (ShouldIgnoreScreenBoundsForMenus() || monitor_bounds.IsEmpty())
@@ -2516,10 +2553,22 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
   return menu_bounds;
 }
 
-gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
-                                                    bool prefer_leading,
-                                                    bool* is_leading) {
+gfx::Rect MenuController::CalculateBubbleMenuBounds(
+    MenuItemView* item,
+    bool prefer_leading,
+    bool* is_leading,
+    ui::OwnedWindowAnchor* anchor) {
   DCHECK(item);
+  DCHECK(anchor);
+
+  const bool is_bubble = MenuItemView::IsBubble(state_.anchor);
+
+  // TODO(msisov): Shall we also calculate anchor for bubble menus, which are
+  // used by ash? If there is a need. Fix that.
+  anchor->anchor_position = ui::OwnedWindowAnchorPosition::kTopLeft;
+  anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomRight;
+  anchor->constraint_adjustment =
+      ui::OwnedWindowConstraintAdjustment::kAdjustmentNone;
 
   // Assume we can honor `prefer_leading`.
   *is_leading = prefer_leading;
@@ -2539,6 +2588,9 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
 
   const gfx::Rect& monitor_bounds = state_.monitor_bounds;
 
+  const bool is_win11_menu =
+      menu_config.win11_style_menus && menu_config.CornerRadiusForMenu(this);
+
   if (!item->GetParentMenuItem()) {
     // This is a top-level menu, position it relative to the anchor bounds.
     const gfx::Rect& anchor_bounds = state_.initial_bounds;
@@ -2551,7 +2603,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
       int max_height = monitor_bounds.height();
       // In case of bubbles, the maximum width is limited by the space
       // between the display corner and the target area + the tip size.
-      if (MenuItemView::IsBubble(state_.anchor) ||
+      if (is_bubble || is_win11_menu ||
           item->actual_menu_position() == MenuPosition::kAboveBounds) {
         // Don't consider |border_and_shadow_insets| because when the max size
         // is enforced, the scroll view is shown and the md shadows are not
@@ -2559,7 +2611,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
         max_height =
             std::max(anchor_bounds.y() - monitor_bounds.y(),
                      monitor_bounds.bottom() - anchor_bounds.bottom()) -
-            menu_config.touchable_anchor_offset;
+            (is_win11_menu ? 0 : menu_config.touchable_anchor_offset);
       }
       // The menu should always have a non-empty available area.
       DCHECK_GE(max_width, kBubbleTipSizeLeftRight);
@@ -2580,18 +2632,24 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
       case MenuAnchorPosition::kBubbleTopRight:
       case MenuAnchorPosition::kBubbleBottomLeft:
       case MenuAnchorPosition::kBubbleBottomRight:
+      case MenuAnchorPosition::kTopLeft:
+      case MenuAnchorPosition::kTopRight:
+      case MenuAnchorPosition::kBottomCenter:
         // Align the right edges of the menu and anchor.
-        x_menu_on_left = anchor_bounds.right() - menu_size.width() +
+        x_menu_on_left = anchor_bounds.right() -
+                         (state_.anchor == MenuAnchorPosition::kBottomCenter
+                              ? menu_size.width() / 2
+                              : menu_size.width()) +
                          border_and_shadow_insets.right();
         // Align the left edges of the menu and anchor.
         x_menu_on_right = anchor_bounds.x() - border_and_shadow_insets.left();
         // Align the bottom of the menu with the top of the anchor.
         y_menu_above = anchor_bounds.y() - menu_size.height() +
                        border_and_shadow_insets.bottom() -
-                       menu_config.touchable_anchor_offset;
+                       (is_bubble ? menu_config.touchable_anchor_offset : 0);
         // Align the top of the menu with the bottom of the anchor.
         y_menu_below = anchor_bounds.bottom() - border_and_shadow_insets.top() +
-                       menu_config.touchable_anchor_offset;
+                       (is_bubble ? menu_config.touchable_anchor_offset : 0);
         break;
       case MenuAnchorPosition::kBubbleLeft:
       case MenuAnchorPosition::kBubbleRight:
@@ -2609,10 +2667,6 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
         // Align the top of the menu with the top of the anchor.
         y_menu_below = anchor_bounds.y() - border_and_shadow_insets.top();
         break;
-      case MenuAnchorPosition::kTopLeft:
-      case MenuAnchorPosition::kTopRight:
-      case MenuAnchorPosition::kBottomCenter:
-        NOTREACHED();
     }
 
     // Choose the most appropriate x coordinate.
@@ -2620,20 +2674,19 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
       case MenuAnchorPosition::kBubbleTopLeft:
       case MenuAnchorPosition::kBubbleLeft:
       case MenuAnchorPosition::kBubbleBottomLeft:
+      case MenuAnchorPosition::kTopRight:
+      case MenuAnchorPosition::kBottomCenter:
         x = x_menu_on_left >= monitor_bounds.x() ? x_menu_on_left
                                                  : x_menu_on_right;
         break;
       case MenuAnchorPosition::kBubbleTopRight:
       case MenuAnchorPosition::kBubbleRight:
       case MenuAnchorPosition::kBubbleBottomRight:
+      case MenuAnchorPosition::kTopLeft:
         x = x_menu_on_right + menu_size.width() <= monitor_bounds.right()
                 ? x_menu_on_right
                 : x_menu_on_left;
         break;
-      case MenuAnchorPosition::kTopLeft:
-      case MenuAnchorPosition::kTopRight:
-      case MenuAnchorPosition::kBottomCenter:
-        NOTREACHED();
     }
 
     // Choose the most appropriate y coordinate.
@@ -2645,6 +2698,9 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
       case MenuAnchorPosition::kBubbleRight:
       case MenuAnchorPosition::kBubbleBottomLeft:
       case MenuAnchorPosition::kBubbleBottomRight:
+      case MenuAnchorPosition::kTopLeft:
+      case MenuAnchorPosition::kTopRight:
+      case MenuAnchorPosition::kBottomCenter:
         // Respect the actual menu position calculated earlier if possible, to
         // prevent changing positions during menu size updates.
         if (able_to_show_menu_below &&
@@ -2679,10 +2735,6 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
           item->set_actual_menu_position(MenuPosition::kBestFit);
         }
         break;
-      case MenuAnchorPosition::kTopLeft:
-      case MenuAnchorPosition::kTopRight:
-      case MenuAnchorPosition::kBottomCenter:
-        NOTREACHED();
     }
 
     // The above adjustments may have shifted a large menu off the screen.
@@ -2698,11 +2750,6 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
     x = base::clamp(x, x_min, x_max);
     y = base::clamp(y, y_min, y_max);
   } else {
-    if (!use_touchable_layout_) {
-      NOTIMPLEMENTED()
-          << "Nested bubble menus are only implemented for touchable menus.";
-    }
-
     // This is a sub-menu, position it relative to the parent menu.
     const gfx::Rect item_bounds = item->GetBoundsInScreen();
     // If the layout is RTL, then a 'leading' menu is positioned to the left of
@@ -2710,8 +2757,16 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
     const bool layout_is_rtl = base::i18n::IsRTL();
     const bool create_on_right = prefer_leading != layout_is_rtl;
 
+    // Don't let the menu get too wide if Win11 menus are on.
+    if (is_win11_menu) {
+      menu_size.set_width(std::min(
+          menu_size.width(), item->GetDelegate()->GetMaxWidthForMenu(item)));
+    }
+
     const int width_with_right_inset =
-        menu_config.touchable_menu_min_width + border_and_shadow_insets.right();
+        is_win11_menu ? (menu_size.width() - border_and_shadow_insets.right())
+                      : (menu_config.touchable_menu_min_width +
+                         border_and_shadow_insets.right());
     const int x_max = monitor_bounds.right() - width_with_right_inset;
     const int x_left = item_bounds.x() - width_with_right_inset;
     const int x_right = item_bounds.right() - border_and_shadow_insets.left();
@@ -2741,13 +2796,33 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
         x = monitor_bounds.x();
       }
     }
-    y = item_bounds.y() - border_and_shadow_insets.top() -
-        menu_config.vertical_touchable_menu_item_padding;
-    y = base::clamp(y, monitor_bounds.y() - border_and_shadow_insets.top(),
-                    monitor_bounds.bottom() - menu_size.height() +
-                        border_and_shadow_insets.top());
+
+    if (is_win11_menu) {
+      // Make sure the menu doesn't exceed the monitor bounds while cancelling
+      // out the border and shadow at the top and bottom.
+      menu_size.set_height(std::min(
+          menu_size.height(),
+          monitor_bounds.height() + border_and_shadow_insets.height()));
+      y = item_bounds.y() - border_and_shadow_insets.top();
+      y = base::clamp(y, monitor_bounds.y() - border_and_shadow_insets.top(),
+                      monitor_bounds.bottom() +
+                          border_and_shadow_insets.bottom() -
+                          menu_size.height());
+    } else {
+      y = item_bounds.y() - border_and_shadow_insets.top() -
+          menu_config.vertical_touchable_menu_item_padding;
+      y = base::clamp(y, monitor_bounds.y() - border_and_shadow_insets.top(),
+                      monitor_bounds.bottom() - menu_size.height() +
+                          border_and_shadow_insets.top());
+    }
   }
-  return gfx::Rect(x, y, menu_size.width(), menu_size.height());
+
+  auto menu_bounds = gfx::Rect(x, y, menu_size.width(), menu_size.height());
+  // TODO(msisov): Shall we also calculate anchor for bubble menus, which are
+  // used by ash? If there is a need. Fix that.
+  anchor->anchor_rect = menu_bounds;
+  anchor->anchor_rect.set_size({1, 1});
+  return menu_bounds;
 }
 
 // static
@@ -3370,6 +3445,57 @@ void MenuController::UnregisterAlertedItem(MenuItemView* item) {
   // Stop animation if necessary.
   if (alerted_items_.empty())
     alert_animation_.Stop();
+}
+
+void MenuController::SetAnchorParametersForItem(MenuItemView* item,
+                                                const gfx::Point& item_loc,
+                                                ui::OwnedWindowAnchor* anchor) {
+  if (item->GetParentMenuItem()) {
+    anchor->anchor_position = ui::OwnedWindowAnchorPosition::kTopRight;
+    anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomRight;
+
+    // If the parent item has been repositioned to the left of its parent
+    // item. The next items must also be positioned on the left of its parent.
+    // Otherwise, there will be a chain of menus that will be positioned as to
+    // the right, to the left, to the right, to the left, etc. The direction
+    // must be maintained.
+    if (item->GetParentMenuItem()->GetParentMenuItem()) {
+      gfx::Point parent_of_parent_item_loc;
+      View::ConvertPointToScreen(item->GetParentMenuItem(),
+                                 &parent_of_parent_item_loc);
+      if (parent_of_parent_item_loc.x() > item_loc.x()) {
+        anchor->anchor_position = ui::OwnedWindowAnchorPosition::kTopLeft;
+        anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomLeft;
+      }
+    }
+
+    anchor->constraint_adjustment =
+        ui::OwnedWindowConstraintAdjustment::kAdjustmentSlideY |
+        ui::OwnedWindowConstraintAdjustment::kAdjustmentFlipX |
+        ui::OwnedWindowConstraintAdjustment::kAdjustmentRezizeY;
+  } else {
+    if (state_.context_menu) {
+      anchor->anchor_position = ui::OwnedWindowAnchorPosition::kBottomLeft;
+      anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomRight;
+      anchor->constraint_adjustment =
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentSlideX |
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentSlideY |
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentFlipY |
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentRezizeY;
+    } else {
+      anchor->constraint_adjustment =
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentSlideX |
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentFlipY |
+          ui::OwnedWindowConstraintAdjustment::kAdjustmentRezizeY;
+      if (state_.anchor == MenuAnchorPosition::kTopRight) {
+        anchor->anchor_position = ui::OwnedWindowAnchorPosition::kBottomRight;
+        anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomLeft;
+      } else {
+        anchor->anchor_position = ui::OwnedWindowAnchorPosition::kBottomLeft;
+        anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomRight;
+      }
+    }
+  }
 }
 
 bool MenuController::CanProcessInputEvents() const {

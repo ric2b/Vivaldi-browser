@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "content/public/renderer/plugin_ax_tree_source.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "pdf/pdf_accessibility_data_handler.h"
@@ -108,6 +109,7 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
       const ui::AXNode& target_node) override;
 
   // content::RenderFrameObserver:
+  void AccessibilityModeChanged(const ui::AXMode& /*mode*/) override;
   void OnDestruct() override;
 
   bool ShowContextMenu();
@@ -143,8 +145,15 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   void ClearAccessibilityNodes();
 
   content::RenderAccessibility* GetRenderAccessibility();
+
+  // WARNING: May cause `this` to be deleted.
   content::RenderAccessibility* GetRenderAccessibilityIfEnabled();
+
   std::unique_ptr<gfx::Transform> MakeTransformFromViewInfo() const;
+
+  // Handles an accessibility change only if there is a valid
+  // `RenderAccessibility` for the frame.
+  void MaybeHandleAccessibilityChange();
 
   ui::AXTreeData tree_data_;
   ui::AXTree tree_;
@@ -188,6 +197,8 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   // Index of the next expected PDF accessibility page info, used to ignore
   // outdated calls of SetAccessibilityPageInfo().
   uint32_t next_page_index_ = 0;
+
+  base::WeakPtrFactory<PdfAccessibilityTree> weak_ptr_factory_{this};
 };
 
 }  // namespace pdf

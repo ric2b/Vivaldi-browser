@@ -106,4 +106,15 @@ base::CallbackListSubscription AddExtDataUpdatedCallback(
       std::move(tab_updated_extdata_callback));
 }
 
+base::RepeatingCallbackList<void()>& GetSystemColorsUpdatedCallbackList() {
+  static base::NoDestructor<base::RepeatingCallbackList<void()>> callback_list;
+  return *callback_list;
+}
+
+base::CallbackListSubscription SystemColorsUpdatedCallback(
+    base::RepeatingCallback<void()> system_colors_callback) {
+  return GetSystemColorsUpdatedCallbackList().Add(
+      std::move(system_colors_callback));
+}
+
 }  // namespace vivaldi

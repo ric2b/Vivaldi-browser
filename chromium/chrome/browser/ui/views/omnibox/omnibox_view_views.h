@@ -33,7 +33,7 @@
 #include "ui/views/view.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/ash/input_method_manager.h"
 #endif
 
 class LocationBarView;
@@ -53,15 +53,15 @@ class OSExchangeData;
 }  // namespace ui
 
 // Views-implementation of OmniboxView.
-class OmniboxViewViews : public OmniboxView,
-                         public views::Textfield,
+class OmniboxViewViews
+    : public OmniboxView,
+      public views::Textfield,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-                         public chromeos::input_method::InputMethodManager::
-                             CandidateWindowObserver,
+      public ash::input_method::InputMethodManager::CandidateWindowObserver,
 #endif
-                         public views::TextfieldController,
-                         public ui::CompositorObserver,
-                         public TemplateURLServiceObserver {
+      public views::TextfieldController,
+      public ui::CompositorObserver,
+      public TemplateURLServiceObserver {
  public:
   METADATA_HEADER(OmniboxViewViews);
 
@@ -259,7 +259,6 @@ class OmniboxViewViews : public OmniboxView,
   // views::Textfield:
   bool IsItemForCommandIdDynamic(int command_id) const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
@@ -271,12 +270,12 @@ class OmniboxViewViews : public OmniboxView,
   void ExecuteTextEditCommand(ui::TextEditCommand command) override;
   bool ShouldShowPlaceholderText() const override;
 
-  // chromeos::input_method::InputMethodManager::CandidateWindowObserver:
+  // ash::input_method::InputMethodManager::CandidateWindowObserver:
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   void CandidateWindowOpened(
-      chromeos::input_method::InputMethodManager* manager) override;
+      ash::input_method::InputMethodManager* manager) override;
   void CandidateWindowClosed(
-      chromeos::input_method::InputMethodManager* manager) override;
+      ash::input_method::InputMethodManager* manager) override;
 #endif
 
   // views::TextfieldController:
@@ -293,7 +292,7 @@ class OmniboxViewViews : public OmniboxView,
       int* formats,
       std::set<ui::ClipboardFormatType>* format_types) override;
   ui::mojom::DragOperation OnDrop(const ui::DropTargetEvent& event) override;
-  views::View::DropCallback GetDropCallback(
+  views::View::DropCallback CreateDropCallback(
       const ui::DropTargetEvent& event) override;
   void UpdateContextMenu(ui::SimpleMenuModel* menu_contents) override;
 

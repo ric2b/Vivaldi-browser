@@ -21,6 +21,7 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
+import org.chromium.components.browser_ui.util.ToolbarUtils;
 import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableListAdapter;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
@@ -30,8 +31,10 @@ import java.util.HashSet;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.ui.base.DeviceFormFactor;
 
-import org.vivaldi.browser.common.VivaldiBookmarkUtils;
+import org.vivaldi.browser.bookmarks.BookmarkDialogDelegate;
+import org.vivaldi.browser.panels.PanelUtils;
 
 /**
  * Main action bar of bookmark UI. It is responsible for displaying title and buttons
@@ -40,10 +43,12 @@ import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         implements BookmarkUIObserver, OnMenuItemClickListener, OnClickListener,
                    DragReorderableListAdapter.DragListener {
+
     private BookmarkItem mCurrentFolder;
     private BookmarkDelegate mDelegate;
 
     /** Vivaldi **/
+    private BookmarkDialogDelegate mBookmarkDialogDelegate;
     private BookmarkBridge.BookmarkModelObserver mBookmarkModelObserver =
             new BookmarkBridge.BookmarkModelObserver() {
                 @Override
@@ -52,6 +57,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                             mDelegate.getSelectionDelegate().getSelectedItemsAsList());
                 }
             };
+    public void setBookmarkDialogDelegate(BookmarkDialogDelegate delegate) { mBookmarkDialogDelegate = delegate; }
 
     public BookmarkActionBar(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -93,12 +99,18 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         hideOverflowMenu();
 
         if (menuItem.getItemId() == R.id.edit_menu_id) {
-            BookmarkAddEditFolderActivity.startEditFolderActivity(getContext(),
-                    mCurrentFolder.getId());
+            if (isVivaldiTablet()) {
+                mBookmarkDialogDelegate.startEditFolder(
+                        mCurrentFolder.getId());
+            }
+            else {
+                BookmarkAddEditFolderActivity.startEditFolderActivity(getContext(),
+                        mCurrentFolder.getId());
+            }
             return true;
         } else if (menuItem.getItemId() == R.id.close_menu_id) {
             if (ChromeApplicationImpl.isVivaldi()) {
-                VivaldiBookmarkUtils.finishActivity(getContext());
+                PanelUtils.closePanel(getContext());
                 return true;
             }
             BookmarkUtils.finishActivityOnPhone(getContext());
@@ -114,14 +126,26 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             assert list.size() == 1;
             BookmarkItem item = mDelegate.getModel().getBookmarkById(list.get(0));
             if (item.isFolder()) {
+                if (isVivaldiTablet())
+                    mBookmarkDialogDelegate
+                            .startEditFolder(item.getId());
+                else
                 BookmarkAddEditFolderActivity.startEditFolderActivity(getContext(), item.getId());
             } else {
+                if (isVivaldiTablet())
+                    mBookmarkDialogDelegate.openEditBookmark(
+                                    item.getId(), mCurrentFolder.getId());
+                else
                 BookmarkUtils.startEditActivity(getContext(), item.getId());
             }
             return true;
         } else if (menuItem.getItemId() == R.id.selection_mode_move_menu_id) {
             List<BookmarkId> list = selectionDelegate.getSelectedItemsAsList();
             if (list.size() >= 1) {
+                if (isVivaldiTablet())
+                    mBookmarkDialogDelegate.chooseFolder(getContext(),
+                                    list.toArray(new BookmarkId[list.size()]));
+                else
                 BookmarkFolderSelectActivity.startFolderSelectActivity(getContext(),
                         list.toArray(new BookmarkId[list.size()]));
                 RecordUserAction.record("MobileBookmarkManagerMoveToFolderBulk");
@@ -347,8 +371,19 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
      */
     @Override
     public void onDragStateChange(boolean drag) {
+        // Disable menu items while dragging.
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, !drag);
+        ToolbarUtils.setOverFlowMenuEnabled(this, !drag);
+
+        // Disable listeners while dragging.
         setNavigationOnClickListener(drag ? null : this);
         setOnMenuItemClickListener(drag ? null : this);
+    }
+
+    // Vivaldi
+
+    private boolean isVivaldiTablet() {
+        return ChromeApplicationImpl.isVivaldi() &&
+                DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
     }
 }

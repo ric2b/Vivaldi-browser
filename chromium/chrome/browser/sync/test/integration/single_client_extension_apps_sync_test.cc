@@ -118,20 +118,23 @@ IN_PROC_BROWSER_TEST_F(SingleClientExtensionAppsSyncTest, InstallSomeApps) {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 
-// Tests for SplitSettingsSync.
+// Tests for SyncConsentOptional.
 class SingleClientExtensionAppsOsSyncTest : public SyncConsentOptionalSyncTest {
  public:
   SingleClientExtensionAppsOsSyncTest()
       : SyncConsentOptionalSyncTest(SINGLE_CLIENT) {}
-  ~SingleClientExtensionAppsOsSyncTest() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientExtensionAppsOsSyncTest);
+  SingleClientExtensionAppsOsSyncTest(
+      const SingleClientExtensionAppsOsSyncTest&) = delete;
+  SingleClientExtensionAppsOsSyncTest& operator=(
+      const SingleClientExtensionAppsOsSyncTest&) = delete;
+
+  ~SingleClientExtensionAppsOsSyncTest() override = default;
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientExtensionAppsOsSyncTest,
                        DisablingOsSyncFeatureDisablesDataType) {
-  ASSERT_TRUE(chromeos::features::IsSplitSettingsSyncEnabled());
+  ASSERT_TRUE(chromeos::features::IsSyncConsentOptionalEnabled());
   ASSERT_TRUE(SetupSync());
   syncer::SyncService* service = GetSyncService(0);
   syncer::SyncUserSettings* settings = service->GetUserSettings();

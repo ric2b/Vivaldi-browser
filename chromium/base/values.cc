@@ -1270,23 +1270,6 @@ bool DictionaryValue::GetStringASCII(StringPiece path,
   return true;
 }
 
-bool DictionaryValue::GetBinary(StringPiece path,
-                                const Value** out_value) const {
-  const Value* value;
-  bool result = Get(path, &value);
-  if (!result || !value->is_blob())
-    return false;
-
-  if (out_value)
-    *out_value = value;
-
-  return true;
-}
-
-bool DictionaryValue::GetBinary(StringPiece path, Value** out_value) {
-  return as_const(*this).GetBinary(path, const_cast<const Value**>(out_value));
-}
-
 bool DictionaryValue::GetDictionary(StringPiece path,
                                     const DictionaryValue** out_value) const {
   const Value* value;
@@ -1478,22 +1461,6 @@ bool ListValue::GetDictionary(size_t index, DictionaryValue** out_value) {
 
 void ListValue::Append(std::unique_ptr<Value> in_value) {
   list().push_back(std::move(*in_value));
-}
-
-void ListValue::AppendBoolean(bool in_value) {
-  list().emplace_back(in_value);
-}
-
-void ListValue::AppendInteger(int in_value) {
-  list().emplace_back(in_value);
-}
-
-void ListValue::AppendString(StringPiece in_value) {
-  list().emplace_back(in_value);
-}
-
-void ListValue::AppendString(const std::u16string& in_value) {
-  list().emplace_back(in_value);
 }
 
 void ListValue::Swap(ListValue* other) {

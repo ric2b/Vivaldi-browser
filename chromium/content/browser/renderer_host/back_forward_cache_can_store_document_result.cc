@@ -4,6 +4,9 @@
 
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
 
+#include <inttypes.h>
+#include <cstdint>
+
 #include "base/containers/contains.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/strings/string_util.h"
@@ -44,8 +47,6 @@ const char* BrowsingInstanceSwapResultToString(
       return "BI not swapped - source URL scheme is not HTTP(S)";
     case ShouldSwapBrowsingInstance::kNo_SameSiteNavigation:
       return "BI not swapped - same site navigation";
-    case ShouldSwapBrowsingInstance::kNo_ReloadingErrorPage:
-      return "BI not swapped - reloading error page";
     case ShouldSwapBrowsingInstance::kNo_AlreadyHasMatchingBrowsingInstance:
       return "BI not swapped - already has matching BrowsingInstance";
     case ShouldSwapBrowsingInstance::kNo_RendererDebugURL:
@@ -112,6 +113,15 @@ std::string DisabledReasonsToString(
   for (const auto& reason : reasons) {
     descriptions.push_back(base::StringPrintf(
         "%d:%d:%s", reason.source, reason.id, reason.description.c_str()));
+  }
+  return base::JoinString(descriptions, ", ");
+}
+
+std::string DisallowActivationReasonsToString(
+    const std::set<uint64_t>& reasons) {
+  std::vector<std::string> descriptions;
+  for (const uint64_t reason : reasons) {
+    descriptions.push_back(base::StringPrintf("%" PRIu64, reason));
   }
   return base::JoinString(descriptions, ", ");
 }
@@ -199,7 +209,8 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
       return "service worker claim is called";
     case Reason::kIgnoreEventAndEvict:
       return "IsInactiveAndDisallowReactivation() was called for the frame in "
-             "bfcache";
+             "bfcache " +
+             DisallowActivationReasonsToString(disallow_activation_reasons_);
     case Reason::kHaveInnerContents:
       return "RenderFrameHost has inner WebContents attached";
     case Reason::kTimeoutPuttingInCache:
@@ -231,6 +242,9 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
     case Reason::kOptInUnloadHeaderNotPresent:
       return "BFCache-Opt-In header not present, or does not include `unload` "
              "token, and an experimental config which requires it is active.";
+    case Reason::kUnloadHandlerExistsInMainFrame:
+      return "Unload handler exists in the main frame, and the current "
+             "experimental config doesn't permit it to be BFCached.";
     case Reason::kUnloadHandlerExistsInSubFrame:
       return "Unload handler exists in a sub frame, and the current "
              "experimental config doesn't permit it to be BFCached.";
@@ -260,13 +274,13 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
 
 void BackForwardCacheCanStoreDocumentResult::No(
     BackForwardCacheMetrics::NotRestoredReason reason) {
-  if (reason ==
-          BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures ||
-      reason == BackForwardCacheMetrics::NotRestoredReason::
-                    kDisableForRenderFrameHostCalled) {
-    CaptureTraceForNavigationDebugScenario(
-        DebugScenario::kDebugBackForwardCacheMetricsMismatch);
-  }
+  // Either |NoDueToFeatures()| or |NoDueToDisableForRenderFrameHostCalled|
+  // should be called instead.
+  DCHECK_NE(reason,
+            BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures);
+  DCHECK_NE(reason, BackForwardCacheMetrics::NotRestoredReason::
+                        kDisableForRenderFrameHostCalled);
+
   AddNotStoredReason(reason);
 }
 
@@ -293,6 +307,13 @@ void BackForwardCacheCanStoreDocumentResult::NoDueToRelatedActiveContents(
   browsing_instance_swap_result_ = browsing_instance_swap_result;
 }
 
+void BackForwardCacheCanStoreDocumentResult::NoDueToDisallowActivation(
+    uint64_t reason) {
+  AddNotStoredReason(
+      BackForwardCacheMetrics::NotRestoredReason::kIgnoreEventAndEvict);
+  disallow_activation_reasons_.insert(reason);
+}
+
 void BackForwardCacheCanStoreDocumentResult::AddReasonsFrom(
     const BackForwardCacheCanStoreDocumentResult& other) {
   not_stored_reasons_.PutAll(other.not_stored_reasons_);
@@ -303,6 +324,9 @@ void BackForwardCacheCanStoreDocumentResult::AddReasonsFrom(
   }
   if (other.browsing_instance_swap_result_)
     browsing_instance_swap_result_ = other.browsing_instance_swap_result_;
+  for (const auto reason : other.disallow_activation_reasons()) {
+    disallow_activation_reasons_.insert(reason);
+  }
 }
 
 BackForwardCacheCanStoreDocumentResult::

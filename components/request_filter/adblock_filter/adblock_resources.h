@@ -30,6 +30,8 @@ class Resources {
 
   explicit Resources(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~Resources();
+  Resources(const Resources&) = delete;
+  Resources& operator=(const Resources&) = delete;
 
   base::WeakPtr<Resources> AsWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
@@ -56,9 +58,8 @@ class Resources {
   base::ObserverList<Observer> observers_;
 
   base::WeakPtrFactory<Resources> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(Resources);
 };
+
 }  // namespace adblock_filter
 
 #endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_RESOURCES_H_

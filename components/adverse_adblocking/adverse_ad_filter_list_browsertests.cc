@@ -66,14 +66,14 @@
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "url/gurl.h"
 
-using subresource_filter::ActivationList;
 using subresource_filter::ActivationDecision;
+using subresource_filter::ActivationList;
 using subresource_filter::Configuration;
 using subresource_filter::kActivationConsoleMessage;
 using subresource_filter::kAdTagging;
 using subresource_filter::ScopedThreadTimers;
-using subresource_filter::testing::CreateSuffixRule;
 using subresource_filter::testing::CreateAllowlistSuffixRule;
+using subresource_filter::testing::CreateSuffixRule;
 using subresource_filter::testing::TestRulesetPair;
 
 namespace {
@@ -132,20 +132,20 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
                        subresource_filter::ActivationList::SUBRESOURCE_FILTER);
   ResetConfiguration(std::move(config));
 
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   EXPECT_EQ(subresource_filter::kActivationConsoleMessage,
-    console_observer.GetMessageAt(0u));
+            console_observer.GetMessageAt(0u));
 
   // The main frame document should never be filtered.
   SetRulesetToDisallowURLsWithPathSuffix("frame_with_included_script.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
@@ -164,7 +164,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ConfigureAsSubresourceFilterOnlyURL(url.GetOrigin());
   base::HistogramTester tester;
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   tester.ExpectUniqueSample(kActivationListHistogram,
                             static_cast<int>(ActivationList::NONE), 1);
 }
@@ -177,19 +177,19 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
       "suffix-that-does-not-match-anything"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   EXPECT_EQ(kActivationConsoleMessage, console_observer.GetMessageAt(0u));
 
   // The main frame document should never be filtered.
   SetRulesetToDisallowURLsWithPathSuffix("frame_with_included_script.html");
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
@@ -201,7 +201,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
 
   // Deactivation would already detected by the IsDynamicScriptElementLoaded
   // line alone. To ensure no reactivation, which would muddy up recorded
@@ -233,15 +233,16 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   whitelist_rule.set_semantics(proto::RULE_SEMANTICS_ALLOWLIST);
   ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules({rule, whitelist_rule}));
 
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
 
   const std::vector<const char*> kSubframeNames{"one", "two", "three"};
   const std::vector<bool> kExpectOnlySecondSubframe{false, true, false};
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectOnlySecondSubframe));
   ExpectFramesIncludedInLayout(kSubframeNames, kExpectOnlySecondSubframe);
-  histogram_tester.ExpectBucketCount(kSubresourceFilterActionsHistogram,
-                                     subresource_filter::SubresourceFilterAction::kUIShown, 1);
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kUIShown, 1);
 
   // Now navigate the first subframe to an allowed URL and ensure that the load
   // successfully commits and the frame gets restored (no longer collapsed).
@@ -297,14 +298,15 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   const std::vector<bool> kExpectScriptInFrameToLoadWithActivation{false, true,
                                                                    false};
 
-  ui_test_utils::NavigateToURL(browser(), url_without_activation);
+  ignore_result(
+      ui_test_utils::NavigateToURL(browser(), url_without_activation));
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectScriptInFrameToLoadWithoutActivation));
 
   // No message should be displayed for navigating to URL without activation.
   EXPECT_TRUE(console_observer.messages().empty());
 
-  ui_test_utils::NavigateToURL(browser(), url_with_activation);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url_with_activation));
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectScriptInFrameToLoadWithActivation));
 
@@ -341,7 +343,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
 
   content::RenderFrameHost* frame = FindFrameByName("one");
   ASSERT_TRUE(frame);
@@ -365,7 +367,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
 
   content::RenderFrameHost* frame = FindFrameByName("one");
   EXPECT_FALSE(WasParsedScriptElementLoaded(frame));
@@ -396,7 +398,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest, DynamicFrame) {
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
 
   ASSERT_NO_FATAL_FAILURE(InsertDynamicFrameWithScript());
   content::RenderFrameHost* dynamic_frame = FindFrameByName("dynamic");
@@ -415,7 +417,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ConfigureAsSubresourceFilterOnlyURL(url);
   // Verify that the ruleset persisted in the previous session is used for this
   // page load right after start-up.
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
@@ -426,7 +428,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ConfigureAsSubresourceFilterOnlyURL(a_url);
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ui_test_utils::NavigateToURL(browser(), a_url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), a_url));
   ExpectParsedScriptElementLoadedStatusInFrames(
       std::vector<const char*>{"b", "c", "d"}, {false, false, false});
 }
@@ -439,7 +441,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules(
       {subresource_filter::testing::CreateSuffixRule("included_script.js"),
        subresource_filter::testing::CreateAllowlistRuleForDocument("c.com")}));
-  ui_test_utils::NavigateToURL(browser(), a_url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), a_url));
   ExpectParsedScriptElementLoadedStatusInFrames(
       std::vector<const char*>{"b", "d"}, {false, true});
 }
@@ -478,7 +480,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
 
   base::HistogramTester tester;
-  ui_test_utils::NavigateToURL(browser(), url);
+  ignore_result(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   content::TestNavigationObserver observer(

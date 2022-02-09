@@ -22,11 +22,13 @@ namespace declarativeNetRequest {
     csp_report,
     media,
     websocket,
+    webtransport,
     other
   };
 
   // This describes the HTTP request method of a network request.
   enum RequestMethod {
+    connect,
     delete,
     get,
     head,

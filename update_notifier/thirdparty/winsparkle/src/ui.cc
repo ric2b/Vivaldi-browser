@@ -1110,7 +1110,8 @@ class UIThreadAccess {
   struct GlobalState {
     GlobalState() { InitializeCriticalSection(&ui_thread_lock); }
     ~GlobalState() { DeleteCriticalSection(&ui_thread_lock); }
-    DISALLOW_COPY_AND_ASSIGN(GlobalState);
+    GlobalState(const GlobalState&) = delete;
+    GlobalState& operator=(const GlobalState&) = delete;
 
     // The event to wait for UI thread initialization.
     HANDLE start_event = nullptr;
@@ -1191,7 +1192,9 @@ void UI::NotifyCheckingUpdates() {
 }
 
 /*static*/
-void UI::NotifyUpdateCheckDone(const Appcast* appcast, const Error& error, bool pending_update) {
+void UI::NotifyUpdateCheckDone(const Appcast* appcast,
+                               const Error& error,
+                               bool pending_update) {
   DCHECK(!pending_update || (!appcast && !error));
   UIThreadAccess uit;
   App& app = uit.EnsureApp();

@@ -227,23 +227,6 @@ base::Value AccessibilityTreeFormatterWin::BuildTree(
   return dict;
 }
 
-base::Value AccessibilityTreeFormatterWin::BuildTreeForWindow(
-    gfx::AcceleratedWidget hwnd) const {
-  if (!hwnd)
-    return base::Value(base::Value::Type::DICTIONARY);
-
-  // Get IAccessible* for window
-  Microsoft::WRL::ComPtr<IAccessible> start;
-  HRESULT hr = ::AccessibleObjectFromWindow(
-      hwnd, static_cast<DWORD>(OBJID_CLIENT), IID_PPV_ARGS(&start));
-  if (FAILED(hr))
-    return base::Value(base::Value::Type::DICTIONARY);
-
-  base::Value dict(base::Value::Type::DICTIONARY);
-  RecursiveBuildTree(start, &dict, 0, 0);
-  return dict;
-}
-
 base::Value AccessibilityTreeFormatterWin::BuildTreeForSelector(
     const AXTreeSelector& selector) const {
   base::Value dict(base::Value::Type::DICTIONARY);
@@ -276,16 +259,21 @@ void AccessibilityTreeFormatterWin::RecursiveBuildTree(
     LONG root_y) const {
   ui::AXPlatformNode* platform_node =
       ui::AXPlatformNode::FromNativeViewAccessible(node.Get());
-  DCHECK(platform_node);
 
-  ui::AXPlatformNodeDelegate* delegate = platform_node->GetDelegate();
-  DCHECK(delegate);
+  bool skipChildren = false;
+  if (platform_node) {
+    ui::AXPlatformNodeDelegate* delegate = platform_node->GetDelegate();
+    DCHECK(delegate);
 
-  if (!ShouldDumpNode(*delegate))
-    return;
+    if (!ShouldDumpNode(*delegate))
+      return;
+
+    if (!ShouldDumpChildren(*delegate))
+      skipChildren = true;
+  }
 
   AddProperties(node, dict, root_x, root_y);
-  if (!ShouldDumpChildren(*delegate))
+  if (skipChildren)
     return;
 
   base::Value child_list(base::Value::Type::LIST);
@@ -859,7 +847,7 @@ std::string AccessibilityTreeFormatterWin::ProcessTreeForOutput(
           std::string string_value;
           if (entry.GetAsString(&string_value))
             if (WriteAttribute(false, string_value, &line))
-              filtered_list->AppendString(string_value);
+              filtered_list->Append(string_value);
         }
         break;
       }

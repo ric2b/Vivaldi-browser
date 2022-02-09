@@ -29,9 +29,14 @@ class RecurrrenceExceptionTable {
   // Must call CreateRecurringExceptionTable() before using to make
   // sure the database is initialized.
   RecurrrenceExceptionTable() = default;
+
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
   virtual ~RecurrrenceExceptionTable() = default;
+
+  RecurrrenceExceptionTable(const RecurrrenceExceptionTable&) = delete;
+  RecurrrenceExceptionTable& operator=(const RecurrrenceExceptionTable&) =
+      delete;
 
   bool CreateRecurringExceptionTable();
 
@@ -51,9 +56,6 @@ class RecurrrenceExceptionTable {
   virtual sql::Database& GetDB() = 0;
   void FillRecurrenceExceptionRow(sql::Statement& statement,
                                   RecurrenceExceptionRow* exception_row);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RecurrrenceExceptionTable);
 };
 
 // Use the macro if you want to put this in the middle of an otherwise constant

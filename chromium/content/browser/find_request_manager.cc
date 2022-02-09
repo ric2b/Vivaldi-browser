@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/browser/find_in_page_client.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -70,11 +71,6 @@ FrameTreeNode* GetDeepestLastChild(FrameTreeNode* node) {
   while (FrameTreeNode* last_child = GetLastChild(node))
     node = last_child;
   return node;
-}
-RenderFrameHost* GetDeepestLastChild(RenderFrameHost* rfh) {
-  FrameTreeNode* node =
-      static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
-  return GetDeepestLastChild(node)->current_frame_host();
 }
 
 // Returns the parent FrameTreeNode of |node|, if |node| has a parent, or
@@ -179,6 +175,9 @@ class FindRequestManager::FrameObserver : public WebContentsObserver {
   FrameObserver(WebContentsImpl* web_contents, FindRequestManager* manager)
       : WebContentsObserver(web_contents), manager_(manager) {}
 
+  FrameObserver(const FrameObserver&) = delete;
+  FrameObserver& operator=(const FrameObserver&) = delete;
+
   ~FrameObserver() override = default;
 
   void DidFinishLoad(RenderFrameHost* rfh, const GURL& validated_url) override {
@@ -212,8 +211,6 @@ class FindRequestManager::FrameObserver : public WebContentsObserver {
 
   // The FindRequestManager that owns this FrameObserver.
   FindRequestManager* const manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(FrameObserver);
 };
 
 FindRequestManager::FindRequest::FindRequest() = default;
@@ -274,6 +271,24 @@ void FindRequestManager::Find(int request_id,
   // requests.
   DCHECK_GT(request_id, current_request_.id);
   DCHECK_GT(request_id, current_session_id_);
+
+  // TODO(crbug.com/1250158): Remove this when we decide how long the
+  // find-in-page delay should be.
+  if (options->new_session) {
+    base::TimeTicks now = base::TimeTicks::Now();
+    if (!last_time_typed_.is_null() &&
+        base::StartsWith(search_text, last_searched_text_)) {
+      base::TimeDelta elapsed = now - last_time_typed_;
+      // If we waited more than 5 seconds, the user probably is searching for
+      // something else now.
+      if (elapsed.InSecondsF() <= 5.f) {
+        UMA_HISTOGRAM_TIMES("WebCore.FindInPage.DurationBetweenKeystrokes",
+                            elapsed);
+      }
+    }
+    last_time_typed_ = now;
+    last_searched_text_ = search_text;
+  }
 
   // If this is a new find session, clear any queued requests from last session.
   if (options->new_session)
@@ -367,6 +382,9 @@ void FindRequestManager::SetActiveMatchOrdinal(RenderFrameHostImpl* rfh,
     // match is in, which should be in the |rfh|'s associated WebContents.
     WebContentsImpl* web_contents =
         static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(rfh));
+    // Do not focus inactive RenderFrameHost.
+    if (!rfh->IsActive())
+      return;
     web_contents->SetFocusedFrame(rfh->frame_tree_node(),
                                   rfh->GetSiteInstance());
   }
@@ -663,10 +681,10 @@ void FindRequestManager::NotifyFindReply(int request_id, bool final_update) {
 }
 
 RenderFrameHost* FindRequestManager::GetInitialFrame(bool forward) const {
-  RenderFrameHost* rfh = contents_->GetMainFrame();
-
+  FrameTreeNode* ftn = contents_->GetFrameTree()->root();
+  RenderFrameHost* rfh = ftn->current_frame_host();
   if (!forward)
-    rfh = GetDeepestLastChild(rfh);
+    rfh = GetDeepestLastChild(ftn)->current_frame_host();
 
   return rfh;
 }

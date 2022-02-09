@@ -87,14 +87,12 @@
 <translation id="6498249116389603658">&amp;ನಿಮ್ಮ ಎಲ್ಲಾ ಭಾಷೆಗಳು</translation>
 <translation id="6503077044568424649">ಅತಿಹೆಚ್ಚು ಬಾರಿ ಸಂದರ್ಶಿಸಿರುವುದು</translation>
 <translation id="6508261954199872201">ಅಪ್ಲಿಕೇಶನ್: <ph name="APP_NAME" /></translation>
-<translation id="6612358246767739896">ಸಂರಕ್ಷಿತ ವಿಷಯ</translation>
 <translation id="6691936601825168937">&amp;ಮುಂದೆ ತನ್ನಿ</translation>
 <translation id="6798954102094737107">ಪ್ಲಗಿನ್: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">ಹಿನ್ನೆಲೆ ಅಪ್ಲಿಕೇಶನ್: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ಫೈಲ್ ಪ್ರವೇಶವನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಿ</translation>
 <translation id="7287143125007575591">ಪ್ರವೇಶ ನೀರಾಕರಿಸಲಾಗಿದೆ.</translation>
 <translation id="7427348830195639090">ಹಿನ್ನೆಲೆ ಪುಟ: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">ಜಾವಾಸ್ಕ್ರಿಪ್ಟ್</translation>
 <translation id="7629827748548208700">ಟ್ಯಾಬ್: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">ರಿಸೀವರ್: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">ಕಾರ್ಯ</translation>
@@ -112,7 +110,6 @@
 <translation id="8004582292198964060">ಬ್ರೌಸರ್</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">ಈ ವಿಸ್ತರಣೆಯನ್ನು <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ನಲ್ಲಿ ಪಟ್ಟಿ ಮಾಡಲಾಗಿಲ್ಲ ಮತ್ತು ಇದು ನಿಮಗೆ ಅರಿವಿಲ್ಲದಂತೆ ಸೇರಿಸಿರಬಹುದು.</translation>
-<translation id="8270242299912238708">ಪಿಡಿಎಫ್ ದಾಖಲೆಗಳು</translation>
 <translation id="8351419472474436977">ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಈ ವಿಸ್ತರಣೆಯು ನಿಯಂತ್ರಣಕ್ಕೆ ತೆಗೆದುಕೊಂಡಿದೆ. ಅಂದರೆ, ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಮಾಡುವ ಯಾವುದೇ ಕಾರ್ಯವನ್ನು ಇದು ಬದಲಾಯಿಸಬಹುದು, ಒಳನುಸುಳಬಹುದು ಅಥವಾ ಕದ್ದಾಲಿಸಬಹುದು ಎಂದರ್ಥ. ಇದು ಹೇಗೆ ಸಂಭವಿಸಿದೆ ಎಂಬುದೇ ನಿಮಗೆ ಖಚಿತವಿಲ್ಲದಿದ್ದರೆ, ನಿಮಗೆ ಬಹುಶಃ ಇದು ಬೇಕಾಗಿಲ್ಲ.</translation>
 <translation id="8615618338313291042">ಅದೃಶ್ಯ ಅಪ್ಲಿಕೇಶನ್: <ph name="APP_NAME" /></translation>
 <translation id="8808478386290700967">ವೆಬ್‌ ಸ್ಟೋರ್‌</translation>

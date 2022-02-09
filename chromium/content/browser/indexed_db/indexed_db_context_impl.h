@@ -19,6 +19,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "components/services/storage/public/mojom/blob_storage_context.mojom.h"
 #include "components/services/storage/public/mojom/file_system_access_context.mojom.h"
 #include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
@@ -36,9 +37,9 @@
 
 namespace base {
 class Clock;
-class ListValue;
 class FilePath;
 class SequencedTaskRunner;
+class Value;
 }
 
 namespace blink {
@@ -180,7 +181,7 @@ class CONTENT_EXPORT IndexedDBContextImpl
   bool HasStorageKey(const blink::StorageKey& storage_key);
 
   // Used by IndexedDBInternalsUI to populate internals page.
-  base::ListValue* GetAllStorageKeysDetails();
+  base::Value* GetAllStorageKeysDetails();
 
   // GetStoragePaths returns all paths owned by this database, in arbitrary
   // order.
@@ -219,6 +220,13 @@ class CONTENT_EXPORT IndexedDBContextImpl
   class IndexedDBGetUsageAndQuotaCallback;
 
   ~IndexedDBContextImpl() override;
+
+  // Binds receiver on bucket retrieval to ensure that a bucket always exists
+  // for a storage key.
+  void BindIndexedDBWithBucket(
+      const blink::StorageKey& storage_key,
+      mojo::PendingReceiver<blink::mojom::IDBFactory> receiver,
+      storage::QuotaErrorOr<storage::BucketInfo> result);
 
   void ShutdownOnIDBSequence();
 
@@ -270,6 +278,8 @@ class CONTENT_EXPORT IndexedDBContextImpl
   mojo::RemoteSet<storage::mojom::IndexedDBObserver> observers_;
   mojo::Receiver<storage::mojom::QuotaClient> quota_client_receiver_;
   const std::unique_ptr<storage::FilesystemProxy> filesystem_proxy_;
+
+  base::WeakPtrFactory<IndexedDBContextImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBContextImpl);
 };

@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 3
+// Next MinVersion: 8
 
 module crosapi.mojom;
 
+import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
 import "ui/gfx/image/mojom/image.mojom";
+import "url/mojom/url.mojom";
 
 // Information about an app. See components/services/app_service/README.md.
 
@@ -40,7 +43,7 @@ struct App {
   mojo_base.mojom.Time? install_time@11;
 
   // Whether the app was installed by sync, policy or as a default app.
-  InstallSource install_source@12;
+  InstallReason install_reason@12;
   OptionalBool recommendable@13;
   OptionalBool searchable@14;
   OptionalBool show_in_launcher@15;
@@ -64,6 +67,11 @@ struct App {
   // Whether the app's display mode is in the browser or otherwise.
   [MinVersion=2]
   WindowMode window_mode@22;
+
+  // An optional ID used for policy to identify the app.
+  // For web apps, it contains the install URL.
+  [MinVersion=7]
+  string? policy_id@23;
 };
 
 // The types of apps available in the registry.
@@ -95,9 +103,9 @@ enum Readiness {
   [MinVersion=1] kUninstalledByMigration,
 };
 
-// How the app was installed.
-[Stable, Extensible]
-enum InstallSource {
+// The reason why the app was installed.
+[Stable, Extensible, RenamedFrom="crosapi.mojom.InstallSource"]
+enum InstallReason {
   [Default] kUnknown = 0,
   kSystem,     // Installed with the system and is considered a part of the OS.
   kPolicy,     // Installed by policy.
@@ -105,6 +113,7 @@ enum InstallSource {
   kDefault,    // Preinstalled by default, but is not considered a system app.
   kSync,       // Installed by sync.
   kUser,       // Installed by user action.
+  [MinVersion=7] kSubApp,     // Installed by the SubApp API call.
 };
 
 // Augments a bool to include an 'unknown' value.
@@ -152,7 +161,9 @@ enum ConditionType {
   kHost,              // Matches the URL host (e.g. www.google.com).
   kPattern,           // Matches the URL pattern (e.g. /abc/*).
   kAction,            // Matches the action type (e.g. view, send).
-  kMimeType,          // Matches the data mime type (e.g. image/jpeg).
+  kMimeType,          // Matches the top-level mime type (e.g. text/plain).
+  [MinVersion=1] kFileExtension,  // Deprecated.
+  [MinVersion=4] kFile            // Matches against all files.
 };
 
 // The pattern match type for intent filter pattern condition.
@@ -163,6 +174,8 @@ enum PatternMatchType {
   kPrefix,
   kGlob,
   kMimeType,
+  [MinVersion=1] kFileExtension,
+  [MinVersion=6] kIsDirectory,
 };
 
 // For pattern type of condition, the value match will be based on the pattern
@@ -259,6 +272,7 @@ struct MenuItems {
 struct MenuItem {
   string label@0;                      // The string label, may be empty.
   gfx.mojom.ImageSkia? image@1;        // The image icon, may be null.
+  [MinVersion=3]string? id@2;          // The id of the item.
 };
 
 [Stable, Extensible]
@@ -272,4 +286,71 @@ enum WindowMode {
   kBrowser,
   // Opens in a tabbed app window
   kTabbedWindow,
+};
+
+// Metadata for a single file shared through an intent.
+[Stable]
+struct IntentFile {
+  // The file path of the file to share.
+  mojo_base.mojom.FilePath file_path;
+};
+
+// Action and resource handling request. This should
+// be kept in sync with ConvertIntentToValue and ConvertValueToIntent in
+// components/services/app_service/public/cpp/intent_util.*
+[Stable]
+struct Intent {
+  string action@0;       // Intent action. e.g. view, send.
+  url.mojom.Url? url@1;  // The URL of the intent. e.g. https://www.google.com/.
+  string? mime_type@2;   // MIME type. e.g. text/plain, image/*.
+  string? share_text@3;  // Text to share. e.g. Share link to other app.
+  string? share_title@4; // Title for the share.
+  // The files to view or share.
+  [MinVersion=5]array<IntentFile>? files@5;
+};
+
+// The result from launching an app.
+[Stable]
+struct LaunchResult {
+  // The id to represent which instance the app is launched in.
+  mojo_base.mojom.UnguessableToken instance_id@0;
+};
+
+// Enumeration of app launch sources.
+[Stable, Extensible]
+enum LaunchSource {
+  [Default] kUnknown = 0,
+  kFromAppListGrid,              // Grid of apps, not the search box.
+  kFromAppListGridContextMenu,   // Grid of apps; context menu.
+  kFromAppListQuery,             // Query-dependent results (larger icons).
+  kFromAppListQueryContextMenu,  // Query-dependent results; context menu.
+  kFromAppListRecommendation,    // Query-less recommendations (smaller
+                                 // icons).
+  kFromParentalControls,         // Parental Controls Settings Section and
+                                 // Per App time notification.
+  kFromShelf,                    // Shelf.
+  kFromFileManager,              // FileManager.
+  kFromLink,                     // Left-clicking on links in the browser.
+  kFromOmnibox,                  // Enter URL in the Omnibox in the
+                                 // browser.
+  kFromChromeInternal,           // Chrome internal call.
+  kFromKeyboard,                 // Keyboard shortcut for opening app.
+  kFromOtherApp,                 // Clicking link in another app or webui.
+  kFromMenu,                     // Menu.
+  kFromInstalledNotification,    // Installed notification
+  kFromTest,                     // Test
+  kFromArc,                      // Arc.
+  kFromSharesheet,               // Sharesheet.
+  kFromReleaseNotesNotification, // Release Notes Notification.
+  kFromFullRestore,              // Full restore.
+  kFromSmartTextContextMenu,     // Smart text selection context menu.
+  kFromDiscoverTabNotification,  // Discover Tab Notification.
+};
+
+[Stable]
+// The parameters to launch an app.
+struct LaunchParams {
+  string app_id@0;               // The app id of the app.
+  LaunchSource launch_source@1;  // The app launch source.
+  Intent? intent@2;              // The intent the app will launch with.
 };

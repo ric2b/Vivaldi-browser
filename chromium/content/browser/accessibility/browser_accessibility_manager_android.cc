@@ -40,6 +40,11 @@ BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
       BrowserAccessibilityManagerAndroid::GetEmptyDocument(), delegate);
 }
 
+BrowserAccessibilityManagerAndroid*
+BrowserAccessibilityManager::ToBrowserAccessibilityManagerAndroid() {
+  return static_cast<BrowserAccessibilityManagerAndroid*>(this);
+}
+
 BrowserAccessibilityManagerAndroid::BrowserAccessibilityManagerAndroid(
     const ui::AXTreeUpdate& initial_tree,
     base::WeakPtr<WebContentsAccessibilityAndroid> web_contents_accessibility,
@@ -141,6 +146,16 @@ void BrowserAccessibilityManagerAndroid::FireFocusEvent(
   WebContentsAccessibilityAndroid* wcax = GetWebContentsAXFromRootManager();
   if (!wcax)
     return;
+
+  // When focusing a node on Android, we want to ensure that we clear the
+  // Java-side cache for the previously focused node as well.
+  if (BrowserAccessibility* last_focused_node =
+          BrowserAccessibilityManager::GetLastFocusedNode()) {
+    BrowserAccessibilityAndroid* android_last_focused_node =
+        static_cast<BrowserAccessibilityAndroid*>(last_focused_node);
+    wcax->ClearNodeInfoCacheForGivenId(android_last_focused_node->unique_id());
+  }
+
   BrowserAccessibilityAndroid* android_node =
       static_cast<BrowserAccessibilityAndroid*>(node);
   wcax->HandleFocusChanged(android_node->unique_id());
@@ -283,6 +298,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::ATOMIC_CHANGED:
     case ui::AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
     case ui::AXEventGenerator::Event::BUSY_CHANGED:
+    case ui::AXEventGenerator::Event::CARET_BOUNDS_CHANGED:
     case ui::AXEventGenerator::Event::CHECKED_STATE_DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::CHILDREN_CHANGED:
     case ui::AXEventGenerator::Event::CLASS_NAME_CHANGED:

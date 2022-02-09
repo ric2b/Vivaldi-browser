@@ -11,7 +11,7 @@
 namespace bookmarks {
 class BookmarkModel;
 class BookmarkNode;
-}
+}  // namespace bookmarks
 
 namespace ui {
 class SimpleMenuModel;
@@ -21,7 +21,7 @@ namespace gfx {
 class ImageSkia;
 class Point;
 class Rect;
-}
+}  // namespace gfx
 
 namespace vivaldi {
 struct BookmarkMenuContainer;
@@ -39,26 +39,32 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
                                        bookmarks::BookmarkModel* model,
                                        int64_t id,
                                        int command);
-void ExecuteBookmarkMenuCommand(Browser* browser, int menu_command,
-                                int64_t bookmark_id, int mouse_event_flags);
+void ExecuteBookmarkMenuCommand(Browser* browser,
+                                int menu_command,
+                                int64_t bookmark_id,
+                                int mouse_event_flags);
 void HandleHoverUrl(Browser* browser, const std::string& url);
 void HandleOpenMenu(Browser* browser, int64_t id);
 const bookmarks::BookmarkNode* GetNodeByPosition(
-    bookmarks::BookmarkModel* model, const gfx::Point& screen_point,
-    int* start_index, gfx::Rect* rect);
+    bookmarks::BookmarkModel* model,
+    const gfx::Point& screen_point,
+    int* start_index,
+    gfx::Rect* rect);
 const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
                                            bool next,
                                            int* start_index,
                                            gfx::Rect* rect);
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddExtraBookmarkMenuItems(Profile* profile, views::MenuItemView* menu,
+void AddExtraBookmarkMenuItems(Profile* profile,
+                               views::MenuItemView* menu,
                                unsigned int* menu_index,
                                const bookmarks::BookmarkNode* parent,
                                bool on_top);
 void AddSeparator(views::MenuItemView* menu, unsigned int* menu_index);
 bool AddIfSeparator(const bookmarks::BookmarkNode* node,
-                    views::MenuItemView* menu, unsigned int* menu_index);
+                    views::MenuItemView* menu,
+                    unsigned int* menu_index);
 views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
                                  unsigned int* menu_index,
                                  int id,
@@ -75,7 +81,6 @@ ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
                                      views::Widget* widget);
 ui::ImageModel GetBookmarkSpeeddialIcon(views::MenuItemView* menu,
                                         views::Widget* widget);
-}  // vivaldi
-
+}  // namespace vivaldi
 
 #endif  // BROWSER_MENUS_VIVALDI_BOOKMARK_CONTEXT_MENUS_H_

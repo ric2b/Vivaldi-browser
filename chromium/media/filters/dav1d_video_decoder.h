@@ -27,6 +27,10 @@ class MEDIA_EXPORT Dav1dVideoDecoder : public OffloadableVideoDecoder {
 
   Dav1dVideoDecoder(MediaLog* media_log,
                     OffloadState offload_state = OffloadState::kNormal);
+
+  Dav1dVideoDecoder(const Dav1dVideoDecoder&) = delete;
+  Dav1dVideoDecoder& operator=(const Dav1dVideoDecoder&) = delete;
+
   ~Dav1dVideoDecoder() override;
 
   // VideoDecoder implementation.
@@ -87,8 +91,6 @@ class MEDIA_EXPORT Dav1dVideoDecoder : public OffloadableVideoDecoder {
   // The allocated decoder; null before Initialize() and anytime after
   // CloseDecoder().
   Dav1dContext* dav1d_decoder_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(Dav1dVideoDecoder);
 };
 
 // Helper class for creating a Dav1dVideoDecoder which will offload all AV1
@@ -98,7 +100,7 @@ class OffloadingDav1dVideoDecoder : public OffloadingVideoDecoder {
   explicit OffloadingDav1dVideoDecoder(MediaLog* media_log)
       : OffloadingVideoDecoder(
             0,
-            std::vector<VideoCodec>(1, kCodecAV1),
+            std::vector<VideoCodec>(1, VideoCodec::kAV1),
             std::make_unique<Dav1dVideoDecoder>(
                 media_log,
                 OffloadableVideoDecoder::OffloadState::kOffloaded)) {}

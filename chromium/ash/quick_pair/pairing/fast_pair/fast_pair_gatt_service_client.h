@@ -7,8 +7,16 @@
 
 #include "device/bluetooth/bluetooth_adapter.h"
 
+namespace {
+
+constexpr int kBlockByteSize = 16;
+
+}  // namespace
+
 namespace ash {
 namespace quick_pair {
+
+class FastPairDataEncryptor;
 
 // This class is responsible for connecting to the Fast Pair GATT service for a
 // device and invoking a callback when ready, or when an error is discovered
@@ -27,9 +35,29 @@ class FastPairGattServiceClient : public device::BluetoothAdapter::Observer {
       uint8_t flags,
       const std::string& provider_address,
       const std::string& seekers_address,
+      FastPairDataEncryptor* fast_pair_data_encryptor,
       base::OnceCallback<void(std::vector<uint8_t>,
                               absl::optional<PairFailure>)>
           write_response_callback) = 0;
+
+  // Constructs a data vector based on the message type and passkey. Writes
+  // data to the passkey characteristic and calls the callback with response
+  // data on success, or with a PairFailure on failure.
+  virtual void WritePasskeyAsync(
+      uint8_t message_type,
+      uint32_t passkey,
+      FastPairDataEncryptor* fast_pair_data_encryptor,
+      base::OnceCallback<void(std::vector<uint8_t>,
+                              absl::optional<PairFailure>)>
+          write_response_callback) = 0;
+
+  // Writes the account key to the account key characteristic.
+  virtual void WriteAccountKey(
+      std::array<uint8_t, 16> account_key,
+      FastPairDataEncryptor* fast_pair_data_encryptor,
+      base::OnceCallback<
+          void(absl::optional<device::BluetoothGattService::GattErrorCode>)>
+          write_account_key_callback) = 0;
 };
 
 }  // namespace quick_pair

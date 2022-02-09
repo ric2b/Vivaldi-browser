@@ -6,16 +6,24 @@
 
 #include <utility>
 
+#include "ui/aura/window.h"
+
 namespace ash {
 
 TestNewWindowDelegate::TestNewWindowDelegate() = default;
 TestNewWindowDelegate::~TestNewWindowDelegate() = default;
 
 void TestNewWindowDelegate::NewTab() {}
-void TestNewWindowDelegate::NewTabWithUrl(const GURL& url,
-                                          bool from_user_interaction) {}
 void TestNewWindowDelegate::NewWindow(bool incognito,
                                       bool should_trigger_session_restore) {}
+void TestNewWindowDelegate::NewWindowForWebUITabDrop(
+    aura::Window* source_window,
+    const ui::OSExchangeData& drop_data,
+    NewWindowForWebUITabDropCallback closure) {
+  std::move(closure).Run(/*new_window=*/nullptr);
+}
+void TestNewWindowDelegate::OpenUrl(const GURL& url,
+                                    bool from_user_interaction) {}
 void TestNewWindowDelegate::OpenCalculator() {}
 void TestNewWindowDelegate::OpenFileManager() {}
 void TestNewWindowDelegate::OpenDownloadsFolder() {}

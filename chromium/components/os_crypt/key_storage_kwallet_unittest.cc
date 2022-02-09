@@ -102,6 +102,9 @@ class KeyStorageKWalletTest : public testing::Test {
  public:
   KeyStorageKWalletTest() : key_storage_kwallet_(kDesktopEnv, "test-app") {}
 
+  KeyStorageKWalletTest(const KeyStorageKWalletTest&) = delete;
+  KeyStorageKWalletTest& operator=(const KeyStorageKWalletTest&) = delete;
+
   void SetUp() override {
     kwallet_dbus_mock_ = new StrictMock<MockKWalletDBus>();
 
@@ -127,9 +130,6 @@ class KeyStorageKWalletTest : public testing::Test {
   StrictMock<MockKWalletDBus>* kwallet_dbus_mock_;
   KeyStorageKWallet key_storage_kwallet_;
   const std::string wallet_name_ = "mollet";
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(KeyStorageKWalletTest);
 };
 
 TEST_F(KeyStorageKWalletTest, InitializeFolder) {
@@ -237,6 +237,10 @@ class KeyStorageKWalletFailuresTest
   KeyStorageKWalletFailuresTest()
       : key_storage_kwallet_(kDesktopEnv, "test-app") {}
 
+  KeyStorageKWalletFailuresTest(const KeyStorageKWalletFailuresTest&) = delete;
+  KeyStorageKWalletFailuresTest& operator=(
+      const KeyStorageKWalletFailuresTest&) = delete;
+
   void SetUp() override {
     // |key_storage_kwallet_| will take ownership of |kwallet_dbus_mock_|.
     kwallet_dbus_mock_ = new StrictMock<MockKWalletDBus>();
@@ -262,9 +266,6 @@ class KeyStorageKWalletFailuresTest
   StrictMock<MockKWalletDBus>* kwallet_dbus_mock_;
   KeyStorageKWallet key_storage_kwallet_;
   const std::string wallet_name_ = "mollet";
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(KeyStorageKWalletFailuresTest);
 };
 
 INSTANTIATE_TEST_SUITE_P(All,

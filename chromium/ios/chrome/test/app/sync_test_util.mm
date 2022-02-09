@@ -141,7 +141,7 @@ int GetNumberOfSyncEntities(syncer::ModelType type) {
   if (!entities->GetList(model_type_string, &entity_list)) {
     return 0;
   }
-  return entity_list->GetSize();
+  return entity_list->GetList().size();
 }
 
 BOOL VerifyNumberOfSyncEntitiesWithName(syncer::ModelType type,
@@ -364,8 +364,7 @@ BOOL IsTypedUrlPresentOnClient(const GURL& url,
   NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:4.0];
   while (!history_service_callback_called &&
          [[NSDate date] compare:deadline] != NSOrderedDescending) {
-    base::test::ios::SpinRunLoopWithMaxDelay(
-        base::TimeDelta::FromSecondsD(0.1));
+    base::test::ios::SpinRunLoopWithMaxDelay(base::Seconds(0.1));
   }
 
   NSString* error_message = nil;

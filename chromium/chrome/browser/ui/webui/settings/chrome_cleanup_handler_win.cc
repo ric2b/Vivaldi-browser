@@ -110,37 +110,37 @@ ChromeCleanupHandler::~ChromeCleanupHandler() {
 }
 
 void ChromeCleanupHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "registerChromeCleanerObserver",
       base::BindRepeating(
           &ChromeCleanupHandler::HandleRegisterChromeCleanerObserver,
           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "startScanning",
       base::BindRepeating(&ChromeCleanupHandler::HandleStartScanning,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "restartComputer",
       base::BindRepeating(&ChromeCleanupHandler::HandleRestartComputer,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "startCleanup",
       base::BindRepeating(&ChromeCleanupHandler::HandleStartCleanup,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "notifyShowDetails",
       base::BindRepeating(&ChromeCleanupHandler::HandleNotifyShowDetails,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "notifyChromeCleanupLearnMoreClicked",
       base::BindRepeating(
           &ChromeCleanupHandler::HandleNotifyChromeCleanupLearnMoreClicked,
           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getMoreItemsPluralString",
       base::BindRepeating(&ChromeCleanupHandler::HandleGetMoreItemsPluralString,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "getItemsToRemovePluralString",
       base::BindRepeating(
           &ChromeCleanupHandler::HandleGetItemsToRemovePluralString,
@@ -191,9 +191,8 @@ void ChromeCleanupHandler::OnRebootRequired() {
 
 void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
     const base::ListValue* args) {
-  DCHECK_EQ(0U, args->GetSize());
+  DCHECK_EQ(0U, args->GetList().size());
 
-  UMA_HISTOGRAM_BOOLEAN("SoftwareReporter.CleanupCard", true);
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_Shown"));
   AllowJavascript();
@@ -203,7 +202,7 @@ void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
 }
 
 void ChromeCleanupHandler::HandleStartScanning(const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   bool allow_logs_upload = false;
   args->GetBoolean(0, &allow_logs_upload);
 
@@ -220,7 +219,7 @@ void ChromeCleanupHandler::HandleStartScanning(const base::ListValue* args) {
 }
 
 void ChromeCleanupHandler::HandleRestartComputer(const base::ListValue* args) {
-  DCHECK_EQ(0U, args->GetSize());
+  DCHECK_EQ(0U, args->GetList().size());
 
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_RestartComputer"));
@@ -229,7 +228,7 @@ void ChromeCleanupHandler::HandleRestartComputer(const base::ListValue* args) {
 }
 
 void ChromeCleanupHandler::HandleStartCleanup(const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   bool allow_logs_upload = false;
   args->GetBoolean(0, &allow_logs_upload);
 
@@ -250,7 +249,7 @@ void ChromeCleanupHandler::HandleStartCleanup(const base::ListValue* args) {
 
 void ChromeCleanupHandler::HandleNotifyShowDetails(
     const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
+  CHECK_EQ(1U, args->GetList().size());
   bool details_section_visible = false;
   args->GetBoolean(0, &details_section_visible);
 
@@ -265,7 +264,7 @@ void ChromeCleanupHandler::HandleNotifyShowDetails(
 
 void ChromeCleanupHandler::HandleNotifyChromeCleanupLearnMoreClicked(
     const base::ListValue* args) {
-  CHECK_EQ(0U, args->GetSize());
+  CHECK_EQ(0U, args->GetList().size());
 
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_LearnMore"));

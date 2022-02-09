@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "gpu/command_buffer/service/ref_counted_lock.h"
@@ -75,16 +76,6 @@ class MEDIA_GPU_EXPORT CodecImage
   bool CopyTexSubImage(unsigned target,
                        const gfx::Point& offset,
                        const gfx::Rect& rect) override;
-  // Currently this API is depended on the implementation of
-  // NotifyOverlayPromotion. since we expect overlay to use SharedImage in the
-  // future.
-  bool ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
-                            int z_order,
-                            gfx::OverlayTransform transform,
-                            const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect,
-                            bool enable_blend,
-                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
   void SetColorSpace(const gfx::ColorSpace& color_space) override {}
   void Flush() override {}
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,

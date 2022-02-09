@@ -3,6 +3,8 @@
 # simplify the unit test config.
 source_set("dataurl") {
   sources = [
+    "resource_reader.cc",
+    "resource_reader.h",
     "vivaldi_data_url_utils.cc",
     "vivaldi_data_url_utils.h",
   ]

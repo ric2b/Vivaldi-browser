@@ -63,6 +63,8 @@ enum class ProtoDbType {
   SEGMENT_INFO_DATABASE = 37,
   SIGNAL_DATABASE = 38,
   SIGNAL_STORAGE_CONFIG_DATABASE = 39,
+  VIDEO_TUTORIALS_V2_DATABASE = 40,
+  COUPON_DATABASE = 41,
   LAST,
 };
 
@@ -80,8 +82,10 @@ constexpr ProtoDbType kBlocklistedDbForSharedImpl[]{
 // Add any obsolete databases in this list so that, if the data is no longer
 // needed.
 constexpr ProtoDbType kObsoleteSharedProtoDbTypeClients[] = {
-    ProtoDbType::DOM_DISTILLER_STORE, ProtoDbType::FEED_CONTENT_DATABASE,
+    ProtoDbType::DOM_DISTILLER_STORE,
+    ProtoDbType::FEED_CONTENT_DATABASE,
     ProtoDbType::FEED_JOURNAL_DATABASE,
+    ProtoDbType::VIDEO_TUTORIALS_DATABASE,
     ProtoDbType::LAST,  // Marks the end of list.
 };
 

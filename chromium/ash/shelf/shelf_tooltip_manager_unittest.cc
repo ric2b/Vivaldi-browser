@@ -6,8 +6,8 @@
 
 #include <memory>
 
-#include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/test/test_shelf_item_delegate.h"
 #include "ash/shelf/home_button.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_bubble.h"
@@ -24,22 +24,13 @@
 
 namespace ash {
 
-namespace {
-class TestShelfItemDelegate : public ShelfItemDelegate {
- public:
-  explicit TestShelfItemDelegate(const ShelfID& shelf_id)
-      : ShelfItemDelegate(shelf_id) {}
-  void ExecuteCommand(bool from_context_menu,
-                      int64_t command_id,
-                      int32_t event_flags,
-                      int64_t display_id) override {}
-  void Close() override {}
-};
-}  // namespace
-
 class ShelfTooltipManagerTest : public AshTestBase {
  public:
   ShelfTooltipManagerTest() = default;
+
+  ShelfTooltipManagerTest(const ShelfTooltipManagerTest&) = delete;
+  ShelfTooltipManagerTest& operator=(const ShelfTooltipManagerTest&) = delete;
+
   ~ShelfTooltipManagerTest() override = default;
 
   void SetUp() override {
@@ -65,9 +56,6 @@ class ShelfTooltipManagerTest : public AshTestBase {
   ShelfView* shelf_view_;
   ShelfTooltipManager* tooltip_manager_;
   std::unique_ptr<ShelfViewTestAPI> test_api_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShelfTooltipManagerTest);
 };
 
 TEST_F(ShelfTooltipManagerTest, ShowTooltip) {

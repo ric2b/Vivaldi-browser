@@ -21,19 +21,19 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
-#include "chrome/browser/web_applications/components/app_registry_controller.h"
-#include "chrome/browser/web_applications/components/install_bounce_metric.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/components/web_app_prefs_utils.h"
+#include "chrome/browser/web_applications/install_bounce_metric.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
+#include "chrome/browser/web_applications/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/feature_list.h"
-#include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -60,6 +60,10 @@ namespace {
 
 class PwaInstallIconChangeWaiter : public views::ViewObserver {
  public:
+  PwaInstallIconChangeWaiter(const PwaInstallIconChangeWaiter&) = delete;
+  PwaInstallIconChangeWaiter& operator=(const PwaInstallIconChangeWaiter&) =
+      delete;
+
   static void VerifyIconVisibility(views::View* iconView, bool visible);
 
  private:
@@ -77,8 +81,6 @@ class PwaInstallIconChangeWaiter : public views::ViewObserver {
   base::RunLoop run_loop_;
 
   base::ScopedObservation<views::View, views::ViewObserver> observation_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PwaInstallIconChangeWaiter);
 };
 
 // static
@@ -113,6 +115,11 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
          {feature_engagement::kIPHDesktopPwaInstallFeature, {}}},
         {});
   }
+
+  PwaInstallViewBrowserTest(const PwaInstallViewBrowserTest&) = delete;
+  PwaInstallViewBrowserTest& operator=(const PwaInstallViewBrowserTest&) =
+      delete;
+
   ~PwaInstallViewBrowserTest() override = default;
 
   void SetUp() override {
@@ -189,7 +196,7 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
         webapps::TestAppBannerManagerDesktop::FromWebContents(web_contents);
     DCHECK(!app_banner_manager->WaitForInstallableCheck());
 
-    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     bool installable = app_banner_manager->WaitForInstallableCheck();
 
     return OpenTabResult{web_contents, app_banner_manager, installable};
@@ -252,7 +259,7 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
     web_app::SetInstallBounceMetricTimeForTesting(test_time + install_duration);
 
     base::RunLoop run_loop;
-    web_app::WebAppProvider::Get(browser()->profile())
+    web_app::WebAppProvider::GetForTest(browser()->profile())
         ->install_finalizer()
         .UninstallWebApp(app_id, webapps::WebappUninstallSource::kAppMenu,
                          base::BindLambdaForTesting([&](bool uninstalled) {
@@ -281,8 +288,6 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
   PageActionIconView* pwa_install_view_ = nullptr;
   content::WebContents* web_contents_ = nullptr;
   webapps::TestAppBannerManagerDesktop* app_banner_manager_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(PwaInstallViewBrowserTest);
 
  private:
   web_app::ScopedOsHooksSuppress os_hooks_suppress_;
@@ -340,8 +345,8 @@ IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest,
   web_app::AppId app_id = ExecutePwaInstallIcon();
 
   // Change launch container to open in tab.
-  web_app::WebAppProvider::Get(browser()->profile())
-      ->registry_controller()
+  web_app::WebAppProvider::GetForTest(browser()->profile())
+      ->sync_bridge()
       .SetAppUserDisplayMode(app_id, web_app::DisplayMode::kBrowser,
                              /*is_user_action=*/false);
 
@@ -579,11 +584,11 @@ IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest, TextContrast) {
 }
 
 IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest, BouncedInstallMeasured) {
-  TestInstallBounce(base::TimeDelta::FromMinutes(50), 1);
+  TestInstallBounce(base::Minutes(50), 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest, BouncedInstallIgnored) {
-  TestInstallBounce(base::TimeDelta::FromMinutes(70), 0);
+  TestInstallBounce(base::Minutes(70), 0);
 }
 
 // Omnibox install promotion should show if there are no viable related apps
@@ -653,7 +658,8 @@ IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest,
       "Manifest listing related chrome app"));
 }
 
-IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest, PwaIntallIphSiteEngagement) {
+// TODO(crbug.com/1258062): Flaky.
+IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest, DISABLED_PwaIntallIphSiteEngagement) {
   GURL app_url = GetInstallableAppURL();
   bool installable = OpenTab(app_url).installable;
   ASSERT_TRUE(installable);

@@ -47,6 +47,8 @@ class CalendarService : public KeyedService {
  public:
   CalendarService();
   ~CalendarService() override;
+  CalendarService(const CalendarService&) = delete;
+  CalendarService& operator=(const CalendarService&) = delete;
 
   bool Init(bool no_db, const CalendarDatabaseParams& calendar_database_params);
 
@@ -285,16 +287,6 @@ class CalendarService : public KeyedService {
   void NotifyCalendarServiceBeingDeleted();
 
   void OnEventCreated(const EventResult& event);
-  void OnEventDeleted(const EventResult& event);
-  void OnEventChanged(const EventResult& event);
-
-  void OnCalendarCreated(const CalendarRow& row);
-  void OnCalendarDeleted(const CalendarRow& row);
-  void OnCalendarChanged(const CalendarRow& row);
-
-  void OnEventTypeCreated(const EventTypeRow& row);
-  void OnEventTypeDeleted(const EventTypeRow& row);
-  void OnEventTypeChanged(const EventTypeRow& row);
 
   void OnNotificationChanged(const NotificationRow& row);
   void OnCalendarModified();
@@ -302,7 +294,6 @@ class CalendarService : public KeyedService {
   void Cleanup();
 
   Profile* profile_;
-
 
   SEQUENCE_CHECKER(sequence_checker_);
 
@@ -326,8 +317,6 @@ class CalendarService : public KeyedService {
 
   // All vended weak pointers are invalidated in Cleanup().
   base::WeakPtrFactory<CalendarService> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(CalendarService);
 };
 
 }  // namespace calendar

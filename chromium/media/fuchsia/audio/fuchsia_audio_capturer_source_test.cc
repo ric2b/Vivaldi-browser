@@ -9,6 +9,7 @@
 
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/test/task_environment.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/channel_layout.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -183,7 +184,14 @@ class FuchsiaAudioCapturerSourceTest : public testing::Test {
     test_capturer_ =
         std::make_unique<TestAudioCapturer>(capturer_handle.NewRequest());
     capturer_source_ = base::MakeRefCounted<FuchsiaAudioCapturerSource>(
-        std::move(capturer_handle));
+        std::move(capturer_handle), base::ThreadTaskRunnerHandle::Get());
+  }
+
+  ~FuchsiaAudioCapturerSourceTest() override {
+    capturer_source_->Stop();
+    capturer_source_ = nullptr;
+
+    base::RunLoop().RunUntilIdle();
   }
 
   void InitializeCapturer(ChannelLayout layout) {
@@ -298,8 +306,7 @@ TEST_F(FuchsiaAudioCapturerSourceTest, CaptureTwoPackets) {
 
   base::TimeTicks ts = base::TimeTicks::FromZxTime(100);
   test_capturer_->SendData(ts, samples1.data());
-  test_capturer_->SendData(ts + base::TimeDelta::FromMilliseconds(10),
-                           samples2.data());
+  test_capturer_->SendData(ts + base::Milliseconds(10), samples2.data());
   base::RunLoop().RunUntilIdle();
 
   // Verify that both packets were received.

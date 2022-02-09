@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
@@ -147,6 +148,10 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
       BrowserAccessibilityDelegate* delegate);
 
   static BrowserAccessibilityManager* FromID(ui::AXTreeID ax_tree_id);
+
+  BrowserAccessibilityManager(const BrowserAccessibilityManager&) = delete;
+  BrowserAccessibilityManager& operator=(const BrowserAccessibilityManager&) =
+      delete;
 
   ~BrowserAccessibilityManager() override;
 
@@ -634,8 +639,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   // declaration, do not move this member above other members.
   base::ScopedObservation<ui::AXTree, ui::AXTreeObserver> tree_observation_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityManager);
 };
 
 }  // namespace content

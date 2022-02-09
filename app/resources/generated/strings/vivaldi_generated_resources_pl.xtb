@@ -34,13 +34,10 @@
 <translation id="159359590073980872">Pamięć podręczna grafiki</translation>
 <translation id="1601560923496285236">Zastosuj</translation>
 <translation id="1603914832182249871">(tryb prywatny)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskryptory plików</translation>
 <translation id="1682548588986054654">Nowe okno prywatne</translation>
-<translation id="1706625117072057435">Poziomy powiększenia</translation>
 <translation id="1708338024780164500">(nieaktywny)</translation>
 <translation id="1723824996674794290">&amp;Nowe okno</translation>
-<translation id="1725149567830788547">Pokaż elementy sterują&amp;ce</translation>
 <translation id="1729533290416704613">Kontroluje także to, jaka strona wyświetla się przy wyszukiwaniu w polu adresu.</translation>
 <translation id="174123615272205933">Niestandardowe</translation>
 <translation id="1744108098763830590">strona tła</translation>
@@ -89,11 +86,9 @@
 <translation id="2445081178310039857">Katalog główny rozszerzenia jest wymagany.</translation>
 <translation id="2470702053775288986">Wyłączono nieobsługiwane rozszerzenia</translation>
 <translation id="2476578072172137802">Ustawienia strony</translation>
-<translation id="2482878487686419369">Powiadomienia</translation>
 <translation id="2498539833203011245">Minimalizuj</translation>
 <translation id="2509495747794740764">Współczynnik skalowania musi być liczbą z przedziału od 10 do 200.</translation>
 <translation id="253557089021624350">Liczba sygnałów utrzymania aktywności</translation>
-<translation id="2546283357679194313">Ciasteczka i dane stron</translation>
 <translation id="2550212893339833758">Pamięć stronicowana</translation>
 <translation id="2553440850688409052">Ukryj wtyczkę</translation>
 <translation id="26224892172169984">Nie zezwalaj żadnej stronie na obsługę protokołów</translation>
@@ -119,7 +114,6 @@
 <translation id="3003623123441819449">Pamięć podręczna CSS</translation>
 <translation id="3008272652534848354">Zresetuj uprawnienia</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">Urządzenia MIDI</translation>
 <translation id="3021678814754966447">&amp;Wyświetl źródło ramki</translation>
 <translation id="3036546437875325427">Włącz Flasha</translation>
 <translation id="3046910703532196514">Strona internetowa, kompletna</translation>
@@ -133,7 +127,6 @@
 <translation id="3144647712221361880">Otwórz link jako</translation>
 <translation id="3154429428035006212">Offline od ponad miesiąca</translation>
 <translation id="3222066309010235055">Wstępne renderowanie: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wybierz katalog główny rozszerzenia, które chcesz umieścić w pakiecie. Aby zaktualizować rozszerzenie, wybierz również plik kluczy prywatnych do ponownego użycia.</translation>
 <translation id="3280237271814976245">Zapisz &amp;jako...</translation>
 <translation id="3285322247471302225">Nowa &amp;karta</translation>
@@ -164,7 +157,6 @@
 <translation id="3708684582558000260">Nie zezwalaj stronom na kontynuowanie przesyłania lub odbierania danych po ich zamknięciu</translation>
 <translation id="3711931198657368127">Wklej i &amp;przejdź <ph name="URL" /></translation>
 <translation id="3727187387656390258">Zbadaj wyskakujące okno</translation>
-<translation id="3744111561329211289">Synchronizacja w tle</translation>
 <translation id="3760460896538743390">Zbadaj &amp;stronę tła</translation>
 <translation id="3797900183766075808">Wy&amp;szukaj „<ph name="SEARCH_TERMS" />” w <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3800806661949714323">Pokaż wszystkie (zalecane)</translation>
@@ -175,6 +167,7 @@
 <translation id="3899879303189199559">Offline od ponad roku</translation>
 <translation id="3905761538810670789">Napraw aplikację</translation>
 <translation id="3908501907586732282">Włącz rozszerzenie</translation>
+<translation id="3909701002594999354">Pokaż wszystkie &amp;elementy sterujące</translation>
 <translation id="3909791450649380159">Wy&amp;tnij</translation>
 <translation id="3927932062596804919">Odmawiaj</translation>
 <translation id="3936390757709632190">&amp;Otwórz dźwięk w nowej karcie</translation>
@@ -207,7 +200,6 @@
 <translation id="4394049700291259645">Wyłącz</translation>
 <translation id="4409697491990005945">Marginesy</translation>
 <translation id="4423376891418188461">Przywróć ustawienia</translation>
-<translation id="4434045419905280838">Wyskakujące okna i przekierowania</translation>
 <translation id="4478664379124702289">Zapisz link ja&amp;ko...</translation>
 <translation id="4579581181964204535">Nie można przesłać <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Przejdź do <ph name="URL" /></translation>
@@ -274,9 +266,7 @@
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">Kontroluje także to, jaka strona wyświetla się po kliknięciu przycisku strony głównej.</translation>
 <translation id="563535393368633106">Pytaj przed uzyskaniem dostępu (zalecane)</translation>
-<translation id="5649053991847567735">Pobieranie automatyczne</translation>
 <translation id="5677928146339483299">Zablokowane</translation>
-<translation id="5689516760719285838">Lokalizacja</translation>
 <translation id="5707185214361380026">Nie udało się załadować rozszerzenia z:</translation>
 <translation id="5715711091495208045">Broker wtyczek: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Zapisz jako PDF</translation>
@@ -298,7 +288,6 @@
 <translation id="5979421442488174909">&amp;Przetłumacz na <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Wyczyść dane witryny</translation>
 <translation id="6042308850641462728">Więcej</translation>
-<translation id="6059925163896151826">Urządzenia USB</translation>
 <translation id="6086846494333236931">Zainstalowane przez twojego administratora</translation>
 <translation id="6101226222197207147">Dodano nową aplikację (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Twoje połączenie internetowe jest kontrolowane</translation>
@@ -330,7 +319,7 @@
 <translation id="6508261954199872201">Aplikacja: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kop&amp;iuj obraz</translation>
 <translation id="6550675742724504774">Opcje</translation>
-<translation id="6612358246767739896">Treść chroniona</translation>
+<translation id="6579369886355986318">Pokaż wszystkie &amp;elementy sterujące</translation>
 <translation id="6639554308659482635">Pamięć SQLite</translation>
 <translation id="6686817083349815241">Zapisz hasło</translation>
 <translation id="6691936601825168937">&amp;Dalej</translation>
@@ -359,8 +348,6 @@
 <translation id="7270858098575133036">Pytaj gdy strona chce użyć komunikatów systemowych by uzyskać dostęp do urządzeń MIDI</translation>
 <translation id="7287143125007575591">Odmowa dostępu.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7309257895202129721">Pokaż elementy sterują&amp;ce</translation>
-<translation id="7374461526650987610">Obsługa protokołów</translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="7412226954991670867">Pamięć GPU</translation>
 <translation id="7421925624202799674">&amp;Wyświetl źródło strony</translation>
@@ -368,7 +355,6 @@
 <translation id="7427348830195639090">Strona w tle: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Wybierając tę drukarkę, zezwalasz na dostęp do niej temu rozszerzeniu:</translation>
 <translation id="749028671485790643">Osoba <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Zakończ proces</translation>
 <translation id="7576690715254076113">Sortuj</translation>
 <translation id="7629827748548208700">Karta: <ph name="TAB_NAME" /></translation>
@@ -419,7 +405,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Trwa pobieranie pliku}few{Trwa pobieranie plików}many{Trwa pobieranie plików}other{Trwa pobieranie plików}}</translation>
 <translation id="8230134520748321204">Zapisać hasło do: <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">To rozszerzenie nie jest oferowane w <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i mogło zostać dodane bez twojej wiedzy.</translation>
-<translation id="8270242299912238708">Dokumenty PDF</translation>
 <translation id="8339059274628563283">Lokalnie zapisane dane z <ph name="SITE" /></translation>
 <translation id="8351419472474436977">To rozszerzenie przejęło kontrolę nad ustawieniami serwera proxy, co oznacza, że może zmieniać, przerywać lub podglądać wszystko, co robisz online. Jeśli nie masz pewności skąd wzięła się ta zmiana, prawdopodobnie jej nie chcesz.</translation>
 <translation id="8382913212082956454">Kopiuj adres &amp;e-mail</translation>
@@ -467,8 +452,8 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="9170848237812810038">&amp;Cofnij</translation>
 <translation id="9215293857209265904">Dodano "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="9218430445555521422">Ustaw jako domyślny</translation>
-<translation id="9219103736887031265">Obrazy</translation>
 <translation id="93766956588638423">Napraw rozszerzenie</translation>
+<translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Poziomo</translation>
 <translation id="994289308992179865">&amp;Powtarzaj</translation>
 <translation id="998747458861718449">&amp;Zbadaj element</translation>

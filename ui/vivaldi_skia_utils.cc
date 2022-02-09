@@ -159,21 +159,21 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
                                   ImageFormat image_format,
                                   int image_quality) {
   std::vector<unsigned char> image_bytes =
-    EncodeBitmap(std::move(bitmap), image_format, image_quality);
+      EncodeBitmap(std::move(bitmap), image_format, image_quality);
   if (image_bytes.empty())
     return base::FilePath();
 
   std::string ext;
   const char* mime_type;
   switch (image_format) {
-  case ImageFormat::kJPEG:
-    mime_type = "image/jpeg";  // kMimeTypeJpeg;
-    ext = ".jpg";
-    break;
-  case ImageFormat::kPNG:
-    mime_type = "image/png";  // kMimeTypePng;
-    ext = ".png";
-    break;
+    case ImageFormat::kJPEG:
+      mime_type = "image/jpeg";  // kMimeTypeJpeg;
+      ext = ".jpg";
+      break;
+    case ImageFormat::kPNG:
+      mime_type = "image/png";  // kMimeTypePng;
+      ext = ".png";
+      break;
   }
   base::FilePath base_path(directory);
 
@@ -187,7 +187,7 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
   int unique_number = base::GetUniquePathNumber(base_path);
   if (unique_number > 0) {
     base_path = base_path.InsertBeforeExtensionASCII(
-      base::StringPrintf(" (%d)", unique_number));
+        base::StringPrintf(" (%d)", unique_number));
   }
   int bytes =
       base::WriteFile(base_path, reinterpret_cast<const char*>(&image_bytes[0]),

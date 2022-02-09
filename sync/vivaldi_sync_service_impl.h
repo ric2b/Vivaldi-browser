@@ -27,9 +27,11 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
   // invalidation_service as parameter to work around possible effects of
   // immedatiate move of init_params
   VivaldiSyncServiceImpl(syncer::SyncServiceImpl::InitParams* init_params,
-                            Profile* profile,
-                            VivaldiAccountManager* account_manager);
+                         Profile* profile,
+                         VivaldiAccountManager* account_manager);
   ~VivaldiSyncServiceImpl() override;
+  VivaldiSyncServiceImpl(const VivaldiSyncServiceImpl&) = delete;
+  VivaldiSyncServiceImpl& operator=(const VivaldiSyncServiceImpl&) = delete;
 
   base::WeakPtr<VivaldiSyncServiceImpl> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -68,8 +70,6 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
   VivaldiSyncUIHelper ui_helper_;
 
   base::WeakPtrFactory<VivaldiSyncServiceImpl> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiSyncServiceImpl);
 };
 
 }  // namespace vivaldi

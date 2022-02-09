@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -40,11 +41,11 @@ CaptionsHandler::~CaptionsHandler() {
 }
 
 void CaptionsHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "openSystemCaptionsDialog",
       base::BindRepeating(&CaptionsHandler::HandleOpenSystemCaptionsDialog,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  web_ui()->RegisterDeprecatedMessageCallback(
       "liveCaptionSectionReady",
       base::BindRepeating(&CaptionsHandler::HandleLiveCaptionSectionReady,
                           base::Unretained(this)));

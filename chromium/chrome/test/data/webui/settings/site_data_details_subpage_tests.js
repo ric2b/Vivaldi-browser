@@ -8,7 +8,7 @@ import {cookieInfo, LocalDataBrowserProxyImpl} from 'chrome://settings/lazy_load
 import {MetricsBrowserProxyImpl, PrivacyElementInteractions, Router,routes} from 'chrome://settings/settings.js';
 import {TestLocalDataBrowserProxy} from 'chrome://test/settings/test_local_data_browser_proxy.js';
 
-import {flushTasks} from '../test_util.m.js';
+import {flushTasks} from '../test_util.js';
 
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 
@@ -47,9 +47,9 @@ suite('SiteDataDetailsSubpage', function() {
   setup(function() {
     browserProxy = new TestLocalDataBrowserProxy();
     browserProxy.setCookieDetails([cookieDetails]);
-    LocalDataBrowserProxyImpl.instance_ = browserProxy;
+    LocalDataBrowserProxyImpl.setInstance(browserProxy);
     testMetricsBrowserProxy = new TestMetricsBrowserProxy();
-    MetricsBrowserProxyImpl.instance_ = testMetricsBrowserProxy;
+    MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
     PolymerTest.clearBody();
     page = document.createElement('site-data-details-subpage');
     Router.getInstance().navigateTo(
@@ -89,7 +89,7 @@ suite('SiteDataDetailsSubpage', function() {
   test('InteractionMetrics', async function() {
     // Confirm that various page interactions record the appropriate metric.
     await flushTasks();
-    page.$$('.icon-clear').click();
+    page.shadowRoot.querySelector('.icon-clear').click();
     let metric =
         await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
     assertEquals(PrivacyElementInteractions.COOKIE_DETAILS_REMOVE_ITEM, metric);

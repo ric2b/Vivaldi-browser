@@ -8,28 +8,28 @@
 
 namespace omnibox {
 
-const auto enabled_by_default_desktop_only =
+constexpr auto enabled_by_default_desktop_only =
 #if defined(OS_ANDROID) || defined(OS_IOS)
     base::FEATURE_DISABLED_BY_DEFAULT;
 #else
     base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
 
-const auto enabled_by_default_android_only =
+constexpr auto enabled_by_default_android_only =
 #if defined(OS_ANDROID)
     base::FEATURE_ENABLED_BY_DEFAULT;
 #else
     base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
 
-const auto enabled_by_default_desktop_android =
+constexpr auto enabled_by_default_desktop_android =
 #if defined(OS_IOS)
     base::FEATURE_DISABLED_BY_DEFAULT;
 #else
     base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
 
-const auto enabled_by_default_desktop_ios =
+constexpr auto enabled_by_default_desktop_ios =
 #if defined(OS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT;
 #else
@@ -148,7 +148,7 @@ const base::Feature kOnFocusSuggestionsContextualWebAllowSRP{
     base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kOnFocusSuggestionsContextualWebOnContent{
     "OmniboxOnFocusSuggestionsContextualWebOnContent",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    enabled_by_default_android_only};
 
 // Allows the LocalHistoryZeroSuggestProvider to use local search history.
 const base::Feature kLocalHistoryZeroSuggest{
@@ -177,7 +177,7 @@ const base::Feature kOmniboxExperimentalSuggestScoring{
 // over 10% of all shutdown hangs.
 const base::Feature kHistoryQuickProviderAblateInMemoryURLIndexCacheFile{
     "OmniboxHistoryQuickProviderAblateInMemoryURLIndexCacheFile",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    enabled_by_default_desktop_only};
 
 // If enabled, suggestions from a cgi param name match are scored to 0.
 const base::Feature kDisableCGIParamMatching{"OmniboxDisableCGIParamMatching",
@@ -196,7 +196,7 @@ const base::Feature kShortBookmarkSuggestions{
     "OmniboxShortBookmarkSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kShortBookmarkSuggestionsByTotalInputLength{
     "OmniboxShortBookmarkSuggestionsByTotalInputLength",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If disabled, updating shortcuts truncates their text to the user input. If
 // enabled, they preserve up to 3 additional chars. See `GetShortcutText()` in
@@ -209,7 +209,7 @@ const base::Feature kPreserveLongerShortcutsText{
 // 'Jupiter' with URL 'en.wikipedia.org/wiki/Jupiter' located in a path
 // containing 'planet.'
 const base::Feature kBookmarkPaths{"OmniboxBookmarkPaths",
-                                   base::FEATURE_ENABLED_BY_DEFAULT};
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature used to fetch document suggestions.
 const base::Feature kDocumentProvider{"OmniboxDocumentProvider",
@@ -233,15 +233,10 @@ const base::Feature kAdaptiveSuggestionsCount{
 const base::Feature kClipboardSuggestionContentHidden = {
     "ClipboardSuggestionContentHidden", enabled_by_default_android_only};
 
-// If enabled, shows slightly more compact suggestions, allowing the
-// kAdaptiveSuggestionsCount feature to fit more suggestions on screen.
-const base::Feature kCompactSuggestions{"OmniboxCompactSuggestions",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
 // If enabled, frequently visited sites are presented in form of a single row
 // with a carousel of tiles, instead of one URL per row.
 extern const base::Feature kMostVisitedTiles{"OmniboxMostVisitedTiles",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             enabled_by_default_android_only};
 
 // If enabled, expands autocompletion to possibly (depending on params) include
 // suggestion titles and non-prefixes as opposed to be restricted to URL
@@ -250,13 +245,13 @@ extern const base::Feature kMostVisitedTiles{"OmniboxMostVisitedTiles",
 const base::Feature kRichAutocompletion{"OmniboxRichAutocompletion",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Feature used to enable Pedals in the NTP Realbox.
+const base::Feature kNtpRealboxPedals{"NtpRealboxPedals",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Feature used to enable Suggestion Answers in the NTP Realbox.
 const base::Feature kNtpRealboxSuggestionAnswers{
     "NtpRealboxSuggestionAnswers", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature used to enable the second batch of Pedals (Safety Check, etc.).
-const base::Feature kOmniboxPedalsBatch2{"OmniboxPedalsBatch2",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature used to enable the second batch of Pedals (Safety Check, etc.)
 // for non-English locales (English locales are 'en' and 'en-GB').
@@ -268,9 +263,11 @@ const base::Feature kOmniboxPedalsBatch2NonEnglish{
 const base::Feature kOmniboxPedalsBatch3{"OmniboxPedalsBatch3",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Feature that enables use of the colored version of the default Pedal icon.
-const base::Feature kOmniboxPedalsDefaultIconColored{
-    "OmniboxPedalsDefaultIconColored", base::FEATURE_ENABLED_BY_DEFAULT};
+// Feature used to enable the third batch of Pedals (Find your phone, etc.)
+// for non-English locales (English locales are 'en' and 'en-GB').
+// This feature is only meaningful if `OmniboxPedalsBatch3` is enabled.
+const base::Feature kOmniboxPedalsBatch3NonEnglish{
+    "OmniboxPedalsBatch3NonEnglish", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature that enables loading synonyms from the translation console.
 const base::Feature kOmniboxPedalsTranslationConsole{

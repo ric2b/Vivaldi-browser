@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "base/threading/sequence_bound.h"
@@ -26,6 +27,7 @@
 namespace content {
 
 class FontEnumerationCache;
+struct FontEnumerationData;
 
 // The ownership hierarchy for this class is:
 //
@@ -100,9 +102,7 @@ class CONTENT_EXPORT FontAccessManagerImpl
 
   void DidRequestPermission(EnumerateLocalFontsCallback callback,
                             blink::mojom::PermissionStatus status);
-  void DidFindAllFonts(FindAllFontsCallback callback,
-                       blink::mojom::FontEnumerationStatus,
-                       base::ReadOnlySharedMemoryRegion);
+  void DidFindAllFonts(FindAllFontsCallback callback, FontEnumerationData data);
   void DidChooseLocalFonts(GlobalRenderFrameHostId frame_id,
                            ChooseLocalFontsCallback callback,
                            blink::mojom::FontEnumerationStatus status,
@@ -125,6 +125,9 @@ class CONTENT_EXPORT FontAccessManagerImpl
   // Here to keep the choosers alive for the user to interact with.
   std::map<GlobalRenderFrameHostId, std::unique_ptr<FontAccessChooser>>
       choosers_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  base::WeakPtrFactory<FontAccessManagerImpl> weak_ptr_factory_
+      GUARDED_BY_CONTEXT(sequence_checker_){this};
 };
 
 }  // namespace content

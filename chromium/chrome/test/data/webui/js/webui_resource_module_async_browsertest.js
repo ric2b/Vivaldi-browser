@@ -8,6 +8,8 @@
 
 GEN('#include "content/public/test/browser_test.h"');
 
+/* eslint-disable no-var */
+
 /** Test fixture for testing shared JS module resources. */
 var WebUIResourceModuleAsyncTest = class extends testing.Test {
   /** @override */
@@ -123,6 +125,28 @@ TEST_F('I18nBehaviorModuleTest', 'All', function() {
   mocha.run();
 });
 
+var I18nMixinTest = class extends WebUIResourceModuleAsyncTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://test/test_loader.html?module=js/i18n_mixin_test.js';
+  }
+};
+
+TEST_F('I18nMixinTest', 'All', function() {
+  mocha.run();
+});
+
+var WebUIListenerMixinTest = class extends WebUIResourceModuleAsyncTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://test/test_loader.html?module=js/web_ui_listener_mixin_test.js';
+  }
+};
+
+TEST_F('WebUIListenerMixinTest', 'All', function() {
+  mocha.run();
+});
+
 var ColorUtilsModuleTest = class extends WebUIResourceModuleAsyncTest {
   /** @override */
   get browsePreload() {
@@ -142,5 +166,16 @@ var CustomElementModuleTest = class extends WebUIResourceModuleAsyncTest {
 };
 
 TEST_F('CustomElementModuleTest', 'All', function() {
+  mocha.run();
+});
+
+var StaticTypesTest = class extends WebUIResourceModuleAsyncTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://test/test_loader.html?module=js/static_types_test.js';
+  }
+};
+
+TEST_F('StaticTypesTest', 'All', function() {
   mocha.run();
 });

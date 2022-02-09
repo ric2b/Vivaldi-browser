@@ -83,6 +83,12 @@ class DeviceLocalAccountPolicyServiceTestBase
     : public ash::DeviceSettingsTestBase {
  public:
   DeviceLocalAccountPolicyServiceTestBase();
+
+  DeviceLocalAccountPolicyServiceTestBase(
+      const DeviceLocalAccountPolicyServiceTestBase&) = delete;
+  DeviceLocalAccountPolicyServiceTestBase& operator=(
+      const DeviceLocalAccountPolicyServiceTestBase&) = delete;
+
   ~DeviceLocalAccountPolicyServiceTestBase() override;
 
   // ash::DeviceSettingsTestBase:
@@ -111,14 +117,16 @@ class DeviceLocalAccountPolicyServiceTestBase
   FakeAffiliatedInvalidationServiceProvider
       affiliated_invalidation_service_provider_;
   std::unique_ptr<DeviceLocalAccountPolicyService> service_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyServiceTestBase);
 };
 
 class DeviceLocalAccountPolicyServiceTest
     : public DeviceLocalAccountPolicyServiceTestBase {
  public:
+  DeviceLocalAccountPolicyServiceTest(
+      const DeviceLocalAccountPolicyServiceTest&) = delete;
+  DeviceLocalAccountPolicyServiceTest& operator=(
+      const DeviceLocalAccountPolicyServiceTest&) = delete;
+
   MOCK_METHOD1(OnRefreshDone, void(bool));
 
   // DeviceLocalAccountPolicyServiceTestBase:
@@ -132,9 +140,6 @@ class DeviceLocalAccountPolicyServiceTest
   void InstallDevicePolicy() override;
 
   MockDeviceLocalAccountPolicyServiceObserver service_observer_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyServiceTest);
 };
 
 DeviceLocalAccountPolicyServiceTestBase::
@@ -539,6 +544,12 @@ TEST_F(DeviceLocalAccountPolicyServiceTest, RefreshPolicy) {
 
 class DeviceLocalAccountPolicyExtensionCacheTest
     : public DeviceLocalAccountPolicyServiceTestBase {
+ public:
+  DeviceLocalAccountPolicyExtensionCacheTest(
+      const DeviceLocalAccountPolicyExtensionCacheTest&) = delete;
+  DeviceLocalAccountPolicyExtensionCacheTest& operator=(
+      const DeviceLocalAccountPolicyExtensionCacheTest&) = delete;
+
  protected:
   DeviceLocalAccountPolicyExtensionCacheTest();
 
@@ -552,9 +563,6 @@ class DeviceLocalAccountPolicyExtensionCacheTest
   base::FilePath cache_dir_1_;
   base::FilePath cache_dir_2_;
   base::FilePath cache_dir_3_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyExtensionCacheTest);
 };
 
 DeviceLocalAccountPolicyExtensionCacheTest::
@@ -818,6 +826,12 @@ TEST_F(DeviceLocalAccountPolicyExtensionCacheTest, RemoveAccount) {
 
 class DeviceLocalAccountPolicyProviderTest
     : public DeviceLocalAccountPolicyServiceTestBase {
+ public:
+  DeviceLocalAccountPolicyProviderTest(
+      const DeviceLocalAccountPolicyProviderTest&) = delete;
+  DeviceLocalAccountPolicyProviderTest& operator=(
+      const DeviceLocalAccountPolicyProviderTest&) = delete;
+
  protected:
   DeviceLocalAccountPolicyProviderTest();
 
@@ -828,9 +842,6 @@ class DeviceLocalAccountPolicyProviderTest
   std::unique_ptr<DeviceLocalAccountPolicyProvider> provider_;
   MockConfigurationPolicyObserver provider_observer_;
   std::unique_ptr<ash::ScopedCrosSettingsTestHelper> cros_settings_helper_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyProviderTest);
 };
 
 DeviceLocalAccountPolicyProviderTest::DeviceLocalAccountPolicyProviderTest()
@@ -1057,7 +1068,7 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, RefreshPolicies) {
 }
 
 TEST_F(DeviceLocalAccountPolicyProviderTest,
-       RestrictedManagedGuestSessionEnabled) {
+       DeviceRestrictedManagedGuestSessionEnabled) {
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
       .Times(AtLeast(1));
   InstallDeviceLocalAccountPolicy(kAccount1);
@@ -1068,12 +1079,12 @@ TEST_F(DeviceLocalAccountPolicyProviderTest,
       service_->GetBrokerForUser(account_1_user_id_);
   ASSERT_TRUE(broker);
 
-  // Disabled RestrictedManagedGuestSessionEnabled policy does not
+  // Disabled DeviceRestrictedManagedGuestSessionEnabled policy does not
   // change other policy values.
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
       .Times(AtLeast(1));
   cros_settings_helper_->SetBoolean(
-      chromeos::kRestrictedManagedGuestSessionEnabled, false);
+      chromeos::kDeviceRestrictedManagedGuestSessionEnabled, false);
   InstallDeviceLocalAccountPolicy(kAccount1);
   broker->core()->store()->Load();
   FlushDeviceSettings();
@@ -1084,12 +1095,12 @@ TEST_F(DeviceLocalAccountPolicyProviderTest,
       POLICY_DOMAIN_CHROME, std::string())) = expected_policy_map_.Clone();
   EXPECT_TRUE(expected_policy_bundle.Equals(provider_->policies()));
 
-  // Enabled RestrictedManagedGuestSessionEnabled policy overrides
+  // Enabled DeviceRestrictedManagedGuestSessionEnabled policy overrides
   // certain policies.
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
       .Times(AtLeast(1));
   cros_settings_helper_->SetBoolean(
-      chromeos::kRestrictedManagedGuestSessionEnabled, true);
+      chromeos::kDeviceRestrictedManagedGuestSessionEnabled, true);
   device_local_account_policy_.payload()
       .mutable_passwordmanagerenabled()
       ->set_value(true);
@@ -1160,10 +1171,6 @@ TEST_F(DeviceLocalAccountPolicyProviderTest,
       POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,
       base::Value(true), nullptr);
   expected_policy_map_restricted.Set(
-      key::kLacrosAllowed, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-      POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,
-      base::Value(false), nullptr);
-  expected_policy_map_restricted.Set(
       key::kLacrosSecondaryProfilesAllowed, POLICY_LEVEL_MANDATORY,
       POLICY_SCOPE_USER,
       POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,
@@ -1209,6 +1216,12 @@ TEST_F(DeviceLocalAccountPolicyProviderKioskTest, WebKioskPolicy) {
 
 class DeviceLocalAccountPolicyProviderLoadImmediateTest
     : public DeviceLocalAccountPolicyServiceTestBase {
+ public:
+  DeviceLocalAccountPolicyProviderLoadImmediateTest(
+      const DeviceLocalAccountPolicyProviderLoadImmediateTest&) = delete;
+  DeviceLocalAccountPolicyProviderLoadImmediateTest& operator=(
+      const DeviceLocalAccountPolicyProviderLoadImmediateTest&) = delete;
+
  protected:
   DeviceLocalAccountPolicyProviderLoadImmediateTest();
 
@@ -1217,9 +1230,6 @@ class DeviceLocalAccountPolicyProviderLoadImmediateTest
 
   std::unique_ptr<DeviceLocalAccountPolicyProvider> provider_;
   MockDeviceLocalAccountPolicyServiceObserver service_observer_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyProviderLoadImmediateTest);
 };
 
 DeviceLocalAccountPolicyProviderLoadImmediateTest::

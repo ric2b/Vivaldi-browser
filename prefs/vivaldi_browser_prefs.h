@@ -26,12 +26,13 @@ struct EnumPrefProperties {
   EnumPrefProperties();
   ~EnumPrefProperties();
   EnumPrefProperties(EnumPrefProperties&&);
+  EnumPrefProperties(const EnumPrefProperties&) = delete;
+  EnumPrefProperties& operator=(const EnumPrefProperties&) = delete;
 
   absl::optional<int> FindValue(base::StringPiece name) const;
   const std::string* FindName(int value) const;
 
   std::vector<std::pair<std::string, int>> name_value_pairs;
-  DISALLOW_COPY_AND_ASSIGN(EnumPrefProperties);
 };
 
 bool IsMergeableListPreference(base::StringPiece name);
@@ -49,6 +50,8 @@ class PrefProperties {
   PrefProperties();
   PrefProperties(PrefProperties&&);
   ~PrefProperties();
+  PrefProperties(const PrefProperties&) = delete;
+  PrefProperties& operator=(const PrefProperties&) = delete;
 
   bool is_local() const { return local_pref_; }
   const EnumPrefProperties* enum_properties() const {
@@ -61,7 +64,6 @@ class PrefProperties {
  private:
   std::unique_ptr<EnumPrefProperties> enum_properties_;
   bool local_pref_ = false;
-  DISALLOW_COPY_AND_ASSIGN(PrefProperties);
 };
 
 using PrefPropertiesMap = std::unordered_map<std::string, PrefProperties>;

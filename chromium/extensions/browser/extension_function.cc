@@ -148,13 +148,13 @@ void LogUma(bool success,
   // anything waiting on user action. As such, we can't always assume that a
   // long execution time equates to a poorly-performing function.
   if (success) {
-    if (elapsed_time < base::TimeDelta::FromMilliseconds(1)) {
+    if (elapsed_time < base::Milliseconds(1)) {
       base::UmaHistogramSparse("Extensions.Functions.SucceededTime.LessThan1ms",
                                histogram_value);
-    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(5)) {
+    } else if (elapsed_time < base::Milliseconds(5)) {
       base::UmaHistogramSparse("Extensions.Functions.SucceededTime.1msTo5ms",
                                histogram_value);
-    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(10)) {
+    } else if (elapsed_time < base::Milliseconds(10)) {
       base::UmaHistogramSparse("Extensions.Functions.SucceededTime.5msTo10ms",
                                histogram_value);
     } else {
@@ -164,13 +164,13 @@ void LogUma(bool success,
     UMA_HISTOGRAM_TIMES("Extensions.Functions.SucceededTotalExecutionTime",
                         elapsed_time);
   } else {
-    if (elapsed_time < base::TimeDelta::FromMilliseconds(1)) {
+    if (elapsed_time < base::Milliseconds(1)) {
       base::UmaHistogramSparse("Extensions.Functions.FailedTime.LessThan1ms",
                                histogram_value);
-    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(5)) {
+    } else if (elapsed_time < base::Milliseconds(5)) {
       base::UmaHistogramSparse("Extensions.Functions.FailedTime.1msTo5ms",
                                histogram_value);
-    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(10)) {
+    } else if (elapsed_time < base::Milliseconds(10)) {
       base::UmaHistogramSparse("Extensions.Functions.FailedTime.5msTo10ms",
                                histogram_value);
     } else {
@@ -391,6 +391,9 @@ class ExtensionFunction::RenderFrameHostTracker
             WebContents::FromRenderFrameHost(function->render_frame_host())),
         function_(function) {}
 
+  RenderFrameHostTracker(const RenderFrameHostTracker&) = delete;
+  RenderFrameHostTracker& operator=(const RenderFrameHostTracker&) = delete;
+
  private:
   // content::WebContentsObserver:
   void RenderFrameDeleted(
@@ -406,8 +409,6 @@ class ExtensionFunction::RenderFrameHostTracker
   }
 
   ExtensionFunction* function_;  // Owns us.
-
-  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostTracker);
 };
 
 ExtensionFunction::ExtensionFunction() {
@@ -523,8 +524,8 @@ void ExtensionFunction::OnQuotaExceeded(std::string violation_error) {
 
 void ExtensionFunction::SetArgs(base::Value args) {
   DCHECK(args.is_list());
-  DCHECK(!args_.get());  // Should only be called once.
-  args_ = base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
+  DCHECK(!args_.has_value());
+  args_ = std::move(args).TakeList();
 }
 
 const base::ListValue* ExtensionFunction::GetResultList() const {
@@ -593,6 +594,9 @@ void ExtensionFunction::SetDispatcher(
 }
 
 void ExtensionFunction::Shutdown() {
+  // Allow the extension function to perform any cleanup before nulling out
+  // `browser_context_`.
+  OnBrowserContextShutdown();
   browser_context_ = nullptr;
 }
 
@@ -750,8 +754,8 @@ void ExtensionFunction::OnResponded() {
 }
 
 bool ExtensionFunction::HasOptionalArgument(size_t index) {
-  base::Value* value;
-  return args_->Get(index, &value) && !value->is_none();
+  DCHECK(args_);
+  return index < args_->size() && !(*args_)[index].is_none();
 }
 
 void ExtensionFunction::WriteToConsole(blink::mojom::ConsoleMessageLevel level,

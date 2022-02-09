@@ -9,6 +9,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "chrome/browser/ui/user_education/feature_promo_bubble_params.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/user_education/feature_promo_bubble_params.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -81,6 +81,11 @@ views::View* GetReadingListStarView(BrowserView* browser_view) {
       ->GetIconView(PageActionIconType::kBookmarkStar);
 }
 
+// kIPHReadingListInSidePanelFeature:
+views::View* GetSidePanelButton(BrowserView* browser_view) {
+  return browser_view->toolbar()->read_later_button();
+}
+
 // kIPHReopenTabFeature:
 views::View* GetAppMenuButton(BrowserView* browser_view) {
   return browser_view->toolbar()->app_menu_button();
@@ -92,6 +97,13 @@ views::View* GetAvatarToolbarButton(BrowserView* browser_view) {
   return browser_view->toolbar_button_provider()->GetAvatarToolbarButton();
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+// kIPHSideSearchFeature:
+views::View* GetSideSearchButton(BrowserView* browser_view) {
+  return browser_view->toolbar()->left_side_panel_button();
+}
+#endif
 
 // kIPHTabSearchFeature:
 views::View* GetTabSearchButton(BrowserView* browser_view) {
@@ -124,7 +136,7 @@ FeaturePromoRegistry* FeaturePromoRegistry::GetInstance() {
   return instance.get();
 }
 
-absl::optional<FeaturePromoBubbleParams>
+absl::optional<std::pair<FeaturePromoBubbleParams, views::View*>>
 FeaturePromoRegistry::GetParamsForFeature(const base::Feature& iph_feature,
                                           BrowserView* browser_view) {
   auto data_it = feature_promo_data_.find(&iph_feature);
@@ -136,7 +148,6 @@ FeaturePromoRegistry::GetParamsForFeature(const base::Feature& iph_feature,
     return absl::nullopt;
 
   FeaturePromoBubbleParams params = data_it->second.params;
-  params.anchor_view = anchor_view;
 
   if (params.feature_command_id) {
     // Only one of the two should be specified.
@@ -151,7 +162,7 @@ FeaturePromoRegistry::GetParamsForFeature(const base::Feature& iph_feature,
       params.feature_accelerator = accelerator;
   }
 
-  return params;
+  return std::make_pair(params, anchor_view);
 }
 
 void FeaturePromoRegistry::RegisterFeature(
@@ -178,7 +189,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     // kIPHDesktopPwaInstallFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_DESKTOP_PWA_INSTALL_PROMO;
-    params.arrow = views::BubbleBorder::Arrow::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     RegisterFeature(feature_engagement::kIPHDesktopPwaInstallFeature, params,
                     base::BindRepeating(GetDesktopPwaInstallView));
@@ -189,7 +200,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     FeaturePromoBubbleParams params;
     params.body_string_specifier =
         IDS_UPDATED_CONNECTION_SECURITY_INDICATORS_PROMO;
-    params.arrow = views::BubbleBorder::Arrow::TOP_LEFT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_LEFT;
 
     RegisterFeature(
         feature_engagement::kIPHUpdatedConnectionSecurityIndicatorsFeature,
@@ -200,7 +211,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     // kIPHDesktopTabGroupsNewGroupFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_TAB_GROUPS_NEW_GROUP_PROMO;
-    params.arrow = views::BubbleBorder::TOP_CENTER;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_CENTER;
 
     // Turn on IPH Snooze for Tab Group.
     if (base::FeatureList::IsEnabled(
@@ -218,9 +229,19 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_LIVE_CAPTION_PROMO;
     params.screenreader_string_specifier = IDS_LIVE_CAPTION_PROMO_SCREENREADER;
-    params.arrow = views::BubbleBorder::Arrow::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     RegisterFeature(feature_engagement::kIPHLiveCaptionFeature, params,
+                    base::BindRepeating(GetMediaButton));
+  }
+
+  {
+    // kIPHGMCCastStartStopFeature:
+    FeaturePromoBubbleParams params;
+    params.body_string_specifier =
+        IDS_GLOBAL_MEDIA_CONTROLS_CONTROL_CAST_SESSIONS_PROMO;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
+    RegisterFeature(feature_engagement::kIPHGMCCastStartStopFeature, params,
                     base::BindRepeating(GetMediaButton));
   }
 
@@ -232,7 +253,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     params.screenreader_string_specifier =
         IDS_PROFILE_SWITCH_PROMO_SCREENREADER;
     params.feature_command_id = IDC_SHOW_AVATAR_MENU;
-    params.arrow = views::BubbleBorder::Arrow::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     RegisterFeature(feature_engagement::kIPHProfileSwitchFeature, params,
                     base::BindRepeating(GetAvatarToolbarButton));
@@ -243,7 +264,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     // kReadingListDiscoveryFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_READING_LIST_DISCOVERY_PROMO;
-    params.arrow = views::BubbleBorder::Arrow::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     RegisterFeature(feature_engagement::kIPHReadingListDiscoveryFeature, params,
                     base::BindRepeating(GetReadingListButton));
@@ -253,7 +274,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     // kIPHReadingListEntryPointFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_READING_LIST_ENTRY_POINT_PROMO;
-    params.arrow = views::BubbleBorder::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     // Turn on IPH Snooze for Read Later entry point.
     if (base::FeatureList::IsEnabled(
@@ -267,21 +288,43 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
   }
 
   {
+    // kIPHReadingListInSidePanelFeature:
+    FeaturePromoBubbleParams params;
+    params.body_string_specifier = IDS_READING_LIST_IN_SIDE_PANEL_PROMO;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
+
+    RegisterFeature(feature_engagement::kIPHReadingListInSidePanelFeature,
+                    params, base::BindRepeating(GetSidePanelButton));
+  }
+
+  {
     // kIPHReopenTabFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_REOPEN_TAB_PROMO;
-    params.arrow = views::BubbleBorder::Arrow::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
     params.feature_command_id = IDC_RESTORE_TAB;
 
     RegisterFeature(feature_engagement::kIPHReopenTabFeature, params,
                     base::BindRepeating(GetAppMenuButton));
   }
 
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  {
+    // kIPHSideSearchFeature:
+    FeaturePromoBubbleParams params;
+    params.body_string_specifier = IDS_SIDE_SEARCH_PROMO;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_LEFT;
+
+    RegisterFeature(feature_engagement::kIPHSideSearchFeature, params,
+                    base::BindRepeating(GetSideSearchButton));
+  }
+#endif
+
   {
     // kIPHTabSearchFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_TAB_SEARCH_PROMO;
-    params.arrow = views::BubbleBorder::Arrow::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     RegisterFeature(feature_engagement::kIPHTabSearchFeature, params,
                     base::BindRepeating(GetTabSearchButton));
@@ -292,7 +335,7 @@ void FeaturePromoRegistry::RegisterKnownFeatures() {
     // kIPHWebUITabStripFeature:
     FeaturePromoBubbleParams params;
     params.body_string_specifier = IDS_WEBUI_TAB_STRIP_PROMO;
-    params.arrow = views::BubbleBorder::TOP_RIGHT;
+    params.arrow = FeaturePromoBubbleParams::Arrow::TOP_RIGHT;
 
     RegisterFeature(feature_engagement::kIPHWebUITabStripFeature, params,
                     base::BindRepeating(GetWebUITabStripAnchorView));

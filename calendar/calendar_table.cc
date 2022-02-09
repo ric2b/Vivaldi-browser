@@ -69,6 +69,7 @@ bool CalendarTable::CreateDefaultCalendar(AccountID account_id) {
 
   CalendarRow row;
   row.set_name(l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_NAME));
+  row.set_description(l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_NAME));
   row.set_color("#4FACF2");
   row.set_account_id(account_id);
   int component_set = CALENDAR_VEVENT;

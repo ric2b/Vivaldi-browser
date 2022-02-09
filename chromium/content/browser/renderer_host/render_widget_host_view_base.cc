@@ -28,7 +28,7 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
-#include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom.h"
+#include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/display_util.h"
@@ -60,14 +60,10 @@ int RenderWidgetHostViewBase::IsValidRWHVBPointer(
 
 RenderWidgetHostViewBase::RenderWidgetHostViewBase(RenderWidgetHost* host)
     : host_(RenderWidgetHostImpl::From(host)),
-      display_list_({display::Display(display::kDefaultDisplayId)},
-                    /*primary_id=*/display::kDefaultDisplayId,
-                    /*current_id=*/display::kDefaultDisplayId) {
-  // `display_list_` must be initialized, to permit unconditional access to its
-  // current Display object. A placeholder Display is used here, so the first
-  // call to UpdateScreenInfo will trigger the expected updates.
-  CHECK(display_list_.IsValidAndHasPrimaryAndCurrentDisplays());
-
+      // `screen_infos_` must be initialized, to permit unconditional access to
+      // its current display. A placeholder ScreenInfo is used here, so the
+      // first call to UpdateScreenInfo will trigger the expected updates.
+      screen_infos_(display::ScreenInfos(display::ScreenInfo())) {
   g_alloc_dealloc_tracker_map.Get()[this]++;
 }
 
@@ -510,14 +506,24 @@ void RenderWidgetHostViewBase::ProcessAckedTouchEvent(
   NOTREACHED();
 }
 
-const std::vector<display::Display>& RenderWidgetHostViewBase::GetDisplays()
-    const {
+display::ScreenInfos RenderWidgetHostViewBase::GetScreenInfos() {
   // Get the latest info directly from display::Screen, like GetScreenInfo().
   // TODO(crbug.com/1169312): Unify display info caching and change detection.
-  if (auto* screen = display::Screen::GetScreen())
-    return screen->GetAllDisplays();
-  static const base::NoDestructor<std::vector<display::Display>> kEmptyDisplays;
-  return *kEmptyDisplays;
+  // GetScreenInfos should be made non-virtual to just return screen_infos_.
+  // GetScreenInfo should go away and callers should use GetScreenInfos.
+  // UpdateScreenInfo should be the only updater of screen_infos.
+  if (auto* screen = display::Screen::GetScreen()) {
+    gfx::NativeView native_view = GetNativeView();
+    const auto& display = native_view
+                              ? screen->GetDisplayNearestView(native_view)
+                              : screen->GetPrimaryDisplay();
+    return screen->GetScreenInfosNearestDisplay(display.id());
+  }
+
+  // If there is no screen, create fake ScreenInfos (for tests).
+  display::ScreenInfo screen_info;
+  screen_info.display_id = display::kDefaultDisplayId;
+  return display::ScreenInfos(screen_info);
 }
 
 void RenderWidgetHostViewBase::UpdateScreenInfo() {
@@ -540,51 +546,37 @@ void RenderWidgetHostViewBase::UpdateScreenInfo() {
       host()->delegate()->SendScreenRects();
   }
 
-  const display::DisplayList new_display_list =
-      display::Screen::GetScreen()->GetDisplayListNearestViewWithFallbacks(
-          GetNativeView());
-
   // TODO(crbug.com/1169312): Unify display info caching and change detection.
-  const display::Display& current_display = display_list_.GetCurrentDisplay();
-  const display::Display& new_display = new_display_list.GetCurrentDisplay();
-  // Proposed multi-screen APIs expose the current display's status as the
-  // primary display, and whether it is one of several extended displays, so
-  // those changes should also be surfaced via RenderWidgetHostImpl.
-  const bool current_display_is_primary =
-      display_list_.primary_id() == current_display.id();
-  const bool current_display_is_extended = display_list_.displays().size() > 1;
-  const bool new_display_is_primary =
-      new_display_list.primary_id() == new_display.id();
-  const bool new_display_is_extended = new_display_list.displays().size() > 1;
+  auto new_screen_infos = GetScreenInfos();
+
+  if (screen_infos_ == new_screen_infos && !force_sync_visual_properties)
+    return;
+
+  // We need to look at `orientation_type` which is marked as kUndefined at
+  // startup. Unlike `orientation_angle` that uses 0 degrees as the default.
+  // This accounts for devices which have a default landscape orientation, such
+  // as tablets. We do not want the first UpdateScreenInfo to be treated as a
+  // rotation.
   const bool has_rotation_changed =
-      current_display.rotation() != new_display.rotation();
-  const bool has_display_property_changed =
-      current_display.id() != new_display.id() ||
-      current_display.bounds() != new_display.bounds() ||
-      current_display.work_area() != new_display.work_area() ||
-      current_display.device_scale_factor() !=
-          new_display.device_scale_factor() ||
-      has_rotation_changed ||
-      current_display.color_spaces() != new_display.color_spaces() ||
-      current_display.IsInternal() != new_display.IsInternal() ||
-      current_display_is_primary != new_display_is_primary ||
-      current_display_is_extended != new_display_is_extended;
+      screen_infos_.current().orientation_type !=
+          display::mojom::ScreenOrientation::kUndefined &&
+      screen_infos_.current().orientation_type !=
+          new_screen_infos.current().orientation_type;
+  screen_infos_ = std::move(new_screen_infos);
 
-  if (has_display_property_changed || force_sync_visual_properties) {
-    display_list_ = new_display_list;
-
-    // Notify the associated RenderWidgetHostImpl when screen info has changed.
-    // That will synchronize visual properties needed for frame tree rendering
-    // and for web platform APIs that expose screen and window info and events.
-    if (host()) {
-      OnSynchronizedDisplayPropertiesChanged(has_rotation_changed);
-      host()->NotifyScreenInfoChanged();
-    }
+  // Notify the associated RenderWidgetHostImpl when screen info has changed.
+  // That will synchronize visual properties needed for frame tree rendering
+  // and for web platform APIs that expose screen and window info and events.
+  if (host()) {
+    OnSynchronizedDisplayPropertiesChanged(has_rotation_changed);
+    host()->NotifyScreenInfoChanged();
   }
 }
 
 float RenderWidgetHostViewBase::GetCurrentDeviceScaleFactor() const {
-  return display_list_.GetCurrentDisplay().device_scale_factor();
+  // TODO(enne): consolidate this GetCurrentDeviceScaleFactor() function with
+  // GetDeviceScaleFactor().
+  return screen_infos_.current().device_scale_factor;
 }
 
 void RenderWidgetHostViewBase::DidUnregisterFromTextInputManager(
@@ -629,7 +621,7 @@ base::WeakPtr<RenderWidgetHostViewBase> RenderWidgetHostViewBase::GetWeakPtr() {
 }
 
 void RenderWidgetHostViewBase::GetScreenInfo(display::ScreenInfo* screen_info) {
-  display::DisplayUtil::GetNativeViewScreenInfo(screen_info, GetNativeView());
+  *screen_info = GetScreenInfos().current();
 }
 
 float RenderWidgetHostViewBase::GetDeviceScaleFactor() {
@@ -903,7 +895,8 @@ bool RenderWidgetHostViewBase::TransformPointToTargetCoordSpace(
       return false;
     target_ancestors.push_back(cur_view->GetFrameSinkId());
   }
-  target_ancestors.push_back(root_frame_sink_id);
+  if (target_ancestors.back() != root_frame_sink_id)
+    target_ancestors.push_back(root_frame_sink_id);
 
   float device_scale_factor = original_view->GetDeviceScaleFactor();
   DCHECK_GT(device_scale_factor, 0.0f);
@@ -1025,6 +1018,10 @@ ui::Compositor* RenderWidgetHostViewBase::GetCompositor() {
 }
 
 bool RenderWidgetHostViewBase::ShouldVirtualKeyboardOverlayContent() {
+  return false;
+}
+
+bool RenderWidgetHostViewBase::IsHTMLFormPopup() const {
   return false;
 }
 

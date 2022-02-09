@@ -15,9 +15,9 @@ void RenderViewImpl::DidUpdateRendererPreferences() {
     auto renderer_preferences = webview->GetRendererPreferences();
     webview->SetImagesEnabled(renderer_preferences.should_show_images);
     webview->SetServeResourceFromCacheOnly(
-      renderer_preferences.serve_resources_only_from_cache);
+        renderer_preferences.serve_resources_only_from_cache);
     webview->SetPluginsEnabled(
-      renderer_preferences.should_enable_plugin_content);
+        renderer_preferences.should_enable_plugin_content);
     webview->SetAllowTabCycleIntoUI(
         renderer_preferences.allow_tab_cycle_from_webpage_into_ui);
     webview->SetAllowAccessKeys(renderer_preferences.allow_access_keys);

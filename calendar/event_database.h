@@ -35,6 +35,9 @@ class EventDatabase {
   // happening to avoid thread-safety problems.
   virtual ~EventDatabase();
 
+  EventDatabase(const EventDatabase&) = delete;
+  EventDatabase& operator=(const EventDatabase&) = delete;
+
   EventID CreateCalendarEvent(calendar::EventRow ev);
 
   bool CreateEventTable();
@@ -55,9 +58,6 @@ class EventDatabase {
   bool MigrateCalendarToVersion6();
   bool MigrateCalendarToVersion8();
   bool MigrateCalendarToVersion9();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(EventDatabase);
 };
 
 // This is available BOTH as a macro and a static string (kURLRowFields). Use

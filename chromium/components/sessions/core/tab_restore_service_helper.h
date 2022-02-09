@@ -85,6 +85,9 @@ class SESSIONS_EXPORT TabRestoreServiceHelper
                           TabRestoreServiceClient* client,
                           TimeFactory* time_factory);
 
+  TabRestoreServiceHelper(const TabRestoreServiceHelper&) = delete;
+  TabRestoreServiceHelper& operator=(const TabRestoreServiceHelper&) = delete;
+
   ~TabRestoreServiceHelper() override;
 
   void SetHelperObserver(Observer* observer);
@@ -230,8 +233,6 @@ class SESSIONS_EXPORT TabRestoreServiceHelper
   std::set<tab_groups::TabGroupId> closing_groups_;
 
   TimeFactory* const time_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabRestoreServiceHelper);
 };
 
 }  // namespace sessions

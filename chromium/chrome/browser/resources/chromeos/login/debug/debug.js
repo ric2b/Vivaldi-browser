@@ -6,6 +6,11 @@
  * @fileoverview Root element of the OOBE UI Debugger.
  */
 
+// #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
+// #import {loadTimeData} from '../i18n_setup.js';
+// #import {Oobe} from '../cr_ui.m.js'
+// #import {$} from 'chrome://resources/js/util.m.js';
+
 cr.define('cr.ui.login.debug', function() {
   const DEBUG_BUTTON_STYLE = `
       height:20px;
@@ -200,6 +205,20 @@ cr.define('cr.ui.login.debug', function() {
     },
     {
       id: 'os-install',
+      kind: ScreenKind.OTHER,
+      handledSteps: 'success',
+      states: [
+        {
+          id: 'success',
+          trigger: (screen) => {
+            screen.updateCountdownString('60 seconds');
+            screen.showStep('success');
+          },
+        },
+      ],
+    },
+    {
+      id: 'os-trial',
       kind: ScreenKind.OTHER,
     },
     {
@@ -869,6 +888,123 @@ cr.define('cr.ui.login.debug', function() {
       }]
     },
     {
+      id: 'consolidated-consent',
+      kind: ScreenKind.NORMAL,
+      handledSteps: 'loaded,loading,error,eula,additional,arc,privacy',
+      // TODO(crbug.com/1247174): Use localized URLs for eulaUrl and
+      // additionalTosUrl.
+      states: [
+        {
+          id: 'regular',
+          data: {
+            isArcEnabled: true,
+            isDemo: false,
+            isChildAccount: false,
+            eulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            additionalTosUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
+          id: 'child',
+          data: {
+            isArcEnabled: true,
+            isDemo: false,
+            isChildAccount: true,
+            eulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            additionalTosUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
+          id: 'demo-mode',
+          data: {
+            isArcEnabled: true,
+            isDemo: true,
+            isChildAccount: false,
+            eulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            additionalTosUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
+          id: 'arc-disabled',
+          data: {
+            isArcEnabled: false,
+            isDemo: false,
+            isChildAccount: false,
+            eulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            additionalTosUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
+          id: 'error',
+          trigger: (screen) => {
+            screen.setUIStep('error');
+          },
+          data: {
+            isArcEnabled: true,
+            isDemo: false,
+            isChildAccount: false,
+            eulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            additionalTosUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+
+      ]
+    },
+    {
+      id: 'guest-tos',
+      kind: ScreenKind.NORMAL,
+      handledSteps: 'loading,loaded,google-eula,cros-eula',
+      // TODO(crbug.com/1247174): Use localized URLs for googleEulaURL and
+      // crosEulaURL.
+      states: [
+        {
+          id: 'loaded',
+          trigger: (screen) => {
+            screen.setUIStep('loaded');
+          },
+          data: {
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+          },
+        },
+        {
+          id: 'loading',
+          trigger: (screen) => {
+            screen.setUIStep('loading');
+          },
+          data: {
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+          },
+        },
+        {
+          id: 'google-eula',
+          trigger: (screen) => {
+            screen.setUIStep('google-eula');
+          },
+          data: {
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+          },
+        },
+        {
+          id: 'cros-eula',
+          trigger: (screen) => {
+            screen.setUIStep('cros-eula');
+          },
+          data: {
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+          },
+        },
+      ]
+    },
+    {
       id: 'fingerprint-setup',
       kind: ScreenKind.NORMAL,
       defaultState: 'default',
@@ -958,7 +1094,7 @@ cr.define('cr.ui.login.debug', function() {
             screen.reset();
             screen.setWebview(RECOMMENDED_APPS_CONTENT);
             let apps = [];
-            for (i = 1; i <= 21; i++) {
+            for (let i = 1; i <= 21; i++) {
               apps.push({
                 name: 'Test app ' + i,
                 package_name: 'app.test' + i,
@@ -972,20 +1108,6 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'app-downloading',
       kind: ScreenKind.NORMAL,
-      states: [
-        {
-          id: 'single-app',
-          data: {
-            numOfApps: 1,
-          },
-        },
-        {
-          id: 'multiple-apps',
-          data: {
-            numOfApps: 2,
-          },
-        },
-      ],
     },
     {
       id: 'assistant-optin-flow',
@@ -1123,7 +1245,7 @@ cr.define('cr.ui.login.debug', function() {
     }
   }
 
-  class DebuggerUI {
+  /* #export */ class DebuggerUI {
     constructor() {
       this.debuggerVisible_ = false;
       /** Element with Debugger UI */
@@ -1558,28 +1680,9 @@ cr.define('cr.ui.login.debug', function() {
 
   cr.addSingletonGetter(DebuggerUI);
 
+  // #cr_define_end
   // Export
   return {
     DebuggerUI: DebuggerUI,
   };
 });
-
-/**
- * Initializes the Debugger. Called after the DOM, and all external scripts,
- * have been loaded.
- */
-function initializeDebugger() {
-  if (document.readyState === 'loading')
-    return;
-  document.removeEventListener('DOMContentLoaded', initializeDebugger);
-  cr.ui.login.debug.DebuggerUI.getInstance().register(document.body);
-}
-
-/**
- * Final initialization performed after DOM and all scripts have loaded.
- */
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeDebugger);
-} else {
-  initializeDebugger();
-}

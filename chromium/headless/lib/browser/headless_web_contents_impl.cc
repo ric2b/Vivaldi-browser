@@ -51,7 +51,7 @@
 #include "ui/gfx/switches.h"
 
 #if BUILDFLAG(ENABLE_PRINTING)
-#include "headless/lib/browser/headless_print_manager.h"
+#include "components/printing/browser/print_to_pdf/pdf_print_manager.h"
 #endif
 
 namespace headless {
@@ -287,11 +287,18 @@ HeadlessWebContentsImpl::CreateForChildContents(
   child->begin_frame_control_enabled_ = parent->begin_frame_control_enabled_;
   child->InitializeWindow(child->web_contents_->GetContainerBounds());
 
-  // There may already be frames, so make sure they also have our services.
-  for (content::RenderFrameHost* frame_host :
-       child->web_contents_->GetAllFrames()) {
-    child->RenderFrameCreated(frame_host);
-  }
+  // There may already be frames and we may have missed the RenderFrameCreated
+  // callback so make sure they also have our services.
+  // We want to iterate all frame trees because RenderFrameCreated gets called
+  // for any RenderFrame created. base::Unretained is safe here because
+  // ForEachRenderFrameHost is synchronous.
+  child->web_contents_->ForEachRenderFrameHost(base::BindRepeating(
+      [](HeadlessWebContentsImpl* child,
+         content::RenderFrameHost* render_frame_host) {
+        if (render_frame_host->IsRenderFrameLive())
+          child->RenderFrameCreated(render_frame_host);
+      },
+      child.get()));
 
   return child;
 }
@@ -321,7 +328,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
       agent_host_(
           content::DevToolsAgentHost::GetOrCreateFor(web_contents_.get())) {
 #if BUILDFLAG(ENABLE_PRINTING)
-  HeadlessPrintManager::CreateForWebContents(web_contents_.get());
+  print_to_pdf::PdfPrintManager::CreateForWebContents(web_contents_.get());
 // TODO(weili): Add support for printing OOPIFs.
 #endif
   UpdatePrefsFromSystemSettings(web_contents_->GetMutableRendererPrefs());

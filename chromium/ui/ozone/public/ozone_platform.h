@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/native_widget_types.h"
@@ -70,6 +71,10 @@ struct PlatformWindowInitProperties;
 class COMPONENT_EXPORT(OZONE) OzonePlatform {
  public:
   OzonePlatform();
+
+  OzonePlatform(const OzonePlatform&) = delete;
+  OzonePlatform& operator=(const OzonePlatform&) = delete;
+
   virtual ~OzonePlatform();
 
   // Additional initialization params for the platform. Platforms must not
@@ -154,20 +159,43 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     // Determines whether buffer formats should be fetched on GPU and passed
     // back via gpu extra info.
     bool fetch_buffer_formats_for_gmb_on_gpu = false;
+
+#if defined(OS_LINUX)
+    // TODO(crbug.com/1116701): add vaapi support for other Ozone platforms on
+    // Linux. At the moment, VA-API Linux implementation supports only X11
+    // backend. This implementation must be refactored to support Ozone
+    // properly. As a temporary solution, VA-API on Linux checks if vaapi is
+    // supported (which implicitly means that it is Ozone/X11).
+    bool supports_vaapi = false;
+#endif
+
+    // Indicates that the platform allows client applications to manipulate
+    // global screen coordinates. Wayland, for example, disallow it by design.
+    bool supports_global_screen_coordinates = true;
   };
 
   // Groups platform properties that can only be known at run time.
   struct PlatformRuntimeProperties {
-    // Indicates whether the platform supports server-side window decorations.
-    bool supports_server_side_window_decorations = true;
-  };
+    // Values to override the value of the
+    // supports_server_side_window_decorations property in tests.
+    enum class SupportsSsdForTest {
+      kNotSet,  // The property is not overridden.
+      kYes,     // The platform should return true.
+      kNo,      // The plafrorm should return false.
+    };
 
-  // Properties available in the host process after initialization.
-  struct InitializedHostProperties {
     // Whether the underlying platform supports deferring compositing of buffers
     // via overlays. If overlays are not supported the promotion and validation
     // logic can be skipped.
     bool supports_overlays = false;
+    // Indicates whether the platform supports server-side window decorations.
+    bool supports_server_side_window_decorations = true;
+
+    // For platforms that have optional support for server-side decorations,
+    // this parameter allows setting the desired state in tests.  The platform
+    // must have the appropriate logic in its GetPlatformRuntimeProperties()
+    // method.
+    static SupportsSsdForTest override_supports_ssd_for_test;
   };
 
   // Corresponds to chrome_browser_main_extra_parts.h.
@@ -269,12 +297,9 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
   // process at any time.
   virtual const PlatformProperties& GetPlatformProperties();
 
-  // Returns runtime properties of the current platform implementation.
-  virtual const PlatformRuntimeProperties& GetPlatformRuntimeProperties();
-
-  // Returns a struct that contains properties available in the host process
+  // Returns runtime properties of the current platform implementation available
   // after InitializeForUI() runs.
-  virtual const InitializedHostProperties& GetInitializedHostProperties();
+  virtual const PlatformRuntimeProperties& GetPlatformRuntimeProperties();
 
   // Ozone platform implementations may also choose to expose mojo interfaces to
   // internal functionality. Embedders wishing to take advantage of ozone mojo
@@ -329,8 +354,6 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
   // modifications to |single_process_| visible by other threads. Mutex is not
   // needed since it's set before other threads are started.
   volatile bool single_process_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(OzonePlatform);
 };
 
 }  // namespace ui

@@ -44,8 +44,7 @@ void AwSafeBrowsingSubresourceHelper::ReadyToCommitNavigation(
               manager, navigation_handle->GetWebContents(),
               navigation_handle->GetURL(), resource, std::move(request));
       security_interstitials::SecurityInterstitialTabHelper::
-          AssociateBlockingPage(navigation_handle->GetWebContents(),
-                                navigation_handle->GetNavigationId(),
+          AssociateBlockingPage(navigation_handle,
                                 base::WrapUnique(blocking_page));
     }
   }
@@ -55,6 +54,6 @@ AwSafeBrowsingSubresourceHelper::AwSafeBrowsingSubresourceHelper(
     content::WebContents* web_contents)
     : WebContentsObserver(web_contents) {}
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(AwSafeBrowsingSubresourceHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(AwSafeBrowsingSubresourceHelper);
 
 }  // namespace android_webview

@@ -155,6 +155,10 @@ class DevToolsToolboxDelegate
   DevToolsToolboxDelegate(
       WebContents* toolbox_contents,
       DevToolsWindow::ObserverWithAccessor* web_contents_observer);
+
+  DevToolsToolboxDelegate(const DevToolsToolboxDelegate&) = delete;
+  DevToolsToolboxDelegate& operator=(const DevToolsToolboxDelegate&) = delete;
+
   ~DevToolsToolboxDelegate() override;
 
   content::WebContents* OpenURLFromTab(
@@ -171,7 +175,6 @@ class DevToolsToolboxDelegate
  private:
   BrowserWindow* GetInspectedBrowserWindow();
   DevToolsWindow::ObserverWithAccessor* inspected_contents_observer_;
-  DISALLOW_COPY_AND_ASSIGN(DevToolsToolboxDelegate);
 };
 
 DevToolsToolboxDelegate::DevToolsToolboxDelegate(
@@ -262,6 +265,9 @@ class DevToolsEventForwarder {
   explicit DevToolsEventForwarder(DevToolsWindow* window)
      : devtools_window_(window) {}
 
+  DevToolsEventForwarder(const DevToolsEventForwarder&) = delete;
+  DevToolsEventForwarder& operator=(const DevToolsEventForwarder&) = delete;
+
   // Registers whitelisted shortcuts with the forwarder.
   // Only registered keys will be forwarded to the DevTools frontend.
   void SetWhitelistedShortcuts(const std::string& message);
@@ -276,8 +282,6 @@ class DevToolsEventForwarder {
 
   DevToolsWindow* devtools_window_;
   std::set<int> whitelisted_keys_;
-
-  DISALLOW_COPY_AND_ASSIGN(DevToolsEventForwarder);
 };
 
 void DevToolsEventForwarder::SetWhitelistedShortcuts(
@@ -375,6 +379,9 @@ class DevToolsWindow::Throttle : public content::NavigationThrottle {
     devtools_window_->throttle_ = this;
   }
 
+  Throttle(const Throttle&) = delete;
+  Throttle& operator=(const Throttle&) = delete;
+
   ~Throttle() override {
     if (devtools_window_)
       devtools_window_->throttle_ = nullptr;
@@ -397,8 +404,6 @@ class DevToolsWindow::Throttle : public content::NavigationThrottle {
 
  private:
   DevToolsWindow* devtools_window_;
-
-  DISALLOW_COPY_AND_ASSIGN(Throttle);
 };
 
 // Helper class that holds the owned main WebContents for the docked
@@ -501,6 +506,15 @@ void DevToolsWindow::RegisterProfilePrefs(
                                 true);
   registry->RegisterListPref(prefs::kDevToolsTCPDiscoveryConfig);
   registry->RegisterDictionaryPref(prefs::kDevToolsPreferences);
+  registry->RegisterBooleanPref(
+      prefs::kDevToolsSyncPreferences,
+      DevToolsSettings::kSyncDevToolsPreferencesDefault,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterDictionaryPref(
+      prefs::kDevToolsSyncedPreferencesSyncEnabled,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterDictionaryPref(
+      prefs::kDevToolsSyncedPreferencesSyncDisabled);
 }
 
 // static
@@ -563,11 +577,12 @@ void DevToolsWindow::OpenDevToolsWindowForWorker(
   DevToolsWindow* window = FindDevToolsWindow(worker_agent.get());
   if (!window) {
     base::RecordAction(base::UserMetricsAction("DevTools_InspectWorker"));
-    window = Create(profile, nullptr, kFrontendWorker, std::string(), false, "",
-                    "", worker_agent->IsAttached());
+    window =
+        Create(profile, nullptr, kFrontendWorker, std::string(), false, "", "",
+               worker_agent->IsAttached(), /* browser_connection */ true);
     if (!window)
       return;
-    window->bindings_->AttachTo(worker_agent);
+    window->bindings_->AttachViaBrowserTarget(worker_agent);
   }
   window->ScheduleShow(DevToolsToggleAction::Show());
 }
@@ -643,9 +658,9 @@ void DevToolsWindow::OpenDevToolsWindowForFrame(
     const scoped_refptr<content::DevToolsAgentHost>& agent_host) {
   DevToolsWindow* window = FindDevToolsWindow(agent_host.get());
   if (!window) {
-    window = DevToolsWindow::Create(profile, nullptr, kFrontendDefault,
-                                    std::string(), false, std::string(),
-                                    std::string(), agent_host->IsAttached());
+    window = DevToolsWindow::Create(
+        profile, nullptr, kFrontendDefault, std::string(), false, std::string(),
+        std::string(), agent_host->IsAttached(), false);
     if (!window)
       return;
     window->bindings_->AttachTo(agent_host);
@@ -684,7 +699,8 @@ void DevToolsWindow::OpenExternalFrontend(
   if (type == "node") {
     // Direct node targets will always open using ToT front-end.
     window = Create(profile, nullptr, kFrontendV8, std::string(), false,
-                    std::string(), std::string(), agent_host->IsAttached());
+                    std::string(), std::string(), agent_host->IsAttached(),
+                    /* browser_connection */ false);
   } else {
     bool is_worker = type == DevToolsAgentHost::kTypeServiceWorker ||
                      type == DevToolsAgentHost::kTypeSharedWorker;
@@ -696,7 +712,8 @@ void DevToolsWindow::OpenExternalFrontend(
                              : DevToolsUI::GetProxyURL(frontend_url).spec();
     window =
         Create(profile, nullptr, frontend_type, effective_frontend_url, false,
-               std::string(), std::string(), agent_host->IsAttached());
+               std::string(), std::string(), agent_host->IsAttached(),
+               /* browser_connection */ false);
   }
   if (!window)
     return;
@@ -714,9 +731,9 @@ DevToolsWindow* DevToolsWindow::OpenNodeFrontendWindow(Profile* profile) {
     }
   }
 
-  DevToolsWindow* window =
-      Create(profile, nullptr, kFrontendNode, std::string(), false,
-             std::string(), std::string(), false);
+  DevToolsWindow* window = Create(
+      profile, nullptr, kFrontendNode, std::string(), false, std::string(),
+      std::string(), false, /* browser_connection */ false);
   if (!window)
     return nullptr;
   window->bindings_->AttachTo(DevToolsAgentHost::CreateForDiscovery());
@@ -768,7 +785,8 @@ void DevToolsWindow::ToggleDevToolsWindow(
         break;
     }
     window = Create(profile, inspected_web_contents, kFrontendDefault,
-                    std::string(), true, settings, panel, agent->IsAttached());
+                    std::string(), true, settings, panel, agent->IsAttached(),
+                    /* browser_connection */ false);
     if (!window)
       return;
     window->bindings_->AttachTo(agent.get());
@@ -1165,7 +1183,8 @@ DevToolsWindow* DevToolsWindow::Create(
     bool can_dock,
     const std::string& settings,
     const std::string& panel,
-    bool has_other_clients) {
+    bool has_other_clients,
+    bool browser_connection) {
   if (!AllowDevToolsFor(profile, inspected_web_contents))
     return nullptr;
 
@@ -1190,7 +1209,7 @@ DevToolsWindow* DevToolsWindow::Create(
   }
   // Create WebContents with devtools.
   GURL url(GetDevToolsURL(profile, frontend_type, frontend_url, can_dock, panel,
-                          has_other_clients));
+                          has_other_clients, browser_connection));
 
   WebContents::CreateParams params(profile);
 
@@ -1231,7 +1250,8 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
                                     const std::string& frontend_url,
                                     bool can_dock,
                                     const std::string& panel,
-                                    bool has_other_clients) {
+                                    bool has_other_clients,
+                                    bool browser_connection) {
   std::string url;
 
   std::string remote_base =
@@ -1273,6 +1293,8 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
 
   if (has_other_clients)
     url += "&hasOtherClients=true";
+  if (browser_connection)
+    url += "&browserConnection=true";
   return DevToolsUIBindings::SanitizeFrontendURL(GURL(url));
 }
 
@@ -1477,6 +1499,15 @@ content::JavaScriptDialogManager* DevToolsWindow::GetJavaScriptDialogManager(
   return javascript_dialogs::AppModalDialogManager::GetInstance();
 }
 
+std::unique_ptr<content::EyeDropper> DevToolsWindow::OpenEyeDropper(
+    content::RenderFrameHost* render_frame_host,
+    content::EyeDropperListener* listener) {
+  BrowserWindow* window = GetInspectedBrowserWindow();
+  if (window)
+    return window->OpenEyeDropper(render_frame_host, listener);
+  return nullptr;
+}
+
 void DevToolsWindow::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
     scoped_refptr<content::FileSelectListener> listener,
@@ -1650,9 +1681,6 @@ void DevToolsWindow::InspectedContentsClosing() {
 }
 
 infobars::ContentInfoBarManager* DevToolsWindow::GetInfoBarManager() {
-  if (vivaldi::IsVivaldiRunning()) {
-    return infobars::ContentInfoBarManager::FromWebContents(GetInspectedWebContents());
-  } else
   return is_docked_ ? infobars::ContentInfoBarManager::FromWebContents(
                           GetInspectedWebContents())
                     : infobars::ContentInfoBarManager::FromWebContents(

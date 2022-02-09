@@ -255,9 +255,8 @@ void FrameHandler::InjectJS(const std::string& content, int world_id) {
   std::vector<blink::WebScriptSource> sources(
       1, blink::WebScriptSource(blink::WebString::FromUTF8(content), GURL()));
 
-  render_frame()->GetWebFrame()->RequestExecuteScriptInIsolatedWorld(
-      world_id, &sources.front(), sources.size(), false,
-      blink::WebLocalFrame::kSynchronous, nullptr,
+  render_frame()->GetWebFrame()->RequestExecuteScript(
+      world_id, sources, false, blink::WebLocalFrame::kSynchronous, nullptr,
       blink::BackForwardCacheAware::kPossiblyDisallow);
 }
 

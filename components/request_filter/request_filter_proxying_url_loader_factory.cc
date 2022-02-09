@@ -48,6 +48,9 @@ namespace {
 class ShutdownNotifierFactory
     : public BrowserContextKeyedServiceShutdownNotifierFactory {
  public:
+  ShutdownNotifierFactory(const ShutdownNotifierFactory&) = delete;
+  ShutdownNotifierFactory& operator=(const ShutdownNotifierFactory&) = delete;
+
   static ShutdownNotifierFactory* GetInstance() {
     static base::NoDestructor<ShutdownNotifierFactory> factory;
     return factory.get();
@@ -60,8 +63,6 @@ class ShutdownNotifierFactory
       : BrowserContextKeyedServiceShutdownNotifierFactory(
             "RequestFilterProxyingURLLoaderFactory") {}
   ~ShutdownNotifierFactory() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(ShutdownNotifierFactory);
 };
 
 void ForwardOnBeforeSendHeadersCallback(
@@ -201,7 +202,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   info_.emplace(request_id_, factory_->render_process_id_, frame_routing_id_,
                 view_routing_id_, request_for_info,
                 factory_->loader_factory_type(),
-                !(options_ & network::mojom::kURLLoadOptionSynchronous),
+                !(options_ & network::mojom::kURLLoadOptionSynchronous), false,
                 factory_->navigation_id_);
 
   // The value of `has_any_extra_headers_listeners_` is constant for the
@@ -585,7 +586,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     set_request_headers_.clear();
     removed_request_headers_.clear();
 
-    const auto state_on_error = State::kRejectedByOnBeforeSendHeaders;
+    state_on_error = State::kRejectedByOnBeforeSendHeaders;
     auto continuation =
         base::BindRepeating(&InProgressRequest::ContinueToSendHeaders,
                             weak_factory_.GetWeakPtr(), state_on_error);

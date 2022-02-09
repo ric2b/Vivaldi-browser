@@ -26,6 +26,12 @@ class FamilyLinkUserInternalsMessageHandler
       public SupervisedUserURLFilter::Observer {
  public:
   FamilyLinkUserInternalsMessageHandler();
+
+  FamilyLinkUserInternalsMessageHandler(
+      const FamilyLinkUserInternalsMessageHandler&) = delete;
+  FamilyLinkUserInternalsMessageHandler& operator=(
+      const FamilyLinkUserInternalsMessageHandler&) = delete;
+
   ~FamilyLinkUserInternalsMessageHandler() override;
 
  private:
@@ -46,7 +52,6 @@ class FamilyLinkUserInternalsMessageHandler
   void SendFamilyLinkUserSettings(const base::DictionaryValue* settings);
 
   void OnTryURLResult(
-      const std::map<std::string, std::u16string>& allowlists,
       const std::string& callback_id,
       SupervisedUserURLFilter::FilteringBehavior behavior,
       supervised_user_error_page::FilteringBehaviorReason reason,
@@ -67,8 +72,6 @@ class FamilyLinkUserInternalsMessageHandler
 
   base::WeakPtrFactory<FamilyLinkUserInternalsMessageHandler> weak_factory_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(FamilyLinkUserInternalsMessageHandler);
 };
 
 #endif  // CHROME_BROWSER_UI_WEBUI_FAMILY_LINK_USER_INTERNALS_FAMILY_LINK_USER_INTERNALS_MESSAGE_HANDLER_H_

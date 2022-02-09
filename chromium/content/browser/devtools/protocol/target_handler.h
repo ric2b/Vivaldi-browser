@@ -47,6 +47,10 @@ class TargetHandler : public DevToolsDomainHandler,
                 const std::string& owner_target_id,
                 TargetAutoAttacher* auto_attacher,
                 DevToolsSession* root_session);
+
+  TargetHandler(const TargetHandler&) = delete;
+  TargetHandler& operator=(const TargetHandler&) = delete;
+
   ~TargetHandler() override;
 
   static std::vector<TargetHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
@@ -54,11 +58,13 @@ class TargetHandler : public DevToolsDomainHandler,
   void Wire(UberDispatcher* dispatcher) override;
   Response Disable() override;
 
-  std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
-      NavigationHandle* navigation_handle);
-
   void UpdatePortals();
   bool ShouldThrottlePopups() const;
+
+  // This is to support legacy protocol, where an autoattacher on service worker
+  // targets would not auto-attach service workers.
+  // TODO(caseq): update front-end logic and get rid of this.
+  void DisableAutoAttachOfServiceWorkers();
 
   // Domain implementation.
   Response SetDiscoverTargets(bool discover) override;
@@ -66,6 +72,10 @@ class TargetHandler : public DevToolsDomainHandler,
                      bool wait_for_debugger_on_start,
                      Maybe<bool> flatten,
                      std::unique_ptr<SetAutoAttachCallback> callback) override;
+  void AutoAttachRelated(
+      const std::string& targetId,
+      bool wait_for_debugger_on_start,
+      std::unique_ptr<AutoAttachRelatedCallback> callback) override;
   Response SetRemoteLocations(
       std::unique_ptr<protocol::Array<Target::RemoteLocation>>) override;
   Response AttachToTarget(const std::string& target_id,
@@ -124,11 +134,21 @@ class TargetHandler : public DevToolsDomainHandler,
   class ResponseThrottle;
 
   // TargetAutoAttacher::Delegate implementation.
-  bool AutoAttach(DevToolsAgentHost* host, bool waiting_for_debugger) override;
-  void AutoDetach(DevToolsAgentHost* host) override;
+  bool AutoAttach(TargetAutoAttacher* source,
+                  DevToolsAgentHost* host,
+                  bool waiting_for_debugger) override;
+  void AutoDetach(TargetAutoAttacher* source, DevToolsAgentHost* host) override;
   void SetAttachedTargetsOfType(
+      TargetAutoAttacher* source,
       const base::flat_set<scoped_refptr<DevToolsAgentHost>>& new_hosts,
       const std::string& type) override;
+  std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
+      TargetAutoAttacher* auto_attacher,
+      NavigationHandle* navigation_handle) override;
+  void AutoAttacherDestroyed(TargetAutoAttacher* auto_attacher) override;
+
+  bool ShouldWaitForDebuggerOnStart(
+      NavigationRequest* navigation_request) const;
 
   Response FindSession(Maybe<std::string> session_id,
                        Maybe<std::string> target_id,
@@ -152,13 +172,18 @@ class TargetHandler : public DevToolsDomainHandler,
 
   TargetAutoAttacher* const auto_attacher_;
   std::unique_ptr<Target::Frontend> frontend_;
+
   bool flatten_auto_attach_ = false;
   bool auto_attach_ = false;
   bool wait_for_debugger_on_start_ = false;
+  std::map<DevToolsAgentHost*, Session*> auto_attached_sessions_;
+  base::flat_map<TargetAutoAttacher*, bool /* wait_for_debugger_on_start */>
+      auto_attach_related_targets_;
+  bool auto_attach_service_workers_ = true;
+
   bool discover_;
   bool observing_agent_hosts_ = false;
   std::map<std::string, std::unique_ptr<Session>> attached_sessions_;
-  std::map<DevToolsAgentHost*, Session*> auto_attached_sessions_;
   std::set<DevToolsAgentHost*> reported_hosts_;
   base::flat_set<std::string> dispose_on_detach_context_ids_;
   base::flat_map<std::string, net::ProxyConfig> contexts_with_overridden_proxy_;
@@ -168,8 +193,6 @@ class TargetHandler : public DevToolsDomainHandler,
   base::flat_set<Throttle*> throttles_;
   absl::optional<net::ProxyConfig> pending_proxy_config_;
   base::WeakPtrFactory<TargetHandler> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(TargetHandler);
 };
 
 }  // namespace protocol

@@ -17,28 +17,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Returns a promise that gets resolved after "window.requestAnimationFrame"
-// callbacks happened on a front window.
-var pendingRafPromise = null;
-function raf() {
-  chrome.test.assertTrue(pendingRafPromise === null);
-
-  var res;
-  pendingRafPromise = new Promise((resolve) => {
-    res = resolve;
-  });
-  pendingRafPromise.resolve = res;
-
-  chrome.windows.create({'url': 'raf.html'}, function() {});
-  return pendingRafPromise;
-}
-function onRaf(rafWin) {
-  chrome.test.assertTrue(pendingRafPromise !== null);
-  pendingRafPromise.resolve();
-  pendingRafPromise = null;
-  rafWin.close();
-}
-
 function promisify(f, ...args) {
   return new Promise((resolve, reject) => {
     f(...args, (result) => {
@@ -83,6 +61,7 @@ var defaultTests = [
           chrome.test.assertTrue(status.hasOwnProperty("email"));
           chrome.test.assertTrue(status.hasOwnProperty("displayEmail"));
           chrome.test.assertTrue(status.hasOwnProperty("userImage"));
+          chrome.test.assertTrue(status.hasOwnProperty("hasValidOauth2Token"));
         }));
   },
   function getExtensionsInfo() {
@@ -932,9 +911,6 @@ var defaultTests = [
     chrome.autotestPrivate.startSmoothnessTracking(async function() {
       chrome.test.assertNoLastError();
 
-      // Wait for a few frames.
-      await raf();
-
       chrome.autotestPrivate.stopSmoothnessTracking(function(data) {
         chrome.test.assertNoLastError();
         chrome.test.assertTrue(data.hasOwnProperty('framesExpected') ||
@@ -954,9 +930,6 @@ var defaultTests = [
         chrome.autotestPrivate.startSmoothnessTracking(displayId,
                                                        async function() {
           chrome.test.assertNoLastError();
-
-          // Wait for a few frames.
-          await raf();
 
           chrome.autotestPrivate.stopSmoothnessTracking(badDisplay,
                                                         function(data) {
@@ -979,9 +952,6 @@ var defaultTests = [
   function stopSmoothnessTrackingMultiple() {
     chrome.autotestPrivate.startSmoothnessTracking(async function() {
       chrome.test.assertNoLastError();
-
-      // Wait for a few frames.
-      await raf();
 
       // A few racing stopSmoothnessTracking calls.
       const count = 3;
@@ -1326,22 +1296,6 @@ var splitviewLeftSnappedTests = [
   }
 ];
 
-var startStopTracingTests = [function startStopTracing() {
-  chrome.autotestPrivate.startTracing({}, function() {
-    chrome.test.assertNoLastError();
-    chrome.autotestPrivate.stopTracing(function(trace) {
-      chrome.test.assertNoLastError();
-      chrome.test.assertTrue(trace.length > 0);
-      try {
-        chrome.test.assertTrue(JSON.parse(trace) instanceof Object);
-        chrome.test.succeed();
-      } catch (e) {
-        chrome.test.fail('stopTracing callback returned invalid JSON');
-      }
-    });
-  });
-}];
-
 var scrollableShelfTests = [
   function fetchScrollableShelfInfoWithoutScroll() {
     chrome.autotestPrivate.getScrollableShelfInfoForState(
@@ -1491,7 +1445,6 @@ var test_suites = {
   'overviewDefault': overviewTests,
   'overviewDrag': overviewDragTests,
   'splitviewLeftSnapped': splitviewLeftSnappedTests,
-  'startStopTracing': startStopTracingTests,
   'scrollableShelf': scrollableShelfTests,
   'shelf': shelfTests,
   'systemWebApps': systemWebAppsTests,

@@ -4,8 +4,8 @@
 
 #include "app/vivaldi_resources.h"
 #include "browser/menus/vivaldi_menu_enums.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
@@ -14,6 +14,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/submenu_view.h"
@@ -23,17 +24,11 @@
 namespace {
 
 SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
-#if !defined(OS_MAC)
-  // macOS incognito currently has a light on dark bookmark bar, but
-  // dark on light menus, so using the theme color in the folders is
-  // incorrect.
   if (widget && widget->GetNativeTheme()) {
-    return widget->GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+    return widget->GetColorProvider()->GetColor(ui::kColorMenuItemForeground);
+  } else {
+    return SK_ColorBLACK;
   }
-#endif
-  return menu->GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
 }
 
 }  // namespace
@@ -52,48 +47,45 @@ static MenuIdToNodeMap MenuIdToBookmarkMap;
 void BuildBookmarkContextMenu(Profile* profile,
                               ui::SimpleMenuModel* menu_model) {
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_NEW_TAB,
-      IDS_VIV_BOOKMARK_BAR_OPEN_NEW_TAB);
+                                  IDS_VIV_BOOKMARK_BAR_OPEN_NEW_TAB);
   if (!profile->GetPrefs()->GetBoolean(
           vivaldiprefs::kTabsOpenNewInBackground)) {
     menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB,
-        IDS_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB);
+                                    IDS_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB);
   }
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB,
-      IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB);
+                                  IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW,
-      IDS_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW);
+                                  IDS_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW);
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_NEW_PRIVATE_WINDOW,
-      IDS_VIV_BOOKMARK_BAR_OPEN_NEW_PRIVATE_WINDOW);
+                                  IDS_VIV_BOOKMARK_BAR_OPEN_NEW_PRIVATE_WINDOW);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB,
-      IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB);
+                                  IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_ADD_NEW_BOOKMARK,
-      IDS_VIV_BOOKMARK_BAR_NEW_BOOKMARK);
+                                  IDS_VIV_BOOKMARK_BAR_NEW_BOOKMARK);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_NEW_FOLDER,
-      IDS_VIV_BOOKMARK_BAR_NEW_FOLDER);
+                                  IDS_VIV_BOOKMARK_BAR_NEW_FOLDER);
   if (Container->sort_field == BookmarkSorter::FIELD_NONE) {
     menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_NEW_SEPARATOR,
-        IDS_VIV_BOOKMARK_BAR_NEW_SEPARATOR);
+                                    IDS_VIV_BOOKMARK_BAR_NEW_SEPARATOR);
   }
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_EDIT,
-      IDS_VIV_BOOKMARK_BAR_EDIT);
+                                  IDS_VIV_BOOKMARK_BAR_EDIT);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-  menu_model->AddItemWithStringId(IDC_CUT,
-      IDS_VIV_BOOKMARK_BAR_CUT);
-  menu_model->AddItemWithStringId(IDC_COPY,
-      IDS_VIV_BOOKMARK_BAR_COPY);
-  menu_model->AddItemWithStringId(IDC_PASTE,
-      IDS_VIV_BOOKMARK_BAR_PASTE);
+  menu_model->AddItemWithStringId(IDC_CUT, IDS_VIV_BOOKMARK_BAR_CUT);
+  menu_model->AddItemWithStringId(IDC_COPY, IDS_VIV_BOOKMARK_BAR_COPY);
+  menu_model->AddItemWithStringId(IDC_PASTE, IDS_VIV_BOOKMARK_BAR_PASTE);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_REMOVE,
-      IDS_VIV_BOOKMARK_BAR_REMOVE);
+                                  IDS_VIV_BOOKMARK_BAR_REMOVE);
 }
 
 void MoveToTrash(bookmarks::BookmarkModel* model, int64_t id) {
-  const bookmarks::BookmarkNode *node =
+  const bookmarks::BookmarkNode* node =
       bookmarks::GetBookmarkNodeByID(model, id);
   if (node && model->trash_node()) {
     model->Move(node, model->trash_node(), 0);
@@ -127,8 +119,10 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
   }
 }
 
-void ExecuteBookmarkMenuCommand(Browser* browser, int menu_id,
-                                int64_t bookmark_id, int mouse_event_flags) {
+void ExecuteBookmarkMenuCommand(Browser* browser,
+                                int menu_id,
+                                int64_t bookmark_id,
+                                int mouse_event_flags) {
   if (IsVivaldiMenuItem(menu_id)) {
     // Currently, and probably forever, we only have one specific menu item so
     // no more tests.
@@ -144,7 +138,7 @@ void HandleHoverUrl(Browser* browser, const std::string& url) {
 }
 
 void HandleOpenMenu(Browser* browser, int64_t id) {
-  for (const ::vivaldi::BookmarkMenuContainerEntry& e:  Container->siblings) {
+  for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
     if (e.id == id) {
       Container->delegate->OnOpenMenu(id);
       break;
@@ -153,21 +147,22 @@ void HandleOpenMenu(Browser* browser, int64_t id) {
 }
 
 const bookmarks::BookmarkNode* GetNodeByPosition(
-    bookmarks::BookmarkModel* model, const gfx::Point& screen_point,
-    int* start_index, gfx::Rect* rect) {
+    bookmarks::BookmarkModel* model,
+    const gfx::Point& screen_point,
+    int* start_index,
+    gfx::Rect* rect) {
   unsigned int i = 0;
-  for (const ::vivaldi::BookmarkMenuContainerEntry& e: Container->siblings) {
+  for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
     if (e.rect.Contains(screen_point)) {
       CurrentIndex = i;
       *rect = e.rect;
       *start_index = e.offset;
       return bookmarks::GetBookmarkNodeByID(model, e.id);
     }
-    i ++;
+    i++;
   }
   return nullptr;
 }
-
 
 const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
                                            bool next,
@@ -177,7 +172,7 @@ const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
     return nullptr;
   }
   if (next) {
-    CurrentIndex ++;
+    CurrentIndex++;
     if (CurrentIndex >= Container->siblings.size()) {
       CurrentIndex = 0;
     }
@@ -185,7 +180,7 @@ const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
     if (CurrentIndex == 0) {
       CurrentIndex = Container->siblings.size() - 1;
     } else {
-      CurrentIndex --;
+      CurrentIndex--;
     }
   }
   const ::vivaldi::BookmarkMenuContainerEntry& e =
@@ -206,33 +201,36 @@ void SetBookmarkContainer(const BookmarkMenuContainer* container,
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes) {
   nodes.reserve(parent->children().size());
-  for (auto& it: parent->children()) {
+  for (auto& it : parent->children()) {
     nodes.push_back(const_cast<bookmarks::BookmarkNode*>(it.get()));
   }
   bool folder_group =
-      (CurrentIndex >= 0 && CurrentIndex < Container->siblings.size()) ?
-          Container->siblings[CurrentIndex].folder_group : false;
+      (CurrentIndex >= 0 && CurrentIndex < Container->siblings.size())
+          ? Container->siblings[CurrentIndex].folder_group
+          : false;
   BookmarkSorter sorter(Container->sort_field, Container->sort_order,
                         folder_group);
   sorter.sort(nodes);
 }
 
-void AddExtraBookmarkMenuItems(Profile* profile, views::MenuItemView* menu,
+void AddExtraBookmarkMenuItems(Profile* profile,
+                               views::MenuItemView* menu,
                                unsigned int* menu_index,
                                const bookmarks::BookmarkNode* parent,
                                bool on_top) {
-  BookmarkMenuContainer::Edge edge = on_top ? BookmarkMenuContainer::Above :
-    BookmarkMenuContainer::Below;
+  BookmarkMenuContainer::Edge edge =
+      on_top ? BookmarkMenuContainer::Above : BookmarkMenuContainer::Below;
   if (edge == Container->edge) {
     if (edge == BookmarkMenuContainer::Below) {
       AddSeparator(menu, menu_index);
     }
-    menu->AddMenuItemAt(*menu_index, NextMenuId,
+    menu->AddMenuItemAt(
+        *menu_index, NextMenuId,
         l10n_util::GetStringUTF16(IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB),
         std::u16string(), std::u16string(), ui::ImageModel(), ui::ImageModel(),
         views::MenuItemView::Type::kNormal, ui::NORMAL_SEPARATOR);
     MenuIdToBookmarkMap[NextMenuId] = parent;
-    NextMenuId ++;
+    NextMenuId++;
     *menu_index += 1;
 
     if (edge == BookmarkMenuContainer::Above) {
@@ -242,7 +240,7 @@ void AddExtraBookmarkMenuItems(Profile* profile, views::MenuItemView* menu,
 
   // Add an extra separator if requsted by the api setup code.
   if (edge == BookmarkMenuContainer::Below) {
-    for (const ::vivaldi::BookmarkMenuContainerEntry& e: Container->siblings) {
+    for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
       if (e.id == parent->id()) {
         if (e.tweak_separator) {
           AddSeparator(menu, menu_index);
@@ -258,7 +256,8 @@ bool IsVivaldiMenuItem(int id) {
 }
 
 bool AddIfSeparator(const bookmarks::BookmarkNode* node,
-                    views::MenuItemView* menu, unsigned int* menu_index) {
+                    views::MenuItemView* menu,
+                    unsigned int* menu_index) {
   if (vivaldi_bookmark_kit::IsSeparator(node)) {
     if (Container->sort_field == BookmarkSorter::FIELD_NONE) {
       AddSeparator(menu, menu_index);
@@ -282,8 +281,8 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
                                  const std::u16string& label,
                                  const gfx::ImageSkia& icon,
                                  views::MenuItemView::Type type) {
-  views::MenuItemView* item =
-      menu->AddMenuItemAt(*menu_index, id, label, std::u16string(), std::u16string(),
+  views::MenuItemView* item = menu->AddMenuItemAt(
+      *menu_index, id, label, std::u16string(), std::u16string(),
       ui::ImageModel(), ui::ImageModel::FromImageSkia(icon), type,
       ui::NORMAL_SEPARATOR);
   *menu_index += 1;
@@ -293,14 +292,14 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
 unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id) {
   unsigned int menu_index = 0;
   if (menu->HasSubmenu()) {
-    for (const ::vivaldi::BookmarkMenuContainerEntry& e: Container->siblings) {
+    for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
       if (e.id == id) {
         // Sub menus are always created with an "(empty)" entry which is removed
         // after population has finished. We must adjust for that and since the
         // menu index is set up from the menu model which has no empty entry.
-        unsigned int index = e.menu_index +
-          (menu->GetSubmenu()->HasEmptyMenuItemView() ? 1 : 0);
-        if (menu->GetSubmenu()->children().size() >= index/*e.menu_index*/) {
+        unsigned int index =
+            e.menu_index + (menu->GetSubmenu()->HasEmptyMenuItemView() ? 1 : 0);
+        if (menu->GetSubmenu()->children().size() >= index /*e.menu_index*/) {
           menu_index = index;
         }
         break;
@@ -316,28 +315,29 @@ const gfx::ImageSkia* GetBookmarkDefaultIcon() {
 
 const gfx::ImageSkia* GetBookmarkletIcon(views::MenuItemView* menu,
                                          views::Widget* widget) {
-  return Container->support.icons[
-            color_utils::IsDark(TextColorForMenu(menu, widget))
-              ? BookmarkSupport::kBookmarklet
-              : BookmarkSupport::kBookmarkletDark].ToImageSkia();
+  return Container->support
+      .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
+                 ? BookmarkSupport::kBookmarklet
+                 : BookmarkSupport::kBookmarkletDark]
+      .ToImageSkia();
 }
 
 ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
                                      views::Widget* widget) {
   return ui::ImageModel::FromImage(
-      Container->support.icons[
-          color_utils::IsDark(TextColorForMenu(menu, widget))
-              ? BookmarkSupport::kFolder
-              : BookmarkSupport::kFolderDark]);
+      Container->support
+          .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
+                     ? BookmarkSupport::kFolder
+                     : BookmarkSupport::kFolderDark]);
 }
 
 ui::ImageModel GetBookmarkSpeeddialIcon(views::MenuItemView* menu,
                                         views::Widget* widget) {
   return ui::ImageModel::FromImage(
-      Container->support.icons[
-          color_utils::IsDark(TextColorForMenu(menu, widget))
-              ? BookmarkSupport::kSpeeddial
-              : BookmarkSupport::kSpeeddialDark]);
+      Container->support
+          .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
+                     ? BookmarkSupport::kSpeeddial
+                     : BookmarkSupport::kSpeeddialDark]);
 }
 
-}  // vivaldi
+}  // namespace vivaldi

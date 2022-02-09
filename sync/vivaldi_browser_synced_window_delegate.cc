@@ -14,7 +14,8 @@
 #include "components/sessions/core/session_id.h"
 #include "ui/vivaldi_browser_window.h"
 
-VivaldiBrowserSyncedWindowDelegate::VivaldiBrowserSyncedWindowDelegate(Browser* browser)
+VivaldiBrowserSyncedWindowDelegate::VivaldiBrowserSyncedWindowDelegate(
+    Browser* browser)
     : BrowserSyncedWindowDelegate(browser), browser_copy_(browser) {}
 
 VivaldiBrowserSyncedWindowDelegate::~VivaldiBrowserSyncedWindowDelegate() {}
@@ -43,7 +44,7 @@ sync_sessions::SyncedTabDelegate* VivaldiBrowserSyncedWindowDelegate::GetTabAt(
   }
   LOG(ERROR) << "Window had title: " << window->GetTitle();
   LOG(ERROR) << "Window top level url: "
-              << window->web_contents()->GetURL().spec();
+             << window->web_contents()->GetURL().spec();
 
   return nullptr;
 }

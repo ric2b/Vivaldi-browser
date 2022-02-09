@@ -30,6 +30,9 @@ class TabHandleLayer : public Layer {
   static scoped_refptr<TabHandleLayer> Create(
       LayerTitleCache* layer_title_cache);
 
+  TabHandleLayer(const TabHandleLayer&) = delete;
+  TabHandleLayer& operator=(const TabHandleLayer&) = delete;
+
   void SetProperties(int id,
                      ui::Resource* close_button_resource,
                      ui::NinePatchResource* tab_handle_resource,
@@ -45,7 +48,10 @@ class TabHandleLayer : public Layer {
                      float close_button_alpha,
                      bool is_loading,
                      float spinner_rotation,
-                     float brightness);
+                     float brightness,
+                     float tab_alpha, // Vivaldi
+                     bool is_shown_as_favicon, // Vivaldi
+                     float title_offset); // Vivaldi
   scoped_refptr<cc::Layer> layer() override;
 
  protected:
@@ -63,8 +69,6 @@ class TabHandleLayer : public Layer {
 
   float brightness_;
   bool foreground_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabHandleLayer);
 };
 
 }  // namespace android

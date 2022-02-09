@@ -28,6 +28,9 @@ class NoStatePrefetchHelper
   NoStatePrefetchHelper(content::RenderFrame* render_frame,
                         const std::string& histogram_prefix);
 
+  NoStatePrefetchHelper(const NoStatePrefetchHelper&) = delete;
+  NoStatePrefetchHelper& operator=(const NoStatePrefetchHelper&) = delete;
+
   ~NoStatePrefetchHelper() override;
 
   // Configures and returns a new PrerenderURLLoaderThrottle instance if the
@@ -42,7 +45,7 @@ class NoStatePrefetchHelper
 
  private:
   // RenderFrameObserver implementation.
-  void DidFinishDocumentLoad() override;
+  void DidDispatchDOMContentLoadedEvent() override;
   void OnDestruct() override;
 
   void AddThrottle(PrerenderURLLoaderThrottle& throttle);
@@ -57,8 +60,6 @@ class NoStatePrefetchHelper
   base::TimeTicks parsed_time_;
 
   base::WeakPtrFactory<NoStatePrefetchHelper> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NoStatePrefetchHelper);
 };
 
 }  // namespace prerender

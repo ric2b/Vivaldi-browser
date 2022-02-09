@@ -94,6 +94,9 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
       bool test_mode,
       const std::string& thread_name);
 
+  GpuWatchdogThread(const GpuWatchdogThread&) = delete;
+  GpuWatchdogThread& operator=(const GpuWatchdogThread&) = delete;
+
   ~GpuWatchdogThread() override;
 
   // Notifies the watchdog when Chrome is backgrounded / foregrounded. Should
@@ -181,14 +184,6 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
   void GpuWatchdogTimeoutHistogram(GpuWatchdogTimeoutEvent timeout_event);
 
 #if defined(OS_WIN)
-  // The extra thread time the GPU main thread needs to make a progress.
-  // Records "GPU.WatchdogThread.ExtraThreadTime".
-  void RecordExtraThreadTimeHistogram();
-  // The number of users per timeout stay in Chrome after giving extra thread
-  // time. Records "GPU.WatchdogThread.ExtraThreadTime.NumOfUsers" and
-  // "GPU.WatchdogThread.Timeout".
-  void RecordNumOfUsersWaitingWithExtraThreadTimeHistogram(int count);
-
   // Histograms recorded for WatchedThreadNeedsMoreThreadTime() function.
   void WatchedThreadNeedsMoreThreadTimeHistogram(
       bool no_gpu_hang_detected,
@@ -305,9 +300,6 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
   // The number of logical processors/cores on the current machine.
   int num_of_processors_ = 0;
 
-  // how many cycles of timeout since we detect a hang.
-  int count_of_extra_cycles_ = 0;
-
   // For the experiment and the debugging purpose
   size_t num_of_timeout_after_power_resume_ = 0;
   size_t num_of_timeout_after_foregrounded_ = 0;
@@ -324,8 +316,6 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
 
   base::WeakPtr<GpuWatchdogThread> weak_ptr_;
   base::WeakPtrFactory<GpuWatchdogThread> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(GpuWatchdogThread);
 };
 
 }  // namespace gpu

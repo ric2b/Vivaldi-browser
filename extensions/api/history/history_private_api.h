@@ -35,10 +35,9 @@ class HistoryPrivateEventRouter : public history::HistoryServiceObserver {
                      const std::string& event_name,
                      std::vector<base::Value> event_args);
   Profile* profile_;
-  base::ScopedObservation<history::HistoryService, history::HistoryServiceObserver>
+  base::ScopedObservation<history::HistoryService,
+                          history::HistoryServiceObserver>
       history_service_observer_;
-
-  DISALLOW_COPY_AND_ASSIGN(HistoryPrivateEventRouter);
 };
 
 class HistoryPrivateAPI : public BrowserContextKeyedAPI,
@@ -78,7 +77,7 @@ class HistoryPrivateDbSearchFunction : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.dbSearch", HISTORYPRIVATE_DBSEARCH)
 
- protected:
+ private:
   ~HistoryPrivateDbSearchFunction() override {}
 
   // HistoryFunctionWithCallback:
@@ -92,7 +91,7 @@ class HistoryPrivateSearchFunction : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.search", HISTORYPRIVATE_SEARCH)
 
- protected:
+ private:
   ~HistoryPrivateSearchFunction() override {}
 
   // HistoryFunctionWithCallback:
@@ -107,7 +106,7 @@ class HistoryPrivateDeleteVisitsFunction : public HistoryFunctionWithCallback {
   DECLARE_EXTENSION_FUNCTION("historyPrivate.deleteVisits",
                              HISTORYPRIVATE_DELETEVISITS)
 
- protected:
+ private:
   ~HistoryPrivateDeleteVisitsFunction() override {}
 
   // HistoryFunctionWithCallback:
@@ -123,7 +122,7 @@ class HistoryPrivateGetTopUrlsPerDayFunction
   DECLARE_EXTENSION_FUNCTION("historyPrivate.getTopUrlsPerDay",
                              HISTORYPRIVATE_GETTOPURLSPERDAY)
 
- protected:
+ private:
   ~HistoryPrivateGetTopUrlsPerDayFunction() override {}
 
   // HistoryFunctionWithCallback:
@@ -142,7 +141,7 @@ class HistoryPrivateVisitSearchFunction : public HistoryFunctionWithCallback {
   DECLARE_EXTENSION_FUNCTION("historyPrivate.visitSearch",
                              HISTORYPRIVATE_VISITSEARCH)
 
- protected:
+ private:
   ~HistoryPrivateVisitSearchFunction() override {}
   ExtensionFunction::ResponseAction Run() override;
   // Callback for the history service to acknowledge visits search complete.
@@ -155,7 +154,7 @@ class HistoryPrivateSetKeywordSearchTermsForURLFunction
   DECLARE_EXTENSION_FUNCTION("historyPrivate.setKeywordSearchTermsForURL",
                              HISTORYPRIVATE_SETKEYWORDSEARCHTERMSFORURL)
 
- protected:
+ private:
   ~HistoryPrivateSetKeywordSearchTermsForURLFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };
@@ -166,7 +165,7 @@ class HistoryPrivateDeleteAllSearchTermsForKeywordFunction
   DECLARE_EXTENSION_FUNCTION("historyPrivate.deleteAllSearchTermsForKeyword",
                              HISTORYPRIVATE_DELETEALLSEARCHTERMSFORKEYWORD)
 
- protected:
+ private:
   ~HistoryPrivateDeleteAllSearchTermsForKeywordFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };
@@ -176,7 +175,7 @@ class HistoryPrivateGetTypedHistoryFunction : public HistoryFunction {
   DECLARE_EXTENSION_FUNCTION("historyPrivate.getTypedHistory",
                              HISTORYPRIVATE_GETTYPEDURLSANDSEARCHES)
 
- protected:
+ private:
   ~HistoryPrivateGetTypedHistoryFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };
@@ -186,7 +185,7 @@ class HistoryPrivateMigrateOldTypedUrlFunction : public HistoryFunction {
   DECLARE_EXTENSION_FUNCTION("historyPrivate.migrateOldTypedUrl",
                              HISTORYPRIVATE_MIGRATEOLDTYPEDURL)
 
- protected:
+ private:
   ~HistoryPrivateMigrateOldTypedUrlFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };

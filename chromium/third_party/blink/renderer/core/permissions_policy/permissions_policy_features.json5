@@ -91,11 +91,6 @@
       depends_on: ["FeaturePolicyForClientHints"],
     },
     {
-      name: "ClientHintLang",
-      permissions_policy_name: "ch-lang",
-      depends_on: ["FeaturePolicyForClientHints"],
-    },
-    {
       name: "ClientHintPrefersColorScheme",
       permissions_policy_name: "ch-prefers-color-scheme",
       depends_on: ["FeaturePolicyForClientHints"],
@@ -153,7 +148,12 @@
     {
       name: "ClientHintUAReduced",
       permissions_policy_name: "ch-ua-reduced",
-      depends_on: ["FeaturePolicyForClientHints"],
+      depends_on: ["FeaturePolicyForClientHints", "UserAgentReduction"],
+    },
+    {
+      name: "ClientHintViewportHeight",
+      permissions_policy_name: "ch-viewport-height",
+      depends_on: ["ViewportHeightClientHintHeader"],
     },
     {
       name: "ClientHintViewportWidth",

@@ -496,6 +496,8 @@ String StylePropertySerializer::SerializeShorthand(
       return GetShorthandValue(columnRuleShorthand());
     case CSSPropertyID::kColumns:
       return GetShorthandValue(columnsShorthand());
+    case CSSPropertyID::kContainIntrinsicSize:
+      return ContainIntrinsicSizeValue();
     case CSSPropertyID::kFlex:
       return GetShorthandValue(flexShorthand());
     case CSSPropertyID::kFlexFlow:
@@ -522,6 +524,8 @@ String StylePropertySerializer::SerializeShorthand(
       return Get2Values(placeSelfShorthand());
     case CSSPropertyID::kFont:
       return FontValue();
+    case CSSPropertyID::kFontSynthesis:
+      return FontSynthesisValue();
     case CSSPropertyID::kFontVariant:
       return FontVariantValue();
     case CSSPropertyID::kMargin:
@@ -830,6 +834,67 @@ String StylePropertySerializer::FontVariantValue() const {
   if (result.IsEmpty()) {
     return "normal";
   }
+
+  return result.ToString();
+}
+
+String StylePropertySerializer::FontSynthesisValue() const {
+  StringBuilder result;
+
+  int font_synthesis_weight_property_index =
+      property_set_.FindPropertyIndex(GetCSSPropertyFontSynthesisWeight());
+  int font_synthesis_style_property_index =
+      property_set_.FindPropertyIndex(GetCSSPropertyFontSynthesisStyle());
+  int font_synthesis_small_caps_property_index =
+      property_set_.FindPropertyIndex(GetCSSPropertyFontSynthesisSmallCaps());
+  DCHECK_NE(font_synthesis_weight_property_index, -1);
+  DCHECK_NE(font_synthesis_style_property_index, -1);
+  DCHECK_NE(font_synthesis_small_caps_property_index, -1);
+
+  PropertyValueForSerializer font_synthesis_weight_property =
+      property_set_.PropertyAt(font_synthesis_weight_property_index);
+  PropertyValueForSerializer font_synthesis_style_property =
+      property_set_.PropertyAt(font_synthesis_style_property_index);
+  PropertyValueForSerializer font_synthesis_small_caps_property =
+      property_set_.PropertyAt(font_synthesis_small_caps_property_index);
+
+  const CSSValue* font_synthesis_weight_value =
+      font_synthesis_weight_property.Value();
+  const CSSValue* font_synthesis_style_value =
+      font_synthesis_style_property.Value();
+  const CSSValue* font_synthesis_small_caps_value =
+      font_synthesis_small_caps_property.Value();
+
+  auto* font_synthesis_weight_identifier_value =
+      DynamicTo<CSSIdentifierValue>(font_synthesis_weight_value);
+  if (font_synthesis_weight_identifier_value &&
+      font_synthesis_weight_identifier_value->GetValueID() ==
+          CSSValueID::kAuto) {
+    result.Append("weight");
+  }
+
+  auto* font_synthesis_style_identifier_value =
+      DynamicTo<CSSIdentifierValue>(font_synthesis_style_value);
+  if (font_synthesis_style_identifier_value &&
+      font_synthesis_style_identifier_value->GetValueID() ==
+          CSSValueID::kAuto) {
+    if (!result.IsEmpty())
+      result.Append(' ');
+    result.Append("style");
+  }
+
+  auto* font_synthesis_small_caps_identifier_value =
+      DynamicTo<CSSIdentifierValue>(font_synthesis_small_caps_value);
+  if (font_synthesis_small_caps_identifier_value &&
+      font_synthesis_small_caps_identifier_value->GetValueID() ==
+          CSSValueID::kAuto) {
+    if (!result.IsEmpty())
+      result.Append(' ');
+    result.Append("small-caps");
+  }
+
+  if (result.IsEmpty())
+    return "none";
 
   return result.ToString();
 }
@@ -1322,7 +1387,7 @@ String StylePropertySerializer::BackgroundRepeatPropertyValue() const {
     return String();
 
   size_t shorthand_length =
-      lowestCommonMultiple(repeat_x_length, repeat_y_length);
+      LowestCommonMultiple(repeat_x_length, repeat_y_length);
   StringBuilder builder;
   for (size_t i = 0; i < shorthand_length; ++i) {
     if (i)
@@ -1351,6 +1416,15 @@ String StylePropertySerializer::PageBreakPropertyValue(
       value_id == CSSValueID::kRight || value_id == CSSValueID::kAvoid)
     return value->CssText();
   return String();
+}
+
+String StylePropertySerializer::ContainIntrinsicSizeValue() const {
+  // If the two values are identical, we return just one.
+  String res = GetCommonValue(containIntrinsicSizeShorthand());
+  if (!res.IsNull())
+    return res;
+  // Otherwise just serialize them in sequence.
+  return GetShorthandValue(containIntrinsicSizeShorthand());
 }
 
 }  // namespace blink

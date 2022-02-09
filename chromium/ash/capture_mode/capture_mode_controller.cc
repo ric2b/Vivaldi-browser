@@ -6,13 +6,16 @@
 
 #include <utility>
 
+#include "ash/capture_mode/capture_mode_ash_notification_view.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_notification_view.h"
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/video_recording_watcher.h"
+#include "ash/constants/ash_features.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/public/cpp/capture_mode_delegate.h"
+#include "ash/projector/projector_controller_impl.h"
+#include "ash/public/cpp/capture_mode/recording_overlay_view.h"
 #include "ash/public/cpp/holding_space/holding_space_client.h"
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/notification_utils.h"
@@ -41,6 +44,8 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -63,8 +68,7 @@ CaptureModeController* g_instance = nullptr;
 
 // The amount of time that can elapse from the prior screenshot to be considered
 // consecutive.
-constexpr base::TimeDelta kConsecutiveScreenshotThreshold =
-    base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta kConsecutiveScreenshotThreshold = base::Seconds(5);
 
 constexpr char kScreenCaptureNotificationId[] = "capture_mode_notification";
 constexpr char kScreenCaptureStoppedNotificationId[] =
@@ -84,8 +88,12 @@ constexpr char k24HourTimeFmtStr[] = "%02d.%02d.%02d";
 constexpr char kAmPmTimeFmtStr[] = "%d.%02d.%02d";
 
 // Duration to clear the capture region selection from the previous session.
-constexpr base::TimeDelta kResetCaptureRegionDuration =
-    base::TimeDelta::FromMinutes(8);
+constexpr base::TimeDelta kResetCaptureRegionDuration = base::Minutes(8);
+
+// The name of a file path pref for the user-selected custom path to which
+// captured images and videos should be saved.
+constexpr char kCustomCapturePathPrefName[] =
+    "ash.capture_mode.custom_save_path";
 
 // The screenshot notification button index.
 enum ScreenshotNotificationButtonIndex {
@@ -333,14 +341,14 @@ CaptureModeController::CaptureModeController(
 
   // Schedule recording of the number of screenshots taken per day.
   num_screenshots_taken_in_last_day_scheduler_.Start(
-      FROM_HERE, base::TimeDelta::FromDays(1),
+      FROM_HERE, base::Days(1),
       base::BindRepeating(
           &CaptureModeController::RecordAndResetScreenshotsTakenInLastDay,
           weak_ptr_factory_.GetWeakPtr()));
 
   // Schedule recording of the number of screenshots taken per week.
   num_screenshots_taken_in_last_week_scheduler_.Start(
-      FROM_HERE, base::TimeDelta::FromDays(7),
+      FROM_HERE, base::Days(7),
       base::BindRepeating(
           &CaptureModeController::RecordAndResetScreenshotsTakenInLastWeek,
           weak_ptr_factory_.GetWeakPtr()));
@@ -349,12 +357,22 @@ CaptureModeController::CaptureModeController(
       kScreenShotNotificationType));
   DCHECK(!MessageViewFactory::HasCustomNotificationViewFactory(
       kScreenRecordingNotificationType));
-  MessageViewFactory::SetCustomNotificationViewFactory(
-      kScreenShotNotificationType,
-      base::BindRepeating(&CaptureModeNotificationView::CreateForImage));
-  MessageViewFactory::SetCustomNotificationViewFactory(
-      kScreenRecordingNotificationType,
-      base::BindRepeating(&CaptureModeNotificationView::CreateForVideo));
+
+  if (features::IsNotificationsRefreshEnabled()) {
+    MessageViewFactory::SetCustomNotificationViewFactory(
+        kScreenShotNotificationType,
+        base::BindRepeating(&CaptureModeAshNotificationView::CreateForImage));
+    MessageViewFactory::SetCustomNotificationViewFactory(
+        kScreenRecordingNotificationType,
+        base::BindRepeating(&CaptureModeAshNotificationView::CreateForVideo));
+  } else {
+    MessageViewFactory::SetCustomNotificationViewFactory(
+        kScreenShotNotificationType,
+        base::BindRepeating(&CaptureModeNotificationView::CreateForImage));
+    MessageViewFactory::SetCustomNotificationViewFactory(
+        kScreenRecordingNotificationType,
+        base::BindRepeating(&CaptureModeNotificationView::CreateForVideo));
+  }
 
   Shell::Get()->session_controller()->AddObserver(this);
   chromeos::PowerManagerClient::Get()->AddObserver(this);
@@ -379,6 +397,12 @@ CaptureModeController* CaptureModeController::Get() {
   return g_instance;
 }
 
+// static
+void CaptureModeController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterFilePathPref(kCustomCapturePathPrefName,
+                                 /*default_value=*/base::FilePath());
+}
+
 bool CaptureModeController::IsActive() const {
   return capture_mode_session_ && !capture_mode_session_->is_shutting_down();
 }
@@ -393,7 +417,7 @@ void CaptureModeController::SetSource(CaptureModeSource source) {
 }
 
 void CaptureModeController::SetType(CaptureModeType type) {
-  if (is_recording_in_progress_ && type == CaptureModeType::kVideo) {
+  if (is_recording_in_progress() && type == CaptureModeType::kVideo) {
     // Overwrite video capture types to image, as we can't have more than one
     // recording at a time.
     type = CaptureModeType::kImage;
@@ -412,6 +436,13 @@ void CaptureModeController::EnableAudioRecording(bool enable_audio_recording) {
     return;
 
   enable_audio_recording_ = enable_audio_recording;
+
+  // TODO(conniekxu): remove all code below for this function once feature
+  // 'ImprovedScreenCaptureSettings' is fully launched.
+  // Return directly if |kImprovedScreenCaptureSettings| is enabled because for
+  // the new CaptureMode settings we don't have microphone toggle button.
+  if (features::AreImprovedScreenCaptureSettingsEnabled())
+    return;
   DCHECK(capture_mode_session_);
   capture_mode_session_->OnMicrophoneChanged(enable_audio_recording_);
 }
@@ -429,11 +460,23 @@ void CaptureModeController::Start(CaptureModeEntryType entry_type) {
     return;
   }
 
+  // Starting capture mode from the Projector app will put it in a special mode
+  // where only video recording is allowed, with audio recording enabled.
+  bool for_projector = false;
+
   // Before we start the session, if video recording is in progress, we need to
   // set the current type to image, as we can't have more than one recording at
   // a time. The video toggle button in the capture mode bar will be disabled.
-  if (is_recording_in_progress_)
+  if (is_recording_in_progress()) {
     SetType(CaptureModeType::kImage);
+  } else if (entry_type == CaptureModeEntryType::kProjector) {
+    DCHECK(features::IsProjectorEnabled());
+    for_projector = true;
+    // TODO(afakhry): Discuss with PM whether we want this to affect the audio
+    // settings of future generic capture mode sessions.
+    enable_audio_recording_ = true;
+    SetType(CaptureModeType::kVideo);
+  }
 
   RecordCaptureModeEntryType(entry_type);
   // Reset the user capture region if enough time has passed as it can be
@@ -447,7 +490,8 @@ void CaptureModeController::Start(CaptureModeEntryType entry_type) {
 
   delegate_->OnSessionStateChanged(/*started=*/true);
 
-  capture_mode_session_ = std::make_unique<CaptureModeSession>(this);
+  capture_mode_session_ =
+      std::make_unique<CaptureModeSession>(this, for_projector);
   capture_mode_session_->Initialize();
 }
 
@@ -465,6 +509,45 @@ void CaptureModeController::SetUserCaptureRegion(const gfx::Rect& region,
   user_capture_region_ = region;
   if (!user_capture_region_.IsEmpty() && by_user)
     last_capture_region_update_time_ = base::TimeTicks::Now();
+}
+
+void CaptureModeController::SetCustomCaptureFolder(const base::FilePath& path) {
+  DCHECK(Shell::Get()->session_controller()->IsActiveUserSessionStarted());
+
+  auto* pref_service =
+      Shell::Get()->session_controller()->GetActivePrefService();
+  DCHECK(pref_service);
+  pref_service->SetFilePath(kCustomCapturePathPrefName, path);
+
+  // TODO(https://crbug.com/1250885): Propagate the changes to the capture
+  // session (if any).
+}
+
+CaptureModeController::CaptureFolder
+CaptureModeController::GetCurrentCaptureFolder() const {
+  if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted()) {
+    base::FilePath temp_dir;
+    if (!base::GetTempDir(&temp_dir))
+      LOG(ERROR) << "Failed to find the temporary directory.";
+    return {temp_dir, /*is_default_downloads_folder=*/false};
+  }
+
+  auto* pref_service =
+      Shell::Get()->session_controller()->GetActivePrefService();
+  const auto default_downloads_folder =
+      delegate_->GetUserDefaultDownloadsFolder();
+  if (pref_service) {
+    const auto custom_path =
+        pref_service->GetFilePath(kCustomCapturePathPrefName);
+    if (!custom_path.empty()) {
+      return {custom_path,
+              /*is_default_downloads_folder=*/custom_path ==
+                  default_downloads_folder};
+    }
+  }
+
+  return {default_downloads_folder,
+          /*is_default_downloads_folder=*/true};
 }
 
 void CaptureModeController::CaptureScreenshotsOfAllDisplays() {
@@ -544,7 +627,7 @@ void CaptureModeController::SetWindowProtectionMask(aura::Window* window,
 }
 
 void CaptureModeController::RefreshContentProtection() {
-  if (!is_recording_in_progress_)
+  if (!is_recording_in_progress())
     return;
 
   DCHECK(video_recording_watcher_);
@@ -556,6 +639,18 @@ void CaptureModeController::RefreshContentProtection() {
     FinalizeRecording(/*success=*/false, gfx::ImageSkia());
     ShowVideoRecordingStoppedNotification(/*for_hdcp=*/true);
   }
+}
+
+void CaptureModeController::ToggleRecordingOverlayEnabled() {
+  DCHECK(is_recording_in_progress());
+  DCHECK(video_recording_watcher_->is_in_projector_mode());
+
+  video_recording_watcher_->ToggleRecordingOverlayEnabled();
+}
+
+std::unique_ptr<RecordingOverlayView>
+CaptureModeController::CreateRecordingOverlayView() {
+  return delegate_->CreateRecordingOverlayView();
 }
 
 void CaptureModeController::OnRecordingEnded(
@@ -602,7 +697,7 @@ void CaptureModeController::StartVideoRecordingImmediatelyForTesting() {
 void CaptureModeController::PushNewRootSizeToRecordingService(
     const gfx::Size& root_size,
     float device_scale_factor) {
-  DCHECK(is_recording_in_progress_);
+  DCHECK(is_recording_in_progress());
   DCHECK(video_recording_watcher_);
   DCHECK(recording_service_remote_);
 
@@ -613,7 +708,7 @@ void CaptureModeController::PushNewRootSizeToRecordingService(
 void CaptureModeController::OnRecordedWindowChangingRoot(
     aura::Window* window,
     aura::Window* new_root) {
-  DCHECK(is_recording_in_progress_);
+  DCHECK(is_recording_in_progress());
   DCHECK(video_recording_watcher_);
   DCHECK_EQ(window, video_recording_watcher_->window_being_recorded());
   DCHECK(recording_service_remote_);
@@ -633,7 +728,7 @@ void CaptureModeController::OnRecordedWindowChangingRoot(
 
 void CaptureModeController::OnRecordedWindowSizeChanged(
     const gfx::Size& new_size) {
-  DCHECK(is_recording_in_progress_);
+  DCHECK(is_recording_in_progress());
   DCHECK(video_recording_watcher_);
   DCHECK(recording_service_remote_);
 
@@ -670,7 +765,7 @@ void CaptureModeController::EndSessionOrRecording(EndRecordingReason reason) {
     return;
   }
 
-  if (!is_recording_in_progress_)
+  if (!is_recording_in_progress())
     return;
 
   if (reason == EndRecordingReason::kImminentSuspend) {
@@ -858,10 +953,9 @@ void CaptureModeController::FinalizeRecording(bool success,
 }
 
 void CaptureModeController::TerminateRecordingUiElements() {
-  if (!is_recording_in_progress_)
+  if (!is_recording_in_progress())
     return;
 
-  is_recording_in_progress_ = false;
   capture_mode_util::SetStopRecordingButtonVisibility(
       video_recording_watcher_->window_being_recorded()->GetRootWindow(),
       false);
@@ -1097,11 +1191,13 @@ base::FilePath CaptureModeController::BuildImagePathForDisplay(
 base::FilePath CaptureModeController::BuildPathNoExtension(
     const char* const format_string,
     base::Time timestamp) const {
-  const base::FilePath path = delegate_->GetScreenCaptureDir();
   base::Time::Exploded exploded_time;
   timestamp.LocalExplode(&exploded_time);
 
-  return path.AppendASCII(base::StringPrintf(
+  // TODO(https://crbug.com/1252156): The current path can become unavailable at
+  // any time before we get here. We need to handle the cases mentioned on the
+  // bug.
+  return GetCurrentCaptureFolder().path.AppendASCII(base::StringPrintf(
       format_string, GetDateStr(exploded_time).c_str(),
       GetTimeStr(exploded_time, delegate_->Uses24HourFormat()).c_str()));
 }
@@ -1127,11 +1223,58 @@ void CaptureModeController::OnVideoRecordCountDownFinished() {
   if (!IsActive())
     return;
 
+  const absl::optional<CaptureParams> capture_params = GetCaptureParams();
+  if (!capture_params) {
+    // There's nothing to capture, so we'll stop the session and skip the rest.
+    Stop();
+    return;
+  }
+
+  // In Projector mode, the creation of the DriveFS folder that will host the
+  // video is asynchronous. We don't want the user to be able to bail out of the
+  // session at this point, since we don't want to create that folder in vain.
+  capture_mode_session_->set_can_exit_on_escape(false);
+
+  if (capture_mode_session_->is_in_projector_mode()) {
+    ProjectorControllerImpl::Get()->CreateScreencastContainerFolder(
+        base::BindOnce(
+            &CaptureModeController::OnProjectorContainerFolderCreated,
+            weak_ptr_factory_.GetWeakPtr(), *capture_params));
+    return;
+  }
+
+  BeginVideoRecording(*capture_params,
+                      /*for_projector=*/false, BuildVideoPath());
+}
+
+void CaptureModeController::OnProjectorContainerFolderCreated(
+    const CaptureParams& capture_params,
+    const base::FilePath& file_path_no_extension) {
+  DCHECK(IsActive());
+
+  // An empty path is sent to indicate an error.
+  if (file_path_no_extension.empty()) {
+    Stop();
+    return;
+  }
+
+  BeginVideoRecording(capture_params, /*for_projector=*/true,
+                      file_path_no_extension.AddExtension("webm"));
+}
+
+void CaptureModeController::BeginVideoRecording(
+    const CaptureParams& capture_params,
+    bool for_projector,
+    const base::FilePath& video_file_path) {
+  DCHECK(IsActive());
+  DCHECK_EQ(capture_mode_session_->is_in_projector_mode(), for_projector);
+  DCHECK(GetCaptureParams());
+  DCHECK(!video_file_path.empty());
+  DCHECK(video_file_path.MatchesExtension(".webm"));
+
   // Do not trigger an alert when exiting the session, since we end the session
   // to start recording.
   capture_mode_session_->set_a11y_alert_on_session_exit(false);
-
-  const absl::optional<CaptureParams> capture_params = GetCaptureParams();
 
   // Acquire the session's layer in order to potentially reuse it for painting
   // a highlight around the region being recorded.
@@ -1143,30 +1286,27 @@ void CaptureModeController::OnVideoRecordCountDownFinished() {
   // video.
   Stop();
 
-  if (!capture_params)
-    return;
-
   // During the 3-second count down, screen content might have changed such that
   // admin-restricted or HDCP content became present. We must check again.
   const CaptureAllowance allowance =
-      IsCaptureAllowedByEnterprisePolicies(*capture_params);
+      IsCaptureAllowedByEnterprisePolicies(capture_params);
   if (allowance != CaptureAllowance::kAllowed) {
     ShowDisabledNotification(allowance);
     return;
   }
 
-  if (ShouldBlockRecordingForContentProtection(capture_params->window)) {
+  if (ShouldBlockRecordingForContentProtection(capture_params.window)) {
     ShowDisabledNotification(CaptureAllowance::kDisallowedByHdcp);
     return;
   }
 
-  is_recording_in_progress_ = true;
   mojo::PendingRemote<viz::mojom::FrameSinkVideoCaptureOverlay>
       cursor_capture_overlay;
   auto cursor_overlay_receiver =
       cursor_capture_overlay.InitWithNewPipeAndPassReceiver();
   video_recording_watcher_ = std::make_unique<VideoRecordingWatcher>(
-      this, capture_params->window, std::move(cursor_capture_overlay));
+      this, capture_params.window, std::move(cursor_capture_overlay),
+      for_projector);
 
   // We only paint the recorded area highlight for window and region captures.
   if (source_ != CaptureModeSource::kFullscreen)
@@ -1174,18 +1314,18 @@ void CaptureModeController::OnVideoRecordCountDownFinished() {
 
   DCHECK(current_video_file_path_.empty());
   recording_start_time_ = base::TimeTicks::Now();
-  current_video_file_path_ = BuildVideoPath();
+  current_video_file_path_ = video_file_path;
 
-  LaunchRecordingServiceAndStartRecording(*capture_params,
+  LaunchRecordingServiceAndStartRecording(capture_params,
                                           std::move(cursor_overlay_receiver));
 
+  capture_mode_util::SetStopRecordingButtonVisibility(
+      capture_params.window->GetRootWindow(), true);
+
   delegate_->StartObservingRestrictedContent(
-      capture_params->window, capture_params->bounds,
+      capture_params.window, capture_params.bounds,
       base::BindOnce(&CaptureModeController::InterruptVideoRecording,
                      weak_ptr_factory_.GetWeakPtr()));
-
-  capture_mode_util::SetStopRecordingButtonVisibility(
-      capture_params->window->GetRootWindow(), true);
 }
 
 void CaptureModeController::InterruptVideoRecording() {

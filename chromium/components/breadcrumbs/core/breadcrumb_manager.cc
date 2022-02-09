@@ -38,7 +38,7 @@ base::Time GetBucketTime(const base::Time& time) {
 
 }  // namespace
 
-BreadcrumbManager::BreadcrumbManager() : start_time_(base::Time::Now()) {}
+BreadcrumbManager::BreadcrumbManager() = default;
 
 BreadcrumbManager::~BreadcrumbManager() = default;
 
@@ -72,6 +72,7 @@ const std::list<std::string> BreadcrumbManager::GetEvents(
 }
 
 void BreadcrumbManager::AddEvent(const std::string& event) {
+  DCHECK_EQ(std::string::npos, event.find('\n'));
   const base::Time time = base::Time::Now();
   const base::Time bucket_time = GetBucketTime(time);
 
@@ -96,8 +97,7 @@ void BreadcrumbManager::AddEvent(const std::string& event) {
 }
 
 void BreadcrumbManager::DropOldEvents() {
-  static const base::TimeDelta kMessageExpirationTime =
-      base::TimeDelta::FromMinutes(20);
+  static const base::TimeDelta kMessageExpirationTime = base::Minutes(20);
 
   bool old_buckets_dropped = false;
   const base::Time now = base::Time::Now();

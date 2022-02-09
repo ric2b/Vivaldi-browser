@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Sobre a Versão</translation>
 <translation id="139305205187523129">Nenhum dado foi enviado por <ph name="HOST_NAME" />.</translation>
 <translation id="1559528461873125649">Arquivo ou diretório não encontrado</translation>
-<translation id="1620510694547887537">Câmera</translation>
 <translation id="1640244768702815859">Tente <ph name="BEGIN_LINK" />visitar a página inicial do site<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo não suportado</translation>
 <translation id="1710259589646384581">Sistema Operacional</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este site contém programas perigosos</translation>
 <translation id="1916770123977586577">Para aplicar as configurações atualizadas a este site, recarregue a página</translation>
-<translation id="1919345977826869612">Anúncios</translation>
 <translation id="1974060860693918893">Avançado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificar o proxy e o firewall<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Som</translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> (<ph name="JURISDICTION" />)</translation>
-<translation id="2147827593068025794">Sincronização em segundo plano</translation>
 <translation id="2166378884831602661">Não foi possível estabelecer uma conexão segura com este site</translation>
 <translation id="2187317261103489799">Detectar (padrão)</translation>
 <translation id="2224337661447660594">Sem Internet</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">O seu acesso à Internet está bloqueado</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> exige um nome de usuário e uma senha.</translation>
 <translation id="2337852623177822836">Configuração controlada pelo administrador</translation>
-<translation id="2344028582131185878">Downloads automáticos</translation>
 <translation id="2355395290879513365">É possível que invasores consigam ver as imagens que você está olhando nesse site e as modifiquem para enganar você.</translation>
 <translation id="2356070529366658676">Perguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Notificações</translation>
 <translation id="2491414235131909199">Esta página foi bloqueada por uma extensão</translation>
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
-<translation id="2586657967955657006">Área de transferência</translation>
 <translation id="2609632851001447353">Variações</translation>
 <translation id="2634124572758952069">Não foi possível encontrar o endereço IP do servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -67,7 +60,6 @@
       estar usando um servidor proxy:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Atualize a página para reenviar os dados necessários para carregar a página.</translation>
-<translation id="3227137524299004712">Microfone</translation>
 <translation id="3234666976984236645">Sempre detectar conteúdo importante neste site</translation>
 <translation id="3308738399950580893">anúncios</translation>
 <translation id="3422472998109090673">No momento, não é possível acessar <ph name="HOST_NAME" />.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">Detalhes</translation>
 <translation id="4558551763791394412">Tente desativar suas extensões.</translation>
 <translation id="4592951414987517459">Sua conexão com <ph name="DOMAIN" /> foi criptografada usando um pacote de criptografia moderno.</translation>
-<translation id="4690462567478992370">Parar de usar um certificado inválido</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">A conexão foi interrompida</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4750917950439032686">Suas informações pessoais (como senhas ou números de cartão de crédito) não podem ser obtidas por terceiros que possam interceptar os dados entre você e o site.</translation>
 <translation id="4764776831041365478">A página em <ph name="URL" /> pode estar temporariamente indisponível ou pode ter sido movida permanentemente para um novo endereço.</translation>
+<translation id="483241715238664915">Habilitar avisos</translation>
 <translation id="4943872375798546930">Nenhum resultado</translation>
-<translation id="4974590756084640048">Reativar avisos</translation>
 <translation id="5023310440958281426">Verifique as políticas do administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 em uso)} other {(# em uso)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">Verificar que você está conectado</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> redirecionou o endereço muitas vezes.</translation>
 <translation id="5675650730144413517">Esta página não está funcionando</translation>
-<translation id="5689516760719285838">Local</translation>
-<translation id="5710435578057952990">A identidade deste site não foi confirmada.</translation>
-<translation id="5778550464785688721">Controle total de dispositivos MIDI</translation>
 <translation id="5785756445106461925">Além disso, esta página inclui outros recursos que não são seguros. Esses recursos podem ser visualizados por outros usuários enquanto eles navegam e podem ser modificados por um invasor para alterar o comportamento da página.</translation>
 <translation id="5799902971440853357">Você não pode visitar <ph name="SITE" /> agora porque o website enviou credenciais embaralhadas que o Vivaldi não consegue processar. Erros de rede e ataques são geralmente temporários, de modo que esta página provavelmente funcionará mais tarde.</translation>
 <translation id="5810442152076338065">Sua conexão com <ph name="DOMAIN" /> está criptografada com um pacote de criptografia obsoleto.</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">Sua conexão com esse site não é segura</translation>
 <translation id="6203231073485539293">Verifique sua conexão com a Internet</translation>
 <translation id="6225522625585012689">Visite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para visualizar a lista de URLs bloqueadas e outras políticas aplicadas pelo seu administrador do sistema.</translation>
-<translation id="625755898061068298">Você optou por desativar os avisos de segurança para esse site.</translation>
 <translation id="6264485186158353794">Voltar à Segurança</translation>
 <translation id="6305205051461490394">Não é possível acessar <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Verifique suas configurações de DNS</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este site contém malware</translation>
+<translation id="7096937462164235847">A identidade deste site não foi verificada.</translation>
 <translation id="7108819624672055576">Permitida por uma extensão</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">A identidade do servidor ao qual você está conectado não pode ser validada completamente. Você está conectado ao servidor com um nome válido somente na sua rede e que, portanto, uma autoridade de certificação externa não consegue validar a propriedade. Como algumas autoridades de certificação emitem certificados para esses nomes mesmo assim, não é possível garantir que você esteja conectado ao site que gostaria e não a um invasor.</translation>
 <translation id="7455133967321480974">Usar padrão global (Bloquear)</translation>
 <translation id="7518003948725431193">Nenhuma página foi encontrada para o endereço <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Esta página da Web necessita que os dados inseridos anteriormente sejam reenviados para ser exibida corretamente. É possível enviá-los novamente porém, ao fazer isso, você estará repetindo a ação realizada anteriormente na página.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> não consegue atender a esta solicitação no momento.</translation>
 <translation id="7662298039739062396">Configuração controlada por uma extensão</translation>
@@ -227,11 +214,11 @@
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Esses recursos podem ser visualizados por outros usuários enquanto eles navegam e podem ser modificados por um invasor para alterar o comportamento da página.</translation>
 <translation id="9062620674789239642">Talvez ele tenha sido movido, editado ou excluído.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
+<translation id="9073799351042754113">Você escolheu desativar os avisos de segurança para este site.</translation>
 <translation id="910924428752220542">Senhas Vivaldi</translation>
 <translation id="9169664750068251925">Sempre bloquear neste site</translation>
 <translation id="9180553614777056266">Bloqueador de Anúncios</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> usa um protocolo incompatível.</translation>
-<translation id="9219103736887031265">Imagens</translation>
 <translation id="936602727769022409">Você pode perder o acesso à sua Conta do Google. O Chromium recomenda que sua senha seja alterada agora. Solicitaremos que você faça login.</translation>
 <translation id="969892804517981540">Versão Oficial</translation>
 <translation id="988159990683914416">Versão de Desenvolvimento</translation>

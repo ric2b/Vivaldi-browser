@@ -14,7 +14,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/account_manager_facade_factory.h"
 #include "chrome/browser/ash/account_manager/account_manager_util.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -40,6 +39,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/account_manager_core/account_manager_facade.h"
+#include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/account_manager_core/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -613,11 +613,6 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
-  // TODO(https://crbug.com/1227694): Remove this after migrating all JS usages
-  // of splitSettingsSyncEnabled to syncSettingsCategorizationEnabled and
-  // syncConsentOptionalEnabled.
-  html_source->AddBoolean("splitSettingsSyncEnabled",
-                          chromeos::features::IsSplitSettingsSyncEnabled());
   html_source->AddBoolean(
       "syncSettingsCategorizationEnabled",
       chromeos::features::IsSyncSettingsCategorizationEnabled());
@@ -696,13 +691,13 @@ void AddParentalControlStrings(content::WebUIDataSource* html_source,
 
 bool IsSameAccount(const ::account_manager::AccountKey& account_key,
                    const AccountId& account_id) {
-  switch (account_key.account_type) {
+  switch (account_key.account_type()) {
     case account_manager::AccountType::kGaia:
       return account_id.GetAccountType() == AccountType::GOOGLE &&
-             account_id.GetGaiaId() == account_key.id;
+             account_id.GetGaiaId() == account_key.id();
     case account_manager::AccountType::kActiveDirectory:
       return account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY &&
-             account_id.GetObjGuid() == account_key.id;
+             account_id.GetObjGuid() == account_key.id();
   }
 }
 

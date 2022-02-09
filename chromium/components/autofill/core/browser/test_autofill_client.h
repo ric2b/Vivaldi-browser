@@ -41,6 +41,10 @@ namespace autofill {
 class TestAutofillClient : public AutofillClient {
  public:
   TestAutofillClient();
+
+  TestAutofillClient(const TestAutofillClient&) = delete;
+  TestAutofillClient& operator=(const TestAutofillClient&) = delete;
+
   ~TestAutofillClient() override;
 
   // AutofillClient:
@@ -63,8 +67,8 @@ class TestAutofillClient : public AutofillClient {
   translate::LanguageState* GetLanguageState() override;
   translate::TranslateDriver* GetTranslateDriver() override;
 #if !defined(OS_IOS)
-  std::unique_ptr<InternalAuthenticator> CreateCreditCardInternalAuthenticator(
-      content::RenderFrameHost* rfh) override;
+  std::unique_ptr<webauthn::InternalAuthenticator>
+  CreateCreditCardInternalAuthenticator(content::RenderFrameHost* rfh) override;
 #endif
 
   void ShowAutofillSettings(bool show_credit_card_settings) override;
@@ -198,6 +202,8 @@ class TestAutofillClient : public AutofillClient {
     security_level_ = security_level;
   }
 
+  void set_last_committed_url(const GURL& url);
+
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   void set_allowed_merchants(
       const std::vector<std::string>& merchant_allowlist) {
@@ -304,8 +310,6 @@ class TestAutofillClient : public AutofillClient {
   std::vector<std::string> allowed_merchants_;
   std::vector<std::string> allowed_bin_ranges_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(TestAutofillClient);
 };
 
 }  // namespace autofill

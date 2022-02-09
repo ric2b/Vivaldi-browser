@@ -41,13 +41,6 @@ bool ShouldShowPlayPauseButton(const HTMLVideoElement& element) {
          element.duration() != std::numeric_limits<double>::infinity();
 }
 
-bool IsVideoElement(const Element& element) {
-  if (!element.IsMediaElement())
-    return false;
-
-  return IsA<HTMLVideoElement>(static_cast<const HTMLMediaElement&>(element));
-}
-
 }  // namespace
 
 // static
@@ -93,7 +86,7 @@ PictureInPictureController::Status
 PictureInPictureControllerImpl::VerifyElementAndOptions(
     const HTMLElement& element,
     const PictureInPictureOptions* options) const {
-  if (!IsVideoElement(element) && options) {
+  if (!IsA<HTMLVideoElement>(element) && options) {
     // If either the width or height is present then we should make sure they
     // are both present and valid.
     if (options->hasWidth() || options->hasHeight()) {
@@ -121,11 +114,9 @@ PictureInPictureControllerImpl::IsElementAllowed(const HTMLElement& element,
   if (status != Status::kEnabled)
     return status;
 
-  if (!IsVideoElement(element))
+  const auto* video_element = DynamicTo<HTMLVideoElement>(element);
+  if (!video_element)
     return Status::kEnabled;
-
-  const HTMLVideoElement* video_element =
-      static_cast<const HTMLVideoElement*>(&element);
 
   if (video_element->getReadyState() == HTMLMediaElement::kHaveNothing)
     return Status::kMetadataNotLoaded;
@@ -143,15 +134,14 @@ void PictureInPictureControllerImpl::EnterPictureInPicture(
     HTMLElement* element,
     PictureInPictureOptions* options,
     ScriptPromiseResolver* resolver) {
-  if (!IsVideoElement(*element)) {
+  auto* video_element = DynamicTo<HTMLVideoElement>(*element);
+  if (!video_element) {
     // TODO(https://crbug.com/953957): Support element level pip.
     if (resolver)
       resolver->Resolve();
 
     return;
   }
-
-  HTMLVideoElement* video_element = static_cast<HTMLVideoElement*>(element);
 
   DCHECK(video_element->GetWebMediaPlayer());
   DCHECK(!options);
@@ -219,7 +209,6 @@ void PictureInPictureControllerImpl::OnEnteredPictureInPicture(
   picture_in_picture_session_.Bind(
       std::move(session_remote),
       element->GetDocument().GetTaskRunner(TaskType::kMediaElementEvent));
-
   if (IsElementAllowed(*element, /*report_failure=*/true) != Status::kEnabled) {
     if (resolver) {
       resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -235,6 +224,12 @@ void PictureInPictureControllerImpl::OnEnteredPictureInPicture(
 
   picture_in_picture_element_ = element;
   picture_in_picture_element_->OnEnteredPictureInPicture();
+
+  // Request that viz does not throttle our LayerTree's BeginFrame messages, in
+  // case this page generates them as a side-effect of driving picture-in-
+  // picture content.  See the header file for more details, or
+  // https://crbug.com/1232173
+  SetMayThrottleIfUndrawnFrames(false);
 
   picture_in_picture_window_ = MakeGarbageCollected<PictureInPictureWindow>(
       GetExecutionContext(), picture_in_picture_window_size);
@@ -269,6 +264,12 @@ void PictureInPictureControllerImpl::OnExitedPictureInPicture(
   // Bail out if document is not active.
   if (!GetSupplementable()->IsActive())
     return;
+
+  // Now that this widget is not responsible for providing the content for a
+  // Picture in Picture window, we should not be producing CompositorFrames
+  // while the widget is hidden.  Let viz know that throttling us is okay if we
+  // do that.
+  SetMayThrottleIfUndrawnFrames(true);
 
   // The Picture-in-Picture window and the Picture-in-Picture element
   // should be either both set or both null.
@@ -429,6 +430,14 @@ void PictureInPictureControllerImpl::OnWindowSizeChanged(
 
 void PictureInPictureControllerImpl::OnStopped() {
   OnExitedPictureInPicture(nullptr);
+}
+
+void PictureInPictureControllerImpl::SetMayThrottleIfUndrawnFrames(
+    bool may_throttle) {
+  GetSupplementable()
+      ->GetFrame()
+      ->GetWidgetForLocalRoot()
+      ->SetMayThrottleIfUndrawnFrames(may_throttle);
 }
 
 void PictureInPictureControllerImpl::Trace(Visitor* visitor) const {

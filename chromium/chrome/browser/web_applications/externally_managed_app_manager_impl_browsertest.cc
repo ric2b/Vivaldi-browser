@@ -12,12 +12,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/components/external_install_options.h"
-#include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/external_install_options.h"
+#include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/externally_managed_app_registration_task.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/web_app_registration_waiter.h"
+#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -44,11 +45,11 @@ class ExternallyManagedAppManagerImplBrowserTest : public InProcessBrowserTest {
   }
 
   WebAppRegistrar& registrar() {
-    return WebAppProvider::Get(browser()->profile())->registrar();
+    return WebAppProvider::GetForTest(browser()->profile())->registrar();
   }
 
   ExternallyManagedAppManager& externally_managed_app_manager() {
-    return WebAppProvider::Get(browser()->profile())
+    return WebAppProvider::GetForTest(browser()->profile())
         ->externally_managed_app_manager();
   }
 
@@ -171,6 +172,34 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerImplBrowserTest,
   EXPECT_TRUE(registrar().IsPlaceholderApp(app_id.value()));
 }
 
+// Installing a placeholder app with shortcuts should succeed.
+IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerImplBrowserTest,
+                       PlaceholderInstallSucceedsWithCustomName) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL final_url = embedded_test_server()->GetURL(
+      "other.origin.com", "/banners/manifest_test_page.html");
+  // Add a redirect to a different origin, so a placeholder is installed.
+  GURL url(
+      embedded_test_server()->GetURL("/server-redirect?" + final_url.spec()));
+  const std::string CUSTOM_NAME = "CUSTOM_NAME";
+
+  ExternalInstallOptions options = CreateInstallOptions(url);
+  options.install_placeholder = true;
+  options.add_to_applications_menu = true;
+  options.add_to_desktop = true;
+  options.placeholder_name = CUSTOM_NAME;
+  InstallApp(options);
+
+  EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result_code_.value());
+  absl::optional<AppId> app_id =
+      ExternallyInstalledWebAppPrefs(browser()->profile()->GetPrefs())
+          .LookupAppId(url);
+  ASSERT_TRUE(app_id.has_value());
+  EXPECT_TRUE(registrar().IsPlaceholderApp(app_id.value()));
+  EXPECT_EQ(CUSTOM_NAME, registrar().GetAppById(app_id.value())->name());
+}
+
 // Tests that the browser doesn't crash if it gets shutdown with a pending
 // installation.
 IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerImplBrowserTest,
@@ -181,7 +210,7 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerImplBrowserTest,
       embedded_test_server()->GetURL("/banners/manifest_test_page.html"));
 
   // Start an installation but don't wait for it to finish.
-  WebAppProvider::Get(browser()->profile())
+  WebAppProvider::GetForTest(browser()->profile())
       ->externally_managed_app_manager()
       .Install(std::move(install_options), base::DoNothing());
 

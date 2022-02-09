@@ -13,7 +13,7 @@
 namespace content {
 class BrowserContext;
 class WebContents;
-}
+}  // namespace content
 
 namespace extensions {
 
@@ -24,7 +24,7 @@ class BookmarkContextMenuAPI : public BrowserContextKeyedAPI {
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<BookmarkContextMenuAPI>*
-        GetFactoryInstance();
+  GetFactoryInstance();
 
   // Functions that will send events to JS.
   static void SendOpen(content::BrowserContext* browser_context, int64_t id);
@@ -40,12 +40,13 @@ class BookmarkContextMenuAPI : public BrowserContextKeyedAPI {
 };
 
 // Opens a bookmark context menu
-class BookmarkContextMenuShowFunction : public ExtensionFunction,
-    public ::vivaldi::BookmarkMenuContainer::Delegate,
-    public ::vivaldi::VivaldiBookmarkMenuObserver {
+class BookmarkContextMenuShowFunction
+    : public ExtensionFunction,
+      public ::vivaldi::BookmarkMenuContainer::Delegate,
+      public ::vivaldi::VivaldiBookmarkMenuObserver {
  public:
-  DECLARE_EXTENSION_FUNCTION(
-        "bookmarkContextMenu.show", BOOKMARKCONTEXTMENU_SHOW)
+  DECLARE_EXTENSION_FUNCTION("bookmarkContextMenu.show",
+                             BOOKMARKCONTEXTMENU_SHOW)
   BookmarkContextMenuShowFunction();
 
  private:
@@ -66,8 +67,6 @@ class BookmarkContextMenuShowFunction : public ExtensionFunction,
   std::string Open(content::WebContents* web_contents, const std::string& id);
 
   std::unique_ptr<::vivaldi::BookmarkMenuContainer> bookmark_menu_container_;
-
-  DISALLOW_COPY_AND_ASSIGN(BookmarkContextMenuShowFunction);
 };
 
 }  // namespace extensions

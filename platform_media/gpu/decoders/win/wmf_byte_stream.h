@@ -13,8 +13,8 @@
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 
 #include "base/callback.h"
-#include "base/threading/thread_checker.h"
 #include "base/sequenced_task_runner.h"
+#include "base/threading/thread_checker.h"
 
 // Windows Media Foundation headers
 #include <mfapi.h>
@@ -48,20 +48,24 @@ class WMFByteStream : public WMFByteStream_UnknownBase {
   HRESULT STDMETHODCALLTYPE SetCurrentPosition(QWORD position) override;
   HRESULT STDMETHODCALLTYPE IsEndOfStream(BOOL* end_of_stream) override;
   HRESULT STDMETHODCALLTYPE Read(BYTE* buff, ULONG len, ULONG* read) override;
-  HRESULT STDMETHODCALLTYPE BeginRead(BYTE* buff, ULONG len,
+  HRESULT STDMETHODCALLTYPE BeginRead(BYTE* buff,
+                                      ULONG len,
                                       IMFAsyncCallback* callback,
                                       IUnknown* punk_State) override;
   HRESULT STDMETHODCALLTYPE EndRead(IMFAsyncResult* result,
                                     ULONG* read) override;
-  HRESULT STDMETHODCALLTYPE Write(const BYTE* buff, ULONG len,
+  HRESULT STDMETHODCALLTYPE Write(const BYTE* buff,
+                                  ULONG len,
                                   ULONG* written) override;
-  HRESULT STDMETHODCALLTYPE BeginWrite(const BYTE* buff, ULONG len,
+  HRESULT STDMETHODCALLTYPE BeginWrite(const BYTE* buff,
+                                       ULONG len,
                                        IMFAsyncCallback* callback,
                                        IUnknown* punk_state) override;
   HRESULT STDMETHODCALLTYPE EndWrite(IMFAsyncResult* result,
                                      ULONG* written) override;
   HRESULT STDMETHODCALLTYPE Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
-                                 LONGLONG seek_offset, DWORD seek_flags,
+                                 LONGLONG seek_offset,
+                                 DWORD seek_flags,
                                  QWORD* current_position) override;
   HRESULT STDMETHODCALLTYPE Flush() override;
   HRESULT STDMETHODCALLTYPE Close() override;

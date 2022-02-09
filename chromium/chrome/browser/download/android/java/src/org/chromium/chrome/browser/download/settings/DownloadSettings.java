@@ -16,10 +16,8 @@ import org.chromium.chrome.browser.download.DownloadLaterPromptStatus;
 import org.chromium.chrome.browser.download.DownloadPromptStatus;
 import org.chromium.chrome.browser.download.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.offlinepages.prefetch.PrefetchConfiguration;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileKey;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
@@ -28,6 +26,15 @@ import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 
 // Vivaldi
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.Toolbar;
+import org.chromium.build.BuildConfig;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -38,14 +45,13 @@ public class DownloadSettings
     static final String PREF_LOCATION_CHANGE = "location_change";
     static final String PREF_DOWNLOAD_LATER_PROMPT_ENABLED = "download_later_prompt_enabled";
     static final String PREF_LOCATION_PROMPT_ENABLED = "location_prompt_enabled";
-    static final String PREF_PREFETCHING_ENABLED = "prefetching_enabled";
 
     private PrefService mPrefService;
     private DownloadLocationPreference mLocationChangePref;
     private ChromeSwitchPreference mDownloadLaterPromptEnabledPref;
     private ChromeSwitchPreference mLocationPromptEnabledPref;
     private ManagedPreferenceDelegate mLocationPromptEnabledPrefDelegate;
-    private ChromeSwitchPreference mPrefetchingEnabled;
+
     //Vivaldi
     private static final String PREF_EXTERNAL_DOWNLOAD_MANAGER = "external_download_manager";
     private Preference mExternalDownloadManagerPref;
@@ -77,15 +83,6 @@ public class DownloadSettings
         };
         mLocationPromptEnabledPref.setManagedPreferenceDelegate(mLocationPromptEnabledPrefDelegate);
         mLocationChangePref = (DownloadLocationPreference) findPreference(PREF_LOCATION_CHANGE);
-
-        if (PrefetchConfiguration.isPrefetchingFlagEnabled()) {
-            mPrefetchingEnabled = (ChromeSwitchPreference) findPreference(PREF_PREFETCHING_ENABLED);
-            mPrefetchingEnabled.setOnPreferenceChangeListener(this);
-
-            updatePrefetchSummary();
-        } else {
-            getPreferenceScreen().removePreference(findPreference(PREF_PREFETCHING_ENABLED));
-        }
 
         // Vivaldi
         mExternalDownloadManagerPref = findPreference(PREF_EXTERNAL_DOWNLOAD_MANAGER);
@@ -133,36 +130,11 @@ public class DownloadSettings
             mLocationPromptEnabledPref.setEnabled(true);
         }
 
-        if (mPrefetchingEnabled != null) {
-            mPrefetchingEnabled.setChecked(PrefetchConfiguration.isPrefetchingEnabledInSettings(
-                    ProfileKey.getLastUsedRegularProfileKey()));
-            updatePrefetchSummary();
-        }
-
         // Vivaldi - update external download Manager summary
         if (mExternalDownloadManagerPref != null) {
             mExternalDownloadManagerPref.setSummary(
                     VivaldiPreferences.getSharedPreferencesManager().readString(
                             VivaldiPreferences.EXTERNAL_DOWNLOAD_MANAGER_APPLICATION, "Off"));
-        }
-    }
-
-    private void updatePrefetchSummary() {
-        // The summary text should remain empty if mPrefetchingEnabled is switched off so it is only
-        // updated when the setting is on.
-        ProfileKey profileKey = ProfileKey.getLastUsedRegularProfileKey();
-        if (PrefetchConfiguration.isPrefetchingEnabled(profileKey)) {
-            mPrefetchingEnabled.setSummaryOn("");
-        } else if (PrefetchConfiguration.isPrefetchingEnabledInSettings(profileKey)) {
-            // If prefetching is enabled by the user but isPrefetchingEnabled() returned false, we
-            // know that prefetching is forbidden by the server.
-            if (PrefetchConfiguration.isEnabledByServerUnknown(profileKey)) {
-                mPrefetchingEnabled.setSummaryOn(
-                        R.string.download_settings_prefetch_maybe_unavailable_description);
-            } else {
-                mPrefetchingEnabled.setSummaryOn(
-                        R.string.download_settings_prefetch_unavailable_description);
-            }
         }
     }
 
@@ -196,10 +168,6 @@ public class DownloadSettings
             } else {
                 DownloadDialogBridge.setPromptForDownloadAndroid(DownloadPromptStatus.DONT_SHOW);
             }
-        } else if (PREF_PREFETCHING_ENABLED.equals(preference.getKey())) {
-            PrefetchConfiguration.setPrefetchingEnabledInSettings(
-                    ProfileKey.getLastUsedRegularProfileKey(), (boolean) newValue);
-            updatePrefetchSummary();
         }
         return true;
     }
@@ -207,5 +175,37 @@ public class DownloadSettings
     @VisibleForTesting
     ManagedPreferenceDelegate getLocationPromptEnabledPrefDelegateForTesting() {
         return mLocationPromptEnabledPrefDelegate;
+    }
+
+    /** Vivaldi **/
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        if (BuildConfig.IS_VIVALDI) {
+            boolean isTablet = DeviceFormFactor
+                    .isNonMultiDisplayContextOnTablet(view.getContext());
+            if (isTablet) {
+                getView().setBackgroundColor(getResources()
+                        .getColor(R.color.tablet_panel_bg_color));
+                Toolbar toolbar = new Toolbar(getContext());
+                if (getView() != null) {
+                    ((ViewGroup) getView()).addView(toolbar, 0);
+                    toolbar.getLayoutParams().height =
+                    Math.round(56 * getResources().getDisplayMetrics().density);
+                    toolbar.setBackgroundColor(
+                            getResources().getColor(R.color.tablet_panel_bg_color));
+                    toolbar.setSubtitle(getResources().getString(R.string.downloads));
+                    toolbar.setNavigationIcon(R.drawable.vivaldi_nav_button_back);
+                    ((LinearLayout.LayoutParams) toolbar.getLayoutParams()).gravity = Gravity.TOP;
+                    toolbar.setNavigationOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            getParentFragmentManager().popBackStack();
+                        }
+                    });
+                }
+
+            }
+        }
+        super.onViewCreated(view, savedInstanceState);
     }
 }

@@ -29,4 +29,9 @@ void ComponentLoader::AddVivaldiPIP() {
   }
 }
 
+void ComponentLoader::AddVivaldiThemeStore() {
+  Add(VIVALDI_THEMESTORE_MANIFEST,
+      base::FilePath(FILE_PATH_LITERAL("vivaldi/components/theme-store")));
+}
+
 }  // namespace extensions

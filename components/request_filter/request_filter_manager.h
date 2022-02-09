@@ -15,6 +15,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "net/base/completion_once_callback.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/web_transport.mojom.h"
 #include "services/network/public/mojom/websocket.mojom-forward.h"
 
 class GURL;
@@ -27,6 +28,7 @@ class RenderFrameHost;
 namespace net {
 class HttpRequestHeaders;
 class HttpResponseHeaders;
+class SiteForCookies;
 }  // namespace net
 
 namespace vivaldi {
@@ -50,6 +52,10 @@ class RequestFilterManager : public KeyedService {
   class ProxySet {
    public:
     ProxySet();
+
+    ProxySet(const ProxySet&) = delete;
+    ProxySet& operator=(const ProxySet&) = delete;
+
     ~ProxySet();
 
     // Add a Proxy.
@@ -59,13 +65,15 @@ class RequestFilterManager : public KeyedService {
 
    private:
     std::set<std::unique_ptr<Proxy>, base::UniquePtrComparator> proxies_;
-
-    DISALLOW_COPY_AND_ASSIGN(ProxySet);
   };
 
   class RequestIDGenerator {
    public:
     RequestIDGenerator();
+
+    RequestIDGenerator(const RequestIDGenerator&) = delete;
+    RequestIDGenerator& operator=(const RequestIDGenerator&) = delete;
+
     ~RequestIDGenerator();
 
     // Generates a WebRequest ID. If the same (routing_id,
@@ -84,7 +92,6 @@ class RequestFilterManager : public KeyedService {
    private:
     int64_t id_ = 0;
     std::map<std::pair<int32_t, int32_t>, uint64_t> saved_id_map_;
-    DISALLOW_COPY_AND_ASSIGN(RequestIDGenerator);
   };
 
   class RequestHandler {
@@ -103,6 +110,10 @@ class RequestFilterManager : public KeyedService {
     };
 
     explicit RequestHandler(RequestFilterManager* filter_manager);
+
+    RequestHandler(const RequestHandler&) = delete;
+    RequestHandler& operator=(const RequestHandler&) = delete;
+
     ~RequestHandler();
 
     bool WantsExtraHeadersForAnyRequest();
@@ -231,6 +242,10 @@ class RequestFilterManager : public KeyedService {
   };
 
   explicit RequestFilterManager(content::BrowserContext* context);
+
+  RequestFilterManager(const RequestFilterManager&) = delete;
+  RequestFilterManager& operator=(const RequestFilterManager&) = delete;
+
   ~RequestFilterManager() override;
 
   // Swaps out |*factory_request| for a new request which proxies through an
@@ -257,7 +272,7 @@ class RequestFilterManager : public KeyedService {
       int frame_id,
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
@@ -273,7 +288,7 @@ class RequestFilterManager : public KeyedService {
       int frame_id,
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const absl::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
@@ -282,6 +297,26 @@ class RequestFilterManager : public KeyedService {
       mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
           authentication_handler,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client);
+
+  static void ProxiedProxyWebTransport(
+      content::BrowserContext* context,
+      int process_id,
+      int frame_id,
+      const url::Origin& frame_origin,
+      const GURL& url,
+      content::ContentBrowserClient::WillCreateWebTransportCallback callback,
+      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+          handshake_client,
+      absl::optional<network::mojom::WebTransportErrorPtr> error);
+
+  void ProxyWebTransport(
+      int process_id,
+      int frame_id,
+      const url::Origin& frame_origin,
+      const GURL& url,
+      content::ContentBrowserClient::WillCreateWebTransportCallback callback,
+      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+          handshake_client);
 
   void AddFilter(std::unique_ptr<RequestFilter> new_filter);
   void RemoveFilter(RequestFilter* filter);
@@ -299,8 +334,6 @@ class RequestFilterManager : public KeyedService {
   RequestFilterList request_filters_;
 
   RequestHandler request_handler_;
-
-  DISALLOW_COPY_AND_ASSIGN(RequestFilterManager);
 };
 }  // namespace vivaldi
 

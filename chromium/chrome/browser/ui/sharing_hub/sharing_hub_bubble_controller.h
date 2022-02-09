@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_UI_SHARING_HUB_SHARING_HUB_BUBBLE_CONTROLLER_H_
 #define CHROME_BROWSER_UI_SHARING_HUB_SHARING_HUB_BUBBLE_CONTROLLER_H_
 
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/sharesheet/sharesheet_types.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "ui/gfx/native_widget_types.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 
@@ -22,7 +22,7 @@ class Button;
 }  // namespace views
 
 namespace sharesheet {
-class SharesheetService;
+class SharesheetController;
 }  // namespace sharesheet
 
 namespace sharing_hub {
@@ -36,6 +36,10 @@ struct SharingHubAction;
 class SharingHubBubbleController
     : public content::WebContentsUserData<SharingHubBubbleController> {
  public:
+  SharingHubBubbleController(const SharingHubBubbleController&) = delete;
+  SharingHubBubbleController& operator=(const SharingHubBubbleController&) =
+      delete;
+
   ~SharingHubBubbleController() override;
 
   static SharingHubBubbleController* CreateOrGetFromWebContents(
@@ -84,8 +88,7 @@ class SharingHubBubbleController
   void OnSharesheetClosed(views::Widget::ClosedReason reason);
 
   views::ViewTracker highlighted_button_tracker_;
-  sharesheet::SharesheetService* sharesheet_service_ = nullptr;
-  gfx::NativeWindow native_window_ = nullptr;
+  sharesheet::SharesheetController* sharesheet_controller_ = nullptr;
 #endif
 
   // The web_contents associated with this controller.
@@ -96,8 +99,6 @@ class SharingHubBubbleController
   SharingHubModel* sharing_hub_model_ = nullptr;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(SharingHubBubbleController);
 };
 
 }  // namespace sharing_hub

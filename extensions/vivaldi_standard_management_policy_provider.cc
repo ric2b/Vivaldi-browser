@@ -6,11 +6,10 @@
 
 #include "app/vivaldi_apptools.h"
 
-
 namespace extensions {
 
 VivaldiStandardManagementPolicyProvider::
-    VivaldiStandardManagementPolicyProvider(const ExtensionManagement* settings)
+    VivaldiStandardManagementPolicyProvider(ExtensionManagement* settings)
     : StandardManagementPolicyProvider(settings) {}
 
 VivaldiStandardManagementPolicyProvider::

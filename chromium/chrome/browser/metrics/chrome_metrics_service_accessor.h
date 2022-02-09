@@ -33,6 +33,10 @@ class FlashDOMHandler;
 class ChromeCameraAppUIDelegate;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+namespace autofill_assistant {
+class ClientAndroid;
+}  // namespace autofill_assistant
+
 namespace domain_reliability {
 class DomainReliabilityServiceFactory;
 }
@@ -78,6 +82,7 @@ class MetricsReportingHandler;
 namespace feed {
 class FeedServiceBridge;
 class FeedServiceDelegateImpl;
+class WebFeedSubscriptionCoordinator;
 }  // namespace feed
 
 namespace browser_sync {
@@ -89,6 +94,11 @@ class DeviceInfoSyncClientImpl;
 // as a 'friend' below.
 class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
  public:
+  ChromeMetricsServiceAccessor() = delete;
+  ChromeMetricsServiceAccessor(const ChromeMetricsServiceAccessor&) = delete;
+  ChromeMetricsServiceAccessor& operator=(const ChromeMetricsServiceAccessor&) =
+      delete;
+
   // This test method is public so tests don't need to befriend this class.
 
   // If arg is non-null, the value will be returned from future calls to
@@ -97,6 +107,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   static void SetMetricsAndCrashReportingForTesting(const bool* value);
 
  private:
+  friend class autofill_assistant::ClientAndroid;
   friend class ::CrashesDOMHandler;
   friend class ::FlashDOMHandler;
   friend class ChromeBrowserFieldTrials;
@@ -135,11 +146,17 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class feed::FeedServiceDelegateImpl;
   friend class browser_sync::DeviceInfoSyncClientImpl;
   friend class feed::FeedServiceBridge;
+  friend class feed::WebFeedSubscriptionCoordinator;
   friend class HttpsFirstModeService;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   friend class ChromeCameraAppUIDelegate;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // For RegisterSyntheticFieldTrial.
+  friend class FieldTrialObserver;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // Testing related friends.
   friend class first_run::FirstRunMasterPrefsVariationsSeedTest;
@@ -180,8 +197,6 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   static void BindMetricsServiceReceiver(
       mojo::PendingReceiver<chrome::mojom::MetricsService> receiver);
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(ChromeMetricsServiceAccessor);
 };
 
 #endif  // CHROME_BROWSER_METRICS_CHROME_METRICS_SERVICE_ACCESSOR_H_

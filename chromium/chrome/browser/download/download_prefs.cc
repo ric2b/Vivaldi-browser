@@ -100,6 +100,9 @@ base::FilePath::StringType StringToFilePathString(const std::string& src) {
 
 class DefaultDownloadDirectory {
  public:
+  DefaultDownloadDirectory(const DefaultDownloadDirectory&) = delete;
+  DefaultDownloadDirectory& operator=(const DefaultDownloadDirectory&) = delete;
+
   const base::FilePath& path() const { return path_; }
 
   void Initialize() {
@@ -121,8 +124,6 @@ class DefaultDownloadDirectory {
   DefaultDownloadDirectory() { Initialize(); }
 
   base::FilePath path_;
-
-  DISALLOW_COPY_AND_ASSIGN(DefaultDownloadDirectory);
 };
 
 DefaultDownloadDirectory& GetDefaultDownloadDirectorySingleton() {
@@ -393,9 +394,9 @@ bool DownloadPrefs::PromptForDownload() const {
   // dialog shown, show the dialog.
   return *prompt_for_download_android_ !=
          static_cast<int>(DownloadPromptStatus::DONT_SHOW);
-#endif
-
+#else
   return *prompt_for_download_;
+#endif
 }
 
 bool DownloadPrefs::PromptDownloadLater() const {
@@ -676,7 +677,7 @@ void DownloadPrefs::UpdateAllowedURLsForOpenByPolicy() {
     // Since we only want to auto-open for the specified urls, block everything
     // else.
     auto blocked = std::make_unique<base::ListValue>();
-    blocked->AppendString("*");
+    blocked->Append("*");
     allowed_urls->Block(blocked.get());
   }
 

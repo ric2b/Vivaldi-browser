@@ -28,9 +28,13 @@ class NotificationTable {
   // Must call CreateNotificationTable() before using to make
   // sure the database is initialized.
   NotificationTable() = default;
+
   // This object must be destroyed on the thread where all accesses are
   // happening to avoid thread-safety problems.
   virtual ~NotificationTable() = default;
+
+  NotificationTable(const NotificationTable&) = delete;
+  NotificationTable& operator=(const NotificationTable&) = delete;
 
   bool CreateNotificationTable();
 
@@ -50,9 +54,6 @@ class NotificationTable {
   virtual sql::Database& GetDB() = 0;
   void FillNotificationRow(sql::Statement& statement,
                            NotificationRow* notification);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NotificationTable);
 };
 
 // Use the macro if you want to put this in the middle of an otherwise constant

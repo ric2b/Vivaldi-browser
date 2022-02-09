@@ -37,7 +37,7 @@ constexpr int kElementSpacing = 16;
 constexpr int kVolumeBarHeight = 16;
 constexpr int kVolumePopupPadding = 16;
 constexpr int kVolumePopupBottomInset = 32;
-constexpr base::TimeDelta kUiHideDelay = base::TimeDelta::FromSeconds(3);
+constexpr base::TimeDelta kUiHideDelay = base::Seconds(3);
 
 }  // namespace
 
@@ -193,9 +193,9 @@ std::unique_ptr<views::Widget> MediaOverlayImpl::CreateOverlayWidget(
 void MediaOverlayImpl::OnAudioPipelineInitialized(
     media::MediaPipelineImpl* pipeline,
     const ::media::AudioDecoderConfig& config) {
-  if (config.codec() == ::media::AudioCodec::kCodecAC3 ||
-      config.codec() == ::media::AudioCodec::kCodecEAC3 ||
-      config.codec() == ::media::AudioCodec::kCodecMpegHAudio) {
+  if (config.codec() == ::media::AudioCodec::kAC3 ||
+      config.codec() == ::media::AudioCodec::kEAC3 ||
+      config.codec() == ::media::AudioCodec::kMpegHAudio) {
     passthrough_pipelines_.insert(pipeline);
   }
 

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -36,6 +37,10 @@ class RecurrenceRanker {
                    const base::FilePath& filepath,
                    const RecurrenceRankerConfigProto& config,
                    bool is_ephemeral_user);
+
+  RecurrenceRanker(const RecurrenceRanker&) = delete;
+  RecurrenceRanker& operator=(const RecurrenceRanker&) = delete;
+
   ~RecurrenceRanker();
 
   // Record the use of a given target, and train the predictor on it. This may
@@ -160,8 +165,6 @@ class RecurrenceRanker {
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   base::WeakPtrFactory<RecurrenceRanker> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(RecurrenceRanker);
 };
 
 }  // namespace app_list

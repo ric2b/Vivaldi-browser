@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
+#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/authentication/signout_action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
@@ -52,8 +53,7 @@ using signin_metrics::PromoAction;
     ManageSyncSettingsCommandHandler,
     SyncErrorSettingsCommandHandler,
     ManageSyncSettingsTableViewControllerPresentationDelegate,
-    SyncObserverModelBridge,
-    SyncSettingsViewState> {
+    SyncObserverModelBridge> {
   // Sync observer.
   std::unique_ptr<SyncObserverBridge> _syncObserver;
 }
@@ -104,12 +104,17 @@ using signin_metrics::PromoAction;
       self.browser->GetBrowserState());
   self.mediator.commandHandler = self;
   self.mediator.syncErrorHandler = self;
+  self.mediator.forcedSigninEnabled = IsForceSignInEnabled();
   self.viewController = [[ManageSyncSettingsTableViewController alloc]
       initWithStyle:ChromeTableViewStyle()];
   self.viewController.title = self.delegate.manageSyncSettingsCoordinatorTitle;
   self.viewController.serviceDelegate = self.mediator;
   self.viewController.presentationDelegate = self;
   self.viewController.modelDelegate = self.mediator;
+  self.viewController.dispatcher = static_cast<
+      id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>>(
+      self.browser->GetCommandDispatcher());
+
   self.mediator.consumer = self.viewController;
   [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
@@ -117,26 +122,15 @@ using signin_metrics::PromoAction;
 }
 
 - (void)stop {
-  // If kMobileIdentityConsistency is disabled,
-  // GoogleServicesSettingsCoordinator is in charge to enable sync or not when
-  // being closed. This coordinator displays a sub view.
-  // With kMobileIdentityConsistency enabled:
   // This coordinator displays the main view and it is in charge to enable sync
   // or not when being closed.
   // Sync changes should only be commited if the user is authenticated and
   // the sign-in has not been interrupted.
-  if (base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency) &&
-      (self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin) ||
-       !self.signinInterrupted)) {
+  if (self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin) ||
+      !self.signinInterrupted) {
     SyncSetupService* syncSetupService =
         SyncSetupServiceFactory::GetForBrowserState(
             self.browser->GetBrowserState());
-    if (syncSetupService->GetSyncServiceState() ==
-        SyncSetupService::kSyncSettingsNotConfirmed) {
-      // If Sync is still in aborted state, this means the user didn't turn on
-      // sync, and wants Sync off. To acknowledge, Sync has to be turned off.
-      syncSetupService->SetSyncEnabled(false);
-    }
     syncSetupService->CommitSyncChanges();
   }
 }
@@ -151,17 +145,6 @@ using signin_metrics::PromoAction;
 - (AuthenticationService*)authService {
   return AuthenticationServiceFactory::GetForBrowserState(
       self.browser->GetBrowserState());
-}
-
-#pragma mark - SyncSettingsViewState
-
-- (BOOL)isSettingsViewShown {
-  return [self.viewController
-      isEqual:self.baseNavigationController.topViewController];
-}
-
-- (UINavigationItem*)navigationItem {
-  return self.viewController.navigationItem;
 }
 
 #pragma mark - Private
@@ -306,7 +289,7 @@ using signin_metrics::PromoAction;
       [[AuthenticationFlow alloc] initWithBrowser:self.browser
                                          identity:authenticatedIdentity
                                   shouldClearData:SHOULD_CLEAR_DATA_USER_CHOICE
-                                 postSignInAction:POST_SIGNIN_ACTION_START_SYNC
+                                 postSignInAction:POST_SIGNIN_ACTION_COMMIT_SYNC
                          presentingViewController:self.viewController];
   self.authenticationFlow.dispatcher = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), BrowsingDataCommands);
@@ -338,22 +321,14 @@ using signin_metrics::PromoAction;
 - (void)onSyncStateChanged {
   syncer::SyncService::DisableReasonSet disableReasons =
       self.syncService->GetDisableReasons();
-  bool isMICeEnabled =
-      base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency);
   syncer::SyncService::DisableReasonSet userChoiceDisableReason =
       syncer::SyncService::DisableReasonSet(
           syncer::SyncService::DISABLE_REASON_USER_CHOICE);
-  // MICe: manage sync settings needs to stay opened if sync is disabled with
+  // Manage sync settings needs to stay opened if sync is disabled with
   // DISABLE_REASON_USER_CHOICE. Manage sync settings is the only way for a
   // user to turn on the sync engine (and remove DISABLE_REASON_USER_CHOICE).
   // The sync engine turned back on automatically by enabling any datatype.
-  // A pre-MICe signed in user who migrated to MICe, might have sync disabled.
-  bool closeSyncSettingsWithMice =
-      isMICeEnabled &&
-      (!disableReasons.Empty() && disableReasons != userChoiceDisableReason);
-  // Pre-MICe: manage sync settings needs to be closed if the sync is disabled.
-  bool closeSyncSettingsPreMICE = !isMICeEnabled && !disableReasons.Empty();
-  if (closeSyncSettingsWithMice || closeSyncSettingsPreMICE) {
+  if (!disableReasons.Empty() && disableReasons != userChoiceDisableReason) {
     [self closeManageSyncSettings];
   }
 }

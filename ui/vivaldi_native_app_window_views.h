@@ -44,6 +44,9 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
 
   VivaldiNativeAppWindowViews();
   ~VivaldiNativeAppWindowViews() override;
+  VivaldiNativeAppWindowViews(const VivaldiNativeAppWindowViews&) = delete;
+  VivaldiNativeAppWindowViews& operator=(const VivaldiNativeAppWindowViews&) =
+      delete;
 
   void Init(VivaldiBrowserWindow* window,
             const VivaldiBrowserWindowParams& create_params);
@@ -189,8 +192,6 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
 
   // The icon family for the task bar and elsewhere.
   gfx::ImageFamily icon_family_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowViews);
 };
 
 #endif  // UI_VIVALDI_NATIVE_APP_WINDOW_VIEWS_H_

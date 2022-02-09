@@ -62,8 +62,13 @@ class BrowserViewLayout : public views::LayoutManager {
                     views::View* left_aligned_side_panel_separator,
                     views::View* right_aligned_side_panel,
                     views::View* right_aligned_side_panel_separator,
+                    views::View* lens_side_panel,
                     ImmersiveModeController* immersive_mode_controller,
                     views::View* contents_separator);
+
+  BrowserViewLayout(const BrowserViewLayout&) = delete;
+  BrowserViewLayout& operator=(const BrowserViewLayout&) = delete;
+
   ~BrowserViewLayout() override;
 
   // Sets or updates views that are not available when |this| is initialized.
@@ -159,6 +164,7 @@ class BrowserViewLayout : public views::LayoutManager {
   views::View* const left_aligned_side_panel_separator_;
   views::View* const right_aligned_side_panel_;
   views::View* const right_aligned_side_panel_separator_;
+  views::View* const lens_side_panel_;
   ImmersiveModeController* const immersive_mode_controller_;
   views::View* const contents_separator_;
 
@@ -191,8 +197,6 @@ class BrowserViewLayout : public views::LayoutManager {
   // The distance the web contents modal dialog is from the top of the window,
   // in pixels.
   int web_contents_modal_dialog_top_y_ = -1;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserViewLayout);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_VIEW_LAYOUT_H_

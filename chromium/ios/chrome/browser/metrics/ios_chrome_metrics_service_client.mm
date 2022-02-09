@@ -36,6 +36,7 @@
 #include "components/metrics/drive_metrics_provider.h"
 #include "components/metrics/entropy_state_provider.h"
 #include "components/metrics/field_trials_provider.h"
+#include "components/metrics/metrics_data_validation.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -70,6 +71,7 @@
 #include "ios/chrome/browser/metrics/chrome_browser_state_client.h"
 #import "ios/chrome/browser/metrics/ios_chrome_default_browser_metrics_provider.h"
 #include "ios/chrome/browser/metrics/ios_chrome_stability_metrics_provider.h"
+#include "ios/chrome/browser/metrics/ios_profile_session_metrics_provider.h"
 #include "ios/chrome/browser/metrics/mobile_session_shutdown_metrics_provider.h"
 #include "ios/chrome/browser/signin/ios_chrome_signin_status_metrics_provider_delegate.h"
 #include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
@@ -194,6 +196,11 @@ int32_t IOSChromeMetricsServiceClient::GetProduct() {
 
 std::string IOSChromeMetricsServiceClient::GetApplicationLocale() {
   return GetApplicationContext()->GetApplicationLocale();
+}
+
+const network_time::NetworkTimeTracker*
+IOSChromeMetricsServiceClient::GetNetworkTimeTracker() {
+  return GetApplicationContext()->GetNetworkTimeTracker();
 }
 
 bool IOSChromeMetricsServiceClient::GetBrand(std::string* brand_code) {
@@ -322,6 +329,9 @@ void IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<metrics::DemographicMetricsProvider>(
           std::make_unique<metrics::ChromeBrowserStateClient>(),
           metrics::MetricsLogUploader::MetricServiceType::UMA));
+
+  metrics_service_->RegisterMetricsProvider(
+      CreateIOSProfileSessionMetricsProvider());
 }
 
 void IOSChromeMetricsServiceClient::RegisterUKMProviders() {
@@ -353,6 +363,12 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
     mach_vm_size_t footprint_mb = task_info_data.phys_footprint / 1024 / 1024;
     base::UmaHistogramMemoryLargeMB("Memory.Browser.MemoryFootprint",
                                     footprint_mb);
+    // The pseudo metric of Memory.Browser.MemoryFootprint. Only used to
+    // assess field trial data quality.
+    base::UmaHistogramMemoryLargeMB(
+        "UMA.Pseudo.Memory.Browser.MemoryFootprint",
+        metrics::GetPseudoMetricsSample(
+            static_cast<double>(task_info_data.phys_footprint) / 1024 / 1024));
 
     switch (UIApplication.sharedApplication.applicationState) {
       case UIApplicationStateActive:

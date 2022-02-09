@@ -30,6 +30,8 @@ class ProfileSingletonFactory {
   bool getProfileRequested();
   void setProfileRequested(bool profileReq);
   ~ProfileSingletonFactory();
+  ProfileSingletonFactory(const ProfileSingletonFactory&) = delete;
+  ProfileSingletonFactory& operator=(const ProfileSingletonFactory&) = delete;
 
  private:
   bool profilesRequested;
@@ -37,8 +39,6 @@ class ProfileSingletonFactory {
   static ProfileSingletonFactory* single;
   std::unique_ptr<ImporterList> api_importer_list_;
   ProfileSingletonFactory();
-
-  DISALLOW_COPY_AND_ASSIGN(ProfileSingletonFactory);
 };
 
 class ImportDataAPI : public importer::ImporterProgressObserver,
@@ -92,12 +92,9 @@ class ImportDataGetProfilesFunction : public ExtensionFunction {
   void Finished();
 
   ImporterList* api_importer_list_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(ImportDataGetProfilesFunction);
 };
 
-class ImportDataStartImportFunction : public ExtensionFunction,
-                                      public ui::SelectFileDialog::Listener {
+class ImportDataStartImportFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.startImport", IMPORTDATA_STARTIMPORT)
   ImportDataStartImportFunction();
@@ -108,21 +105,8 @@ class ImportDataStartImportFunction : public ExtensionFunction,
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  // ui::SelectFileDialog::Listener:
-  void FileSelected(const base::FilePath& path,
-                    int index,
-                    void* params) override;
-  void FileSelectionCanceled(void* params) override;
-
   void StartImport(const importer::SourceProfile& source_profile);
   void ImportData(const base::ListValue* args);
-
-  ResponseAction HandleChooseBookmarksFileOrFolder(
-      SessionID::id_type window_id,
-      const std::u16string& title,
-      base::StringPiece extension,
-      const base::FilePath& default_file,
-      bool file_selection);
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
@@ -131,8 +115,6 @@ class ImportDataStartImportFunction : public ExtensionFunction,
 
   // The importer type, need to select correct dialog
   importer::ImporterType importer_type_ = importer::TYPE_UNKNOWN;
-
-  DISALLOW_COPY_AND_ASSIGN(ImportDataStartImportFunction);
 };
 
 }  // namespace extensions

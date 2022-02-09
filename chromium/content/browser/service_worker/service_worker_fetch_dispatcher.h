@@ -58,6 +58,11 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
                                base::OnceClosure prepare_callback,
                                FetchCallback fetch_callback,
                                bool is_offline_capability_check);
+
+  ServiceWorkerFetchDispatcher(const ServiceWorkerFetchDispatcher&) = delete;
+  ServiceWorkerFetchDispatcher& operator=(const ServiceWorkerFetchDispatcher&) =
+      delete;
+
   ~ServiceWorkerFetchDispatcher();
 
   // If appropriate, starts the navigation preload request and creates
@@ -121,10 +126,11 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
 
   scoped_refptr<URLLoaderAssets> url_loader_assets_;
 
-  // |preload_handle_| holds the URLLoader and URLLoaderClient for the service
-  // worker to receive the navigation preload response. It's passed to the
-  // service worker along with the fetch event.
-  blink::mojom::FetchEventPreloadHandlePtr preload_handle_;
+  // Holds the URLLoaderClient for the service worker to receive the navigation
+  // preload response. It's passed to the service worker along with the fetch
+  // event.
+  mojo::PendingReceiver<network::mojom::URLLoaderClient>
+      preload_url_loader_client_receiver_;
 
   // Whether to dispatch an offline-capability-check fetch event.
   const bool is_offline_capability_check_ = false;
@@ -132,8 +138,6 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<ServiceWorkerFetchDispatcher> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerFetchDispatcher);
 };
 
 }  // namespace content

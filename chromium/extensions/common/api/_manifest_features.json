@@ -138,8 +138,7 @@
   },
   "declarative_net_request": {
     "channel": "stable",
-    "extension_types": ["extension"],
-    "feature_flag": "DeclarativeNetRequest"
+    "extension_types": ["extension"]
   },
   "default_locale": {
     "channel": "stable",
@@ -156,16 +155,17 @@
   "externally_connectable": {
     "channel": "stable",
     "extension_types": [
-      "extension", "hosted_app", "legacy_packaged_app", "platform_app"
+      "extension",
+      "hosted_app",
+      "legacy_packaged_app",
+      "platform_app",
+      "chromeos_system_extension"
     ]
   },
   "file_handlers": [
     {
       "channel": "stable",
-      "extension_types": [
-        "platform_app",
-        "hosted_app"  // This should be removed when bookmark apps have migrated off hosted apps.
-      ]
+      "extension_types": ["platform_app"]
     }, {
       "channel": "stable",
       "extension_types": [ "extension"],
@@ -322,7 +322,8 @@
       "legacy_packaged_app",
       "hosted_app",
       "platform_app",
-      "login_screen_extension"
+      "login_screen_extension",
+      "chromeos_system_extension"
     ]
   },
   "replacement_android_app": {
@@ -379,21 +380,6 @@
       "location": "component"
     }
   ],
-  "web_app_file_handlers": {
-    "channel": "stable",
-    "extension_types": ["hosted_app"]
-  },
-  // TODO(https://crbug.com/1065748): Remove web_app_linked_shortcut_items and
-  // web_app_shortcut_icons keys once we've transitioned PWAs from the current
-  // Extensions based representation to WebApp based representation.
-  "web_app_linked_shortcut_items" : {
-    "channel": "stable",
-    "extension_types": ["hosted_app"]
-  },
-  "web_app_shortcut_icons" : {
-    "channel": "stable",
-    "extension_types": ["hosted_app"]
-  },
   "webview": {
     "channel": "stable",
     "extension_types": ["platform_app"]

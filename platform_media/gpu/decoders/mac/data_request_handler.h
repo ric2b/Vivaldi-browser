@@ -99,6 +99,8 @@ class MEDIA_EXPORT DataRequestHandler
   };
 
   DataRequestHandler();
+  DataRequestHandler(const DataRequestHandler&) = delete;
+  DataRequestHandler& operator=(const DataRequestHandler&) = delete;
 
   void Init(ipc_data_source::Info source_info, dispatch_queue_t ipc_queue);
 
@@ -158,8 +160,6 @@ class MEDIA_EXPORT DataRequestHandler
 
   // Other requests besides the active.
   std::vector<AVAssetResourceLoadingRequest*> pending_requests_;
-
-  DISALLOW_COPY_AND_ASSIGN(DataRequestHandler);
 };
 
 }  // namespace media

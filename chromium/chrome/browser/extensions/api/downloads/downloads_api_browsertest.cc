@@ -67,10 +67,12 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "services/network/public/cpp/features.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/file_system/file_system_url.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/page_transition_types.h"
 #include "url/origin.h"
 
@@ -119,6 +121,9 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
   explicit DownloadsEventsListener(Profile* profile)
       : waiting_(false), profile_(profile) {}
 
+  DownloadsEventsListener(const DownloadsEventsListener&) = delete;
+  DownloadsEventsListener& operator=(const DownloadsEventsListener&) = delete;
+
   ~DownloadsEventsListener() override = default;
 
   void ClearEvents() { events_.clear(); }
@@ -133,6 +138,9 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
           event_name_(event_name),
           args_(args.Clone()),
           caught_(caught) {}
+
+    Event(const Event&) = delete;
+    Event& operator=(const Event&) = delete;
 
     const base::Time& caught() { return caught_; }
 
@@ -185,8 +193,6 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
     std::string json_args_;
     base::Value args_;
     base::Time caught_;
-
-    DISALLOW_COPY_AND_ASSIGN(Event);
   };
 
   // extensions::EventRouter::TestObserver:
@@ -251,8 +257,6 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
   std::unique_ptr<Event> waiting_for_;
   base::circular_deque<std::unique_ptr<Event>> events_;
   Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadsEventsListener);
 };
 
 // Object waiting for a download open event.
@@ -261,6 +265,9 @@ class DownloadOpenObserver : public download::DownloadItem::Observer {
   explicit DownloadOpenObserver(download::DownloadItem* item) : item_(item) {
     open_observation_.Observe(item);
   }
+
+  DownloadOpenObserver(const DownloadOpenObserver&) = delete;
+  DownloadOpenObserver& operator=(const DownloadOpenObserver&) = delete;
 
   ~DownloadOpenObserver() override = default;
 
@@ -290,8 +297,6 @@ class DownloadOpenObserver : public download::DownloadItem::Observer {
       open_observation_{this};
   download::DownloadItem* item_;
   base::OnceClosure completion_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadOpenObserver);
 };
 
 }  // namespace
@@ -302,6 +307,9 @@ class DownloadExtensionTest : public ExtensionApiTest {
       : extension_(nullptr),
         incognito_browser_(nullptr),
         current_browser_(nullptr) {}
+
+  DownloadExtensionTest(const DownloadExtensionTest&) = delete;
+  DownloadExtensionTest& operator=(const DownloadExtensionTest&) = delete;
 
  protected:
   // Used with CreateHistoryDownloads
@@ -688,8 +696,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
 
   std::unique_ptr<net::test_server::ControllableHttpResponse> first_download_;
   std::unique_ptr<net::test_server::ControllableHttpResponse> second_download_;
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadExtensionTest);
 };
 
 namespace {
@@ -746,6 +752,10 @@ bool ItemNotInProgress(DownloadItem* item) {
 class ScopedCancellingItem {
  public:
   explicit ScopedCancellingItem(DownloadItem* item) : item_(item) {}
+
+  ScopedCancellingItem(const ScopedCancellingItem&) = delete;
+  ScopedCancellingItem& operator=(const ScopedCancellingItem&) = delete;
+
   ~ScopedCancellingItem() {
     item_->Cancel(true);
     content::DownloadUpdatedObserver observer(
@@ -755,7 +765,6 @@ class ScopedCancellingItem {
   DownloadItem* get() { return item_; }
  private:
   DownloadItem* item_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedCancellingItem);
 };
 
 // Cancels all the underlying DownloadItems when the ScopedItemVectorCanceller
@@ -766,6 +775,11 @@ class ScopedItemVectorCanceller {
   explicit ScopedItemVectorCanceller(DownloadManager::DownloadVector* items)
     : items_(items) {
   }
+
+  ScopedItemVectorCanceller(const ScopedItemVectorCanceller&) = delete;
+  ScopedItemVectorCanceller& operator=(const ScopedItemVectorCanceller&) =
+      delete;
+
   ~ScopedItemVectorCanceller() {
     for (DownloadManager::DownloadVector::const_iterator item = items_->begin();
          item != items_->end(); ++item) {
@@ -779,7 +793,6 @@ class ScopedItemVectorCanceller {
 
  private:
   DownloadManager::DownloadVector* items_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedItemVectorCanceller);
 };
 
 // Writes an HTML5 file so that it can be downloaded.
@@ -843,14 +856,17 @@ class JustInProgressDownloadObserver
       : content::DownloadTestObserverInProgress(download_manager, wait_count) {
   }
 
+  JustInProgressDownloadObserver(const JustInProgressDownloadObserver&) =
+      delete;
+  JustInProgressDownloadObserver& operator=(
+      const JustInProgressDownloadObserver&) = delete;
+
   ~JustInProgressDownloadObserver() override {}
 
  private:
   bool IsDownloadInFinalState(DownloadItem* item) override {
     return item->GetState() == DownloadItem::IN_PROGRESS;
   }
-
-  DISALLOW_COPY_AND_ASSIGN(JustInProgressDownloadObserver);
 };
 
 bool ItemIsInterrupted(DownloadItem* item) {
@@ -1181,9 +1197,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(
       RunFunctionAndReturnResult(new DownloadsSearchFunction(), "[{}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
 }
 
 // Test that file existence check should be performed after search.
@@ -1201,9 +1216,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, FileExistenceCheckAfterSearch) {
   std::unique_ptr<base::Value> result(
       RunFunctionAndReturnResult(new DownloadsSearchFunction(), "[{}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = nullptr;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
+
   // Check file removal update will eventually come. WaitForEvent() will
   // immediately return if the file is already removed.
   content::DownloadUpdatedObserver(
@@ -1248,14 +1263,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"filenameRegex\": \"foobar\"}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
-  base::DictionaryValue* item_value = NULL;
-  ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
-  int item_id = -1;
-  ASSERT_TRUE(item_value->GetInteger("id", &item_id));
-  ASSERT_EQ(all_downloads[0]->GetId(), static_cast<uint32_t>(item_id));
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
+  const base::Value& item_value = result->GetList()[0];
+  ASSERT_TRUE(item_value.is_dict());
+  absl::optional<int> item_id = item_value.FindIntKey("id");
+  ASSERT_TRUE(item_id);
+  ASSERT_EQ(all_downloads[0]->GetId(), static_cast<uint32_t>(*item_id));
 }
 
 // Test the |id| parameter for search().
@@ -1269,14 +1283,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, DownloadExtensionTest_SearchId) {
       new DownloadsSearchFunction(),
       base::StringPrintf("[{\"id\": %u}]", items[0]->GetId())));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
-  base::DictionaryValue* item_value = NULL;
-  ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
-  int item_id = -1;
-  ASSERT_TRUE(item_value->GetInteger("id", &item_id));
-  ASSERT_EQ(items[0]->GetId(), static_cast<uint32_t>(item_id));
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
+  const base::Value& item_value = result->GetList()[0];
+  ASSERT_TRUE(item_value.is_dict());
+  absl::optional<int> item_id = item_value.FindIntKey("id");
+  ASSERT_TRUE(item_id);
+  ASSERT_EQ(items[0]->GetId(), static_cast<uint32_t>(*item_id));
 }
 
 // Test specifying both the |id| and |filename| parameters for search().
@@ -1291,9 +1304,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       RunFunctionAndReturnResult(new DownloadsSearchFunction(),
                                  "[{\"id\": 0, \"filename\": \"foobar\"}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(0UL, result_list->GetSize());
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(0UL, result->GetList().size());
 }
 
 // Test a single |orderBy| parameter for search().
@@ -1311,19 +1323,19 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"orderBy\": [\"filename\"]}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(2UL, result_list->GetSize());
-  base::DictionaryValue* item0_value = NULL;
-  base::DictionaryValue* item1_value = NULL;
-  ASSERT_TRUE(result_list->GetDictionary(0, &item0_value));
-  ASSERT_TRUE(result_list->GetDictionary(1, &item1_value));
-  std::string item0_name, item1_name;
-  ASSERT_TRUE(item0_value->GetString("filename", &item0_name));
-  ASSERT_TRUE(item1_value->GetString("filename", &item1_name));
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(2UL, result->GetList().size());
+  const base::Value& item0_value = result->GetList()[0];
+  const base::Value& item1_value = result->GetList()[1];
+  ASSERT_TRUE(item0_value.is_dict());
+  ASSERT_TRUE(item1_value.is_dict());
+  const std::string* item0_name = item0_value.FindStringKey("filename");
+  const std::string* item1_name = item1_value.FindStringKey("filename");
+  ASSERT_TRUE(item0_name);
+  ASSERT_TRUE(item1_name);
   ASSERT_GT(items[0]->GetTargetFilePath().value(),
             items[1]->GetTargetFilePath().value());
-  ASSERT_LT(item0_name, item1_name);
+  ASSERT_LT(*item0_name, *item1_name);
 }
 
 // Test specifying an empty |orderBy| parameter for search().
@@ -1341,16 +1353,16 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"orderBy\": []}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(2UL, result_list->GetSize());
-  base::DictionaryValue* item0_value = NULL;
-  base::DictionaryValue* item1_value = NULL;
-  ASSERT_TRUE(result_list->GetDictionary(0, &item0_value));
-  ASSERT_TRUE(result_list->GetDictionary(1, &item1_value));
-  std::string item0_name, item1_name;
-  ASSERT_TRUE(item0_value->GetString("filename", &item0_name));
-  ASSERT_TRUE(item1_value->GetString("filename", &item1_name));
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(2UL, result->GetList().size());
+  const base::Value& item0_value = result->GetList()[0];
+  const base::Value& item1_value = result->GetList()[1];
+  ASSERT_TRUE(item0_value.is_dict());
+  ASSERT_TRUE(item1_value.is_dict());
+  const std::string* item0_name = item0_value.FindStringKey("filename");
+  const std::string* item1_name = item1_value.FindStringKey("filename");
+  ASSERT_TRUE(item0_name);
+  ASSERT_TRUE(item1_name);
   ASSERT_GT(items[0]->GetTargetFilePath().value(),
             items[1]->GetTargetFilePath().value());
   // The order of results when orderBy is empty is unspecified. When there are
@@ -1375,9 +1387,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"danger\": \"content\"}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
 }
 
 // Test the |state| option for search().
@@ -1392,9 +1403,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"state\": \"in_progress\"}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
 }
 
 // Test the |limit| option for search().
@@ -1407,9 +1417,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"limit\": 1}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
 }
 
 // Test invalid search parameters.
@@ -1452,14 +1461,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                                  "\"orderBy\": [\"filename\"], "
                                  "\"limit\": 1}]"));
   ASSERT_TRUE(result.get());
-  base::ListValue* result_list = NULL;
-  ASSERT_TRUE(result->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
-  base::DictionaryValue* item_value = NULL;
-  ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
-  std::string item_name;
-  ASSERT_TRUE(item_value->GetString("filename", &item_name));
-  ASSERT_EQ(items[2]->GetTargetFilePath().AsUTF8Unsafe(), item_name);
+  ASSERT_TRUE(result->is_list());
+  ASSERT_EQ(1UL, result->GetList().size());
+  const base::Value& item_value = result->GetList()[0];
+  ASSERT_TRUE(item_value.is_dict());
+  const std::string* item_name = item_value.FindStringKey("filename");
+  ASSERT_TRUE(item_name);
+  ASSERT_EQ(items[2]->GetTargetFilePath().AsUTF8Unsafe(), *item_name);
 }
 
 // Test that incognito downloads are only visible in incognito contexts, and
@@ -1470,13 +1478,7 @@ IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
     DownloadExtensionTest_SearchPauseResumeCancelGetFileIconIncognito) {
   std::unique_ptr<base::Value> result_value;
-  base::ListValue* result_list = NULL;
-  base::DictionaryValue* result_dict = NULL;
-  std::string filename;
-  bool is_incognito = false;
   std::string error;
-  std::string on_item_arg;
-  std::string off_item_arg;
   std::string result_string;
 
   // Set up one on-record item and one off-record item.
@@ -1486,12 +1488,12 @@ IN_PROC_BROWSER_TEST_F(
   GoOffTheRecord();
   DownloadItem* off_item = CreateFirstSlowTestDownload();
   ASSERT_TRUE(off_item);
-  off_item_arg = DownloadItemIdAsArgList(off_item);
+  const std::string off_item_arg = DownloadItemIdAsArgList(off_item);
 
   GoOnTheRecord();
   DownloadItem* on_item = CreateSecondSlowTestDownload();
   ASSERT_TRUE(on_item);
-  on_item_arg = DownloadItemIdAsArgList(on_item);
+  const std::string on_item_arg = DownloadItemIdAsArgList(on_item);
   ASSERT_TRUE(on_item->GetTargetFilePath() != off_item->GetTargetFilePath());
 
   // Extensions running in the incognito window should have access to both
@@ -1500,20 +1502,30 @@ IN_PROC_BROWSER_TEST_F(
   result_value.reset(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{}]"));
   ASSERT_TRUE(result_value.get());
-  ASSERT_TRUE(result_value->GetAsList(&result_list));
-  ASSERT_EQ(2UL, result_list->GetSize());
-  ASSERT_TRUE(result_list->GetDictionary(0, &result_dict));
-  ASSERT_TRUE(result_dict->GetString("filename", &filename));
-  ASSERT_TRUE(result_dict->GetBoolean("incognito", &is_incognito));
-  EXPECT_TRUE(on_item->GetTargetFilePath() ==
-              base::FilePath::FromUTF8Unsafe(filename));
-  EXPECT_FALSE(is_incognito);
-  ASSERT_TRUE(result_list->GetDictionary(1, &result_dict));
-  ASSERT_TRUE(result_dict->GetString("filename", &filename));
-  ASSERT_TRUE(result_dict->GetBoolean("incognito", &is_incognito));
-  EXPECT_TRUE(off_item->GetTargetFilePath() ==
-              base::FilePath::FromUTF8Unsafe(filename));
-  EXPECT_TRUE(is_incognito);
+  ASSERT_TRUE(result_value->is_list());
+  ASSERT_EQ(2UL, result_value->GetList().size());
+  {
+    const base::Value& result_dict = result_value->GetList()[0];
+    ASSERT_TRUE(result_dict.is_dict());
+    const std::string* filename = result_dict.FindStringKey("filename");
+    ASSERT_TRUE(filename);
+    absl::optional<bool> is_incognito = result_dict.FindBoolKey("incognito");
+    ASSERT_TRUE(is_incognito.has_value());
+    EXPECT_TRUE(on_item->GetTargetFilePath() ==
+                base::FilePath::FromUTF8Unsafe(*filename));
+    EXPECT_FALSE(is_incognito.value());
+  }
+  {
+    const base::Value& result_dict = result_value->GetList()[1];
+    ASSERT_TRUE(result_dict.is_dict());
+    const std::string* filename = result_dict.FindStringKey("filename");
+    ASSERT_TRUE(filename);
+    absl::optional<bool> is_incognito = result_dict.FindBoolKey("incognito");
+    ASSERT_TRUE(is_incognito.has_value());
+    EXPECT_TRUE(off_item->GetTargetFilePath() ==
+                base::FilePath::FromUTF8Unsafe(*filename));
+    EXPECT_TRUE(is_incognito.value());
+  }
 
   // Extensions running in the on-record window should have access only to the
   // on-record item.
@@ -1521,14 +1533,19 @@ IN_PROC_BROWSER_TEST_F(
   result_value.reset(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{}]"));
   ASSERT_TRUE(result_value.get());
-  ASSERT_TRUE(result_value->GetAsList(&result_list));
-  ASSERT_EQ(1UL, result_list->GetSize());
-  ASSERT_TRUE(result_list->GetDictionary(0, &result_dict));
-  ASSERT_TRUE(result_dict->GetString("filename", &filename));
-  EXPECT_TRUE(on_item->GetTargetFilePath() ==
-              base::FilePath::FromUTF8Unsafe(filename));
-  ASSERT_TRUE(result_dict->GetBoolean("incognito", &is_incognito));
-  EXPECT_FALSE(is_incognito);
+  ASSERT_TRUE(result_value->is_list());
+  ASSERT_EQ(1UL, result_value->GetList().size());
+  {
+    const base::Value& result_dict = result_value->GetList()[0];
+    ASSERT_TRUE(result_dict.is_dict());
+    const std::string* filename = result_dict.FindStringKey("filename");
+    ASSERT_TRUE(filename);
+    EXPECT_TRUE(on_item->GetTargetFilePath() ==
+                base::FilePath::FromUTF8Unsafe(*filename));
+    absl::optional<bool> is_incognito = result_dict.FindBoolKey("incognito");
+    ASSERT_TRUE(is_incognito.has_value());
+    EXPECT_FALSE(is_incognito.value());
+  }
 
   // Pausing/Resuming the off-record item while on the record should return an
   // error. Cancelling "non-existent" downloads is not an error.
@@ -1598,10 +1615,18 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_STREQ(errors::kNotResumable, error.c_str());
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_Basic \
+  DISABLED_DownloadExtensionTest_Download_Basic
+#else
+#define MAYBE_DownloadExtensionTest_Download_Basic \
+  DownloadExtensionTest_Download_Basic
+#endif
 // Test that we can start a download and that the correct sequence of events is
 // fired for it.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Basic) {
+                       MAYBE_DownloadExtensionTest_Download_Basic) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
@@ -1646,10 +1671,18 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_Redirect \
+  DISABLED_DownloadExtensionTest_Download_Redirect
+#else
+#define MAYBE_DownloadExtensionTest_Download_Redirect \
+  DownloadExtensionTest_Download_Redirect
+#endif
 // Test that we can start a download that gets redirected and that the correct
 // sequence of events is fired for it.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Redirect) {
+                       MAYBE_DownloadExtensionTest_Download_Redirect) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   GURL download_final_url(embedded_test_server()->GetURL("/slow?0"));
@@ -1699,8 +1732,16 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 
 // Test that we can start a download from an incognito context, and that the
 // download knows that it's incognito.
+#if defined(OS_WIN)
+// TODO(https://crbug.com/1245173) Flaky on Win7
+#define MAYBE_DownloadExtensionTest_Download_Incognito \
+  DISABLED_DownloadExtensionTest_Download_Incognito
+#else
+#define MAYBE_DownloadExtensionTest_Download_Incognito \
+  DownloadExtensionTest_Download_Incognito
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Incognito) {
+                       MAYBE_DownloadExtensionTest_Download_Incognito) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   GoOffTheRecord();
@@ -1747,38 +1788,43 @@ namespace {
 
 class CustomResponse : public net::test_server::HttpResponse {
  public:
-  CustomResponse(net::test_server::SendCompleteCallback* callback,
+  CustomResponse(base::OnceClosure* callback,
                  base::TaskRunner** task_runner,
                  bool first_request)
       : callback_(callback),
         task_runner_(task_runner),
         first_request_(first_request) {}
+
+  CustomResponse(const CustomResponse&) = delete;
+  CustomResponse& operator=(const CustomResponse&) = delete;
+
   ~CustomResponse() override {}
 
-  void SendResponse(const net::test_server::SendBytesCallback& send,
-                    net::test_server::SendCompleteCallback done) override {
-    std::string response(
-        "HTTP/1.1 200 OK\r\n"
-        "Content-type: application/octet-stream\r\n"
-        "Cache-Control: max-age=0\r\n"
-        "\r\n");
-    response += std::string(kDownloadSize, '*');
+  void SendResponse(
+      base::WeakPtr<net::test_server::HttpResponseDelegate> delegate) override {
+    base::StringPairs headers = {
+        //"HTTP/1.1 200 OK\r\n"
+        {"Content-type", "application/octet-stream"},
+        {"Cache-Control", "max-age=0"},
+    };
+    std::string contents = std::string(kDownloadSize, '*');
 
     if (first_request_) {
-      *callback_ = std::move(done);
+      *callback_ = base::BindOnce(
+          &net::test_server::HttpResponseDelegate::FinishResponse, delegate);
       *task_runner_ = base::ThreadTaskRunnerHandle::Get().get();
-      send.Run(response, base::DoNothing());
+      delegate->SendResponseHeaders(net::HTTP_OK, "OK", headers);
+      delegate->SendContents(contents);
     } else {
-      send.Run(response, std::move(done));
+      delegate->SendHeadersContentAndFinish(net::HTTP_OK, "OK", headers,
+                                            contents);
     }
   }
 
  private:
-  net::test_server::SendCompleteCallback* callback_;
+  base::OnceClosure* callback_;
   base::TaskRunner** task_runner_;
   bool first_request_;
-
-  DISALLOW_COPY_AND_ASSIGN(CustomResponse);
 };
 
 }  // namespace
@@ -1789,7 +1835,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 
   DownloadItem* item = nullptr;
 
-  net::test_server::SendCompleteCallback complete_callback;
+  base::OnceClosure complete_callback;
   base::TaskRunner* embedded_test_server_io_runner = nullptr;
   const char kThirdDownloadUrl[] = "/download3";
   bool first_request = true;
@@ -2049,9 +2095,17 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       "  \"url\": \"javascript:return false;\"}]"));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_URLFragment \
+  DISABLED_DownloadExtensionTest_Download_URLFragment
+#else
+#define MAYBE_DownloadExtensionTest_Download_URLFragment \
+  DownloadExtensionTest_Download_URLFragment
+#endif
 // Valid URLs plus fragments are still valid URLs.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_URLFragment) {
+                       MAYBE_DownloadExtensionTest_Download_URLFragment) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url =
@@ -2094,8 +2148,17 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // conflictAction may be specified without filename.
+#if defined(OS_WIN)
+// TODO(https://crbug.com/1245173) Flaky on Win7
+#define MAYBE_DownloadExtensionTest_Download_ConflictAction \
+  DISABLED_DownloadExtensionTest_Download_ConflictAction
+#else
+#define MAYBE_DownloadExtensionTest_Download_ConflictAction \
+  DownloadExtensionTest_Download_ConflictAction
+#endif
+
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_ConflictAction) {
+                       MAYBE_DownloadExtensionTest_Download_ConflictAction) {
   static char kFilename[] = "download.txt";
   LoadExtension("downloads_split");
   std::string download_url = "data:text/plain,hello";
@@ -2173,9 +2236,17 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_DataURL \
+  DISABLED_DownloadExtensionTest_Download_DataURL
+#else
+#define MAYBE_DownloadExtensionTest_Download_DataURL \
+  DownloadExtensionTest_Download_DataURL
+#endif
 // Valid data URLs are valid URLs.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_DataURL) {
+                       MAYBE_DownloadExtensionTest_Download_DataURL) {
   LoadExtension("downloads_split");
   std::string download_url = "data:text/plain,hello";
   GoOnTheRecord();
@@ -2308,9 +2379,17 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                          download_url.c_str())));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_Headers \
+  DISABLED_DownloadExtensionTest_Download_Headers
+#else
+#define MAYBE_DownloadExtensionTest_Download_Headers \
+  DownloadExtensionTest_Download_Headers
+#endif
 // Test that DownloadsDownloadFunction propagates |headers| to the URLRequest.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Headers) {
+                       MAYBE_DownloadExtensionTest_Download_Headers) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url =
@@ -2366,8 +2445,16 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 // chrome fails to propagate them back to the server.  This tests both that
 // testserver.py does not succeed when it should fail as well as how the
 // downloads extension api exposes the failure to extensions.
+// TODO(https://crbug.com/1249757): DownloadExtensionTest's are flaky
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_Headers_Fail \
+  DISABLED_DownloadExtensionTest_Download_Headers_Fail
+#else
+#define MAYBE_DownloadExtensionTest_Download_Headers_Fail \
+  DownloadExtensionTest_Download_Headers_Fail
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Headers_Fail) {
+                       MAYBE_DownloadExtensionTest_Download_Headers_Fail) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url =
@@ -2451,8 +2538,16 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 
 // Test that DownloadsDownloadFunction propagates the |method| and |body|
 // parameters to the URLRequest.
+#if defined(OS_WIN)
+// TODO(https://crbug.com/1245173) Flaky on Win7
+#define MAYBE_DownloadExtensionTest_Download_Post \
+  DISABLED_DownloadExtensionTest_Download_Post
+#else
+#define MAYBE_DownloadExtensionTest_Download_Post \
+  DownloadExtensionTest_Download_Post
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Post) {
+                       MAYBE_DownloadExtensionTest_Download_Post) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()
@@ -2507,8 +2602,16 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 // server. This tests both that testserver.py does not succeed when it should
 // fail, and this tests how the downloads extension api exposes the failure to
 // extensions.
+// TODO(https://crbug.com/1249757): DownloadExtensionTest's are flaky
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_Post_Get \
+  DISABLED_DownloadExtensionTest_Download_Post_Get
+#else
+#define MAYBE_DownloadExtensionTest_Download_Post_Get \
+  DownloadExtensionTest_Download_Post_Get
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Post_Get) {
+                       MAYBE_DownloadExtensionTest_Download_Post_Get) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()
@@ -2548,8 +2651,16 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 // server. This tests both that testserver.py does not succeed when it should
 // fail, and this tests how the downloads extension api exposes the failure to
 // extensions.
+// TODO(https://crbug.com/1249757): DownloadExtensionTest's are flaky
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_Download_Post_NoBody \
+  DISABLED_DownloadExtensionTest_Download_Post_NoBody
+#else
+#define MAYBE_DownloadExtensionTest_Download_Post_NoBody \
+  DownloadExtensionTest_Download_Post_NoBody
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_Download_Post_NoBody) {
+                       MAYBE_DownloadExtensionTest_Download_Post_NoBody) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()
@@ -2630,8 +2741,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           result_id)));
 }
 
-// flaky on mac: crbug.com/392288
-#if defined(OS_MAC)
+// TODO(https://crbug.com/392288): Flaky on macOS
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_MAC) || defined(OS_WIN)
 #define MAYBE_DownloadExtensionTest_Download_FileSystemURL \
         DISABLED_DownloadExtensionTest_Download_FileSystemURL
 #else
@@ -2701,8 +2813,17 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   EXPECT_STREQ(kPayloadData, disk_data.c_str());
 }
 
-IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_OnDeterminingFilename_NoChange) {
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_NoChange \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_NoChange
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_NoChange \
+  DownloadExtensionTest_OnDeterminingFilename_NoChange
+#endif
+IN_PROC_BROWSER_TEST_F(
+    DownloadExtensionTest,
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_NoChange) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -2825,8 +2946,17 @@ IN_PROC_BROWSER_TEST_F(
                          result_id)));
 }
 
-IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_OnDeterminingFilename_Twice) {
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_Twice \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_Twice
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_Twice \
+  DownloadExtensionTest_OnDeterminingFilename_Twice
+#endif
+IN_PROC_BROWSER_TEST_F(
+    DownloadExtensionTest,
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_Twice) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -2939,11 +3069,19 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   EXPECT_FALSE(determine_result.get());  // No return value.
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_DangerousOverride \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_DangerousOverride
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_DangerousOverride \
+  DownloadExtensionTest_OnDeterminingFilename_DangerousOverride
+#endif
 // Tests that overriding a safe file extension to a dangerous extension will not
 // trigger the dangerous prompt and will not change the extension.
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_DangerousOverride) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_DangerousOverride) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3072,9 +3210,17 @@ IN_PROC_BROWSER_TEST_F(
             item->GetTargetFilePath());
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid \
+  DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3134,9 +3280,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IllegalFilename \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_IllegalFilename
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IllegalFilename \
+  DownloadExtensionTest_OnDeterminingFilename_IllegalFilename
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_IllegalFilename) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_IllegalFilename) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3196,9 +3350,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IllegalFilenameExtension \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_IllegalFilenameExtension
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IllegalFilenameExtension \
+  DownloadExtensionTest_OnDeterminingFilename_IllegalFilenameExtension
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_IllegalFilenameExtension) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_IllegalFilenameExtension) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3327,9 +3489,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid \
+  DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3389,9 +3559,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid \
+  DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   GoOnTheRecord();
   LoadExtension("downloads_split");
@@ -3451,9 +3629,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_AbsPathInvalid \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_AbsPathInvalid
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_AbsPathInvalid \
+  DownloadExtensionTest_OnDeterminingFilename_AbsPathInvalid
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_AbsPathInvalid) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_AbsPathInvalid) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3578,10 +3764,18 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_Overwrite \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_Overwrite
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_Overwrite \
+  DownloadExtensionTest_OnDeterminingFilename_Overwrite
+#endif
 // conflictAction may be specified without filename.
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_Overwrite) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_Overwrite) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3695,9 +3889,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_Override \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_Override
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_Override \
+  DownloadExtensionTest_OnDeterminingFilename_Override
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_Override) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_Override) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
@@ -3815,7 +4017,8 @@ IN_PROC_BROWSER_TEST_F(
 
 // TODO test precedence rules: install_time
 
-#if defined(OS_MAC)
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_MAC) || defined(OS_WIN)
 #define MAYBE_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer \
   DISABLED_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer
 #else
@@ -3874,7 +4077,10 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // This test is flaky on Linux ASan LSan Tests bot. https://crbug.com/1114226
-#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+     defined(ADDRESS_SANITIZER)) ||                 \
+    defined(OS_WIN)
 #define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit \
   DISABLED_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit
 #else
@@ -4021,9 +4227,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning \
+  DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning) {
   LoadExtension("downloads_spanning");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
@@ -4376,10 +4590,18 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   observer->WaitForFinished();
 }
 
+// TODO(https://crbug.com/1244128): Flaky on Win7
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_DeleteFileAfterCompletion \
+  DISABLED_DownloadExtensionTest_DeleteFileAfterCompletion
+#else
+#define MAYBE_DownloadExtensionTest_DeleteFileAfterCompletion \
+  DownloadExtensionTest_DeleteFileAfterCompletion
+#endif
 // Test that file deletion event is correctly generated after download
 // completion.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_DeleteFileAfterCompletion) {
+                       MAYBE_DownloadExtensionTest_DeleteFileAfterCompletion) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   GoOnTheRecord();
   LoadExtension("downloads_split");
@@ -4425,10 +4647,11 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 class DownloadsApiTest : public ExtensionApiTest {
  public:
   DownloadsApiTest() {}
-  ~DownloadsApiTest() override {}
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DownloadsApiTest);
+  DownloadsApiTest(const DownloadsApiTest&) = delete;
+  DownloadsApiTest& operator=(const DownloadsApiTest&) = delete;
+
+  ~DownloadsApiTest() override {}
 };
 
 
@@ -4480,15 +4703,9 @@ TEST(ExtensionDetermineDownloadFilenameInternal,
   warnings.clear();
   ExtensionDownloadsEventRouter::DetermineFilenameInternal(
       base::FilePath(FILE_PATH_LITERAL("b")),
-      downloads::FILENAME_CONFLICT_ACTION_PROMPT,
-      "suggester",
-      base::Time::Now() - base::TimeDelta::FromDays(1),
-      "incumbent",
-      base::Time::Now(),
-      &winner_id,
-      &filename,
-      &conflict_action,
-      &warnings);
+      downloads::FILENAME_CONFLICT_ACTION_PROMPT, "suggester",
+      base::Time::Now() - base::Days(1), "incumbent", base::Time::Now(),
+      &winner_id, &filename, &conflict_action, &warnings);
   EXPECT_EQ("incumbent", winner_id);
   EXPECT_EQ(FILE_PATH_LITERAL("a"), filename.value());
   EXPECT_EQ(downloads::FILENAME_CONFLICT_ACTION_OVERWRITE, conflict_action);
@@ -4501,15 +4718,9 @@ TEST(ExtensionDetermineDownloadFilenameInternal,
   warnings.clear();
   ExtensionDownloadsEventRouter::DetermineFilenameInternal(
       base::FilePath(FILE_PATH_LITERAL("b")),
-      downloads::FILENAME_CONFLICT_ACTION_PROMPT,
-      "suggester",
-      base::Time::Now(),
-      "incumbent",
-      base::Time::Now() - base::TimeDelta::FromDays(1),
-      &winner_id,
-      &filename,
-      &conflict_action,
-      &warnings);
+      downloads::FILENAME_CONFLICT_ACTION_PROMPT, "suggester",
+      base::Time::Now(), "incumbent", base::Time::Now() - base::Days(1),
+      &winner_id, &filename, &conflict_action, &warnings);
   EXPECT_EQ("suggester", winner_id);
   EXPECT_EQ(FILE_PATH_LITERAL("b"), filename.value());
   EXPECT_EQ(downloads::FILENAME_CONFLICT_ACTION_PROMPT, conflict_action);

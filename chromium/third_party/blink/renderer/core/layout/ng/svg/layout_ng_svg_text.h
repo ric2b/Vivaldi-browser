@@ -37,6 +37,9 @@ class LayoutNGSVGText final : public LayoutNGBlockFlowMixin<LayoutSVGBlock> {
   FloatRect ObjectBoundingBox() const override;
   FloatRect StrokeBoundingBox() const override;
   FloatRect VisualRectInLocalSVGCoordinates() const override;
+  void AbsoluteQuads(Vector<FloatQuad>& quads,
+                     MapCoordinatesFlags mode) const override;
+  FloatRect LocalBoundingBoxRectForAccessibility() const override;
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
   void WillBeDestroyed() override;
   bool NodeAtPoint(HitTestResult& result,
@@ -48,12 +51,14 @@ class LayoutNGSVGText final : public LayoutNGBlockFlowMixin<LayoutSVGBlock> {
 
   // LayoutBox override:
   bool CreatesNewFormattingContext() const override;
+  void UpdateFromStyle() override;
 
   // LayoutBlock override:
   void Paint(const PaintInfo&) const override;
   void UpdateBlockLayout(bool relayout_children) override;
 
   void UpdateFont();
+  void UpdateTransformAffectsVectorEffect();
 
   // bounding_box_* are mutable for on-demand computation in a const method.
   mutable FloatRect bounding_box_;

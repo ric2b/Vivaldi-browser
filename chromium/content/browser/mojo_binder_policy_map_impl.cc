@@ -12,8 +12,10 @@
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
+#include "third_party/blink/public/mojom/file/file_utilities.mojom.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
+#include "third_party/blink/public/mojom/media/renderer_audio_output_stream_factory.mojom.h"
 #include "third_party/blink/public/mojom/native_io/native_io.mojom.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
 
@@ -45,9 +47,22 @@ void RegisterContentBinderPoliciesForSameOriginPrerendering(
   // sending the request.
   map.SetPolicy<blink::mojom::ClipboardHost>(MojoBinderPolicy::kUnexpected);
 
+  // FileUtilitiesHost is only used by APIs that require user activations, being
+  // impossible for a prerendered document. For the reason, this is marked as
+  // kUnexpected.
+  map.SetPolicy<blink::mojom::FileUtilitiesHost>(MojoBinderPolicy::kUnexpected);
+
   map.SetPolicy<blink::mojom::CacheStorage>(MojoBinderPolicy::kGrant);
   map.SetPolicy<blink::mojom::IDBFactory>(MojoBinderPolicy::kGrant);
   map.SetPolicy<blink::mojom::NativeIOHost>(MojoBinderPolicy::kGrant);
+
+  // Grant this interface because some sync web APIs rely on it; deferring it
+  // leads to deadlock. However, granting this interface does not mean that
+  // prerenders are allowed to create output streams.
+  // RenderFrameAudioOutputStreamFactory understands which pages are
+  // prerendering and does not fulfill their requests for audio streams.
+  map.SetPolicy<blink::mojom::RendererAudioOutputStreamFactory>(
+      MojoBinderPolicy::kGrant);
   map.SetPolicy<network::mojom::RestrictedCookieManager>(
       MojoBinderPolicy::kGrant);
   // Set policy to Grant for CodeCacheHost. Without this loads won't progress

@@ -204,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(SearchEnginePreconnectorNoDelaysBrowserTest,
   model->SetUserSelectedDefaultSearchProvider(template_url);
 
   // Ensure that we wait long enough to trigger preconnects.
-  WaitForDelay(base::TimeDelta::FromMilliseconds(200));
+  WaitForDelay(base::Milliseconds(200));
 
   TemplateURLData data_fake_search;
   data_fake_search.SetShortName(kShortName);
@@ -300,7 +300,7 @@ IN_PROC_BROWSER_TEST_P(SearchEnginePreconnectorForegroundBrowserTest,
   model->SetUserSelectedDefaultSearchProvider(template_url);
 
   // Ensure that we wait long enough to trigger preconnects.
-  WaitForDelay(base::TimeDelta::FromMilliseconds(200));
+  WaitForDelay(base::Milliseconds(200));
 
   TemplateURLData data_fake_search;
   data_fake_search.SetShortName(kShortName);
@@ -314,14 +314,15 @@ IN_PROC_BROWSER_TEST_P(SearchEnginePreconnectorForegroundBrowserTest,
   model->SetUserSelectedDefaultSearchProvider(template_url);
 
   tick_clock_.SetNowTicks(base::TimeTicks::Now());
-  tick_clock_.Advance(base::TimeDelta::FromSeconds(10000));
+  tick_clock_.Advance(base::Seconds(10000));
 
   NavigationPredictorKeyedServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser()->profile()))
       ->SetTickClockForTesting(&tick_clock_);
 
   if (load_page()) {
-    ui_test_utils::NavigateToURL(browser(), GetTestURL(kSearchURLWithQuery));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                             GetTestURL(kSearchURLWithQuery)));
   }
 
   // Put the fake search URL to be preconnected in foreground.
@@ -393,11 +394,13 @@ IN_PROC_BROWSER_TEST_F(SearchEnginePreconnectorKeepSocketBrowserTest,
 
   WaitForPreresolveCountForURL(GetTestURL(kSearchURL), 1);
 
-  ui_test_utils::NavigateToURL(browser(), GetTestURL(kSearchURLWithQuery));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GetTestURL(kSearchURLWithQuery)));
 
   auto ukm_recorder = std::make_unique<ukm::TestAutoSetUkmRecorder>();
 
-  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
 
   const auto& entries =
       ukm_recorder->GetMergedEntriesByName(ukm::builders::PageLoad::kEntryName);

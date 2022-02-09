@@ -19,8 +19,8 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/common/content_features.h"
@@ -36,6 +36,12 @@
 class WebAppOpaqueBrowserFrameViewTest : public InProcessBrowserTest {
  public:
   WebAppOpaqueBrowserFrameViewTest() = default;
+
+  WebAppOpaqueBrowserFrameViewTest(const WebAppOpaqueBrowserFrameViewTest&) =
+      delete;
+  WebAppOpaqueBrowserFrameViewTest& operator=(
+      const WebAppOpaqueBrowserFrameViewTest&) = delete;
+
   ~WebAppOpaqueBrowserFrameViewTest() override = default;
 
   static GURL GetAppURL() { return GURL("https://test.org"); }
@@ -107,9 +113,6 @@ class WebAppOpaqueBrowserFrameViewTest : public InProcessBrowserTest {
   // Disable animations.
   ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode_{
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION};
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebAppOpaqueBrowserFrameViewTest);
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewTest, NoThemeColor) {
@@ -197,6 +200,9 @@ IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewTest, StaticTitleBarHeight) {
 // shows and then hides both when the window is first opened and any time the
 // titlebar's appearance changes.
 IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewTest, OriginTextVisibility) {
+  ui_test_utils::UrlLoadObserver url_observer(
+      GetAppURL(), content::NotificationService::AllSources());
+
   if (!InstallAndLaunchWebApp())
     return;
 
@@ -219,7 +225,7 @@ IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewTest, OriginTextVisibility) {
   {
     EXPECT_TRUE(web_app_origin_text->GetVisible());
     base::RunLoop view_hidden_runloop;
-    auto subscription = web_app_origin_text->AddVisibleChangedCallback(
+    auto callback_subscription = web_app_origin_text->AddVisibleChangedCallback(
         view_hidden_runloop.QuitClosure());
     view_hidden_runloop.Run();
     EXPECT_EQ(0, visible_count);
@@ -238,8 +244,10 @@ IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewTest, OriginTextVisibility) {
           else
             view_hidden_runloop.Quit();
         });
-    auto subscription =
+    auto callback_subscription =
         web_app_origin_text->AddVisibleChangedCallback(quit_runloop);
+    // Make sure the navigation has finished before proceeding.
+    url_observer.Wait();
     ASSERT_TRUE(ExecJs(
         browser_view_->GetActiveWebContents()->GetMainFrame(),
         "var meta = document.head.appendChild(document.createElement('meta'));"
@@ -333,7 +341,7 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
-    web_app_info->open_as_window = true;
+    web_app_info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
     web_app_info->title = u"A Web App";
     web_app_info->display_override = display_overrides;
 
@@ -546,8 +554,16 @@ IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest,
   EXPECT_EQ(u"onresize", title_watcher2.WaitAndGetTitle());
 }
 
+// TODO(https://crbug.com/1234323): Very flaky on Wayland builder.
+#if defined(OS_LINUX)
+#define MAYBE_WindowControlsOverlayDraggableRegions \
+  DISABLED_WindowControlsOverlayDraggableRegions
+#else
+#define MAYBE_WindowControlsOverlayDraggableRegions \
+  WindowControlsOverlayDraggableRegions
+#endif  // defined(OS_LINUX)
 IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest,
-                       WindowControlsOverlayDraggableRegions) {
+                       MAYBE_WindowControlsOverlayDraggableRegions) {
   if (!InstallAndLaunchWebAppWithWindowControlsOverlay())
     return;
 
@@ -567,8 +583,8 @@ IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest,
 
   // Validate that the draggable region is reset on navigation and the point is
   // no longer draggable.
-  ui_test_utils::NavigateToURL(browser_view_->browser(),
-                               GURL("http://example.test/"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser_view_->browser(),
+                                           GURL("http://example.test/")));
   EXPECT_NE(opaque_browser_frame_view_->NonClientHitTest(kPoint), HTCAPTION);
   EXPECT_TRUE(browser_view_->ShouldDescendIntoChildForEventHandling(
       browser_view_->GetWidget()->GetNativeView(), kPoint));

@@ -22,6 +22,10 @@ class MEDIA_EXPORT WMFAudioDecoder : public AudioDecoder {
  public:
   WMFAudioDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~WMFAudioDecoder() override;
+  WMFAudioDecoder(const WMFAudioDecoder&) = delete;
+  WMFAudioDecoder& operator=(const WMFAudioDecoder&) = delete;
+
+  static bool IsEnabled();
 
   // AudioDecoder implementation.
   void Initialize(const AudioDecoderConfig& config,
@@ -35,8 +39,6 @@ class MEDIA_EXPORT WMFAudioDecoder : public AudioDecoder {
 
  private:
   WMFDecoderImpl<DemuxerStream::AUDIO> impl_;
-
-  DISALLOW_COPY_AND_ASSIGN(WMFAudioDecoder);
 };
 
 }  // namespace media

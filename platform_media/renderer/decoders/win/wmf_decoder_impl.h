@@ -113,7 +113,7 @@ class WMFDecoderImpl {
   uint32_t output_samples_per_second_;
   ChannelLayout output_channel_layout_;
 
-  std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
+  std::deque<DecoderBuffer::TimeInfo> queued_input_timing_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;
 
   DebugBufferLogger debug_buffer_logger_;

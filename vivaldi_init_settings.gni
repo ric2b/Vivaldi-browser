@@ -26,6 +26,7 @@ declare_overrides() {
     if (is_official_build) {
       symbol_level = 1
     }
+    enable_js_type_check = false
   }
 
   if (is_android) {

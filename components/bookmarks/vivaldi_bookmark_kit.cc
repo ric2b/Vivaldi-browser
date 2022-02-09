@@ -80,6 +80,8 @@ class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
  public:
   BookmarkModelLoadWaiter(RunAfterModelLoadCallback callback)
       : callback_(std::move(callback)) {}
+  BookmarkModelLoadWaiter(const BookmarkModelLoadWaiter&) = delete;
+  BookmarkModelLoadWaiter& operator=(const BookmarkModelLoadWaiter&) = delete;
 
  private:
   ~BookmarkModelLoadWaiter() override = default;
@@ -106,8 +108,6 @@ class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
   }
 
   RunAfterModelLoadCallback callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(BookmarkModelLoadWaiter);
 };
 
 // Struct holding std::string constants with names that we use to get/set values

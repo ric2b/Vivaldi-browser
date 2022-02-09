@@ -35,7 +35,8 @@ class MockTabSharingUIViews : public TabSharingUI {
 
   gfx::NativeViewId OnStarted(
       base::OnceClosure stop_callback,
-      content::MediaStreamUI::SourceCallback source_callback) override {
+      content::MediaStreamUI::SourceCallback source_callback,
+      const std::vector<content::DesktopMediaID>& media_ids) override {
     return 0;
   }
 };
@@ -254,7 +255,6 @@ TEST_P(TabSharingInfoBarDelegateTest, InfobarNotDismissedOnNavigation) {
       infobars::ContentInfoBarManager::FromWebContents(web_contents);
   CreateInfobar(kSharedTabName, kAppName, false, true);
   EXPECT_EQ(infobar_manager->infobar_count(), 1u);
-  content::NavigationController* controller = &web_contents->GetController();
-  NavigateAndCommit(controller, GURL("http://bar"));
+  NavigateAndCommit(web_contents, GURL("http://bar"));
   EXPECT_EQ(infobar_manager->infobar_count(), 1u);
 }

@@ -13,6 +13,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/version.h"
 #import "components/autofill/ios/browser/autofill_java_script_feature.h"
 #import "components/autofill/ios/browser/suggestion_controller_java_script_feature.h"
 #import "components/autofill/ios/form_util/form_handlers_java_script_feature.h"
@@ -56,12 +57,8 @@
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_error.h"
 #include "ios/components/webui/web_ui_url_constants.h"
 #import "ios/net/protocol_handler_util.h"
-#include "ios/public/provider/chrome/browser/browser_url_rewriter_provider.h"
-#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/font_size_java_script_feature.h"
-#include "ios/public/provider/chrome/browser/voice/audio_session_controller.h"
-#include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
+#include "ios/public/provider/chrome/browser/url_rewriters/url_rewriters_api.h"
 #include "ios/web/common/features.h"
 #include "ios/web/common/user_agent.h"
 #include "ios/web/public/navigation/browser_url_rewriter.h"
@@ -80,6 +77,8 @@
 namespace {
 // The tag describing the product name with a placeholder for the version.
 const char kProductTagWithPlaceholder[] = "CriOS/%s";
+
+constexpr char kMajorVersion100[] = "100";
 
 // Returns an autoreleased string containing the JavaScript loaded from a
 // bundled resource file with the given name (excluding extension).
@@ -175,9 +174,30 @@ NSString* GetLegacyTLSErrorPageHTML(web::WebState* web_state,
   return base::SysUTF8ToNSString(error_page_content);
 }
 
+// Returns a version string that matches the current version number except that
+// the major version is 100.
+const std::string& GetM100VersionNumber() {
+  static const base::NoDestructor<std::string> m100_version_number([] {
+    base::Version version(version_info::GetVersionNumber());
+    std::string version_str(kMajorVersion100);
+    const std::vector<uint32_t>& components = version.components();
+    // Rest of the version string remains the same.
+    for (size_t i = 1; i < components.size(); ++i) {
+      version_str.append(".");
+      version_str.append(base::NumberToString(components[i]));
+    }
+    return version_str;
+  }());
+  return *m100_version_number;
+}
+
 // Returns a string describing the product name and version, of the
 // form "productname/version". Used as part of the user agent string.
 std::string GetMobileProduct() {
+  if (base::FeatureList::IsEnabled(web::kForceMajorVersion100InUserAgent)) {
+    return base::StringPrintf(kProductTagWithPlaceholder,
+                              GetM100VersionNumber().c_str());
+  }
   return base::StringPrintf(kProductTagWithPlaceholder,
                             version_info::GetVersionNumber().c_str());
 }
@@ -188,6 +208,10 @@ std::string GetMobileProduct() {
 // for fingerprinting. The Mobile one is using the full version for legacy
 // reasons.
 std::string GetDesktopProduct() {
+  if (base::FeatureList::IsEnabled(web::kForceMajorVersion100InUserAgent)) {
+    return base::StringPrintf(kProductTagWithPlaceholder, kMajorVersion100);
+  }
+
   return base::StringPrintf(kProductTagWithPlaceholder,
                             version_info::GetMajorVersionNumber().c_str());
 }
@@ -203,24 +227,7 @@ std::unique_ptr<web::WebMainParts> ChromeWebClient::CreateWebMainParts() {
       *base::CommandLine::ForCurrentProcess());
 }
 
-void ChromeWebClient::PreWebViewCreation() const {
-  // TODO(crbug.com/1082371): Confirm that this code is no longer needed and
-  // remove it entirely. Until then, prevent this from running on iOS 13.4+, as
-  // it occasionally triggers a permissions prompt.
-  if (!base::ios::IsRunningOnOrLater(13, 4, 0)) {
-    // Initialize the audio session to allow a web page's audio to continue
-    // playing after the app is backgrounded.
-    VoiceSearchProvider* voice_provider =
-        ios::GetChromeBrowserProvider().GetVoiceSearchProvider();
-    if (voice_provider) {
-      AudioSessionController* audio_controller =
-          voice_provider->GetAudioSessionController();
-      if (audio_controller) {
-        audio_controller->InitializeSessionIfNecessary();
-      }
-    }
-  }
-}
+void ChromeWebClient::PreWebViewCreation() const {}
 
 void ChromeWebClient::AddAdditionalSchemes(Schemes* schemes) const {
   schemes->standard_schemes.push_back(kChromeUIScheme);
@@ -286,10 +293,7 @@ void ChromeWebClient::GetAdditionalWebUISchemes(
 void ChromeWebClient::PostBrowserURLRewriterCreation(
     web::BrowserURLRewriter* rewriter) {
   rewriter->AddURLRewriter(&WillHandleWebBrowserAboutURL);
-  BrowserURLRewriterProvider* provider =
-      ios::GetChromeBrowserProvider().GetBrowserURLRewriterProvider();
-  if (provider)
-    provider->AddProviderRewriters(rewriter);
+  ios::provider::AddURLRewriters(rewriter);
 }
 
 std::vector<web::JavaScriptFeature*> ChromeWebClient::GetJavaScriptFeatures(
@@ -427,26 +431,11 @@ bool ChromeWebClient::EnableLongPressUIContextMenu() const {
   return web::features::UseWebViewNativeContextMenuSystem();
 }
 
-bool ChromeWebClient::ForceMobileVersionByDefault(const GURL& url) {
-  DCHECK(web::features::UseWebClientDefaultUserAgent());
-  if (base::FeatureList::IsEnabled(web::kMobileGoogleSRP)) {
-    return google_util::IsGoogleSearchUrl(url);
-  }
-  return false;
-}
-
 web::UserAgentType ChromeWebClient::GetDefaultUserAgent(
     id<UITraitEnvironment> web_view,
     const GURL& url) {
   DCHECK(web::features::UseWebClientDefaultUserAgent());
-  if (ForceMobileVersionByDefault(url))
-    return web::UserAgentType::MOBILE;
-  BOOL isRegularRegular = web_view.traitCollection.horizontalSizeClass ==
-                              UIUserInterfaceSizeClassRegular &&
-                          web_view.traitCollection.verticalSizeClass ==
-                              UIUserInterfaceSizeClassRegular;
-  return isRegularRegular ? web::UserAgentType::DESKTOP
-                          : web::UserAgentType::MOBILE;
+  return web::UserAgentType::MOBILE;
 }
 
 bool ChromeWebClient::RestoreSessionFromCache(web::WebState* web_state) const {

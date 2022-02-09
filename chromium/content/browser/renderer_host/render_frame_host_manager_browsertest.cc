@@ -3923,10 +3923,10 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, LastCommittedOrigin) {
   // verify the subframe's origin.
   GURL url_c(embedded_test_server()->GetURL("c.com", "/title3.html"));
   {
-    TestFrameNavigationObserver commit_observer(root->child_at(0));
+    TestFrameNavigationObserver child_commit_observer(root->child_at(0));
     EXPECT_TRUE(
         ExecuteScript(child, "location.href = '" + url_c.spec() + "';"));
-    commit_observer.WaitForCommit();
+    child_commit_observer.WaitForCommit();
   }
   EXPECT_EQ(url::Origin::Create(url_c),
             child->current_frame_host()->GetLastCommittedOrigin());
@@ -4360,12 +4360,14 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
     observer.Wait();
 
     // This should swap BrowsingInstances.
-    scoped_refptr<SiteInstance> curr_instance(
+    scoped_refptr<SiteInstance> updated_curr_instance(
         popup->web_contents()->GetSiteInstance());
-    EXPECT_NE(a_site_instance, curr_instance);
-    EXPECT_FALSE(a_site_instance->IsRelatedSiteInstance(curr_instance.get()));
-    EXPECT_NE(prev_instance, curr_instance);
-    EXPECT_FALSE(prev_instance->IsRelatedSiteInstance(curr_instance.get()));
+    EXPECT_NE(a_site_instance, updated_curr_instance);
+    EXPECT_FALSE(
+        a_site_instance->IsRelatedSiteInstance(updated_curr_instance.get()));
+    EXPECT_NE(prev_instance, updated_curr_instance);
+    EXPECT_FALSE(
+        prev_instance->IsRelatedSiteInstance(updated_curr_instance.get()));
   }
 }
 
@@ -4444,9 +4446,9 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
       a_site_instance->GetSiteInfo().storage_partition_config().is_default());
 
   // Verify that the iframe uses the default StoragePartition.
-  EXPECT_EQ(2UL, rfh->GetFramesInSubtree().size());
+  EXPECT_EQ(1UL, rfh->child_count());
   SiteInstanceImpl* b_site_instance = static_cast<SiteInstanceImpl*>(
-      rfh->GetFramesInSubtree()[1]->GetSiteInstance());
+      rfh->child_at(0)->current_frame_host()->GetSiteInstance());
   if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(b_site_instance->IsDefaultSiteInstance());
   } else {
@@ -5520,6 +5522,12 @@ class PageEffectiveURLContentBrowserClient : public ContentBrowserClient {
   PageEffectiveURLContentBrowserClient(const GURL& url_to_modify,
                                        const GURL& url_to_return)
       : url_to_modify_(url_to_modify), url_to_return_(url_to_return) {}
+
+  PageEffectiveURLContentBrowserClient(
+      const PageEffectiveURLContentBrowserClient&) = delete;
+  PageEffectiveURLContentBrowserClient& operator=(
+      const PageEffectiveURLContentBrowserClient&) = delete;
+
   ~PageEffectiveURLContentBrowserClient() override = default;
 
  private:
@@ -5532,8 +5540,6 @@ class PageEffectiveURLContentBrowserClient : public ContentBrowserClient {
 
   GURL url_to_modify_;
   GURL url_to_return_;
-
-  DISALLOW_COPY_AND_ASSIGN(PageEffectiveURLContentBrowserClient);
 };
 
 // Ensure that same-document navigations for URLs with effective URLs don't
@@ -5631,15 +5637,6 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
         success_site_instance->IsRelatedSiteInstance(initial_instance.get()));
   }
 
-  // Install a client forcing every navigation to swap BrowsingInstances.
-  // TODO(https://crbug.com/1045524): Ensure for now that we are not swapping
-  // pages on reloads for now even when content client tells us to.
-  // Move client initialisation to a later point in the time after the
-  // problem is fixed.
-  BrowsingInstanceSwapContentBrowserClient content_browser_client;
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&content_browser_client);
-
   // Reload of the error page that still results in an error should stay in
   // the same SiteInstance. Ensure this works for both browser-initiated
   // reloads and renderer-initiated ones.
@@ -5665,6 +5662,11 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
     EXPECT_TRUE(
         IsMainFrameOriginOpaqueAndCompatibleWithURL(shell(), error_url));
   }
+
+  // Install a client forcing every navigation to swap BrowsingInstances.
+  BrowsingInstanceSwapContentBrowserClient content_browser_client;
+  ContentBrowserClient* old_client =
+      SetBrowserClientForTesting(&content_browser_client);
 
   // Allow the navigation to succeed and ensure it swapped to a non-related
   // SiteInstance.
@@ -6649,12 +6651,8 @@ class ProactivelySwapBrowsingInstancesSameSiteCoopTest
   ProactivelySwapBrowsingInstancesSameSiteCoopTest()
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     std::vector<base::Feature> features;
-    feature_list_.InitWithFeatures(
-        {
-            network::features::kCrossOriginOpenerPolicy,
-            network::features::kCrossOriginOpenerPolicyReporting,
-        },
-        {});
+    feature_list_.InitAndEnableFeature(
+        network::features::kCrossOriginOpenerPolicy);
   }
 
   ~ProactivelySwapBrowsingInstancesSameSiteCoopTest() override = default;
@@ -7849,7 +7847,7 @@ class RenderFrameHostManagerUnloadBrowserTest
   // processing to prevent any test flakiness.  This is the time that the ping
   // request will have to make it from the renderer to the test server.
   void ExtendSubframeUnloadTimeoutForTerminationPing(RenderFrameHostImpl* rfh) {
-    rfh->SetSubframeUnloadTimeoutForTesting(base::TimeDelta::FromSeconds(30));
+    rfh->SetSubframeUnloadTimeoutForTesting(base::Seconds(30));
   }
 
  protected:
@@ -8173,7 +8171,7 @@ class AssertForegroundHelper {
         base::BindOnce(&AssertForegroundHelper::AssertForegroundAndRepost,
                        weak_ptr_factory_.GetWeakPtr(),
                        std::cref(renderer_process), port_provider),
-        base::TimeDelta::FromMilliseconds(1));
+        base::Milliseconds(1));
   }
 #else   // defined(OS_MAC)
   // Same as above without the Mac specific base::PortProvider.
@@ -8184,7 +8182,7 @@ class AssertForegroundHelper {
         base::BindOnce(&AssertForegroundHelper::AssertForegroundAndRepost,
                        weak_ptr_factory_.GetWeakPtr(),
                        std::cref(renderer_process)),
-        base::TimeDelta::FromMilliseconds(1));
+        base::Milliseconds(1));
   }
 #endif  // defined(OS_MAC)
 
@@ -8624,7 +8622,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
           StoragePartitionConfig::CreateDefault(browser_context),
           WebExposedIsolationInfo::CreateNonIsolated(), false /* is_guest */,
           false /* does_site_request_dedicated_process_for_coop */,
-          false /* is_jit_disabled */)),
+          false /* is_jit_disabled */, false /* is_pdf */)),
       policy->GetProcessLock(process2->GetID()));
 
   // Ensure also that the foo.com process didn't change midway through the
@@ -8673,6 +8671,12 @@ class RenderFrameHostManagerDefaultProcessTest
     feature_list_.InitAndEnableFeature(
         features::kProcessSharingWithStrictSiteInstances);
   }
+
+  RenderFrameHostManagerDefaultProcessTest(
+      const RenderFrameHostManagerDefaultProcessTest&) = delete;
+  RenderFrameHostManagerDefaultProcessTest& operator=(
+      const RenderFrameHostManagerDefaultProcessTest&) = delete;
+
   ~RenderFrameHostManagerDefaultProcessTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -8687,8 +8691,6 @@ class RenderFrameHostManagerDefaultProcessTest
 
  private:
   base::test::ScopedFeatureList feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostManagerDefaultProcessTest);
 };
 
 // Ensure that the default process can be used for URLs that don't assign a site
@@ -8983,14 +8985,17 @@ class RenderFrameHostManagerNoSiteIsolationTest
     : public RenderFrameHostManagerTest {
  public:
   RenderFrameHostManagerNoSiteIsolationTest() = default;
+
+  RenderFrameHostManagerNoSiteIsolationTest(
+      const RenderFrameHostManagerNoSiteIsolationTest&) = delete;
+  RenderFrameHostManagerNoSiteIsolationTest& operator=(
+      const RenderFrameHostManagerNoSiteIsolationTest&) = delete;
+
   ~RenderFrameHostManagerNoSiteIsolationTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kDisableSiteIsolation);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostManagerNoSiteIsolationTest);
 };
 
 // Ensure that when a process that allows any site gets reused by new

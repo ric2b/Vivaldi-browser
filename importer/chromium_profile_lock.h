@@ -17,6 +17,8 @@ class ChromiumProfileLock {
  public:
   explicit ChromiumProfileLock(const base::FilePath& path);
   ~ChromiumProfileLock();
+  ChromiumProfileLock(const ChromiumProfileLock&) = delete;
+  ChromiumProfileLock& operator=(const ChromiumProfileLock&) = delete;
 
   // Locks and releases the profile.
   void Lock();
@@ -37,8 +39,6 @@ class ChromiumProfileLock {
 #if defined(OS_WIN)
   HANDLE lock_handle_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(ChromiumProfileLock);
 };
 
 #endif  // IMPORTER_CHROMIUM_PROFILE_LOCK_H_

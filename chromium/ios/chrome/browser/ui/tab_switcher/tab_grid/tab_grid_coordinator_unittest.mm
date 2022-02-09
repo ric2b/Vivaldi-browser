@@ -26,6 +26,7 @@
 #include "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/test/block_cleanup_test.h"
+#include "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest_mac.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
@@ -146,6 +147,7 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
 
  protected:
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
 
   // Model for bookmarks.
@@ -307,15 +309,15 @@ TEST_F(TabGridCoordinatorTest, SizeTabGridCoordinatorViewController) {
 // Tests that the time spent in the tab grid is correctly logged.
 TEST_F(TabGridCoordinatorTest, TimeSpentInTabGrid) {
   histogram_tester_.ExpectTotalCount("IOS.TabSwitcher.TimeSpent", 0);
-  scoped_clock_.Advance(base::TimeDelta::FromMinutes(1));
+  scoped_clock_.Advance(base::Minutes(1));
   [coordinator_ showTabGrid];
   histogram_tester_.ExpectTotalCount("IOS.TabSwitcher.TimeSpent", 0);
-  scoped_clock_.Advance(base::TimeDelta::FromSeconds(20));
+  scoped_clock_.Advance(base::Seconds(20));
   [coordinator_ showTabViewController:normal_tab_view_controller_
                    shouldCloseTabGrid:YES
                            completion:nil];
   histogram_tester_.ExpectUniqueTimeSample("IOS.TabSwitcher.TimeSpent",
-                                           base::TimeDelta::FromSeconds(20), 1);
+                                           base::Seconds(20), 1);
   histogram_tester_.ExpectTotalCount("IOS.TabSwitcher.TimeSpent", 1);
 }
 

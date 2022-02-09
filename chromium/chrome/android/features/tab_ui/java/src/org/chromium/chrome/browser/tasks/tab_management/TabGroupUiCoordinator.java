@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
@@ -34,7 +35,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
-import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
@@ -49,6 +49,7 @@ import java.util.List;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
 /**
  * A coordinator for TabGroupUi component. Manages the communication with
@@ -62,7 +63,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final Activity mActivity;
     private final Context mContext;
     private final PropertyModel mModel;
-    private final ThemeColorProvider mThemeColorProvider;
+    private final IncognitoStateProvider mIncognitoStateProvider;
     private final TabGroupUiToolbarView mToolbarView;
     private final ViewGroup mTabListContainerView;
     private final ScrimCoordinator mScrimCoordinator;
@@ -87,7 +88,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
      * Creates a new {@link TabGroupUiCoordinator}
      */
     public TabGroupUiCoordinator(@NonNull Activity activity, @NonNull ViewGroup parentView,
-            @NonNull ThemeColorProvider themeColorProvider,
+            @NonNull IncognitoStateProvider incognitoStateProvider,
             @NonNull ScrimCoordinator scrimCoordinator,
             @NonNull ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             @NonNull BottomSheetController bottomSheetController,
@@ -102,7 +103,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             @NonNull SnackbarManager snackbarManager) {
         mActivity = activity;
         mContext = parentView.getContext();
-        mThemeColorProvider = themeColorProvider;
+        mIncognitoStateProvider = incognitoStateProvider;
         mScrimCoordinator = scrimCoordinator;
         mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mModel = new PropertyModel(TabGroupUiProperties.ALL_KEYS);
@@ -164,7 +165,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
         mMediator = new TabGroupUiMediator(mActivity, visibilityController, this, mModel,
                 mTabModelSelector, mTabCreatorManager, mOverviewModeBehaviorSupplier,
-                mThemeColorProvider, dialogController, mActivityLifecycleDispatcher,
+                mIncognitoStateProvider, dialogController, mActivityLifecycleDispatcher,
                 mSnackbarManager, mOmniboxFocusStateSupplier);
 
         TabGroupUtils.startObservingForCreationIPH();
@@ -189,8 +190,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
      * @return {@link Supplier} that provides dialog visibility.
      */
     @Override
-    public Supplier<Boolean> getTabGridDialogVisibilitySupplier() {
-        return () -> mTabGridDialogCoordinator != null && mTabGridDialogCoordinator.isVisible();
+    public boolean isTabGridDialogVisible() {
+        return mTabGridDialogCoordinator != null && mTabGridDialogCoordinator.isVisible();
     }
 
     /**
@@ -351,5 +352,11 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     @Override
     public void setupLeftButtonOnClickListener(View.OnClickListener listener) {
         mMediator.setupLeftButtonOnClickListener(listener);
+    }
+
+    /** Vivaldi **/
+    @Override
+    public void setThemeColorProvider(ThemeColorProvider provider) {
+        mToolbarView.setThemeColorProvider(provider);
     }
 }

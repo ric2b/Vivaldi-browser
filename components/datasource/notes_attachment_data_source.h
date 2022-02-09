@@ -6,7 +6,6 @@
 #include <string>
 
 #include "components/datasource/vivaldi_data_source.h"
-#include "components/datasource/vivaldi_data_source_api.h"
 
 class NotesAttachmentDataClassHandler : public VivaldiDataClassHandler {
  public:

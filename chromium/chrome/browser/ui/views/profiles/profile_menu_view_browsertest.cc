@@ -291,6 +291,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
 // Regression test for https://crbug.com/1205901
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, CloseIPH) {
   // Display the IPH.
+  FeaturePromoControllerViews::BlockActiveWindowCheckForTesting();
   FeaturePromoControllerViews* promo_controller =
       BrowserView::GetBrowserViewForBrowser(browser())
           ->feature_promo_controller();
@@ -323,6 +324,8 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, CloseIPH) {
       feature_engagement::kIPHProfileSwitchFeature));
 }
 
+// Signing out on Lacros is not possible.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Test that sets up a primary account (without sync) and simulates a click on
 // the signout button.
 class ProfileMenuViewSignoutTest : public ProfileMenuViewTestBase,
@@ -358,7 +361,8 @@ class ProfileMenuViewSignoutTest : public ProfileMenuViewTestBase,
 // Checks that signout opens a new logout tab.
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, OpenLogoutTab) {
   // Start from a page that is not the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL("https://www.google.com"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://www.google.com")));
   TabStripModel* tab_strip = browser()->tab_strip_model();
   EXPECT_EQ(1, tab_strip->count());
   EXPECT_EQ(0, tab_strip->active_index());
@@ -386,7 +390,8 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, OpenLogoutTab) {
 #endif
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, MAYBE_SignoutFromNTP) {
   // Start from the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           GURL(chrome::kChromeUINewTabURL)));
   TabStripModel* tab_strip = browser()->tab_strip_model();
   EXPECT_EQ(1, tab_strip->count());
   EXPECT_EQ(0, tab_strip->active_index());
@@ -490,6 +495,7 @@ IN_PROC_BROWSER_TEST_P(ProfileMenuViewSignoutTestWithNetwork, Signout) {
 INSTANTIATE_TEST_SUITE_P(NetworkOnOrOff,
                          ProfileMenuViewSignoutTestWithNetwork,
                          ::testing::Bool());
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // This class is used to test the existence, the correct order and the call to
 // the correct action of the buttons in the profile menu. This is done by
@@ -524,6 +530,10 @@ class ProfileMenuClickTestBase : public SyncTest,
                                  public ProfileMenuViewTestBase {
  public:
   ProfileMenuClickTestBase() : SyncTest(SINGLE_CLIENT) {}
+
+  ProfileMenuClickTestBase(const ProfileMenuClickTestBase&) = delete;
+  ProfileMenuClickTestBase& operator=(const ProfileMenuClickTestBase&) = delete;
+
   ~ProfileMenuClickTestBase() override = default;
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -568,14 +578,16 @@ class ProfileMenuClickTestBase : public SyncTest,
   base::HistogramTester histogram_tester_;
 
   std::unique_ptr<SyncServiceImplHarness> sync_harness_;
-
-  DISALLOW_COPY_AND_ASSIGN(ProfileMenuClickTestBase);
 };
 
 class ProfileMenuClickTest : public ProfileMenuClickTestBase,
                              public testing::WithParamInterface<size_t> {
  public:
   ProfileMenuClickTest() = default;
+
+  ProfileMenuClickTest(const ProfileMenuClickTest&) = delete;
+  ProfileMenuClickTest& operator=(const ProfileMenuClickTest&) = delete;
+
   ~ProfileMenuClickTest() override = default;
 
   virtual ProfileMenuViewBase::ActionableItem GetExpectedActionableItemAtIndex(
@@ -598,22 +610,19 @@ class ProfileMenuClickTest : public ProfileMenuClickTestBase,
         "Profile.Menu.ClickedActionableItem",
         GetExpectedActionableItemAtIndex(GetParam()), /*count=*/1);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ProfileMenuClickTest);
 };
 
 #define PROFILE_MENU_CLICK_TEST(actionable_item_list, test_case_name)     \
   class test_case_name : public ProfileMenuClickTest {                    \
    public:                                                                \
     test_case_name() = default;                                           \
+    test_case_name(const test_case_name&) = delete;                       \
+    test_case_name& operator=(const test_case_name&) = delete;            \
                                                                           \
     ProfileMenuViewBase::ActionableItem GetExpectedActionableItemAtIndex( \
         size_t index) override {                                          \
       return actionable_item_list[index];                                 \
     }                                                                     \
-                                                                          \
-    DISALLOW_COPY_AND_ASSIGN(test_case_name);                             \
   };                                                                      \
                                                                           \
   INSTANTIATE_TEST_SUITE_P(                                               \

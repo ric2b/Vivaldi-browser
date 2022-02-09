@@ -127,6 +127,11 @@ class OptimizationGuideKeyedServiceBrowserTest
         {optimization_guide::features::kOptimizationHints}, {});
   }
 
+  OptimizationGuideKeyedServiceBrowserTest(
+      const OptimizationGuideKeyedServiceBrowserTest&) = delete;
+  OptimizationGuideKeyedServiceBrowserTest& operator=(
+      const OptimizationGuideKeyedServiceBrowserTest&) = delete;
+
   ~OptimizationGuideKeyedServiceBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
@@ -269,8 +274,6 @@ class OptimizationGuideKeyedServiceBrowserTest
   // Histogram tester used specifically to capture metrics that are recorded
   // during browser initialization.
   base::HistogramTester histogram_tester_;
-
-  DISALLOW_COPY_AND_ASSIGN(OptimizationGuideKeyedServiceBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
@@ -293,11 +296,11 @@ IN_PROC_BROWSER_TEST_F(
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::HistogramTester histogram_tester;
 
-  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_with_hints()));
   histogram_tester.ExpectTotalCount("OptimizationGuide.LoadedHint.Result", 0);
 
   // Navigate away so UKM get recorded.
-  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_with_hints()));
 
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
@@ -320,7 +323,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       },
       run_loop.get()));
 
-  ui_test_utils::NavigateToURL(browser(), url_that_redirects_to_no_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           url_that_redirects_to_no_hints()));
   run_loop->Run();
 }
 
@@ -340,7 +344,7 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       },
       run_loop.get()));
 
-  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_with_hints()));
   run_loop->Run();
 }
 
@@ -360,7 +364,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       },
       run_loop.get()));
 
-  ui_test_utils::NavigateToURL(browser(), GURL("https://nohints.com/"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://nohints.com/")));
   run_loop->Run();
 }
 
@@ -372,7 +377,7 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::HistogramTester histogram_tester;
 
-  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_with_hints()));
 
   EXPECT_GT(optimization_guide::RetryForHistogramUntilCountReached(
                 &histogram_tester, "OptimizationGuide.LoadedHint.Result", 1),
@@ -386,7 +391,7 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
             last_can_apply_optimization_decision());
 
   // Navigate away so metrics get recorded.
-  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_with_hints()));
 
   // Expect that UKM is recorded.
   auto entries = ukm_recorder.GetEntriesByName(
@@ -410,7 +415,7 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::HistogramTester histogram_tester;
 
-  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url_with_hints()));
 
   EXPECT_GT(optimization_guide::RetryForHistogramUntilCountReached(
                 &histogram_tester, "OptimizationGuide.LoadedHint.Result", 1),
@@ -448,7 +453,8 @@ IN_PROC_BROWSER_TEST_F(
 
   base::HistogramTester histogram_tester;
 
-  ui_test_utils::NavigateToURL(browser(), url_that_redirects_to_hints());
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), url_that_redirects_to_hints()));
 
   EXPECT_EQ(optimization_guide::RetryForHistogramUntilCountReached(
                 &histogram_tester, "OptimizationGuide.LoadedHint.Result", 2),
@@ -469,7 +475,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
 
   base::HistogramTester histogram_tester;
 
-  ui_test_utils::NavigateToURL(browser(), GURL("https://nohints.com/"));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("https://nohints.com/")));
 
   EXPECT_EQ(optimization_guide::RetryForHistogramUntilCountReached(
                 &histogram_tester, "OptimizationGuide.LoadedHint.Result", 1),
@@ -609,7 +616,7 @@ IN_PROC_BROWSER_TEST_F(
   // Navigate to a URL that has a hint from a component and wait for that hint
   // to have loaded.
   base::HistogramTester histogram_tester;
-  ui_test_utils::NavigateToURL(otr_browser, url_with_hints());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(otr_browser, url_with_hints()));
   optimization_guide::RetryForHistogramUntilCountReached(
       &histogram_tester, "OptimizationGuide.LoadedHint.Result", 1);
 

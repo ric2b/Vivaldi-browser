@@ -45,6 +45,7 @@ per-file utility_sandbox_delegate_win.*=file://sandbox/win/OWNERS
 # BackForwardCache
 per-file back_forward_cache_browsertest.cc=arthursonzogni@chromium.org
 per-file back_forward_cache_browsertest.cc=altimin@chromium.org
+per-file back_forward_cache_browsertest.cc=rakina@chromium.org
 
 # Storage API dependencies.
 per-file storage_partition*=file://storage/OWNERS
@@ -60,3 +61,7 @@ per-file cross_origin_opener_policy*=pmeuleman@chromium.org
 # Network Service.
 per-file network_service_*=file://services/network/OWNERS
 per-file network_context_*=file://services/network/OWNERS
+
+# For threading (BrowserThread, BrowserMainLoop, etc.)
+per-file *browser_main_loop*=gab@chromium.org
+per-file *browser_thread*=gab@chromium.org

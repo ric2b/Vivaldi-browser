@@ -36,6 +36,9 @@ class EmailTable {
   // happening to avoid thread-safety problems.
   virtual ~EmailTable();
 
+  EmailTable(const EmailTable&) = delete;
+  EmailTable& operator=(const EmailTable&) = delete;
+
   EmailAddressID AddEmailAddress(EmailAddressRow row);
   bool UpdateEmailAddress(EmailAddressRow row);
   bool DeleteEmail(EmailAddressID email_id, ContactID contact_id);
@@ -48,9 +51,6 @@ class EmailTable {
  protected:
   virtual sql::Database& GetDB() = 0;
   bool CreateEmailTable();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(EmailTable);
 };
 
 }  // namespace contact

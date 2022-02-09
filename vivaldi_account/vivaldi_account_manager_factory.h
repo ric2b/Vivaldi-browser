@@ -19,16 +19,17 @@ class VivaldiAccountManagerFactory : public BrowserContextKeyedServiceFactory {
   static VivaldiAccountManagerFactory* GetInstance();
 
  private:
-  friend struct base::DefaultSingletonTraits<VivaldiAccountManagerFactory>;
+  friend base::DefaultSingletonTraits<VivaldiAccountManagerFactory>;
 
   VivaldiAccountManagerFactory();
   ~VivaldiAccountManagerFactory() override;
+  VivaldiAccountManagerFactory(const VivaldiAccountManagerFactory&) = delete;
+  VivaldiAccountManagerFactory& operator=(const VivaldiAccountManagerFactory&) =
+      delete;
 
   // BrowserContextKeyedBaseFactory methods:
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountManagerFactory);
 };
 
 }  // namespace vivaldi

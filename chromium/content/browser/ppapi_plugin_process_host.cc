@@ -71,6 +71,11 @@ class PpapiPluginSandboxedProcessLauncherDelegate
   {
   }
 
+  PpapiPluginSandboxedProcessLauncherDelegate(
+      const PpapiPluginSandboxedProcessLauncherDelegate&) = delete;
+  PpapiPluginSandboxedProcessLauncherDelegate& operator=(
+      const PpapiPluginSandboxedProcessLauncherDelegate&) = delete;
+
   ~PpapiPluginSandboxedProcessLauncherDelegate() override {}
 
 #if defined(OS_WIN)
@@ -135,8 +140,6 @@ class PpapiPluginSandboxedProcessLauncherDelegate
 #if defined(OS_WIN)
   const ppapi::PpapiPermissions permissions_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(PpapiPluginSandboxedProcessLauncherDelegate);
 };
 
 class PpapiPluginProcessHost::PluginNetworkObserver

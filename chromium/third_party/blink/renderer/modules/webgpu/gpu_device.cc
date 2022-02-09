@@ -60,6 +60,7 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
                      scoped_refptr<DawnControlClientHolder> dawn_control_client,
                      GPUAdapter* adapter,
                      WGPUDevice dawn_device,
+                     const WGPUSupportedLimits* limits,
                      const GPUDeviceDescriptor* descriptor)
     : ExecutionContextClient(execution_context),
       DawnObject(dawn_control_client, dawn_device),
@@ -82,15 +83,10 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
       // called.
       lost_callback_(BindDawnRepeatingCallback(&GPUDevice::OnDeviceLostError,
                                                WrapWeakPersistent(this))) {
-  // Check is necessary because we can't assign a default in the IDL.
-  if (descriptor->hasRequiredLimits()) {
-    limits_ =
-        MakeGarbageCollected<GPUSupportedLimits>(descriptor->requiredLimits());
-  } else {
-    limits_ = MakeGarbageCollected<GPUSupportedLimits>();
-  }
-
   DCHECK(dawn_device);
+  DCHECK(limits);
+  limits_ = MakeGarbageCollected<GPUSupportedLimits>(*limits);
+
   GetProcs().deviceSetUncapturedErrorCallback(
       GetHandle(), error_callback_->UnboundCallback(),
       error_callback_->AsUserdata());
@@ -193,10 +189,13 @@ void GPUDevice::OnLogging(WGPULoggingType loggingType, const char* message) {
   }
 }
 
-void GPUDevice::OnDeviceLostError(const char* message) {
+void GPUDevice::OnDeviceLostError(WGPUDeviceLostReason, const char* message) {
+  if (!GetExecutionContext())
+    return;
   AddConsoleWarning(message);
 
   if (lost_property_->GetState() == LostProperty::kPending) {
+    // TODO(crbug.com/1253721): Add the `reason` attribute to GPUDeviceLostInfo.
     auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(message);
     lost_property_->Resolve(device_lost_info);
   }
@@ -336,12 +335,6 @@ GPURenderPipeline* GPUDevice::createRenderPipeline(
 GPUComputePipeline* GPUDevice::createComputePipeline(
     const GPUComputePipelineDescriptor* descriptor,
     ExceptionState& exception_state) {
-  // Check for required members. Can't do this in the IDL because then the
-  // deprecated members would be required.
-  if (!descriptor->hasCompute() && !descriptor->hasComputeStage()) {
-    exception_state.ThrowTypeError("required member compute is undefined.");
-    return nullptr;
-  }
   return GPUComputePipeline::Create(this, descriptor);
 }
 
@@ -379,15 +372,6 @@ ScriptPromise GPUDevice::createComputePipelineAsync(
     const GPUComputePipelineDescriptor* descriptor) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
-
-  // Check for required members. Can't do this in the IDL because then the
-  // deprecated members would be required.
-  if (!descriptor->hasCompute() && !descriptor->hasComputeStage()) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kOperationError,
-        "required member compute is undefined."));
-    return promise;
-  }
 
   std::string label;
   OwnedProgrammableStageDescriptor computeStageDescriptor;

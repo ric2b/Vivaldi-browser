@@ -18,11 +18,17 @@
 class UtilWinImpl : public chrome::mojom::UtilWin {
  public:
   explicit UtilWinImpl(mojo::PendingReceiver<chrome::mojom::UtilWin> receiver);
+
+  UtilWinImpl(const UtilWinImpl&) = delete;
+  UtilWinImpl& operator=(const UtilWinImpl&) = delete;
+
   ~UtilWinImpl() override;
 
  private:
   // chrome::mojom::UtilWin:
   void IsPinnedToTaskbar(IsPinnedToTaskbarCallback callback) override;
+  void UnpinShortcuts(const std::vector<base::FilePath>& shortcut_paths,
+                      UnpinShortcutsCallback callback) override;
   void CallExecuteSelectFile(ui::SelectFileDialog::Type type,
                              uint32_t owner,
                              const std::u16string& title,
@@ -37,8 +43,6 @@ class UtilWinImpl : public chrome::mojom::UtilWin {
                             GetAntiVirusProductsCallback callback) override;
 
   mojo::Receiver<chrome::mojom::UtilWin> receiver_;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilWinImpl);
 };
 
 #endif  // CHROME_SERVICES_UTIL_WIN_UTIL_WIN_IMPL_H_

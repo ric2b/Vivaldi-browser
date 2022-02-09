@@ -10,6 +10,7 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
@@ -24,11 +25,13 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_filter.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_pattern.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
+#include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/stroke_data.h"
+#include "third_party/blink/renderer/platform/graphics/video_frame_image_util.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 
@@ -67,12 +70,14 @@ const char BaseRenderingContext2D::kOptimizeLegibilityRendering[] =
 const char BaseRenderingContext2D::kGeometricPrecisionRendering[] =
     "geometricprecision";
 
+// Dummy overdraw test for ops that do not support overdraw detection
+const auto kNoOverdraw = [](const SkIRect& clip_bounds) { return false; };
+
 // After context lost, it waits |kTryRestoreContextInterval| before start the
 // restore the context. This wait needs to be long enough to avoid spamming the
 // GPU process with retry attempts and short enough to provide decent UX. It's
 // currently set to 500ms.
-const base::TimeDelta kTryRestoreContextInterval =
-    base::TimeDelta::FromMilliseconds(500);
+const base::TimeDelta kTryRestoreContextInterval = base::Milliseconds(500);
 
 BaseRenderingContext2D::BaseRenderingContext2D()
     : dispatch_context_lost_event_timer_(
@@ -128,10 +133,10 @@ void BaseRenderingContext2D::restore() {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kRestore);
   }
   ValidateStateStack();
-
-  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
   if (state_stack_.size() <= 1)
     return;
+
+  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
 
   // Verify that the top of the stack was pushed with Save.
   if (RuntimeEnabledFeatures::Canvas2dLayersEnabled() &&
@@ -215,10 +220,10 @@ void BaseRenderingContext2D::endLayer() {
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   ValidateStateStack();
-
-  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
   if (state_stack_.size() <= 1 || layer_count_ <= 0)
     return;
+
+  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
 
   // Verify that the current state's transform is invertible.
   if (IsTransformInvertible())
@@ -297,7 +302,7 @@ void BaseRenderingContext2D::UnwindStateStack() {
   }
 }
 
-void BaseRenderingContext2D::reset() {
+void BaseRenderingContext2D::ResetInternal() {
   if (identifiability_study_helper_.ShouldUpdateBuilder()) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kReset);
   }
@@ -321,10 +326,16 @@ void BaseRenderingContext2D::reset() {
 #endif
     // We only want to clear the backing buffer if the surface exists because
     // this function is also used when the context is lost.
-    clearRect(0, 0, Width(), Height());
+    clearRect(0, 0, Width(), Height(), /*for_reset=*/true);
   }
   ValidateStateStack();
   origin_tainted_by_content_ = false;
+}
+
+void BaseRenderingContext2D::reset() {
+  UseCounter::Count(GetCanvasRenderingContextHost()->GetTopExecutionContext(),
+                    WebFeature::kCanvasRenderingContext2DRoundRect);
+  ResetInternal();
 }
 
 static V8UnionCSSColorValueOrCanvasGradientOrCanvasPatternOrString*
@@ -397,7 +408,9 @@ void BaseRenderingContext2D::setStrokeStyle(
   switch (style->GetContentType()) {
     case V8UnionCSSColorValueOrCanvasGradientOrCanvasPatternOrString::
         ContentType::kCSSColorValue:
-      if (!RuntimeEnabledFeatures::NewCanvas2DAPIEnabled())
+      if (GetCanvasRenderingContextHost() &&
+          !RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+              GetCanvasRenderingContextHost()->GetTopExecutionContext()))
         return;
       canvas_style = MakeGarbageCollected<CanvasStyle>(
           style->GetAsCSSColorValue()->ToColor().Rgb());
@@ -458,7 +471,9 @@ void BaseRenderingContext2D::setFillStyle(
   switch (style->GetContentType()) {
     case V8UnionCSSColorValueOrCanvasGradientOrCanvasPatternOrString::
         ContentType::kCSSColorValue:
-      if (!RuntimeEnabledFeatures::NewCanvas2DAPIEnabled())
+      if (GetCanvasRenderingContextHost() &&
+          !RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+              GetCanvasRenderingContextHost()->GetTopExecutionContext()))
         return;
       canvas_style = MakeGarbageCollected<CanvasStyle>(
           style->GetAsCSSColorValue()->ToColor().Rgb());
@@ -512,7 +527,7 @@ void BaseRenderingContext2D::setLineWidth(double width) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kSetLineWidth,
                                                 width);
   }
-  GetState().SetLineWidth(clampTo<float>(width));
+  GetState().SetLineWidth(ClampTo<float>(width));
 }
 
 String BaseRenderingContext2D::lineCap() const {
@@ -560,7 +575,7 @@ void BaseRenderingContext2D::setMiterLimit(double limit) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kSetMiterLimit,
                                                 limit);
   }
-  GetState().SetMiterLimit(clampTo<float>(limit));
+  GetState().SetMiterLimit(ClampTo<float>(limit));
 }
 
 double BaseRenderingContext2D::shadowOffsetX() const {
@@ -576,7 +591,7 @@ void BaseRenderingContext2D::setShadowOffsetX(double x) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kSetShadowOffsetX,
                                                 x);
   }
-  GetState().SetShadowOffsetX(clampTo<float>(x));
+  GetState().SetShadowOffsetX(ClampTo<float>(x));
 }
 
 double BaseRenderingContext2D::shadowOffsetY() const {
@@ -592,7 +607,7 @@ void BaseRenderingContext2D::setShadowOffsetY(double y) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kSetShadowOffsetY,
                                                 y);
   }
-  GetState().SetShadowOffsetY(clampTo<float>(y));
+  GetState().SetShadowOffsetY(ClampTo<float>(y));
 }
 
 double BaseRenderingContext2D::shadowBlur() const {
@@ -608,7 +623,7 @@ void BaseRenderingContext2D::setShadowBlur(double blur) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kSetShadowBlur,
                                                 blur);
   }
-  GetState().SetShadowBlur(clampTo<float>(blur));
+  GetState().SetShadowBlur(ClampTo<float>(blur));
 }
 
 String BaseRenderingContext2D::shadowColor() const {
@@ -658,7 +673,7 @@ void BaseRenderingContext2D::setLineDashOffset(double offset) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kSetLineDashOffset,
                                                 offset);
   }
-  GetState().SetLineDashOffset(clampTo<float>(offset));
+  GetState().SetLineDashOffset(ClampTo<float>(offset));
 }
 
 double BaseRenderingContext2D::globalAlpha() const {
@@ -715,7 +730,12 @@ void BaseRenderingContext2D::setFilter(
 
   switch (input->GetContentType()) {
     case V8UnionCanvasFilterOrString::ContentType::kCanvasFilter:
-      if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+      if (GetCanvasRenderingContextHost() &&
+          RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+              GetCanvasRenderingContextHost()->GetTopExecutionContext())) {
+        UseCounter::Count(
+            GetCanvasRenderingContextHost()->GetTopExecutionContext(),
+            WebFeature::kCanvasRenderingContext2DCanvasFilter);
         GetState().SetCanvasFilter(input->GetAsCanvasFilter());
         SnapshotStateForFilter();
         // TODO(crbug.com/1234113): Instrument new canvas APIs.
@@ -761,8 +781,8 @@ void BaseRenderingContext2D::scale(double sx, double sy) {
   }
 
   TransformationMatrix new_transform = GetState().GetTransform();
-  float fsx = clampTo<float>(sx);
-  float fsy = clampTo<float>(sy);
+  float fsx = ClampTo<float>(sx);
+  float fsy = ClampTo<float>(sy);
   new_transform.ScaleNonUniform(fsx, fsy);
   if (GetState().GetTransform() == new_transform)
     return;
@@ -784,9 +804,9 @@ void BaseRenderingContext2D::scale(double sx, double sy, double sz) {
     return;
 
   TransformationMatrix new_transform = GetState().GetTransform();
-  float fsx = clampTo<float>(sx);
-  float fsy = clampTo<float>(sy);
-  float fsz = clampTo<float>(sz);
+  float fsx = ClampTo<float>(sx);
+  float fsy = ClampTo<float>(sy);
+  float fsz = ClampTo<float>(sz);
   new_transform.Scale3d(fsx, fsy, fsz);
   if (GetState().GetTransform() == new_transform)
     return;
@@ -815,14 +835,14 @@ void BaseRenderingContext2D::rotate(double angle_in_radians) {
   }
 
   TransformationMatrix new_transform = GetState().GetTransform();
-  new_transform.Rotate(rad2deg(angle_in_radians));
+  new_transform.Rotate(Rad2deg(angle_in_radians));
   if (GetState().GetTransform() == new_transform)
     return;
 
   SetTransform(new_transform);
   if (!IsTransformInvertible())
     return;
-  c->rotate(clampTo<float>(angle_in_radians * (180.0 / kPiFloat)));
+  c->rotate(ClampTo<float>(angle_in_radians * (180.0 / kPiFloat)));
   path_.Transform(AffineTransform().RotateRadians(-angle_in_radians));
 }
 
@@ -838,11 +858,11 @@ void BaseRenderingContext2D::rotate3d(double rx, double ry, double rz) {
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   TransformationMatrix rotation_matrix =
-      TransformationMatrix().Rotate3d(rad2deg(rx), rad2deg(ry), rad2deg(rz));
+      TransformationMatrix().Rotate3d(Rad2deg(rx), Rad2deg(ry), Rad2deg(rz));
 
   // Check if the transformation is a no-op and early out if that is the case.
   TransformationMatrix new_transform =
-      GetState().GetTransform().Rotate3d(rad2deg(rx), rad2deg(ry), rad2deg(rz));
+      GetState().GetTransform().Rotate3d(Rad2deg(rx), Rad2deg(ry), Rad2deg(rz));
   if (GetState().GetTransform() == new_transform)
     return;
 
@@ -870,11 +890,11 @@ void BaseRenderingContext2D::rotateAxis(double axisX,
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   TransformationMatrix rotation_matrix = TransformationMatrix().Rotate3d(
-      axisX, axisY, axisZ, rad2deg(angle_in_radians));
+      axisX, axisY, axisZ, Rad2deg(angle_in_radians));
 
   // Check if the transformation is a no-op and early out if that is the case.
   TransformationMatrix new_transform = GetState().GetTransform().Rotate3d(
-      axisX, axisY, axisZ, rad2deg(angle_in_radians));
+      axisX, axisY, axisZ, Rad2deg(angle_in_radians));
   if (GetState().GetTransform() == new_transform)
     return;
 
@@ -905,8 +925,8 @@ void BaseRenderingContext2D::translate(double tx, double ty) {
 
   TransformationMatrix new_transform = GetState().GetTransform();
   // clamp to float to avoid float cast overflow when used as SkScalar
-  float ftx = clampTo<float>(tx);
-  float fty = clampTo<float>(ty);
+  float ftx = ClampTo<float>(tx);
+  float fty = ClampTo<float>(ty);
   new_transform.Translate(ftx, fty);
   if (GetState().GetTransform() == new_transform)
     return;
@@ -928,9 +948,9 @@ void BaseRenderingContext2D::translate(double tx, double ty, double tz) {
     return;
 
   // clamp to float to avoid float cast overflow when used as SkScalar
-  float ftx = clampTo<float>(tx);
-  float fty = clampTo<float>(ty);
-  float ftz = clampTo<float>(ty);
+  float ftx = ClampTo<float>(tx);
+  float fty = ClampTo<float>(ty);
+  float ftz = ClampTo<float>(ty);
 
   TransformationMatrix translation_matrix =
       TransformationMatrix().Translate3d(ftx, fty, ftz);
@@ -960,7 +980,7 @@ void BaseRenderingContext2D::perspective(double length) {
   // TODO(crbug.com/1234113): Instrument new canvas APIs.
   identifiability_study_helper_.set_encountered_skipped_ops();
 
-  float flength = clampTo<float>(length);
+  float flength = ClampTo<float>(length);
 
   TransformationMatrix perspective_matrix =
       TransformationMatrix().ApplyPerspective(flength);
@@ -1011,22 +1031,22 @@ void BaseRenderingContext2D::transform(double m11,
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   // clamp to float to avoid float cast overflow when used as SkScalar
-  float fm11 = clampTo<float>(m11);
-  float fm12 = clampTo<float>(m12);
-  float fm13 = clampTo<float>(m13);
-  float fm14 = clampTo<float>(m14);
-  float fm21 = clampTo<float>(m21);
-  float fm22 = clampTo<float>(m22);
-  float fm23 = clampTo<float>(m23);
-  float fm24 = clampTo<float>(m24);
-  float fm31 = clampTo<float>(m31);
-  float fm32 = clampTo<float>(m32);
-  float fm33 = clampTo<float>(m33);
-  float fm34 = clampTo<float>(m34);
-  float fm41 = clampTo<float>(m41);
-  float fm42 = clampTo<float>(m42);
-  float fm43 = clampTo<float>(m43);
-  float fm44 = clampTo<float>(m44);
+  float fm11 = ClampTo<float>(m11);
+  float fm12 = ClampTo<float>(m12);
+  float fm13 = ClampTo<float>(m13);
+  float fm14 = ClampTo<float>(m14);
+  float fm21 = ClampTo<float>(m21);
+  float fm22 = ClampTo<float>(m22);
+  float fm23 = ClampTo<float>(m23);
+  float fm24 = ClampTo<float>(m24);
+  float fm31 = ClampTo<float>(m31);
+  float fm32 = ClampTo<float>(m32);
+  float fm33 = ClampTo<float>(m33);
+  float fm34 = ClampTo<float>(m34);
+  float fm41 = ClampTo<float>(m41);
+  float fm42 = ClampTo<float>(m42);
+  float fm43 = ClampTo<float>(m43);
+  float fm44 = ClampTo<float>(m44);
 
   TransformationMatrix transform =
       TransformationMatrix(fm11, fm12, fm13, fm14, fm21, fm22, fm23, fm24, fm31,
@@ -1064,12 +1084,12 @@ void BaseRenderingContext2D::transform(double m11,
     return;
 
   // clamp to float to avoid float cast overflow when used as SkScalar
-  float fm11 = clampTo<float>(m11);
-  float fm12 = clampTo<float>(m12);
-  float fm21 = clampTo<float>(m21);
-  float fm22 = clampTo<float>(m22);
-  float fdx = clampTo<float>(dx);
-  float fdy = clampTo<float>(dy);
+  float fm11 = ClampTo<float>(m11);
+  float fm12 = ClampTo<float>(m12);
+  float fm21 = ClampTo<float>(m21);
+  float fm22 = ClampTo<float>(m22);
+  float fdx = ClampTo<float>(dx);
+  float fdy = ClampTo<float>(dy);
   if (identifiability_study_helper_.ShouldUpdateBuilder()) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kTransform, fm11,
                                                 fm12, fm21, fm22, fdx, fdy);
@@ -1171,7 +1191,9 @@ void BaseRenderingContext2D::setTransform(DOMMatrixInit* transform,
   // The new canvas 2d API supports 3d transforms.
   // https://github.com/fserb/canvas2D/blob/master/spec/perspective-transforms.md
   // If it is not enabled, throw 3d information away.
-  if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+  if (GetCanvasRenderingContextHost() &&
+      RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+          GetCanvasRenderingContextHost()->GetTopExecutionContext())) {
     setTransform(m->m11(), m->m12(), m->m13(), m->m14(), m->m21(), m->m22(),
                  m->m23(), m->m24(), m->m31(), m->m32(), m->m33(), m->m34(),
                  m->m41(), m->m42(), m->m43(), m->m44());
@@ -1234,16 +1256,17 @@ void BaseRenderingContext2D::DrawPathInternal(
   if (!GetOrCreatePaintCanvas())
     return;
 
-  Draw([sk_path, use_paint_cache](cc::PaintCanvas* c,
-                                  const PaintFlags* flags)  // draw lambda
-       { c->drawPath(sk_path, *flags, use_paint_cache); },
-       [](const SkIRect& rect)  // overdraw test lambda
-       { return false; },
-       bounds, paint_type,
-       GetState().HasPattern(paint_type)
-           ? CanvasRenderingContext2DState::kNonOpaqueImage
-           : CanvasRenderingContext2DState::kNoImage,
-       CanvasPerformanceMonitor::DrawType::kPath);
+  Draw<OverdrawOp::kNone>(
+      [sk_path, use_paint_cache](cc::PaintCanvas* c,
+                                 const PaintFlags* flags)  // draw lambda
+      { c->drawPath(sk_path, *flags, use_paint_cache); },
+      [](const SkIRect& rect)  // overdraw test lambda
+      { return false; },
+      bounds, paint_type,
+      GetState().HasPattern(paint_type)
+          ? CanvasRenderingContext2DState::kNonOpaqueImage
+          : CanvasRenderingContext2DState::kNoImage,
+      CanvasPerformanceMonitor::DrawType::kPath);
 }
 
 static SkPathFillType ParseWinding(const String& winding_rule_string) {
@@ -1311,10 +1334,10 @@ void BaseRenderingContext2D::fillRect(double x,
 
   // clamp to float to avoid float cast overflow when used as SkScalar
   AdjustRectForCanvas(x, y, width, height);
-  float fx = clampTo<float>(x);
-  float fy = clampTo<float>(y);
-  float fwidth = clampTo<float>(width);
-  float fheight = clampTo<float>(height);
+  float fx = ClampTo<float>(x);
+  float fy = ClampTo<float>(y);
+  float fwidth = ClampTo<float>(width);
+  float fheight = ClampTo<float>(height);
 
   // We are assuming that if the pattern is not accelerated and the current
   // canvas is accelerated, the texture of the pattern will not be able to be
@@ -1333,15 +1356,16 @@ void BaseRenderingContext2D::fillRect(double x,
   }
 
   SkRect rect = SkRect::MakeXYWH(fx, fy, fwidth, fheight);
-  Draw([rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
-       { c->drawRect(rect, *flags); },
-       [rect, this](const SkIRect& clip_bounds)  // overdraw test lambda
-       { return RectContainsTransformedRect(rect, clip_bounds); },
-       rect, CanvasRenderingContext2DState::kFillPaintType,
-       GetState().HasPattern(CanvasRenderingContext2DState::kFillPaintType)
-           ? CanvasRenderingContext2DState::kNonOpaqueImage
-           : CanvasRenderingContext2DState::kNoImage,
-       CanvasPerformanceMonitor::DrawType::kRectangle);
+  Draw<OverdrawOp::kFillRect>(
+      [rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+      { c->drawRect(rect, *flags); },
+      [rect, this](const SkIRect& clip_bounds)  // overdraw test lambda
+      { return RectContainsTransformedRect(rect, clip_bounds); },
+      rect, CanvasRenderingContext2DState::kFillPaintType,
+      GetState().HasPattern(CanvasRenderingContext2DState::kFillPaintType)
+          ? CanvasRenderingContext2DState::kNonOpaqueImage
+          : CanvasRenderingContext2DState::kNoImage,
+      CanvasPerformanceMonitor::DrawType::kRectangle);
 }
 
 static void StrokeRectOnCanvas(const FloatRect& rect,
@@ -1376,10 +1400,10 @@ void BaseRenderingContext2D::strokeRect(double x,
 
   // clamp to float to avoid float cast overflow when used as SkScalar
   AdjustRectForCanvas(x, y, width, height);
-  float fx = clampTo<float>(x);
-  float fy = clampTo<float>(y);
-  float fwidth = clampTo<float>(width);
-  float fheight = clampTo<float>(height);
+  float fx = ClampTo<float>(x);
+  float fy = ClampTo<float>(y);
+  float fwidth = ClampTo<float>(width);
+  float fheight = ClampTo<float>(height);
 
   SkRect rect = SkRect::MakeXYWH(fx, fy, fwidth, fheight);
   FloatRect bounds = rect;
@@ -1389,15 +1413,14 @@ void BaseRenderingContext2D::strokeRect(double x,
                              bounds.Height()))
     return;
 
-  Draw([rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
-       { StrokeRectOnCanvas(rect, c, flags); },
-       [](const SkIRect& clip_bounds)  // overdraw test lambda
-       { return false; },
-       bounds, CanvasRenderingContext2DState::kStrokePaintType,
-       GetState().HasPattern(CanvasRenderingContext2DState::kStrokePaintType)
-           ? CanvasRenderingContext2DState::kNonOpaqueImage
-           : CanvasRenderingContext2DState::kNoImage,
-       CanvasPerformanceMonitor::DrawType::kRectangle);
+  Draw<OverdrawOp::kNone>(
+      [rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+      { StrokeRectOnCanvas(rect, c, flags); },
+      kNoOverdraw, bounds, CanvasRenderingContext2DState::kStrokePaintType,
+      GetState().HasPattern(CanvasRenderingContext2DState::kStrokePaintType)
+          ? CanvasRenderingContext2DState::kNonOpaqueImage
+          : CanvasRenderingContext2DState::kNoImage,
+      CanvasPerformanceMonitor::DrawType::kRectangle);
 }
 
 void BaseRenderingContext2D::ClipInternal(const Path& path,
@@ -1464,7 +1487,7 @@ bool BaseRenderingContext2D::IsPointInPathInternal(
 
   if (!std::isfinite(x) || !std::isfinite(y))
     return false;
-  FloatPoint point(clampTo<float>(x), clampTo<float>(y));
+  FloatPoint point(ClampTo<float>(x), ClampTo<float>(y));
   TransformationMatrix ctm = GetState().GetTransform();
   FloatPoint transformed_point = ctm.Inverse().MapPoint(point);
 
@@ -1493,7 +1516,7 @@ bool BaseRenderingContext2D::IsPointInStrokeInternal(const Path& path,
 
   if (!std::isfinite(x) || !std::isfinite(y))
     return false;
-  FloatPoint point(clampTo<float>(x), clampTo<float>(y));
+  FloatPoint point(ClampTo<float>(x), ClampTo<float>(y));
   AffineTransform ctm = GetState().GetAffineTransform();
   FloatPoint transformed_point = ctm.Inverse().MapPoint(point);
 
@@ -1512,7 +1535,8 @@ bool BaseRenderingContext2D::IsPointInStrokeInternal(const Path& path,
 void BaseRenderingContext2D::clearRect(double x,
                                        double y,
                                        double width,
-                                       double height) {
+                                       double height,
+                                       bool for_reset) {
   if (!ValidateRectForCanvas(x, y, width, height))
     return;
 
@@ -1536,15 +1560,22 @@ void BaseRenderingContext2D::clearRect(double x,
 
   // clamp to float to avoid float cast overflow when used as SkScalar
   AdjustRectForCanvas(x, y, width, height);
-  float fx = clampTo<float>(x);
-  float fy = clampTo<float>(y);
-  float fwidth = clampTo<float>(width);
-  float fheight = clampTo<float>(height);
+  float fx = ClampTo<float>(x);
+  float fy = ClampTo<float>(y);
+  float fwidth = ClampTo<float>(width);
+  float fheight = ClampTo<float>(height);
 
   FloatRect rect(fx, fy, fwidth, fheight);
   if (RectContainsTransformedRect(rect, clip_bounds)) {
-    CheckOverdraw(rect, &clear_flags, CanvasRenderingContext2DState::kNoImage,
-                  kClipFill);
+    if (for_reset) {
+      // In the reset case, we can use kUntransformedUnclippedFill because we
+      // know the state state was reset.
+      CheckOverdraw(rect, &clear_flags, CanvasRenderingContext2DState::kNoImage,
+                    OverdrawOp::kContextReset, kUntransformedUnclippedFill);
+    } else {
+      CheckOverdraw(rect, &clear_flags, CanvasRenderingContext2DState::kNoImage,
+                    OverdrawOp::kClearRect, kClipFill);
+    }
     GetPaintCanvasForDraw(clip_bounds,
                           CanvasPerformanceMonitor::DrawType::kOther)
         ->drawRect(rect, clear_flags);
@@ -1679,7 +1710,8 @@ bool BaseRenderingContext2D::ShouldDrawImageAntialiased(
 
 void BaseRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
   if (GetCanvasRenderingContextHost() &&
-      RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+      RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+          GetCanvasRenderingContextHost()->GetTopExecutionContext())) {
     Event* event = Event::CreateCancelable(event_type_names::kContextlost);
     GetCanvasRenderingContextHost()->HostDispatchEvent(event);
 
@@ -1700,10 +1732,17 @@ void BaseRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
 }
 
 void BaseRenderingContext2D::DispatchContextRestoredEvent(TimerBase*) {
-  DCHECK(context_lost_mode_ != CanvasRenderingContext::kNotLostContext);
-  reset();
+  // Since canvas may trigger contextlost event by multiple different ways (ex:
+  // gpu crashes and frame eviction), it's possible to triggeer this
+  // function while the context is already restored. In this case, we
+  // abort it here.
+  if (context_lost_mode_ == CanvasRenderingContext::kNotLostContext)
+    return;
+  ResetInternal();
   context_lost_mode_ = CanvasRenderingContext::kNotLostContext;
-  if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+  if (GetCanvasRenderingContextHost() &&
+      RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+          GetCanvasRenderingContextHost()->GetTopExecutionContext())) {
     Event* event(Event::Create(event_type_names::kContextrestored));
     GetCanvasRenderingContextHost()->HostDispatchEvent(event);
     UseCounter::Count(
@@ -1756,7 +1795,43 @@ void BaseRenderingContext2D::DrawImageInternal(
     image_flags.setImageFilter(nullptr);
   }
 
-  if (!image_source->IsVideoElement()) {
+  if (image_source->IsVideoElement()) {
+    c->save();
+    c->clipRect(dst_rect);
+    c->translate(dst_rect.X(), dst_rect.Y());
+    c->scale(dst_rect.Width() / src_rect.Width(),
+             dst_rect.Height() / src_rect.Height());
+    c->translate(-src_rect.X(), -src_rect.Y());
+    HTMLVideoElement* video = static_cast<HTMLVideoElement*>(image_source);
+    video->PaintCurrentFrame(
+        c,
+        IntRect(IntPoint(), IntSize(video->videoWidth(), video->videoHeight())),
+        &image_flags);
+  } else if (image_source->IsVideoFrame()) {
+    VideoFrame* frame = static_cast<VideoFrame*>(image_source);
+    auto media_frame = frame->frame();
+    bool ignore_transformation =
+        RespectImageOrientationInternal(image_source) ==
+        kDoNotRespectImageOrientation;
+    FloatRect corrected_src_rect = src_rect;
+
+    if (!ignore_transformation) {
+      auto orientation_enum = VideoTransformationToImageOrientation(
+          media_frame->metadata().transformation.value_or(
+              media::kNoTransformation));
+      if (ImageOrientation(orientation_enum).UsesWidthAsHeight())
+        corrected_src_rect = src_rect.TransposedRect();
+    }
+
+    c->save();
+    c->clipRect(dst_rect);
+    c->translate(dst_rect.X(), dst_rect.Y());
+    c->scale(dst_rect.Width() / corrected_src_rect.Width(),
+             dst_rect.Height() / corrected_src_rect.Height());
+    c->translate(-corrected_src_rect.X(), -corrected_src_rect.Y());
+    DrawVideoFrameIntoCanvas(std::move(media_frame), c, image_flags,
+                             ignore_transformation);
+  } else {
     // We always use the image-orientation property on the canvas element
     // because the alternative would result in complex rules depending on
     // the source of the image.
@@ -1771,22 +1846,10 @@ void BaseRenderingContext2D::DrawImageInternal(
     image_flags.setAntiAlias(ShouldDrawImageAntialiased(dst_rect));
     ImageDrawOptions draw_options;
     draw_options.sampling_options = sampling;
-    draw_options.respect_image_orientation = respect_orientation;
-    image->Draw(c, image_flags, dst_rect, corrected_src_rect, draw_options,
-                Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
-  } else {
-    c->save();
-    c->clipRect(dst_rect);
-    c->translate(dst_rect.X(), dst_rect.Y());
-    c->scale(dst_rect.Width() / src_rect.Width(),
-             dst_rect.Height() / src_rect.Height());
-    c->translate(-src_rect.X(), -src_rect.Y());
-    HTMLVideoElement* video = static_cast<HTMLVideoElement*>(image_source);
-    video->PaintCurrentFrame(
-        c,
-        IntRect(IntPoint(), IntSize(video->videoWidth(), video->videoHeight())),
-        &image_flags);
-  };
+    draw_options.respect_orientation = respect_orientation;
+    draw_options.clamping_mode = Image::kDoNotClampImageToSourceRect;
+    image->Draw(c, image_flags, dst_rect, corrected_src_rect, draw_options);
+  }
 
   c->restoreToCount(initial_save_count);
 }
@@ -1812,8 +1875,6 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
   if (!GetOrCreatePaintCanvas())
     return;
 
-  base::TimeTicks start_time = base::TimeTicks::Now();
-
   scoped_refptr<Image> image;
   FloatSize default_object_size(Width(), Height());
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
@@ -1838,14 +1899,14 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
     return;
 
   // clamp to float to avoid float cast overflow when used as SkScalar
-  float fsx = clampTo<float>(sx);
-  float fsy = clampTo<float>(sy);
-  float fsw = clampTo<float>(sw);
-  float fsh = clampTo<float>(sh);
-  float fdx = clampTo<float>(dx);
-  float fdy = clampTo<float>(dy);
-  float fdw = clampTo<float>(dw);
-  float fdh = clampTo<float>(dh);
+  float fsx = ClampTo<float>(sx);
+  float fsy = ClampTo<float>(sy);
+  float fsw = ClampTo<float>(sw);
+  float fsh = ClampTo<float>(sh);
+  float fdx = ClampTo<float>(dx);
+  float fdy = ClampTo<float>(dy);
+  float fdw = ClampTo<float>(dw);
+  float fdh = ClampTo<float>(dh);
 
   FloatRect src_rect = NormalizeRect(FloatRect(fsx, fsy, fsw, fsh));
   FloatRect dst_rect = NormalizeRect(FloatRect(fdx, fdy, fdw, fdh));
@@ -1868,12 +1929,10 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
 
   WillDrawImage(image_source);
 
-  ValidateStateStack();
-
   if (!origin_tainted_by_content_ && WouldTaintOrigin(image_source))
     SetOriginTaintedByContent();
 
-  Draw(
+  Draw<OverdrawOp::kDrawImage>(
       [this, image_source, image, src_rect, dst_rect](
           cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
       {
@@ -1890,68 +1949,12 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
       image_source->IsOpaque() ? CanvasRenderingContext2DState::kOpaqueImage
                                : CanvasRenderingContext2DState::kNonOpaqueImage,
       CanvasPerformanceMonitor::DrawType::kImage);
-
-  ValidateStateStack();
-  bool source_is_canvas = false;
-  if (!IsPaint2D()) {
-    std::string image_source_name;
-    if (image_source->IsCanvasElement()) {
-      image_source_name = "Canvas";
-      source_is_canvas = true;
-    } else if (image_source->IsCSSImageValue()) {
-      image_source_name = "CssImage";
-    } else if (image_source->IsImageElement()) {
-      image_source_name = "ImageElement";
-    } else if (image_source->IsImageBitmap()) {
-      image_source_name = "ImageBitmap";
-    } else if (image_source->IsOffscreenCanvas()) {
-      image_source_name = "OffscreenCanvas";
-      source_is_canvas = true;
-    } else if (image_source->IsSVGSource()) {
-      image_source_name = "SVG";
-    } else if (image_source->IsVideoElement()) {
-      image_source_name = "Video";
-    } else if (image_source->IsVideoFrame()) {
-      image_source_name = "VideoFrame";
-    } else {  // Unknown source.
-      image_source_name = "Unknown";
-    }
-
-    std::string duration_histogram_name =
-        "Blink.Canvas.DrawImage.Duration2." + image_source_name;
-    std::string size_histogram_name =
-        "Blink.Canvas.DrawImage.SqrtNumberOfPixels." + image_source_name;
-
-    if (CanCreateCanvas2dResourceProvider() && IsAccelerated()) {
-      if (source_is_canvas)
-        size_histogram_name.append(".GPU");
-      duration_histogram_name.append(".GPU");
-    } else {
-      if (source_is_canvas)
-        size_histogram_name.append(".CPU");
-      duration_histogram_name.append(".CPU");
-    }
-
-    base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
-
-    base::UmaHistogramMicrosecondsTimes(duration_histogram_name, elapsed);
-
-    float sqrt_pixels_float =
-        std::sqrt(dst_rect.Width()) * std::sqrt(dst_rect.Height());
-    // If sqrt_pixels_float overflows as int CheckedNumeric will store it
-    // as invalid, then ValueOrDefault will return the maximum int.
-    base::CheckedNumeric<int> sqrt_pixels = sqrt_pixels_float;
-    base::UmaHistogramCustomCounts(
-        size_histogram_name,
-        sqrt_pixels.ValueOrDefault(std::numeric_limits<int>::max()), 1, 5000,
-        50);
-  }
 }
 
-void BaseRenderingContext2D::ClearCanvas() {
+void BaseRenderingContext2D::ClearCanvasForSrcCompositeOp() {
   FloatRect canvas_rect(0, 0, Width(), Height());
   CheckOverdraw(canvas_rect, nullptr, CanvasRenderingContext2DState::kNoImage,
-                kClipFill);
+                OverdrawOp::kClearForSrcBlendMode, kClipFill);
   cc::PaintCanvas* c = GetOrCreatePaintCanvas();
   if (c)
     c->clear(HasAlpha() ? SK_ColorTRANSPARENT : SK_ColorBLACK);
@@ -1976,10 +1979,10 @@ CanvasGradient* BaseRenderingContext2D::createLinearGradient(double x0,
     return nullptr;
 
   // clamp to float to avoid float cast overflow
-  float fx0 = clampTo<float>(x0);
-  float fy0 = clampTo<float>(y0);
-  float fx1 = clampTo<float>(x1);
-  float fy1 = clampTo<float>(y1);
+  float fx0 = ClampTo<float>(x0);
+  float fy0 = ClampTo<float>(y0);
+  float fx1 = ClampTo<float>(x1);
+  float fy1 = ClampTo<float>(y1);
 
   auto* gradient = MakeGarbageCollected<CanvasGradient>(FloatPoint(fx0, fy0),
                                                         FloatPoint(fx1, fy1));
@@ -2009,12 +2012,12 @@ CanvasGradient* BaseRenderingContext2D::createRadialGradient(
     return nullptr;
 
   // clamp to float to avoid float cast overflow
-  float fx0 = clampTo<float>(x0);
-  float fy0 = clampTo<float>(y0);
-  float fr0 = clampTo<float>(r0);
-  float fx1 = clampTo<float>(x1);
-  float fy1 = clampTo<float>(y1);
-  float fr1 = clampTo<float>(r1);
+  float fx0 = ClampTo<float>(x0);
+  float fy0 = ClampTo<float>(y0);
+  float fr0 = ClampTo<float>(r0);
+  float fx1 = ClampTo<float>(x1);
+  float fy1 = ClampTo<float>(y1);
+  float fr1 = ClampTo<float>(r1);
 
   auto* gradient = MakeGarbageCollected<CanvasGradient>(
       FloatPoint(fx0, fy0), fr0, FloatPoint(fx1, fy1), fr1);
@@ -2026,6 +2029,8 @@ CanvasGradient* BaseRenderingContext2D::createRadialGradient(
 CanvasGradient* BaseRenderingContext2D::createConicGradient(double startAngle,
                                                             double centerX,
                                                             double centerY) {
+  UseCounter::Count(GetCanvasRenderingContextHost()->GetTopExecutionContext(),
+                    WebFeature::kCanvasRenderingContext2DConicGradient);
   if (!std::isfinite(startAngle) || !std::isfinite(centerX) ||
       !std::isfinite(centerY))
     return nullptr;
@@ -2033,13 +2038,13 @@ CanvasGradient* BaseRenderingContext2D::createConicGradient(double startAngle,
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   // clamp to float to avoid float cast overflow
-  float a = clampTo<float>(startAngle);
-  float x = clampTo<float>(centerX);
-  float y = clampTo<float>(centerY);
+  float a = ClampTo<float>(startAngle);
+  float x = ClampTo<float>(centerX);
+  float y = ClampTo<float>(centerY);
 
   // convert |startAngle| from radians to degree and rotate 90 degree, so
   // |startAngle| at 0 starts from x-axis.
-  a = rad2deg(a) + 90;
+  a = Rad2deg(a) + 90;
 
   auto* gradient = MakeGarbageCollected<CanvasGradient>(a, FloatPoint(x, y));
   gradient->SetExecutionContext(
@@ -2111,7 +2116,9 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
       NOTREACHED();
       return nullptr;
   }
-  DCHECK(image_for_rendering);
+
+  if (!image_for_rendering)
+    return nullptr;
 
   bool origin_clean = !WouldTaintOrigin(image_source);
 
@@ -2199,8 +2206,6 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
     return nullptr;
   }
 
-  base::TimeTicks start_time = base::TimeTicks::Now();
-
   if (!OriginClean()) {
     exception_state.ThrowSecurityError(
         "The canvas has been tainted by cross-origin data.");
@@ -2258,7 +2263,9 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
   // TODO(crbug.com/1090180): New Canvas2D API utilizes willReadFrequently
   // attribute that let the users indicate if a canvas will be read frequently
   // through getImageData, thus uses CPU rendering from the start in such cases.
-  if (!RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+  if (GetCanvasRenderingContextHost() &&
+      !RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
+          GetCanvasRenderingContextHost()->GetTopExecutionContext())) {
     // GetImagedata is faster in Unaccelerated canvases.
     // In Desynchronized canvas disabling the acceleration will break
     // putImageData: crbug.com/1112060.
@@ -2306,32 +2313,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
     }
   }
 
-  if (!IsPaint2D()) {
-    int scaled_time = getScaledElapsedTime(
-        image_data_rect.Width(), image_data_rect.Height(), start_time);
-    if (CanCreateCanvas2dResourceProvider() && IsAccelerated()) {
-      base::UmaHistogramCounts1000(
-          "Blink.Canvas.GetImageDataScaledDuration.GPU", scaled_time);
-    } else {
-      base::UmaHistogramCounts1000(
-          "Blink.Canvas.GetImageDataScaledDuration.CPU", scaled_time);
-    }
-  }
   return image_data;
-}
-
-int BaseRenderingContext2D::getScaledElapsedTime(float width,
-                                                 float height,
-                                                 base::TimeTicks start_time) {
-  base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
-  float sqrt_pixels = std::sqrt(width) * std::sqrt(height);
-  float scaled_time_float = elapsed_time.InMicrosecondsF() * 10.0f /
-                            (sqrt_pixels == 0 ? 1.0f : sqrt_pixels);
-
-  // If scaled_time_float overflows as integer, CheckedNumeric will store it
-  // as invalid, then ValueOrDefault will return the maximum int.
-  base::CheckedNumeric<int> checked_scaled_time = scaled_time_float;
-  return checked_scaled_time.ValueOrDefault(std::numeric_limits<int>::max());
 }
 
 void BaseRenderingContext2D::putImageData(ImageData* data,
@@ -2353,7 +2335,6 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
   if (!base::CheckMul(dirty_width, dirty_height).IsValid<int>()) {
     return;
   }
-  base::TimeTicks start_time = base::TimeTicks::Now();
 
   if (data->IsBufferBaseDetached()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -2405,7 +2386,7 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
   source_rect.Move(-dest_offset);
 
   CheckOverdraw(dest_rect, nullptr, CanvasRenderingContext2DState::kNoImage,
-                kUntransformedUnclippedFill);
+                OverdrawOp::kPutImageData, kUntransformedUnclippedFill);
 
   // Color / format convert ImageData to context 2D settings if needed. Color /
   // format conversion is not needed only if context 2D and ImageData are both
@@ -2445,18 +2426,6 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
     }
   } else {
     PutByteArray(data_pixmap, source_rect, IntPoint(dest_offset));
-  }
-
-  if (!IsPaint2D()) {
-    int scaled_time =
-        getScaledElapsedTime(dest_rect.Width(), dest_rect.Height(), start_time);
-    if (CanCreateCanvas2dResourceProvider() && IsAccelerated()) {
-      base::UmaHistogramCounts1000(
-          "Blink.Canvas.PutImageDataScaledDuration.GPU", scaled_time);
-    } else {
-      base::UmaHistogramCounts1000(
-          "Blink.Canvas.PutImageDataScaledDuration.CPU", scaled_time);
-    }
   }
 
   GetPaintCanvasForDraw(dest_rect,
@@ -2507,7 +2476,7 @@ void BaseRenderingContext2D::InflateStrokeRect(FloatRect& rect) const {
   else if (GetState().GetLineCap() == kSquareCap)
     delta *= kRoot2;
 
-  rect.Inflate(clampTo<float>(delta));
+  rect.Inflate(ClampTo<float>(delta));
 }
 
 bool BaseRenderingContext2D::imageSmoothingEnabled() const {
@@ -2539,70 +2508,6 @@ void BaseRenderingContext2D::setImageSmoothingQuality(const String& quality) {
         IdentifiabilitySensitiveStringToken(quality));
   }
   GetState().SetImageSmoothingQuality(quality);
-}
-
-void BaseRenderingContext2D::CheckOverdraw(
-    const SkRect& rect,
-    const PaintFlags* flags,
-    CanvasRenderingContext2DState::ImageType image_type,
-    DrawType draw_type) {
-  cc::PaintCanvas* c = GetOrCreatePaintCanvas();
-  if (!c)
-    return;
-
-  SkRect device_rect;
-  if (draw_type == kUntransformedUnclippedFill) {
-    device_rect = rect;
-  } else {
-    DCHECK_EQ(draw_type, kClipFill);
-    if (GetState().HasComplexClip())
-      return;
-
-    SkIRect sk_i_bounds;
-    if (!c->getDeviceClipBounds(&sk_i_bounds))
-      return;
-    device_rect = SkRect::Make(sk_i_bounds);
-  }
-
-  const SkImageInfo& image_info = c->imageInfo();
-  if (!device_rect.contains(
-          SkRect::MakeWH(image_info.width(), image_info.height())))
-    return;
-
-  bool is_source_over = true;
-  unsigned alpha = 0xFF;
-  if (flags) {
-    if (flags->getLooper() || flags->getImageFilter() || flags->getMaskFilter())
-      return;
-
-    SkBlendMode mode = flags->getBlendMode();
-    is_source_over = mode == SkBlendMode::kSrcOver;
-    if (!is_source_over && mode != SkBlendMode::kSrc &&
-        mode != SkBlendMode::kClear)
-      return;  // The code below only knows how to handle Src, SrcOver, and
-               // Clear
-
-    alpha = flags->getAlpha();
-
-    if (is_source_over &&
-        image_type == CanvasRenderingContext2DState::kNoImage) {
-      if (flags->HasShader()) {
-        if (flags->ShaderIsOpaque() && alpha == 0xFF)
-          WillOverwriteCanvas();
-        return;
-      }
-    }
-  }
-
-  if (is_source_over) {
-    // With source over, we need to certify that alpha == 0xFF for all pixels
-    if (image_type == CanvasRenderingContext2DState::kNonOpaqueImage)
-      return;
-    if (alpha < 0xFF)
-      return;
-  }
-
-  WillOverwriteCanvas();
 }
 
 double BaseRenderingContext2D::letterSpacing() const {
@@ -2699,5 +2604,50 @@ BaseRenderingContext2D::UsageCounters::UsageCounters()
       num_clear_rect_calls(0),
       num_draw_focus_calls(0),
       num_frames_since_reset(0) {}
+
+namespace {
+
+void CanvasOverdrawHistogram(BaseRenderingContext2D::OverdrawOp op) {
+  UMA_HISTOGRAM_ENUMERATION("Blink.Canvas.OverdrawOp", op);
+}
+
+}  // unnamed namespace
+
+void BaseRenderingContext2D::WillOverwriteCanvas(
+    BaseRenderingContext2D::OverdrawOp op,
+    SkBlendMode blend_mode,
+    bool has_opaque_shader) {
+  auto* host = GetCanvasRenderingContextHost();
+  if (host) {  // CSS paint use cases not counted.
+    UseCounter::Count(GetCanvasRenderingContextHost()->GetTopExecutionContext(),
+                      WebFeature::kCanvasRenderingContext2DHasOverdraw);
+  }
+  CanvasOverdrawHistogram(op);
+  CanvasOverdrawHistogram(OverdrawOp::kTotal);
+
+  // We only hit the blend mode buckets if the op is affected by blend modes.
+  if (op == OverdrawOp::kDrawImage || op == OverdrawOp::kFillRect) {
+    if (blend_mode == SkBlendMode::kSrcOver) {
+      CanvasOverdrawHistogram(OverdrawOp::kSourceOverBlendMode);
+    } else if (blend_mode == SkBlendMode::kClear) {
+      CanvasOverdrawHistogram(OverdrawOp::kClearBlendMode);
+    }
+  }
+
+  // We only hit the kHasTransform bucket if the op is affected by transforms.
+  if (op == OverdrawOp::kClearRect || op == OverdrawOp::kDrawImage ||
+      op == OverdrawOp::kFillRect) {
+    if (!GetState().GetTransform().IsIdentity()) {
+      CanvasOverdrawHistogram(OverdrawOp::kHasTransform);
+    }
+  }
+
+  if (has_opaque_shader) {
+    DCHECK(op == OverdrawOp::kFillRect);
+    CanvasOverdrawHistogram(OverdrawOp::kHasOpaqueShader);
+  }
+
+  WillOverwriteCanvas();
+}
 
 }  // namespace blink

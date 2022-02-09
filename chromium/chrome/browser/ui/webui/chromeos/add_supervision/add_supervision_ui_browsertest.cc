@@ -33,6 +33,11 @@ const char kGetAddSupervisionUIElementJS[] =
 class AddSupervisionBrowserTest : public InProcessBrowserTest {
  public:
   AddSupervisionBrowserTest() = default;
+
+  AddSupervisionBrowserTest(const AddSupervisionBrowserTest&) = delete;
+  AddSupervisionBrowserTest& operator=(const AddSupervisionBrowserTest&) =
+      delete;
+
   ~AddSupervisionBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
@@ -40,7 +45,7 @@ class AddSupervisionBrowserTest : public InProcessBrowserTest {
     // FakeGaia.IssueOAuthToken().
     identity_test_env_ = std::make_unique<signin::IdentityTestEnvironment>();
     identity_test_env_->MakePrimaryAccountAvailable(
-        "example@gmail.com", signin::ConsentLevel::kSignin);
+        "example@gmail.com", signin::ConsentLevel::kSync);
     // This makes the identity manager return the string "access_token" for the
     // access token.
     identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -80,13 +85,12 @@ class AddSupervisionBrowserTest : public InProcessBrowserTest {
 
  private:
   std::unique_ptr<signin::IdentityTestEnvironment> identity_test_env_;
-
-  DISALLOW_COPY_AND_ASSIGN(AddSupervisionBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AddSupervisionBrowserTest, URLParameters) {
   // Open the Add Supervision URL.
-  ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url());
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url()));
   EXPECT_TRUE(content::WaitForLoadStop(contents()));
 
   // Get the URL from the embedded webview.
@@ -123,7 +127,8 @@ IN_PROC_BROWSER_TEST_F(AddSupervisionBrowserTest, URLParameters) {
 
 IN_PROC_BROWSER_TEST_F(AddSupervisionBrowserTest, ShowOfflineScreen) {
   // Open the Add Supervision URL.
-  ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url());
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url()));
   EXPECT_TRUE(content::WaitForLoadStop(contents()));
 
   // Webview div should be initially visible.
@@ -157,7 +162,8 @@ IN_PROC_BROWSER_TEST_F(AddSupervisionBrowserTest, ShowOfflineScreen) {
 
 IN_PROC_BROWSER_TEST_F(AddSupervisionBrowserTest, ShowConfirmSignoutDialog) {
   // Open the Add Supervision URL.
-  ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url());
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url()));
   EXPECT_TRUE(content::WaitForLoadStop(contents()));
 
   // Request that the dialog close before supervision has been enabled.
@@ -194,7 +200,8 @@ IN_PROC_BROWSER_TEST_F(AddSupervisionBrowserTest, UMATest) {
             0);
 
   // Open the Add Supervision URL.
-  ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url());
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), add_supervision_webui_url()));
   EXPECT_TRUE(content::WaitForLoadStop(contents()));
 
   // Simulate supervision being enabled.

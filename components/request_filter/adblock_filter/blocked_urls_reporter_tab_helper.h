@@ -40,11 +40,12 @@ class BlockedUrlsReporterTabHelper
     int total_count = 0;
     BlockedUrlInfoMap blocked_urls;
     std::map<std::string, BlockedTrackerInfo> blocked_trackers;
-
-    DISALLOW_COPY_AND_ASSIGN(TabBlockedUrlInfo);
   };
 
   ~BlockedUrlsReporterTabHelper() override;
+  BlockedUrlsReporterTabHelper(const BlockedUrlsReporterTabHelper&) = delete;
+  BlockedUrlsReporterTabHelper& operator=(const BlockedUrlsReporterTabHelper&) =
+      delete;
 
   void OnUrlBlocked(RuleGroup group, GURL url);
   void OnTrackerBlocked(RuleGroup group,
@@ -69,7 +70,6 @@ class BlockedUrlsReporterTabHelper
   std::array<TabBlockedUrlInfo, kRuleGroupCount> new_blocked_urls_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-  DISALLOW_COPY_AND_ASSIGN(BlockedUrlsReporterTabHelper);
 };
 }  // namespace adblock_filter
 

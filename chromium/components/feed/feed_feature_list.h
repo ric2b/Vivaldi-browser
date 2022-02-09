@@ -59,9 +59,31 @@ extern const base::Feature kReliabilityLogging;
 // Feature that enables refreshing feeds triggered by the users.
 extern const base::Feature kFeedInteractiveRefresh;
 
+// Feature that shows placeholder cards instead of a loading spinner at first
+// load.
+extern const base::Feature kFeedLoadingPlaceholder;
+
 // Feature that allows tuning the size of the image memory cache. Value is a
 // percentage of the maximum size calculated for the device.
 extern const base::Feature kFeedImageMemoryCacheSizePercentage;
+
+// Feature that enables clearing the image memory cache when the feed is
+// destroyed.
+extern const base::Feature kFeedClearImageMemoryCache;
+
+// Feature that enables showing a callout to help users return to the top of the
+// feeds quickly.
+extern const base::Feature kFeedBackToTop;
+
+// Feature that enables the 'X' in the signin promo in the Feed. Without the 'X'
+// the signin promo is not dismissible without opting to sign in.
+extern const base::Feature kFeedSignInPromoDismiss;
+
+// Feature that enables StAMP cards in the feed.
+extern const base::Feature kFeedStamp;
+
+// Feature that enables sorting by different heuristics in the web feed.
+extern const base::Feature kWebFeedSort;
 
 std::string GetFeedReferrerUrl();
 

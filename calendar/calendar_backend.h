@@ -61,17 +61,6 @@ class CalendarBackend
     virtual ~CalendarDelegate() {}
 
     virtual void NotifyEventCreated(const EventResult& event) = 0;
-    virtual void NotifyEventModified(const EventResult& event) = 0;
-    virtual void NotifyEventDeleted(const EventResult& event) = 0;
-
-    virtual void NotifyCalendarCreated(const CalendarRow& row) = 0;
-    virtual void NotifyCalendarModified(const CalendarRow& row) = 0;
-    virtual void NotifyCalendarDeleted(const CalendarRow& row) = 0;
-
-    virtual void NotifyEventTypeCreated(const EventTypeRow& row) = 0;
-    virtual void NotifyEventTypeModified(const EventTypeRow& row) = 0;
-    virtual void NotifyEventTypeDeleted(const EventTypeRow& row) = 0;
-
     virtual void NotifyNotificationChanged(const NotificationRow& row) = 0;
     virtual void NotifyCalendarChanged() = 0;
 
@@ -173,22 +162,13 @@ class CalendarBackend
   EventResult FillEvent(EventID id);
 
   void NotifyEventCreated(const EventResult& event) override;
-  void NotifyEventModified(const EventResult& event) override;
-  void NotifyEventDeleted(const EventResult& event) override;
-
-  void NotifyCalendarCreated(const CalendarRow& row) override;
-  void NotifyCalendarModified(const CalendarRow& row) override;
-  void NotifyCalendarDeleted(const CalendarRow& row) override;
-
-  void NotifyEventTypeCreated(const EventTypeRow& row) override;
-  void NotifyEventTypeModified(const EventTypeRow& row) override;
-  void NotifyEventTypeDeleted(const EventTypeRow& row) override;
-
   void NotifyNotificationChanged(const NotificationRow& row) override;
   void NotifyCalendarChanged() override;
 
  protected:
   ~CalendarBackend() override;
+  CalendarBackend(const CalendarBackend&) = delete;
+  CalendarBackend& operator=(const CalendarBackend&) = delete;
 
  private:
   friend class base::RefCountedThreadSafe<CalendarBackend>;
@@ -223,8 +203,6 @@ class CalendarBackend
   // not be opened, all users must first check for null and return immediately
   // if it is.
   std::unique_ptr<calendar::CalendarDatabase> db_;
-
-  DISALLOW_COPY_AND_ASSIGN(CalendarBackend);
 };
 
 }  // namespace calendar

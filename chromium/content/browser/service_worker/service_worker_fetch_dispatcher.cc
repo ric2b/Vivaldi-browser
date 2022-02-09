@@ -99,6 +99,11 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
     AddDevToolsCallback(
         base::BindOnce(&NotifyNavigationPreloadRequestSent, request));
   }
+
+  DelegatingURLLoaderClient(const DelegatingURLLoaderClient&) = delete;
+  DelegatingURLLoaderClient& operator=(const DelegatingURLLoaderClient&) =
+      delete;
+
   ~DelegatingURLLoaderClient() override {
     if (!completed_) {
       // Let the service worker know that the request has been canceled.
@@ -220,7 +225,6 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
   std::string devtools_request_id_;
   base::queue<base::OnceCallback<void(const WorkerId&, const std::string&)>>
       devtools_callbacks;
-  DISALLOW_COPY_AND_ASSIGN(DelegatingURLLoaderClient);
 };
 
 using EventType = ServiceWorkerMetrics::EventType;
@@ -361,6 +365,9 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
         &ResponseCallback::OnDisconnected, base::Unretained(this)));
   }
 
+  ResponseCallback(const ResponseCallback&) = delete;
+  ResponseCallback& operator=(const ResponseCallback&) = delete;
+
   ~ResponseCallback() override { DCHECK(fetch_event_id_.has_value()); }
 
   void set_fetch_event_id(int id) {
@@ -431,8 +438,6 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
   // handle is passed to the other end (i.e. before any of OnResponse*
   // is called).
   absl::optional<int> fetch_event_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(ResponseCallback);
 };
 
 // This class keeps the URL loader related assets alive while the FetchEvent is
@@ -449,8 +454,10 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
   // NetworkService.
   URLLoaderAssets(
       scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory,
+      mojo::PendingRemote<network::mojom::URLLoader> url_loader,
       std::unique_ptr<DelegatingURLLoaderClient> url_loader_client)
       : shared_url_loader_factory_(std::move(shared_url_loader_factory)),
+        url_loader_(std::move(url_loader)),
         url_loader_client_(std::move(url_loader_client)) {}
 
   void MaybeReportToDevTools(std::pair<int, int> worker_id,
@@ -467,6 +474,7 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
 
   // NetworkService:
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
+  mojo::PendingRemote<network::mojom::URLLoader> url_loader_;
 
   // Both:
   std::unique_ptr<DelegatingURLLoaderClient> url_loader_client_;
@@ -633,7 +641,8 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
   auto params = blink::mojom::DispatchFetchEventParams::New();
   params->request = std::move(request_);
   params->client_id = client_id_;
-  params->preload_handle = std::move(preload_handle_);
+  params->preload_url_loader_client_receiver =
+      std::move(preload_url_loader_client_receiver_);
   params->is_offline_capability_check = is_offline_capability_check_;
 
   // TODO(https://crbug.com/900700): Make the remote connected to a receiver
@@ -721,13 +730,9 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   // When the fetch event is for an offline capability check, respond to the
   // navigation preload with a network disconnected error, to simulate offline.
   if (is_offline_capability_check_) {
-    mojo::PendingRemote<network::mojom::URLLoader> url_loader_to_pass;
     mojo::Remote<network::mojom::URLLoaderClient> url_loader_client;
-    auto dummy_receiver = url_loader_to_pass.InitWithNewPipeAndPassReceiver();
 
-    preload_handle_ = blink::mojom::FetchEventPreloadHandle::New();
-    preload_handle_->url_loader = std::move(url_loader_to_pass);
-    preload_handle_->url_loader_client_receiver =
+    preload_url_loader_client_receiver_ =
         url_loader_client.BindNewPipeAndPassReceiver();
 
     url_loader_client->OnComplete(
@@ -770,12 +775,10 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   factory = base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
       std::move(network_factory));
 
-  preload_handle_ = blink::mojom::FetchEventPreloadHandle::New();
-
   // Create the DelegatingURLLoaderClient, which becomes the
   // URLLoaderClient for the navigation preload network request.
   mojo::PendingRemote<network::mojom::URLLoaderClient> inner_url_loader_client;
-  preload_handle_->url_loader_client_receiver =
+  preload_url_loader_client_receiver_ =
       inner_url_loader_client.InitWithNewPipeAndPassReceiver();
   auto url_loader_client = std::make_unique<DelegatingURLLoaderClient>(
       std::move(inner_url_loader_client), resource_request);
@@ -810,11 +813,9 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
       net::MutableNetworkTrafficAnnotationTag(
           kNavigationPreloadTrafficAnnotation));
 
-  preload_handle_->url_loader = std::move(url_loader);
-
   DCHECK(!url_loader_assets_);
   url_loader_assets_ = base::MakeRefCounted<URLLoaderAssets>(
-      std::move(factory), std::move(url_loader_client));
+      std::move(factory), std::move(url_loader), std::move(url_loader_client));
   return true;
 }
 

@@ -90,7 +90,7 @@ void GetHeaderSizeAndMaxFrameCount(const AudioDecoderConfig& config,
   DCHECK_EQ(header_size, 0u);
   DCHECK_EQ(max_output_frame_count, 0u);
   switch (config.codec()) {
-    case AudioCodec::kCodecAAC:
+    case AudioCodec::kAAC:
       // FFmpegDemuxer already stripped the header, while
       // MultiBufferDataSource kept it.
       header_size =
@@ -380,7 +380,7 @@ void PutZeros(std::vector<uint8_t>& buffer, int count) {
 std::vector<uint8_t> FindInputFormatFromFFmpeg(
     const AudioDecoderConfig& config,
     AudioStreamBasicDescription& format) {
-  DCHECK_EQ(config.codec(), AudioCodec::kCodecAAC);
+  DCHECK_EQ(config.codec(), AudioCodec::kAAC);
   DCHECK(config.platform_media_ffmpeg_demuxer_);
 
   format = AudioStreamBasicDescription{.mFormatID = kAudioFormatMPEG4AAC};
@@ -471,7 +471,7 @@ void ATAudioDecoder::Initialize(
     return;
   }
 
-  if (config.codec() != AudioCodec::kCodecAAC) {
+  if (config.codec() != AudioCodec::kAAC) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Unsupported codec: " << GetCodecName(config.codec());
     task_runner_->PostTask(
@@ -752,24 +752,24 @@ bool ATAudioDecoder::ConvertAudio(scoped_refptr<DecoderBuffer> input) {
   }
 
   if (!input->end_of_stream()) {
-    queued_input_.push_back(std::move(input));
+    queued_input_timing_.push_back(input->time_info());
   }
 
-  if (output_frame_count > 0 && !queued_input_.empty()) {
+  if (output_frame_count > 0 && !queued_input_timing_.empty()) {
     output->TrimEnd(max_output_frame_count - output_frame_count);
 
-    const scoped_refptr<DecoderBuffer> dequeued_input = queued_input_.front();
-    queued_input_.pop_front();
+    DecoderBuffer::TimeInfo dequeued_timing = queued_input_timing_.front();
+    queued_input_timing_.pop_front();
 
     const bool first_output_buffer = !discard_helper_->initialized();
     if (first_output_buffer)
       output = AddFrontPadding(output, config_.codec_delay());
 
     VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " Decoded "
-            << output_frame_count << " frames @" << dequeued_input->timestamp();
+            << output_frame_count << " frames @" << dequeued_timing.timestamp;
 
     // ProcessBuffers() computes and sets the timestamp on |output|.
-    if (discard_helper_->ProcessBuffers(*dequeued_input, output.get())) {
+    if (discard_helper_->ProcessBuffers(dequeued_timing, output.get())) {
       task_runner_->PostTask(FROM_HERE, base::BindOnce(output_cb_, output));
     }
   }
@@ -787,7 +787,7 @@ void ATAudioDecoder::ResetTimestampState() {
                                                config_.codec_delay(), false));
   discard_helper_->Reset(config_.codec_delay());
 
-  queued_input_.clear();
+  queued_input_timing_.clear();
 }
 
 }  // namespace media

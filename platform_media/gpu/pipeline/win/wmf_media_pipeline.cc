@@ -23,7 +23,7 @@
 #include "media/base/timestamp_constants.h"
 
 #include "platform_media/common/platform_logging_util.h"
-#include "platform_media/common/win/mf_util.h"
+#include "platform_media/common/win/platform_media_init.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 #include "platform_media/gpu/decoders/win/wmf_byte_stream.h"
 
@@ -198,6 +198,8 @@ class SourceReaderCallback : public IMFSourceReaderCallback {
       const Microsoft::WRL::ComPtr<IMFSample>& sample)>;
 
   explicit SourceReaderCallback(const OnReadSampleCB& on_read_sample_cb);
+  SourceReaderCallback(const SourceReaderCallback&) = delete;
+  SourceReaderCallback& operator=(const SourceReaderCallback&) = delete;
 
   // IUnknown methods
   STDMETHODIMP QueryInterface(REFIID iid, void** ppv) override;
@@ -221,8 +223,6 @@ class SourceReaderCallback : public IMFSourceReaderCallback {
 
   OnReadSampleCB on_read_sample_cb_;
   LONG reference_count_;
-
-  DISALLOW_COPY_AND_ASSIGN(SourceReaderCallback);
 };  // class SourceReaderCallback
 
 SourceReaderCallback::SourceReaderCallback(
@@ -467,7 +467,7 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
 
   auto result = platform_media::mojom::PipelineInitResult::New();
   do {
-    if (!HasMFDemuxerSupport()) {
+    if (!platform_media_init::HasMFDemuxerSupport()) {
       result->not_available = true;
       break;
     }

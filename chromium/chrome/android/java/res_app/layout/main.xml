@@ -103,6 +103,14 @@
 
         <!-- Vivaldi Start-->
         <ViewStub
+            android:id="@+id/panel_stub"
+            android:layout="@layout/panels_main"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:layout_anchor="@id/control_container"
+            android:inflatedId="@+id/panels_main" />
+
+        <ViewStub
             android:id="@+id/search_engine_suggestion_stub"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

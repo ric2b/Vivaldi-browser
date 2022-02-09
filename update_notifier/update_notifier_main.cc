@@ -35,6 +35,9 @@
 namespace vivaldi_update_notifier {
 
 namespace {
+// If this is not a silent update, run the update check on the browser startup
+// after a delay not to distract the user with update notification immediately.
+constexpr DWORD kLaunchUpdateCheckDelayMillis = 15 * 1000;
 
 constexpr HRESULT kNotFoundObjectError = 0x80070002;
 constexpr HRESULT kAccessDeniedObjectError = 0x80070005;
@@ -452,8 +455,7 @@ bool UnregisterSchedulerTask() {
   return true;
 }
 
-ExitCode RunTaskSchedulerSubAction(Subaction subaction,
-                                   bool& fallthrough_to_main_action) {
+ExitCode RunSubAction(Subaction subaction, bool& fallthrough_to_main_action) {
   DCHECK(!fallthrough_to_main_action);
 
   if (DoesRunAsSystemService()) {
@@ -542,8 +544,8 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
       if (!enabled)
         return ExitCode::kDisabled;
 
-      // Simulate invocation from the task scheduler.
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(kFromScheduler);
+      // Run normal autocheck.
+      base::CommandLine::ForCurrentProcess()->AppendSwitch(kAutoCheck);
       fallthrough_to_main_action = true;
       break;
     }
@@ -555,39 +557,6 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
     }
   }
 
-  return ExitCode::kOk;
-}
-
-ExitCode RunSubAction(Subaction action, bool& fallthrough_to_main_action) {
-  DCHECK(!fallthrough_to_main_action);
-  DLOG(INFO) << "Task scheduler subaction " << static_cast<int>(action);
-  if (IsUsingTaskScheduler()) {
-    return RunTaskSchedulerSubAction(action, fallthrough_to_main_action);
-  }
-  base::FilePath exe_dir = GetExeDir();
-  switch (action) {
-    case Subaction::kDisable:
-    case Subaction::kUnregister: {
-      if (!vivaldi::DisableUpdateNotifierAsAutorun(exe_dir))
-        return ExitCode::kError;
-      break;
-    }
-    case Subaction::kEnable: {
-      if (!vivaldi::EnableUpdateNotifierWithAutorun(exe_dir))
-        return ExitCode::kError;
-      break;
-    }
-    case Subaction::kIsEnabled:
-      if (!vivaldi::IsUpdateNotifierEnabledAsAutorun(exe_dir))
-        return ExitCode::kDisabled;
-      break;
-    case Subaction::kLaunchIfEnabled: {
-      if (!vivaldi::IsUpdateNotifierEnabledAsAutorun(exe_dir))
-        return ExitCode::kDisabled;
-      fallthrough_to_main_action = true;
-      break;
-    }
-  }
   return ExitCode::kOk;
 }
 
@@ -609,15 +578,22 @@ void InitLog(const base::CommandLine& command_line) {
       break;
     }
   }
+#if !defined(OFFICIAL_BUILD)
+  // To get better problem coverage always do a verbose log in soprano builds.
+  verbose = true;
+#endif
 
+  bool disabled = command_line.HasSwitch(installer::switches::kDisableLogging);
   base::FilePath log_file;
-  if (!command_line.HasSwitch(installer::switches::kDisableLogging)) {
-    log_file = command_line.GetSwitchValuePath(installer::switches::kLogFile);
-    if (log_file.empty()) {
+  if (!disabled) {
+    // Allow to use --log-file= with empty path to disable file logging.
+    if (!command_line.HasSwitch(installer::switches::kLogFile)) {
       base::FilePath temp_dir;
       if (base::GetTempDir(&temp_dir)) {
         log_file = temp_dir.AppendASCII("vivaldi_installer.log");
       }
+    } else {
+      log_file = command_line.GetSwitchValuePath(installer::switches::kLogFile);
     }
   }
 
@@ -629,17 +605,19 @@ void InitLog(const base::CommandLine& command_line) {
     settings.log_file_path = log_file.value().c_str();
   }
 
-  if (!verbose) {
-    // Do a minimal level of logging as it should not leak any sensitive
-    // information. This is similar to the installer.
-    logging::SetMinLogLevel(logging::LOGGING_WARNING);
-  } else {
-    // Attach to console if any to make stderr output working.
-    base::RouteStdioToConsole(false);
-    if (DCHECK_IS_ON()) {
-      settings.logging_dest |= logging::LOG_TO_SYSTEM_DEBUG_LOG;
+  if (!disabled) {
+    if (!verbose) {
+      // Do a minimal level of logging as it should not leak any sensitive
+      // information. This is similar to the installer.
+      logging::SetMinLogLevel(logging::LOGGING_WARNING);
+    } else {
+      // Attach to console if any to make stderr output working.
+      base::RouteStdioToConsole(false);
+      if (DCHECK_IS_ON()) {
+        settings.logging_dest |= logging::LOG_TO_SYSTEM_DEBUG_LOG;
+      }
+      settings.logging_dest |= logging::LOG_TO_STDERR;
     }
-    settings.logging_dest |= logging::LOG_TO_STDERR;
   }
   logging::InitLogging(settings);
 }
@@ -764,6 +742,16 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
     } else {
       g_mode = UpdateMode::kSilentUpdate;
     }
+  }
+
+  if (g_mode != UpdateMode::kSilentUpdate &&
+      command_line.HasSwitch(kBrowserStartup)) {
+    // See comments for the constant definition for the need for sleep. For code
+    // simplicity we do the delay here before checking for uniquely running
+    // process in UpdateNotifierManager::RunNotifier() and not before showing
+    // the first UI. This way if the user runs quickly a manual check it will
+    // run immediately without waiting for the sleep to finish.
+    ::Sleep(kLaunchUpdateCheckDelayMillis);
   }
 
   base::AtExitManager at_exit;

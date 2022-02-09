@@ -10,13 +10,13 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/win/registry.h"
-#include "base/win/win_util.h"
 #include "chrome/installer/util/util_constants.h"
 
 #include "app/vivaldi_constants.h"
@@ -266,19 +266,6 @@ void SendQuitUpdateNotifier(const base::FilePath& install_binary_dir,
   ::SetEvent(quit_event.Get());
 }
 
-namespace {
-
-std::wstring GetUpdateNotifierAutorunEntry() {
-  std::wstring command;
-  if (!base::win::ReadCommandFromAutoRun(
-          HKEY_CURRENT_USER, kUpdateNotifierAutorunName, &command)) {
-    return std::wstring();
-  }
-  return command;
-}
-
-}  // namespace
-
 base::FilePath GetUpdateNotifierPath(const base::FilePath& install_binary_dir) {
   const base::FilePath& exe_dir_ref = !install_binary_dir.empty()
                                           ? install_binary_dir
@@ -299,73 +286,20 @@ base::CommandLine GetCommonUpdateNotifierCommand(
         vivaldi_cmd_line->GetSwitchValueNative(switches::kVivaldiUpdateURL));
   }
 
-  // Make logging verbose if invoked from a browser with enabled logging or
-  // from the installer with the verbose logging.
-  if (vivaldi_cmd_line->HasSwitch(installer::switches::kEnableLogging) ||
-      vivaldi_cmd_line->HasSwitch(installer::switches::kVerboseLogging)) {
-    command.AppendSwitch(installer::switches::kVerboseLogging);
+  if (vivaldi_cmd_line->HasSwitch(installer::switches::kDisableLogging)) {
+    command.AppendSwitch(installer::switches::kDisableLogging);
+  } else {
+    // Make logging verbose if invoked from a browser with enabled logging or
+    // from the installer with the verbose logging.
+    if (vivaldi_cmd_line->HasSwitch(installer::switches::kEnableLogging) ||
+        vivaldi_cmd_line->HasSwitch(installer::switches::kVerboseLogging)) {
+      command.AppendSwitch(installer::switches::kVerboseLogging);
+    }
   }
   if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiSilentUpdate)) {
     command.AppendSwitch(switches::kVivaldiSilentUpdate);
   }
   return command;
-}
-
-bool IsUpdateNotifierEnabledAsAutorun(
-    const base::FilePath& install_binary_dir) {
-  std::wstring entry = GetUpdateNotifierAutorunEntry();
-  if (entry.empty())
-    return false;
-  base::CommandLine cmdline = base::CommandLine::FromString(entry);
-  base::FilePath registry_exe = cmdline.GetProgram().NormalizePathSeparators();
-  bool enabled = base::FilePath::CompareEqualIgnoreCase(
-      registry_exe.DirName().value(), install_binary_dir.value());
-  return enabled;
-}
-
-bool IsUpdateNotifierEnabledAsAutorunForAnyPath() {
-  std::wstring entry = GetUpdateNotifierAutorunEntry();
-  return !entry.empty();
-}
-
-bool EnableUpdateNotifierWithAutorun(const base::FilePath& install_binary_dir) {
-  // NOTE(igor@vivaldi.com): According a stack overflow answer without further
-  // references and own testing to pass command line arguments to the autorun
-  // command the first argument after the program path must start with %. So
-  // escape properly the exe path, then, if there are arguments, add a dummy
-  // %args before them. This case does not arise normally as the arguments are
-  // used for testing and debugging.
-  base::CommandLine cmdline =
-      vivaldi::GetCommonUpdateNotifierCommand(install_binary_dir);
-  std::wstring autocommand =
-      base::CommandLine(cmdline.GetProgram()).GetCommandLineString();
-  std::wstring args = cmdline.GetArgumentsString();
-  if (!args.empty()) {
-    autocommand += L" %args ";
-    autocommand += args;
-  }
-  if (!base::win::AddCommandToAutoRun(HKEY_CURRENT_USER,
-                                      ::vivaldi::kUpdateNotifierAutorunName,
-                                      autocommand)) {
-    LOG(ERROR) << "Failed base::win::AddCommandToAutoRun() for " << autocommand;
-    return false;
-  }
-  if (!vivaldi::LaunchNotifierProcess(cmdline))
-    return false;
-  return true;
-}
-
-bool DisableUpdateNotifierAsAutorun(const base::FilePath& install_binary_dir) {
-  // Remove autorun only if it is enabled for the given install_binary_dir.
-  if (IsUpdateNotifierEnabledAsAutorun(install_binary_dir)) {
-    if (!base::win::RemoveCommandFromAutoRun(
-            HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName)) {
-      LOG(ERROR) << "base::win::RemoveCommandFromAutoRun failed";
-      return false;
-    }
-  }
-  SendQuitUpdateNotifier(install_binary_dir, /*global=*/false);
-  return true;
 }
 
 bool LaunchNotifierProcess(const base::CommandLine& cmdline) {

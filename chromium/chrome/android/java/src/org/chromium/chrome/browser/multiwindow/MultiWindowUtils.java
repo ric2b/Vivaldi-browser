@@ -178,7 +178,9 @@ public class MultiWindowUtils implements ActivityStateListener {
 
     @VisibleForTesting
     boolean aospMultiWindowModeSupported() {
-        return false;
+        // Auto screen splitting works from sc-v2.
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.S
+                || Build.VERSION.CODENAME.equals("Sv2");
     }
 
     @VisibleForTesting
@@ -314,6 +316,13 @@ public class MultiWindowUtils implements ActivityStateListener {
             }
         }
         return count;
+    }
+
+    /**
+     * @return Whether the app menu 'Manage windows' should be shown.
+     */
+    public static boolean shouldShowManageWindowsMenu() {
+        return getInstanceCount() > 1;
     }
 
     static boolean isRestorableInstance(int index) {

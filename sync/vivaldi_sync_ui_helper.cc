@@ -14,11 +14,9 @@
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 namespace vivaldi {
-VivaldiSyncUIHelper::VivaldiSyncUIHelper(
-    Profile* profile,
-    VivaldiSyncServiceImpl* sync_service)
-    : profile_(profile), sync_service_(sync_service) {
-}
+VivaldiSyncUIHelper::VivaldiSyncUIHelper(Profile* profile,
+                                         VivaldiSyncServiceImpl* sync_service)
+    : profile_(profile), sync_service_(sync_service) {}
 
 void VivaldiSyncUIHelper::RegisterObserver() {
   sync_service_->AddObserver(this);

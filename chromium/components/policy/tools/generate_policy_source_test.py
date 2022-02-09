@@ -8,7 +8,9 @@ import unittest
 from unittest.mock import patch, mock_open, call
 
 import generate_policy_source
+import generate_policy_source_test_data as test_data
 
+from generate_policy_source import PolicyDetails
 
 class CppGenerationTest(unittest.TestCase):
 
@@ -26,9 +28,48 @@ class CppGenerationTest(unittest.TestCase):
           },
           "supported_on": ["chrome_os:1-"],
           "id": 1,
-          "caption": "caption",
           "tags": [],
-          "desc": "desc"
+          "caption": "ExampleStringPolicy caption",
+          "desc": "ExampleStringPolicy desc"
+      }, {
+          "name": "ExampleBoolPolicy",
+          "type": "main",
+          "schema": {
+              "type": "boolean"
+          },
+          "supported_on": ["chrome_os:1-"],
+          "id": 2,
+          "tags": [],
+          "caption": "ExampleBoolPolicy caption",
+          "desc": "ExampleBoolPolicy desc",
+      }, {
+          "name": "ExampleBoolMergeMetapolicy",
+          "type": "main",
+          "schema": {
+              "type": "boolean"
+          },
+          "supported_on": ["chrome_os:1-"],
+          "features": {
+              "metapolicy_type": "merge",
+          },
+          "id": 3,
+          "tags": [],
+          "caption": "ExampleBoolMergeMetapolicy caption",
+          "desc": "ExampleBoolMergeMetapolicy desc",
+      }, {
+          "name": "ExampleBoolPrecedenceMetapolicy",
+          "type": "main",
+          "schema": {
+              "type": "boolean"
+          },
+          "supported_on": ["chrome_os:1-"],
+          "features": {
+              "metapolicy_type": "precedence",
+          },
+          "id": 4,
+          "tags": [],
+          "caption": "ExampleBoolPrecedenceMetapolicy caption",
+          "desc": "ExampleBoolPrecedenceMetapolicy desc",
       }],
       "policy_atomic_group_definitions": []
   }
@@ -36,12 +77,22 @@ class CppGenerationTest(unittest.TestCase):
   def setUp(self):
     self.chrome_major_version = 94
     self.target_platform = 'chrome_os'
+    self.all_target_platforms = ['win', 'mac', 'linux', 'chromeos', 'fuchsia']
     self.risk_tags = generate_policy_source.RiskTags(self.TEMPLATES_JSON)
     self.policies = [
         generate_policy_source.PolicyDetails(policy, self.chrome_major_version,
                                              self.target_platform,
                                              self.risk_tags.GetValidTags())
         for policy in self.TEMPLATES_JSON['policy_definitions']
+    ]
+    self.risk_tags.ComputeMaxTags(self.policies)
+
+    policy_details_set = list(map((lambda x: x.name), self.policies))
+    policies_already_in_group = set()
+    self.policy_atomic_groups = [
+        generate_policy_source.PolicyAtomicGroup(group, policy_details_set,
+                                                 policies_already_in_group)
+        for group in self.TEMPLATES_JSON['policy_atomic_group_definitions']
     ]
 
   def testDefaultValueGeneration(self):
@@ -89,24 +140,29 @@ class CppGenerationTest(unittest.TestCase):
     self.assertListEqual([], stmts)
     self.assertIsNone(expr)
 
+  def _assertCallsEqual(self, call_args_list, expected_output):
+    # Convert mocked write calls into actual content that would be written
+    # to the file. Elements of call_args_list are call objects, which are
+    # two-tuples of (positional args, keyword args). With call[0] we first
+    # fetch the positional args, which are an n-tuple, and with call[0][0]
+    # we get the first positional argument, which is the string that is
+    # written into the file.
+    actual_output = ''.join(call[0][0] for call in call_args_list)
+
+    # Strip whitespace from the beginning and end of expected and actual
+    # output and verify that they are equal.
+    self.assertEqual(actual_output.strip(), expected_output.strip())
+
   def testWriteCloudPolicyProtobuf(self):
     is_full_runtime_values = [False, True]
     output_path = 'mock_cloud_policy_proto'
-    header_write_call = '''
-syntax = "proto2";
-
-{}option optimize_for = LITE_RUNTIME;
-
-package enterprise_management;
-
-import "policy_common_definitions{}.proto";
-'''
 
     for is_full_runtime in is_full_runtime_values:
       with patch('codecs.open', mock_open()) as mocked_file:
         with codecs.open(output_path, 'w', encoding='utf-8') as f:
           generate_policy_source._WriteCloudPolicyProtobuf(
-              self.policies, [],
+              self.policies,
+              self.policy_atomic_groups,
               self.target_platform,
               f,
               self.risk_tags,
@@ -117,35 +173,25 @@ import "policy_common_definitions{}.proto";
 
       with self.subTest(is_full_runtime=is_full_runtime):
         mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
-        mocked_file().write.assert_has_calls([
-            call(
-                header_write_call.format(full_runtime_comment,
-                                         full_runtime_suffix)),
-            call('message CloudPolicySettings {\n'),
-            call('  optional StringPolicyProto ExampleStringPolicy = 3;\n'),
-            call('}\n\n'),
-        ])
+
+        expected_formatted = test_data.EXPECTED_CLOUD_POLICY_PROTOBUF % {
+            "full_runtime_comment": full_runtime_comment,
+            "full_runtime_suffix": full_runtime_suffix,
+        }
+
+        self._assertCallsEqual(mocked_file().write.call_args_list,
+                               expected_formatted)
 
   def testWriteChromeSettingsProtobuf(self):
     is_full_runtime_values = [False, True]
     output_path = 'mock_chrome_settings_proto'
-    header_write_call = '''
-syntax = "proto2";
-
-{}option optimize_for = LITE_RUNTIME;
-
-package enterprise_management;
-
-// For StringList and PolicyOptions.
-import "policy_common_definitions{}.proto";
-
-'''
 
     for is_full_runtime in is_full_runtime_values:
       with patch('codecs.open', mock_open()) as mocked_file:
         with codecs.open(output_path, 'w', encoding='utf-8') as f:
           generate_policy_source._WriteChromeSettingsProtobuf(
-              self.policies, [],
+              self.policies,
+              self.policy_atomic_groups,
               self.target_platform,
               f,
               self.risk_tags,
@@ -156,35 +202,126 @@ import "policy_common_definitions{}.proto";
 
       with self.subTest(is_full_runtime=is_full_runtime):
         mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
-        mocked_file().write.assert_has_calls([
-            call(
-                header_write_call.format(full_runtime_comment,
-                                         full_runtime_suffix)),
-            call('// PBs for individual settings.\n\n'),
-            call('// caption'),
-            call('\n'),
-            call('//'),
-            call('\n'),
-            call('// desc'),
-            call('\n'),
-            call('//'),
-            call('\n'),
-            call('// Supported on: chrome_os'),
-            call('\n'),
-            call('message ExampleStringPolicyProto {\n'),
-            call('  optional PolicyOptions policy_options = 1;\n'),
-            call('  optional string ExampleStringPolicy = 2;\n'),
-            call('}\n\n'),
-            call('''// --------------------------------------------------
-// Big wrapper PB containing the above groups.
 
-message ChromeSettingsProto {
-'''),
-            call(
-                '  optional ExampleStringPolicyProto ExampleStringPolicy = 3;\n'
-            ),
-            call('}\n\n'),
-        ])
+        expected_formatted = test_data.EXPECTED_CHROME_SETTINGS_PROTOBUF % {
+            "full_runtime_comment": full_runtime_comment,
+            "full_runtime_suffix": full_runtime_suffix,
+        }
+
+        self._assertCallsEqual(mocked_file().write.call_args_list,
+                               expected_formatted)
+
+  def testWritePolicyProto(self):
+    output_path = 'mock_write_policy_proto'
+
+    with patch('codecs.open', mock_open()) as mocked_file:
+      with codecs.open(output_path, 'w', encoding='utf-8') as f:
+        generate_policy_source._WritePolicyProto(f, self.policies[0])
+
+    mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
+    self._assertCallsEqual(mocked_file().write.call_args_list,
+                           test_data.EXPECTED_POLICY_PROTO)
+
+  def testGetMetapoliciesOfType(self):
+    merge_metapolicies = generate_policy_source._GetMetapoliciesOfType(
+        self.policies, "merge")
+    self.assertListEqual(["ExampleBoolMergeMetapolicy"], merge_metapolicies)
+    self.assertEqual(1, len(merge_metapolicies))
+
+    precedence_metapolicies = generate_policy_source._GetMetapoliciesOfType(
+        self.policies, "precedence")
+    self.assertListEqual(["ExampleBoolPrecedenceMetapolicy"],
+                         precedence_metapolicies)
+    self.assertEqual(1, len(precedence_metapolicies))
+
+    invalid_metapolicies = generate_policy_source._GetMetapoliciesOfType(
+        self.policies, "invalid")
+    self.assertListEqual([], invalid_metapolicies)
+    self.assertEqual(0, len(invalid_metapolicies))
+
+  def testWritePolicyConstantHeader(self):
+    output_path = 'mock_policy_constants_h'
+
+    for target_platform in self.all_target_platforms:
+      with patch('codecs.open', mock_open()) as mocked_file:
+        with codecs.open(output_path, 'w', encoding='utf-8') as f:
+          generate_policy_source._WritePolicyConstantHeader(
+              self.policies,
+              self.policy_atomic_groups,
+              target_platform,
+              f,
+              self.risk_tags,
+          )
+      with self.subTest(target_platform=target_platform):
+        mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
+
+        if target_platform == 'win':
+          windows_only_part = test_data.POLICY_CONSTANTS_HEADER_WIN_ONLY_PART
+        else:
+          windows_only_part = ''
+        expected_formatted = test_data.EXPECTED_POLICY_CONSTANTS_HEADER % {
+            "windows_only_part": windows_only_part,
+        }
+
+        self._assertCallsEqual(mocked_file().write.call_args_list,
+                               expected_formatted)
+
+  def testWritePolicyConstantSource(self):
+    output_path = 'mock_policy_constants_cc'
+
+    for target_platform in self.all_target_platforms:
+      with patch('codecs.open', mock_open()) as mocked_file:
+        with codecs.open(output_path, 'w', encoding='utf-8') as f:
+          generate_policy_source._WritePolicyConstantSource(
+              self.policies,
+              self.policy_atomic_groups,
+              target_platform,
+              f,
+              self.risk_tags,
+          )
+      with self.subTest(target_platform=target_platform):
+        mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
+
+        if target_platform == 'win':
+          windows_only_part = test_data.POLICY_CONSTANTS_SOURCE_WIN_ONLY_PART
+        else:
+          windows_only_part = ''
+        expected_formatted = test_data.EXPECTED_POLICY_CONSTANTS_SOURCE % {
+            "windows_only_part": windows_only_part,
+        }
+
+        self._assertCallsEqual(mocked_file().write.call_args_list,
+                               expected_formatted)
+
+  def testWriteChromeOSPolicyConstantsHeader(self):
+    output_path = 'mock_policy_constants_h'
+    with patch('codecs.open', mock_open()) as mocked_file:
+      with codecs.open(output_path, 'w', encoding='utf-8') as f:
+        generate_policy_source._WriteChromeOSPolicyConstantsHeader(
+            self.policies,
+            self.policy_atomic_groups,
+            self.target_platform,
+            f,
+            self.risk_tags,
+        )
+    mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
+    self._assertCallsEqual(mocked_file().write.call_args_list,
+                           test_data.EXPECTED_CROS_POLICY_CONSTANTS_HEADER)
+
+  def testWriteChromeOSPolicyConstantsSource(self):
+    output_path = 'mock_policy_constants_cc'
+    with patch('codecs.open', mock_open()) as mocked_file:
+      with codecs.open(output_path, 'w', encoding='utf-8') as f:
+        generate_policy_source._WriteChromeOSPolicyConstantsSource(
+            self.policies,
+            self.policy_atomic_groups,
+            self.target_platform,
+            f,
+            self.risk_tags,
+        )
+    mocked_file.assert_called_once_with(output_path, 'w', encoding='utf-8')
+    self._assertCallsEqual(mocked_file().write.call_args_list,
+                           test_data.EXPECTED_CROS_POLICY_CONSTANTS_SOURCE)
 
 
 if __name__ == '__main__':

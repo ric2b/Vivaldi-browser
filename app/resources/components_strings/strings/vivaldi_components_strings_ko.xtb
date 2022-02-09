@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">버전 정보</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />에서 전송한 데이터가 없습니다.</translation>
 <translation id="1559528461873125649">해당 파일이나 디렉토리가 없습니다</translation>
-<translation id="1620510694547887537">카메라</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />사이트의 메인 페이지를 방문<ph name="END_LINK" />해 보세요.</translation>
 <translation id="1645368109819982629">지원되지 않는 프로토콜</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -20,12 +19,9 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행해보기<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">이 사이트에 유해한 프로그램이 있습니다</translation>
 <translation id="1916770123977586577">이 사이트에 업데이트된 설정을 적용하려면 이 페이지를 새로고침하세요</translation>
-<translation id="1919345977826869612">광고</translation>
 <translation id="1974060860693918893">세부정보</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />프록시 및 방화벽 확인<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">소리</translation>
 <translation id="2119505898009119320">발급 대상: <ph name="ORGANIZATION" />[<ph name="JURISDICTION" />]</translation>
-<translation id="2147827593068025794">백그라운드 동기화</translation>
 <translation id="2166378884831602661">사이트에 보안 연결할 수 없음</translation>
 <translation id="2187317261103489799">감지(기본값)</translation>
 <translation id="2224337661447660594">인터넷 연결 없음</translation>
@@ -33,17 +29,14 @@
 <translation id="2292556288342944218">인터넷 액세스가 차단됨</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />에 사용자 이름과 비밀번호를 입력해야 합니다.</translation>
 <translation id="2337852623177822836">관리자가 제어하는 설정</translation>
-<translation id="2344028582131185878">자동 다운로드</translation>
 <translation id="2355395290879513365">공격자는 사용자가 이 사이트에서 보고 있는 이미지를 볼 수 있으며 이미지를 수정하여 사용자를 속일 수 있습니다.</translation>
 <translation id="2356070529366658676">확인</translation>
 <translation id="2359808026110333948">계속</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />네트워크 진단 실행<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">알림</translation>
 <translation id="2491414235131909199">확장 프로그램에서 차단한 페이지</translation>
 <translation id="2501278716633472235">이전으로</translation>
 <translation id="2539524384386349900">감지</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />에서 잘못된 응답을 전송했습니다.</translation>
-<translation id="2586657967955657006">클립보드</translation>
 <translation id="2609632851001447353">유사 버전</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" />의 서버 IP 주소를 찾을 수 없습니다.</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" />, <ph name="CITY" /></translation>
@@ -67,7 +60,6 @@
       다음 단계를 따르세요.
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">페이지를 불러오기 위해 필요한 데이터를 다시 제출하려면 새로고침 버튼을 누르세요.</translation>
-<translation id="3227137524299004712">마이크</translation>
 <translation id="3234666976984236645">이 사이트에서 중요한 콘텐츠 항상 감지</translation>
 <translation id="3308738399950580893">광고</translation>
 <translation id="3422472998109090673">현재 <ph name="HOST_NAME" />에 연결할 수 없습니다.</translation>
@@ -108,7 +100,6 @@
 <translation id="4522570452068850558">세부정보</translation>
 <translation id="4558551763791394412">확장 프로그램 사용 중지해보기.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" />에 대한 연결은 최신 암호화 기술을 사용하여 암호화됩니다.</translation>
-<translation id="4690462567478992370">유효하지 않은 인증서 사용 중단</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">연결이 끊김</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행<ph name="END_LINK" /></translation>
@@ -116,8 +107,8 @@
 <translation id="4744603770635761495">실행 가능 경로</translation>
 <translation id="4750917950439032686">비밀번호나 신용카드 번호 등의 정보는 비공개 상태로 이 사이트에 전송됩니다.</translation>
 <translation id="4764776831041365478"><ph name="URL" />의 웹페이지가 일시적으로 다운되었거나 새 웹 주소로 완전히 이동했을 수 있습니다.</translation>
+<translation id="483241715238664915">경고 켜기</translation>
 <translation id="4943872375798546930">검색결과 없음</translation>
-<translation id="4974590756084640048">경고 재활성화</translation>
 <translation id="5023310440958281426">관리자 정책을 확인하세요</translation>
 <translation id="5039804452771397117">허용</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1개 사용 중)}other{(#개 사용 중)}}</translation>
@@ -136,9 +127,6 @@
 <translation id="5610142619324316209">연결 확인</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" />에서 리디렉션한 횟수가 너무 많습니다.</translation>
 <translation id="5675650730144413517">페이지가 작동하지 않습니다</translation>
-<translation id="5689516760719285838">위치</translation>
-<translation id="5710435578057952990">이 웹사이트의 주소가 확인되지 않았습니다.</translation>
-<translation id="5778550464785688721">MIDI 기기 전체 제어</translation>
 <translation id="5785756445106461925">또한 이 페이지에는 안전하지 않은 다른 리소스가 포함되어 있습니다. 이러한 리소스는 전송 중에 다른 사람이 볼 수 있으며 페이지의 모양을 변경하기 위해 공격자가 수정할 수 있습니다.</translation>
 <translation id="5799902971440853357">웹사이트가 Vivaldi에서 처리할 수 없는 암호화된 사용자 인증 정보를 전송하였으므로 지금은 <ph name="SITE" />에 방문할 수 없습니다. 네트워크 오류와 공격은 대체로 일시적인 문제이기 때문에 이후에는 이 페이지가 제대로 작동할 가능성이 높습니다.</translation>
 <translation id="5810442152076338065"><ph name="DOMAIN" />에 대한 연결이 더 이상 사용되지 않는 암호화 기술을 사용하여 암호화됩니다.</translation>
@@ -154,7 +142,6 @@
 <translation id="6177128806592000436">이 사이트에 대한 연결은 안전하지 않습니다</translation>
 <translation id="6203231073485539293">인터넷 연결을 확인하세요</translation>
 <translation id="6225522625585012689">차단된 URL 및 시스템 관리자가 설정한 기타 정책 목록을 확인하려면 &lt;strong&gt;vivaldi://policy&lt;/strong&gt;를 방문하세요.</translation>
-<translation id="625755898061068298">이 사이트에 대한 보안 경고를 사용하지 않도록 선택했습니다.</translation>
 <translation id="6264485186158353794">안전한 페이지로 돌아가기</translation>
 <translation id="6305205051461490394"><ph name="URL" />에 연결할 수 없습니다.</translation>
 <translation id="6321917430147971392">DNS 설정 확인</translation>
@@ -172,6 +159,7 @@
 <translation id="6897140037006041989">사용자 에이전트</translation>
 <translation id="7053983685419859001">차단</translation>
 <translation id="7079718277001814089">이 사이트에 멀웨어가 있습니다</translation>
+<translation id="7096937462164235847">인증된 웹사이트가 아닙니다.</translation>
 <translation id="7108819624672055576">확장 프로그램에 의해 허용됨</translation>
 <translation id="7111012039238467737">(유효)</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />에서 <ph name="BLOCKED_TYPE" /> 허용</translation>
@@ -184,7 +172,6 @@
 <translation id="7445762425076701745">연결하려는 서버 ID를 확인할 수 없습니다. 외부 인증 기관에서 소유권을 확인할 수 없으므로 네트워크에서 유효한 이름을 사용하여 서버에 연결됩니다. 일부 인증 기관에서는 이러한 이름에 대해 관계없이 인증서를 발급하기 때문에 공격자가 아니라 의도한 웹사이트에 연결되어 있는지 확인할 수 없습니다.</translation>
 <translation id="7455133967321480974">전체 기본값 사용(차단)</translation>
 <translation id="7518003948725431193">다음 웹 주소(<ph name="URL" />)에 대해 발견된 웹페이지가 없습니다</translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">이 웹페이지를 제대로 표시하려면 이전에 입력한 데이터가 필요합니다. 이 데이터를 다시 보낼 수 있지만 이 경우 해당 페이지에서 이전에 수행한 작업이 반복됩니다.</translation>
 <translation id="759889825892636187">현재 <ph name="HOST_NAME" />에서 요청을 처리할 수 없습니다.</translation>
 <translation id="7662298039739062396">확장 프로그램에 의해 관리되는 설정</translation>
@@ -220,17 +207,18 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" />의 &lt;abbr id="dnsDefinition"&gt;DNS 주소&lt;/abbr&gt;를 찾을 수 없습니다. 문제를 진단하는 중입니다.</translation>
 <translation id="8820817407110198400">북마크</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />에 의해 차단됨</translation>
+<translation id="8963117664422609631">사이트 설정으로 이동</translation>
 <translation id="9001074447101275817">프록시 <ph name="DOMAIN" />에 사용자 이름 및 비밀번호를 입력해야 합니다.</translation>
 <translation id="9008201768610948239">무시</translation>
 <translation id="9025348182339809926">(유효하지 않음)</translation>
 <translation id="9039213469156557790">또한 이 페이지에는 안전하지 않은 다른 리소스가 포함되어 있습니다. 이러한 리소스는 전송 중에 다른 사람이 볼 수 있으며 페이지의 작동을 변경하기 위해 공격자가 수정할 수 있습니다.</translation>
 <translation id="9062620674789239642">이동, 수정 또는 삭제되었을 수 있습니다.</translation>
 <translation id="9069693763241529744">확장 프로그램에서 차단함</translation>
+<translation id="9073799351042754113">이 사이트의 보안 경고를 끄기로 설정했습니다.</translation>
 <translation id="910924428752220542">Vivaldi 비밀번호</translation>
 <translation id="9169664750068251925">이 사이트에서 항상 차단</translation>
 <translation id="9180553614777056266">광고 차단기</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />에서 지원되지 않는 프로토콜을 사용합니다.</translation>
-<translation id="9219103736887031265">이미지</translation>
 <translation id="936602727769022409">Google 계정에 액세스하지 못할 수도 있습니다. 따라서 지금 비밀번호를 변경하는 것이 좋습니다. 로그인하라는 메시지가 표시됩니다.</translation>
 <translation id="969892804517981540">공식 빌드</translation>
 <translation id="988159990683914416">개발자 빌드</translation>

@@ -52,6 +52,8 @@ class Context {
 
   Context();
   ~Context();
+  Context(const Context&) = delete;
+  Context& operator=(const Context&) = delete;
 
   static void Destroy(Context* context);
   static Context* FromTap(MTAudioProcessingTapRef tap);
@@ -81,8 +83,6 @@ class Context {
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   AudioStreamBasicDescription stream_format_{0};
-
-  DISALLOW_COPY_AND_ASSIGN(Context);
 };
 
 Context::Context() = default;

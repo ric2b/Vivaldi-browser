@@ -300,7 +300,9 @@ void PaintLayerCompositor::UpdateAssignmentsIfNeeded(
 
   PaintLayer* update_root = RootLayer();
 
-  Vector<PaintLayer*> layers_needing_paint_invalidation;
+  HeapVector<Member<PaintLayer>> layers_needing_paint_invalidation;
+  ClearCollectionScope<HeapVector<Member<PaintLayer>>> scope(
+      &layers_needing_paint_invalidation);
 
   if (update_type >= kCompositingUpdateAfterCompositingInputChange) {
     CompositingRequirementsUpdater(*layout_view_)
@@ -347,7 +349,7 @@ void PaintLayerCompositor::UpdateAssignmentsIfNeeded(
     }
   }
 
-  for (auto* layer : layers_needing_paint_invalidation) {
+  for (auto& layer : layers_needing_paint_invalidation) {
     PaintInvalidationOnCompositingChange(layer);
   }
 }
@@ -464,14 +466,10 @@ GraphicsLayer* PaintLayerCompositor::RootGraphicsLayer() const {
 }
 
 GraphicsLayer* PaintLayerCompositor::PaintRootGraphicsLayer() const {
-  // Shortcut: skip the fullscreen checks for popups, and for not-main-frame
-  // ordinary fullscreen mode. Don't use the shortcut for WebXR DOM overlay mode
-  // since that requires ancestor frames to be rendered as transparent.
+  // Shortcut: skip the fullscreen checks for popups.
   Document& doc = layout_view_->GetDocument();
-  if (doc.GetPage()->GetChromeClient().IsPopup() ||
-      (!IsMainFrame() && !doc.IsXrOverlay())) {
+  if (doc.GetPage()->GetChromeClient().IsPopup())
     return RootGraphicsLayer();
-  }
 
   // Start from the full screen overlay layer if exists. Other layers will be
   // skipped during painting.
@@ -543,6 +541,11 @@ DocumentLifecycle& PaintLayerCompositor::Lifecycle() const {
 
 bool PaintLayerCompositor::IsMainFrame() const {
   return layout_view_->GetFrame()->IsMainFrame();
+}
+
+void PaintLayerCompositor::Trace(Visitor* visitor) const {
+  visitor->Trace(layout_view_);
+  visitor->Trace(compositing_inputs_root_);
 }
 
 }  // namespace blink

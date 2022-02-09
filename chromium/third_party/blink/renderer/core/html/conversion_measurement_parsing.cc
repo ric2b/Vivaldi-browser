@@ -90,23 +90,8 @@ WebImpressionOrError GetImpression(
     return mojom::blink::RegisterImpressionError::kNotAllowed;
   }
 
-  // Conversion measurement is only allowed when both the frame and the main
-  // frame (if different) have a secure origin.
-  const Frame& main_frame = frame->Tree().Top();
-  if (!main_frame.GetSecurityContext()
-           ->GetSecurityOrigin()
-           ->IsPotentiallyTrustworthy()) {
-    AuditsIssue::ReportAttributionIssue(
-        frame->DomWindow(),
-        AttributionReportingIssueType::kAttributionSourceUntrustworthyOrigin,
-        main_frame.GetDevToolsFrameToken(), element, absl::nullopt,
-        main_frame.GetSecurityContext()->GetSecurityOrigin()->ToString());
-    return mojom::blink::RegisterImpressionError::kInsecureContext;
-  }
-
-  if (!frame->IsMainFrame() && !frame->GetSecurityContext()
-                                    ->GetSecurityOrigin()
-                                    ->IsPotentiallyTrustworthy()) {
+  // Conversion measurement is only allowed in secure context.
+  if (!execution_context->IsSecureContext()) {
     AuditsIssue::ReportAttributionIssue(
         frame->DomWindow(),
         AttributionReportingIssueType::kAttributionSourceUntrustworthyOrigin,
@@ -168,7 +153,7 @@ WebImpressionOrError GetImpression(
 
   absl::optional<base::TimeDelta> expiry;
   if (impression_expiry_milliseconds)
-    expiry = base::TimeDelta::FromMilliseconds(*impression_expiry_milliseconds);
+    expiry = base::Milliseconds(*impression_expiry_milliseconds);
 
   UseCounter::Count(execution_context,
                     mojom::blink::WebFeature::kConversionAPIAll);

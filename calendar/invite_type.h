@@ -64,21 +64,21 @@ typedef std::vector<InviteToCreate> InvitesToCreate;
 class InviteResult {
  public:
   InviteResult() = default;
+  InviteResult(const InviteResult&) = delete;
+  InviteResult& operator=(const InviteResult&) = delete;
+
   bool success;
   std::string message;
   InviteRow inviteRow;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(InviteResult);
 };
 
 class DeleteInviteResult {
  public:
   DeleteInviteResult() = default;
-  bool success;
+  DeleteInviteResult(const DeleteInviteResult&) = delete;
+  DeleteInviteResult& operator=(const DeleteInviteResult&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteInviteResult);
+  bool success;
 };
 
 }  // namespace calendar

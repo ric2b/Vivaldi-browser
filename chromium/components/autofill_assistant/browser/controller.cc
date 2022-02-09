@@ -16,6 +16,7 @@
 #include "base/values.h"
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
 #include "components/autofill_assistant/browser/controller_observer.h"
+#include "components/autofill_assistant/browser/display_strings_util.h"
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/protocol_utils.h"
@@ -48,13 +49,37 @@ static constexpr int kAutostartInitialProgress = 5;
 // Experiment for toggling the new progress bar.
 const char kProgressBarExperiment[] = "4400697";
 
+// Experiment for non-sticky TTSButtonState. The TTSButtonState is reset to
+// DEFAULT whenever tts/status message changes even when the button was
+// DISABLED by the user tap.
+const char kNonStickyTtsButtonStateExperiment[] = "4624822";
+
+bool ShouldSuppressKeyboardForState(AutofillAssistantState state) {
+  switch (state) {
+    case AutofillAssistantState::STARTING:
+    case AutofillAssistantState::RUNNING:
+      return true;
+
+    case AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT:
+    case AutofillAssistantState::PROMPT:
+    case AutofillAssistantState::BROWSE:
+    case AutofillAssistantState::MODAL_DIALOG:
+    case AutofillAssistantState::STOPPED:
+    case AutofillAssistantState::TRACKING:
+    case AutofillAssistantState::INACTIVE:
+      return false;
+  }
+}
+
 }  // namespace
 
-Controller::Controller(content::WebContents* web_contents,
-                       Client* client,
-                       const base::TickClock* tick_clock,
-                       base::WeakPtr<RuntimeManagerImpl> runtime_manager,
-                       std::unique_ptr<Service> service)
+Controller::Controller(
+    content::WebContents* web_contents,
+    Client* client,
+    const base::TickClock* tick_clock,
+    base::WeakPtr<RuntimeManagerImpl> runtime_manager,
+    std::unique_ptr<Service> service,
+    std::unique_ptr<AutofillAssistantTtsController> tts_controller)
     : content::WebContentsObserver(web_contents),
       client_(client),
       tick_clock_(tick_clock),
@@ -62,9 +87,10 @@ Controller::Controller(content::WebContents* web_contents,
       service_(service ? std::move(service)
                        : ServiceImpl::Create(web_contents->GetBrowserContext(),
                                              client_)),
-      user_data_(std::make_unique<UserData>()),
-      navigating_to_new_document_(web_contents->IsWaitingForResponse()) {
+      navigating_to_new_document_(web_contents->IsWaitingForResponse()),
+      tts_controller_(std::move(tts_controller)) {
   user_model_.AddObserver(this);
+  tts_controller_->SetTtsEventDelegate(this);
 }
 
 Controller::~Controller() {
@@ -122,7 +148,7 @@ Service* Controller::GetService() {
 WebController* Controller::GetWebController() {
   if (!web_controller_) {
     web_controller_ =
-        WebController::CreateForWebContents(web_contents(), user_data_.get());
+        WebController::CreateForWebContents(web_contents(), &user_data_);
   }
   return web_controller_.get();
 }
@@ -148,8 +174,12 @@ std::string Controller::GetEmailAddressForAccessTokenAccount() {
   return client_->GetEmailAddressForAccessTokenAccount();
 }
 
-std::string Controller::GetLocale() {
-  return client_->GetLocale();
+std::string Controller::GetDisplayStringsLocale() {
+  if (GetSettings().display_strings_locale.empty()) {
+    // Fallback locale
+    return client_->GetLocale();
+  }
+  return GetSettings().display_strings_locale;
 }
 
 void Controller::SetTouchableElementArea(const ElementAreaProto& area) {
@@ -161,6 +191,9 @@ void Controller::SetStatusMessage(const std::string& message) {
   for (ControllerObserver& observer : observers_) {
     observer.OnStatusMessageChanged(message);
   }
+
+  // Override tts_message every time status_message changes.
+  SetTtsMessage(message);
 }
 
 std::string Controller::GetStatusMessage() const {
@@ -176,6 +209,38 @@ void Controller::SetBubbleMessage(const std::string& message) {
 
 std::string Controller::GetBubbleMessage() const {
   return bubble_message_;
+}
+
+void Controller::SetTtsMessage(const std::string& message) {
+  tts_message_ = message;
+
+  // Stop any ongoing TTS and reset button state.
+  if (tts_button_state_ == TtsButtonState::PLAYING) {
+    // Will not cause any TTS event.
+    tts_controller_->Stop();
+    SetTtsButtonState(TtsButtonState::DEFAULT);
+  }
+
+  // Re-enable TTS button if "Non sticky Tts Button State" experiment is
+  // enabled.
+  if (tts_button_state_ == TtsButtonState::DISABLED &&
+      trigger_context_ != nullptr &&
+      trigger_context_->HasExperimentId(kNonStickyTtsButtonStateExperiment)) {
+    SetTtsButtonState(TtsButtonState::DEFAULT);
+  }
+}
+
+std::string Controller::GetTtsMessage() const {
+  return tts_message_;
+}
+
+void Controller::MaybePlayTtsMessage() {
+  if (!tts_enabled_) {
+    return;
+  }
+
+  // Will fire a TTS_START event.
+  tts_controller_->Speak(tts_message_, GetDisplayStringsLocale());
 }
 
 void Controller::SetDetails(std::unique_ptr<Details> details,
@@ -349,6 +414,14 @@ bool Controller::GetProgressVisible() const {
   return progress_visible_;
 }
 
+bool Controller::GetTtsButtonVisible() const {
+  return tts_enabled_;
+}
+
+TtsButtonState Controller::GetTtsButtonState() const {
+  return tts_button_state_;
+}
+
 void Controller::SetStepProgressBarConfiguration(
     const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
   step_progress_bar_configuration_ = configuration;
@@ -440,6 +513,13 @@ void Controller::SetUiShown(bool shown) {
   ui_shown_ = shown;
   if (runtime_manager_) {
     runtime_manager_->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
+  }
+
+  // Stop any ongoing TTS if UI is hidden.
+  if (!shown && tts_button_state_ == TtsButtonState::PLAYING) {
+    // Will not cause any TTS event.
+    tts_controller_->Stop();
+    SetTtsButtonState(TtsButtonState::DEFAULT);
   }
 }
 
@@ -593,6 +673,13 @@ const FormProto::Result* Controller::GetFormResult() const {
   return form_result_.get();
 }
 
+void Controller::SetClientSettings(const ClientSettingsProto& client_settings) {
+  settings_.UpdateFromProto(client_settings);
+  for (ControllerObserver& observer : observers_) {
+    observer.OnClientSettingsChanged(settings_);
+  }
+}
+
 bool Controller::SetForm(
     std::unique_ptr<FormProto> form,
     base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
@@ -600,7 +687,7 @@ bool Controller::SetForm(
   form_.reset();
   form_result_.reset();
   form_changed_callback_ = base::DoNothing();
-  form_cancel_callback_ = base::DoNothing::Once<const ClientStatus&>();
+  form_cancel_callback_ = base::DoNothing();
 
   if (!form) {
     for (ControllerObserver& observer : observers_) {
@@ -642,8 +729,8 @@ bool Controller::SetForm(
       case FormInputProto::InputTypeCase::INPUT_TYPE_NOT_SET:
         VLOG(1) << "Encountered input with INPUT_TYPE_NOT_SET";
         return false;
-        // Intentionally no default case to make compilation fail if a new value
-        // was added to the enum but not to this list.
+        // Intentionally no default case to make compilation fail if a new
+        // value was added to the enum but not to this list.
     }
   }
 
@@ -816,7 +903,7 @@ void Controller::EnterStoppedState(bool show_feedback_chip) {
     Chip feedback_chip;
     feedback_chip.type = FEEDBACK_ACTION;
     feedback_chip.text =
-        l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_SEND_FEEDBACK);
+        GetDisplayStringUTF8(ClientSettingsProto::SEND_FEEDBACK, GetSettings());
     feedback_action.SetCallback(base::BindOnce(&Controller::ShutdownIfNecessary,
                                                weak_ptr_factory_.GetWeakPtr()));
     feedback_action.chip() = feedback_chip;
@@ -848,7 +935,10 @@ bool Controller::EnterState(AutofillAssistantState state) {
   }
   state_ = state;
 
+  bool should_suppress_keyboard = ShouldSuppressKeyboardForState(state_);
+  SuppressKeyboard(should_suppress_keyboard);
   for (ControllerObserver& observer : observers_) {
+    observer.OnKeyboardSuppressionStateChanged(should_suppress_keyboard);
     observer.OnStateChanged(state);
   }
 
@@ -991,9 +1081,10 @@ void Controller::OnGetScripts(const GURL& url,
     VLOG(1) << "Failed to get assistant scripts for " << script_url_.host()
             << ", http-status=" << http_status;
 #endif
-    OnFatalError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
-                 /*show_feedback_chip=*/true,
-                 Metrics::DropOutReason::GET_SCRIPTS_FAILED);
+    OnFatalError(
+        GetDisplayStringUTF8(ClientSettingsProto::DEFAULT_ERROR, GetSettings()),
+        /*show_feedback_chip=*/true,
+        Metrics::DropOutReason::GET_SCRIPTS_FAILED);
     return;
   }
 
@@ -1005,16 +1096,14 @@ void Controller::OnGetScripts(const GURL& url,
     VLOG(2) << __func__ << " from " << script_url_.host() << " returned "
             << "unparseable response";
 #endif
-    OnFatalError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
-                 /*show_feedback_chip=*/true,
-                 Metrics::DropOutReason::GET_SCRIPTS_UNPARSABLE);
+    OnFatalError(
+        GetDisplayStringUTF8(ClientSettingsProto::DEFAULT_ERROR, GetSettings()),
+        /*show_feedback_chip=*/true,
+        Metrics::DropOutReason::GET_SCRIPTS_UNPARSABLE);
     return;
   }
   if (response_proto.has_client_settings()) {
-    settings_.UpdateFromProto(response_proto.client_settings());
-    for (ControllerObserver& observer : observers_) {
-      observer.OnClientSettingsChanged(settings_);
-    }
+    SetClientSettings(response_proto.client_settings());
   }
   if (response_proto.has_script_store_config()) {
     GetService()->SetScriptStoreConfig(response_proto.script_store_config());
@@ -1026,8 +1115,8 @@ void Controller::OnGetScripts(const GURL& url,
 
   autostart_timeout_script_path_ =
       response_proto.script_timeout_error().script_path();
-  autostart_timeout_ = base::TimeDelta::FromMilliseconds(
-      response_proto.script_timeout_error().timeout_ms());
+  autostart_timeout_ =
+      base::Milliseconds(response_proto.script_timeout_error().timeout_ms());
   if (allow_autostart())
     absolute_autostart_timeout_ = tick_clock_->NowTicks() + autostart_timeout_;
 
@@ -1056,9 +1145,10 @@ void Controller::OnGetScripts(const GURL& url,
     script_tracker()->SetScripts({});
 
     if (state_ == AutofillAssistantState::TRACKING) {
-      OnFatalError(
-          l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
-          /*show_feedback_chip=*/false, Metrics::DropOutReason::NO_SCRIPTS);
+      OnFatalError(GetDisplayStringUTF8(ClientSettingsProto::DEFAULT_ERROR,
+                                        GetSettings()),
+                   /*show_feedback_chip=*/false,
+                   Metrics::DropOutReason::NO_SCRIPTS);
       return;
     }
     OnNoRunnableScriptsForPage();
@@ -1091,7 +1181,7 @@ void Controller::ExecuteScript(const std::string& script_path,
   // TODO(crbug.com/806868): Consider making ClearRunnableScripts part of
   // ExecuteScripts to simplify the controller.
   script_tracker()->ExecuteScript(
-      script_path, user_data_.get(), std::move(context),
+      script_path, &user_data_, std::move(context),
       base::BindOnce(&Controller::OnScriptExecuted,
                      // script_tracker_ is owned by Controller.
                      base::Unretained(this), script_path, end_state));
@@ -1108,7 +1198,7 @@ void Controller::OnScriptExecuted(const std::string& script_path,
 #endif
 
     OnScriptError(
-        l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
+        GetDisplayStringUTF8(ClientSettingsProto::DEFAULT_ERROR, GetSettings()),
         Metrics::DropOutReason::SCRIPT_FAILED);
     return;
   }
@@ -1198,9 +1288,7 @@ void Controller::InitFromParameters() {
   if (details->UpdateFromParameters(trigger_context_->GetScriptParameters()))
     SetDetails(std::move(details), base::TimeDelta());
 
-  if (user_data_ != nullptr) {
-    trigger_context_->GetScriptParameters().WriteToUserData(user_data_.get());
-  }
+  trigger_context_->GetScriptParameters().WriteToUserData(&user_data_);
 
   const absl::optional<std::string> overlay_color =
       trigger_context_->GetScriptParameters().GetOverlayColors();
@@ -1224,14 +1312,24 @@ void Controller::InitFromParameters() {
       trigger_context_->GetScriptParameters().GetPasswordChangeUsername();
   if (password_change_username) {
     DCHECK(GetDeeplinkURL().is_valid());  // |deeplink_url_| must be set.
-    user_data_->selected_login_.emplace(GetDeeplinkURL().GetOrigin(),
-                                        *password_change_username);
+    user_data_.selected_login_.emplace(GetDeeplinkURL().GetOrigin(),
+                                       *password_change_username);
   }
 
   if (trigger_context_->HasExperimentId(kProgressBarExperiment)) {
     ShowProgressBarProto::StepProgressBarConfiguration mock_configuration;
     mock_configuration.set_use_step_progress_bar(true);
     SetStepProgressBarConfiguration(mock_configuration);
+  }
+
+  const absl::optional<bool> enable_tts =
+      trigger_context_->GetScriptParameters().GetEnableTts();
+  if (enable_tts && enable_tts.value() &&
+      !client_->IsSpokenFeedbackAccessibilityServiceEnabled()) {
+    tts_enabled_ = true;
+    for (ControllerObserver& observer : observers_) {
+      observer.OnTtsButtonVisibilityChanged(/* visible= */ true);
+    }
   }
 
   user_model_.SetCurrentURL(GetCurrentURL());
@@ -1314,6 +1412,10 @@ bool Controller::ShouldShowOverlay() const {
   return overlay_behavior_ == ConfigureUiStateProto::DEFAULT;
 }
 
+bool Controller::ShouldSuppressKeyboard() const {
+  return ShouldSuppressKeyboardForState(state_);
+}
+
 void Controller::OnScriptSelected(const ScriptHandle& handle,
                                   std::unique_ptr<TriggerContext> context) {
   ExecuteScript(handle.path, handle.start_message, handle.needs_ui,
@@ -1321,10 +1423,6 @@ void Controller::OnScriptSelected(const ScriptHandle& handle,
                 state_ == AutofillAssistantState::TRACKING
                     ? AutofillAssistantState::TRACKING
                     : AutofillAssistantState::PROMPT);
-}
-
-void Controller::OnUserInteractionInsideTouchableArea() {
-  GetOrCheckScripts();
 }
 
 std::string Controller::GetDebugContext() {
@@ -1359,17 +1457,17 @@ const CollectUserDataOptions* Controller::GetCollectUserDataOptions() const {
 }
 
 const UserData* Controller::GetUserData() const {
-  return user_data_.get();
+  return &user_data_;
 }
 
 void Controller::OnCollectUserDataContinueButtonClicked() {
-  if (!collect_user_data_options_ || !user_data_)
+  if (!collect_user_data_options_)
     return;
 
   auto callback = std::move(collect_user_data_options_->confirm_callback);
 
   SetCollectUserDataOptions(nullptr);
-  std::move(callback).Run(user_data_.get(), &user_model_);
+  std::move(callback).Run(&user_data_, &user_model_);
 }
 
 void Controller::OnCollectUserDataAdditionalActionTriggered(int index) {
@@ -1379,16 +1477,13 @@ void Controller::OnCollectUserDataAdditionalActionTriggered(int index) {
   auto callback =
       std::move(collect_user_data_options_->additional_actions_callback);
   SetCollectUserDataOptions(nullptr);
-  std::move(callback).Run(index, user_data_.get(), &user_model_);
+  std::move(callback).Run(index, &user_data_, &user_model_);
 }
 
 void Controller::OnTextLinkClicked(int link) {
-  if (!user_data_)
-    return;
-
   auto callback = std::move(collect_user_data_options_->terms_link_callback);
   SetCollectUserDataOptions(nullptr);
-  std::move(callback).Run(link, user_data_.get(), &user_model_);
+  std::move(callback).Run(link, &user_data_, &user_model_);
 }
 
 void Controller::OnFormActionLinkClicked(int link) {
@@ -1399,32 +1494,94 @@ void Controller::OnFormActionLinkClicked(int link) {
   }
 }
 
-void Controller::SetDateTimeRangeStartDate(
-    const absl::optional<DateProto>& date) {
-  if (!user_data_)
-    return;
+void Controller::OnTtsButtonClicked() {
+  switch (tts_button_state_) {
+    case TtsButtonState::DEFAULT:
+      // Will fire a TTS_START event.
+      tts_controller_->Speak(tts_message_, GetDisplayStringsLocale());
+      Metrics::RecordTtsButtonAction(Metrics::TtsButtonAction::PLAY_TTS);
+      break;
+    case TtsButtonState::PLAYING:
+      // Will not cause any TTS event.
+      tts_controller_->Stop();
+      SetTtsButtonState(TtsButtonState::DISABLED);
+      Metrics::RecordTtsButtonAction(Metrics::TtsButtonAction::DISABLE_BUTTON);
+      break;
+    case TtsButtonState::DISABLED:
+      SetTtsButtonState(TtsButtonState::DEFAULT);
+      // Will fire a TTS_START event.
+      tts_controller_->Speak(tts_message_, GetDisplayStringsLocale());
+      Metrics::RecordTtsButtonAction(
+          Metrics::TtsButtonAction::ENABLE_BUTTON_AND_PLAY_TTS);
+      break;
+  }
+}
 
-  if (user_data_->date_time_range_start_date_.has_value() && date.has_value() &&
-      CollectUserDataAction::CompareDates(
-          *user_data_->date_time_range_start_date_, *date) == 0) {
+void Controller::OnTtsEvent(
+    AutofillAssistantTtsController::TtsEventType event) {
+  switch (event) {
+    case AutofillAssistantTtsController::TTS_START:
+      SetTtsButtonState(TtsButtonState::PLAYING);
+      break;
+    case AutofillAssistantTtsController::TTS_END:
+    case AutofillAssistantTtsController::TTS_ERROR:
+      SetTtsButtonState(TtsButtonState::DEFAULT);
+      break;
+  }
+}
+
+void Controller::SetTtsButtonState(TtsButtonState state) {
+  tts_button_state_ = state;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnTtsButtonStateChanged(tts_button_state_);
+  }
+}
+
+void Controller::OnSpokenFeedbackAccessibilityServiceChanged(bool enabled) {
+  if (!enabled) {
+    // Nothing to do when the a11y service is disabled.
     return;
   }
 
-  user_data_->date_time_range_start_date_ = date;
+  if (!tts_enabled_) {
+    return;
+  }
+  // Disable TTS and hide TTS button.
+  tts_enabled_ = false;
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
+    observer.OnTtsButtonVisibilityChanged(/* visible= */ false);
+  }
+  // Stop any ongoing TTS and reset button state.
+  if (tts_button_state_ == TtsButtonState::PLAYING) {
+    // Will not cause any TTS event.
+    tts_controller_->Stop();
+    SetTtsButtonState(TtsButtonState::DEFAULT);
+  }
+}
+
+void Controller::SetDateTimeRangeStartDate(
+    const absl::optional<DateProto>& date) {
+  if (user_data_.date_time_range_start_date_.has_value() && date.has_value() &&
+      CollectUserDataAction::CompareDates(
+          *user_data_.date_time_range_start_date_, *date) == 0) {
+    return;
+  }
+
+  user_data_.date_time_range_start_date_ = date;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnUserDataChanged(user_data_,
                                UserData::FieldChange::DATE_TIME_RANGE_START);
   }
 
   if (CollectUserDataAction::SanitizeDateTimeRange(
-          &user_data_->date_time_range_start_date_,
-          &user_data_->date_time_range_start_timeslot_,
-          &user_data_->date_time_range_end_date_,
-          &user_data_->date_time_range_end_timeslot_,
+          &user_data_.date_time_range_start_date_,
+          &user_data_.date_time_range_start_timeslot_,
+          &user_data_.date_time_range_end_date_,
+          &user_data_.date_time_range_end_timeslot_,
           *collect_user_data_options_,
           /* change_start = */ false)) {
     for (ControllerObserver& observer : observers_) {
-      observer.OnUserDataChanged(user_data_.get(),
+      observer.OnUserDataChanged(user_data_,
                                  UserData::FieldChange::DATE_TIME_RANGE_END);
     }
   }
@@ -1434,30 +1591,27 @@ void Controller::SetDateTimeRangeStartDate(
 
 void Controller::SetDateTimeRangeStartTimeSlot(
     const absl::optional<int>& timeslot_index) {
-  if (!user_data_)
-    return;
-
-  if (user_data_->date_time_range_start_timeslot_.has_value() &&
+  if (user_data_.date_time_range_start_timeslot_.has_value() &&
       timeslot_index.has_value() &&
-      *user_data_->date_time_range_start_timeslot_ == *timeslot_index) {
+      *user_data_.date_time_range_start_timeslot_ == *timeslot_index) {
     return;
   }
 
-  user_data_->date_time_range_start_timeslot_ = timeslot_index;
+  user_data_.date_time_range_start_timeslot_ = timeslot_index;
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
+    observer.OnUserDataChanged(user_data_,
                                UserData::FieldChange::DATE_TIME_RANGE_START);
   }
 
   if (CollectUserDataAction::SanitizeDateTimeRange(
-          &user_data_->date_time_range_start_date_,
-          &user_data_->date_time_range_start_timeslot_,
-          &user_data_->date_time_range_end_date_,
-          &user_data_->date_time_range_end_timeslot_,
+          &user_data_.date_time_range_start_date_,
+          &user_data_.date_time_range_start_timeslot_,
+          &user_data_.date_time_range_end_date_,
+          &user_data_.date_time_range_end_timeslot_,
           *collect_user_data_options_,
           /* change_start = */ false)) {
     for (ControllerObserver& observer : observers_) {
-      observer.OnUserDataChanged(user_data_.get(),
+      observer.OnUserDataChanged(user_data_,
                                  UserData::FieldChange::DATE_TIME_RANGE_END);
     }
   }
@@ -1467,30 +1621,27 @@ void Controller::SetDateTimeRangeStartTimeSlot(
 
 void Controller::SetDateTimeRangeEndDate(
     const absl::optional<DateProto>& date) {
-  if (!user_data_)
-    return;
-
-  if (user_data_->date_time_range_end_date_.has_value() && date.has_value() &&
-      CollectUserDataAction::CompareDates(
-          *user_data_->date_time_range_end_date_, *date) == 0) {
+  if (user_data_.date_time_range_end_date_.has_value() && date.has_value() &&
+      CollectUserDataAction::CompareDates(*user_data_.date_time_range_end_date_,
+                                          *date) == 0) {
     return;
   }
 
-  user_data_->date_time_range_end_date_ = date;
+  user_data_.date_time_range_end_date_ = date;
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
+    observer.OnUserDataChanged(user_data_,
                                UserData::FieldChange::DATE_TIME_RANGE_END);
   }
 
   if (CollectUserDataAction::SanitizeDateTimeRange(
-          &user_data_->date_time_range_start_date_,
-          &user_data_->date_time_range_start_timeslot_,
-          &user_data_->date_time_range_end_date_,
-          &user_data_->date_time_range_end_timeslot_,
+          &user_data_.date_time_range_start_date_,
+          &user_data_.date_time_range_start_timeslot_,
+          &user_data_.date_time_range_end_date_,
+          &user_data_.date_time_range_end_timeslot_,
           *collect_user_data_options_,
           /* change_start = */ true)) {
     for (ControllerObserver& observer : observers_) {
-      observer.OnUserDataChanged(user_data_.get(),
+      observer.OnUserDataChanged(user_data_,
                                  UserData::FieldChange::DATE_TIME_RANGE_START);
     }
   }
@@ -1500,30 +1651,27 @@ void Controller::SetDateTimeRangeEndDate(
 
 void Controller::SetDateTimeRangeEndTimeSlot(
     const absl::optional<int>& timeslot_index) {
-  if (!user_data_)
-    return;
-
-  if (user_data_->date_time_range_end_timeslot_.has_value() &&
+  if (user_data_.date_time_range_end_timeslot_.has_value() &&
       timeslot_index.has_value() &&
-      *user_data_->date_time_range_end_timeslot_ == *timeslot_index) {
+      *user_data_.date_time_range_end_timeslot_ == *timeslot_index) {
     return;
   }
 
-  user_data_->date_time_range_end_timeslot_ = timeslot_index;
+  user_data_.date_time_range_end_timeslot_ = timeslot_index;
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
+    observer.OnUserDataChanged(user_data_,
                                UserData::FieldChange::DATE_TIME_RANGE_END);
   }
 
   if (CollectUserDataAction::SanitizeDateTimeRange(
-          &user_data_->date_time_range_start_date_,
-          &user_data_->date_time_range_start_timeslot_,
-          &user_data_->date_time_range_end_date_,
-          &user_data_->date_time_range_end_timeslot_,
+          &user_data_.date_time_range_start_date_,
+          &user_data_.date_time_range_start_timeslot_,
+          &user_data_.date_time_range_end_date_,
+          &user_data_.date_time_range_end_timeslot_,
           *collect_user_data_options_,
           /* change_start = */ true)) {
     for (ControllerObserver& observer : observers_) {
-      observer.OnUserDataChanged(user_data_.get(),
+      observer.OnUserDataChanged(user_data_,
                                  UserData::FieldChange::DATE_TIME_RANGE_START);
     }
   }
@@ -1533,16 +1681,14 @@ void Controller::SetDateTimeRangeEndTimeSlot(
 
 void Controller::SetAdditionalValue(const std::string& client_memory_key,
                                     const ValueProto& value) {
-  if (!user_data_)
-    return;
-  if (!user_data_->HasAdditionalValue(client_memory_key)) {
+  if (!user_data_.HasAdditionalValue(client_memory_key)) {
     NOTREACHED() << client_memory_key << " not found";
     return;
   }
-  user_data_->SetAdditionalValue(client_memory_key, value);
+  user_data_.SetAdditionalValue(client_memory_key, value);
   UpdateCollectUserDataActions();
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
+    observer.OnUserDataChanged(user_data_,
                                UserData::FieldChange::ADDITIONAL_VALUES);
   }
 }
@@ -1572,15 +1718,15 @@ void Controller::SetContactInfo(
 void Controller::SetCreditCard(
     std::unique_ptr<autofill::CreditCard> card,
     std::unique_ptr<autofill::AutofillProfile> billing_profile) {
-  if (user_data_ == nullptr || collect_user_data_options_ == nullptr) {
+  if (collect_user_data_options_ == nullptr) {
     return;
   }
 
   DCHECK(!collect_user_data_options_->billing_address_name.empty());
 
-  user_model_.SetSelectedCreditCard(std::move(card), user_data_.get());
+  user_model_.SetSelectedCreditCard(std::move(card), &user_data_);
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(), UserData::FieldChange::CARD);
+    observer.OnUserDataChanged(user_data_, UserData::FieldChange::CARD);
   }
   SetProfile(collect_user_data_options_->billing_address_name,
              UserData::FieldChange::BILLING_ADDRESS,
@@ -1591,41 +1737,32 @@ void Controller::SetProfile(
     const std::string& key,
     UserData::FieldChange field_change,
     std::unique_ptr<autofill::AutofillProfile> profile) {
-  if (user_data_ == nullptr) {
-    return;
-  }
-
-  user_model_.SetSelectedAutofillProfile(key, std::move(profile),
-                                         user_data_.get());
+  user_model_.SetSelectedAutofillProfile(key, std::move(profile), &user_data_);
 
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(), field_change);
+    observer.OnUserDataChanged(user_data_, field_change);
   }
   UpdateCollectUserDataActions();
 }
 
 void Controller::SetTermsAndConditions(
     TermsAndConditionsState terms_and_conditions) {
-  if (!user_data_)
-    return;
-
-  user_data_->terms_and_conditions_ = terms_and_conditions;
+  user_data_.terms_and_conditions_ = terms_and_conditions;
   UpdateCollectUserDataActions();
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
+    observer.OnUserDataChanged(user_data_,
                                UserData::FieldChange::TERMS_AND_CONDITIONS);
   }
 }
 
 void Controller::SetLoginOption(std::string identifier) {
-  if (!user_data_ || !collect_user_data_options_)
+  if (!collect_user_data_options_)
     return;
 
-  user_data_->login_choice_identifier_.assign(identifier);
+  user_data_.login_choice_identifier_.assign(identifier);
   UpdateCollectUserDataActions();
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(),
-                               UserData::FieldChange::LOGIN_CHOICE);
+    observer.OnUserDataChanged(user_data_, UserData::FieldChange::LOGIN_CHOICE);
   }
 }
 
@@ -1634,13 +1771,13 @@ void Controller::UpdateCollectUserDataActions() {
   // that updating the PR action buttons will also clear the suggestions. We
   // should update the action buttons only if there are use cases of PR +
   // suggestions.
-  if (!collect_user_data_options_ || !user_data_) {
+  if (!collect_user_data_options_) {
     SetUserActions(nullptr);
     return;
   }
 
   bool confirm_button_enabled = CollectUserDataAction::IsUserDataComplete(
-      *user_data_, user_model_, *collect_user_data_options_);
+      user_data_, user_model_, *collect_user_data_options_);
 
   UserAction confirm(collect_user_data_options_->confirm_action);
   confirm.SetEnabled(confirm_button_enabled);
@@ -1781,9 +1918,9 @@ void Controller::OnNoRunnableScriptsForPage() {
       // We're still waiting for the set of initial scripts, but either didn't
       // get any scripts or didn't get scripts that could possibly become
       // runnable with a DOM change.
-      OnScriptError(
-          l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
-          Metrics::DropOutReason::NO_INITIAL_SCRIPTS);
+      OnScriptError(GetDisplayStringUTF8(ClientSettingsProto::DEFAULT_ERROR,
+                                         GetSettings()),
+                    Metrics::DropOutReason::NO_INITIAL_SCRIPTS);
       break;
 
     case AutofillAssistantState::PROMPT:
@@ -1791,8 +1928,9 @@ void Controller::OnNoRunnableScriptsForPage() {
       // The user has navigated to a page that has no scripts or the scripts
       // have reached a state from which they cannot recover through a DOM
       // change.
-      OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
-                    Metrics::DropOutReason::NO_SCRIPTS);
+      OnScriptError(
+          GetDisplayStringUTF8(ClientSettingsProto::GIVE_UP, GetSettings()),
+          Metrics::DropOutReason::NO_SCRIPTS);
       break;
 
     default:
@@ -1885,16 +2023,14 @@ void Controller::OnNavigationShutdownOrError(const GURL& url,
           google_util::DISALLOW_NON_STANDARD_PORTS)) {
     client_->Shutdown(reason);
   } else {
-    OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
-                  reason);
+    OnScriptError(
+        GetDisplayStringUTF8(ClientSettingsProto::GIVE_UP, GetSettings()),
+        reason);
   }
 }
 
 void Controller::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
   if (!navigation_handle->IsInPrimaryMainFrame() ||
       navigation_handle->IsSameDocument()) {
     return;
@@ -1911,8 +2047,12 @@ void Controller::DidStartNavigation(
     return;
   }
 
+  bool is_user_initiated_or_back_forward =
+      !navigation_handle->IsRendererInitiated() ||
+      navigation_handle->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK;
+
   if (state_ == AutofillAssistantState::STOPPED &&
-      !navigation_handle->IsRendererInitiated() &&
+      is_user_initiated_or_back_forward &&
       !navigation_handle->WasServerRedirect()) {
     if (can_recover_from_stopped_) {
       // Usually when in STOPPED (e.g. through |OnScriptError|) the
@@ -1940,23 +2080,24 @@ void Controller::DidStartNavigation(
   //  In the last two cases, autofill assistant might still give up later on if
   //  it discovers that the new page has no scripts.
   //
-  // Everything else, such as going back to a previous page, or refreshing the
-  // page is considered an end condition. If going back to a previous page is
-  // required, consider using the BROWSE state instead.
+  // Everything else, such as going back to a previous page (whether
+  // user-initiated or javascript-initiated), or refreshing the page is
+  // considered an end condition. If going back to a previous page is required,
+  // consider using the BROWSE state instead.
   if (state_ == AutofillAssistantState::PROMPT &&
       web_contents()->GetLastCommittedURL().is_valid() &&
       !navigation_handle->WasServerRedirect() &&
-      !navigation_handle->IsRendererInitiated()) {
+      is_user_initiated_or_back_forward) {
     OnNavigationShutdownOrError(navigation_handle->GetURL(),
                                 Metrics::DropOutReason::NAVIGATION);
     return;
   }
 
-  // When in RUNNING state, all renderer initiated navigation is allowed,
-  // user initiated navigation will cause an error.
+  // When in RUNNING state, all renderer initiated navigation except
+  // back/forward is allowed, user initiated navigation will cause an error.
   if (state_ == AutofillAssistantState::RUNNING &&
       !navigation_handle->WasServerRedirect() &&
-      !navigation_handle->IsRendererInitiated()) {
+      is_user_initiated_or_back_forward) {
     OnNavigationShutdownOrError(
         navigation_handle->GetURL(),
         Metrics::DropOutReason::NAVIGATION_WHILE_RUNNING);
@@ -1971,9 +2112,6 @@ void Controller::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   // TODO(b/159871774): Rethink how we handle navigation events. The early
   // return here may prevent us from updating |navigating_to_new_document_|.
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
   if (!navigation_handle->IsInPrimaryMainFrame() ||
       navigation_handle->IsSameDocument() ||
       !navigation_handle->HasCommitted() || !IsNavigatingToNewDocument()) {
@@ -2032,6 +2170,21 @@ void Controller::OnWebContentsFocused(
   }
 }
 
+void Controller::WebContentsDestroyed() {
+  suppress_keyboard_raii_.reset();
+}
+
+void Controller::SuppressKeyboard(bool suppress) {
+  if (suppress) {
+    if (!suppress_keyboard_raii_) {
+      suppress_keyboard_raii_ =
+          std::make_unique<SuppressKeyboardRAII>(web_contents());
+    }
+  } else {
+    suppress_keyboard_raii_.reset();
+  }
+}
+
 void Controller::OnValueChanged(const std::string& identifier,
                                 const ValueProto& new_value) {
   event_handler_.DispatchEvent({EventProto::kOnValueChanged, identifier});
@@ -2067,7 +2220,7 @@ void Controller::SetCollectUserDataOptions(CollectUserDataOptions* options) {
   UpdateCollectUserDataActions();
   for (ControllerObserver& observer : observers_) {
     observer.OnCollectUserDataOptionsChanged(collect_user_data_options_);
-    observer.OnUserDataChanged(user_data_.get(), UserData::FieldChange::ALL);
+    observer.OnUserDataChanged(user_data_, UserData::FieldChange::ALL);
   }
 }
 
@@ -2085,12 +2238,12 @@ void Controller::WriteUserData(
     base::OnceCallback<void(UserData*, UserData::FieldChange*)>
         write_callback) {
   UserData::FieldChange field_change = UserData::FieldChange::NONE;
-  std::move(write_callback).Run(user_data_.get(), &field_change);
+  std::move(write_callback).Run(&user_data_, &field_change);
   if (field_change == UserData::FieldChange::NONE) {
     return;
   }
   for (ControllerObserver& observer : observers_) {
-    observer.OnUserDataChanged(user_data_.get(), field_change);
+    observer.OnUserDataChanged(user_data_, field_change);
   }
   UpdateCollectUserDataActions();
 }

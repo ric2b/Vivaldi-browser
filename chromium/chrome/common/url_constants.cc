@@ -165,6 +165,9 @@ const char kGoogleAccountURL[] = "https://myaccount.google.com";
 const char kGoogleAccountChooserURL[] =
     "https://accounts.google.com/AccountChooser";
 
+const char kGoogleAccountDeviceActivityURL[] =
+    "https://myaccount.google.com/device-activity?utm_source=chrome";
+
 const char kGooglePasswordManagerURL[] = "https://passwords.google.com";
 
 const char kGooglePhotosURL[] = "https://photos.google.com";
@@ -325,6 +328,10 @@ const char kArcPrivacyPolicyURLPath[] = "arc/privacy_policy";
 
 const char kArcTermsURLPath[] = "arc/terms";
 
+// TODO(crbug.com/1248270): Use real link to Bluetooth pairing learn more.
+const char kBluetoothPairingLearnMoreUrl[] =
+    "https://support.google.com/chromebook/?p=bluetooth_pairing";
+
 const char kChromeAccessibilityHelpURL[] =
     "https://support.google.com/chromebook/topic/6323347";
 
@@ -387,6 +394,9 @@ const char kAndroidMessagesLearnMoreURL[] =
 const char kLanguageSettingsLearnMoreUrl[] =
     "https://support.google.com/chromebook/answer/1059490";
 
+const char kLanguagePacksLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=language_packs";
+
 const char kLearnMoreEnterpriseURL[] =
     "https://support.google.com/chromebook/?p=managed";
 
@@ -401,10 +411,10 @@ const char kNaturalScrollHelpURL[] =
 
 const char kOemEulaURLPath[] = "oem";
 
-const char kOnlineEulaURLPath[] =
+const char kGoogleEulaOnlineURLPath[] =
     "https://policies.google.com/terms/embedded?hl=%s";
 
-const char kAdditionalToSOnlineURLPath[] =
+const char kCrosEulaOnlineURLPath[] =
     "https://www.google.com/intl/%s/chrome/terms/";
 
 const char kOsSettingsSearchHelpURL[] =
@@ -470,5 +480,9 @@ const char kChromeSyncLearnMoreURL[] =
 const char kOutdatedPluginLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ib_outdated_plugin";
 #endif
+
+// TODO (b/184137843): Use real link to phone hub notifications and apps access.
+const char kPhoneHubPermissionLearnMoreURL[] =
+    "https://support.google.com/chromebook/?p=multidevice";
 
 }  // namespace chrome

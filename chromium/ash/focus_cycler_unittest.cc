@@ -60,6 +60,9 @@ class FocusCyclerTest : public AshTestBase {
  public:
   FocusCyclerTest() = default;
 
+  FocusCyclerTest(const FocusCyclerTest&) = delete;
+  FocusCyclerTest& operator=(const FocusCyclerTest&) = delete;
+
   void SetUp() override {
     AshTestBase::SetUp();
 
@@ -100,8 +103,6 @@ class FocusCyclerTest : public AshTestBase {
 
  private:
   std::unique_ptr<FocusCycler> focus_cycler_;
-
-  DISALLOW_COPY_AND_ASSIGN(FocusCyclerTest);
 };
 
 TEST_F(FocusCyclerTest, CycleFocusBrowserOnly) {
@@ -383,10 +384,10 @@ TEST_F(FocusCyclerTest, CycleFocusThroughWindowWithPanes) {
 TEST_F(FocusCyclerTest, RemoveWidgetOnDisplayRemoved) {
   // Two displays are added, so two shelf widgets and two status area widgets
   // are added to focus cycler.
-  UpdateDisplay("800x800, 500x500");
+  UpdateDisplay("800x700, 600x500");
   // Remove one display. Its shelf widget and status area widget should also be
   // removed from focus cycler.
-  UpdateDisplay("800x800");
+  UpdateDisplay("800x700");
 
   // Create a single test window.
   std::unique_ptr<Window> window(CreateTestWindowInShellWithId(0));

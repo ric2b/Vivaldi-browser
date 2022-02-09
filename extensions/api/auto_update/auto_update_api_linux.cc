@@ -7,7 +7,7 @@ namespace extensions {
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   using vivaldi::auto_update::CheckForUpdates::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   return RespondNow(Error("Not implemented"));
@@ -43,13 +43,11 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }
 
-ExtensionFunction::ResponseAction
-AutoUpdateGetLastCheckTimeFunction::Run() {
+ExtensionFunction::ResponseAction AutoUpdateGetLastCheckTimeFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }
 
-ExtensionFunction::ResponseAction
-AutoUpdateGetUpdateStatusFunction::Run() {
+ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }
 

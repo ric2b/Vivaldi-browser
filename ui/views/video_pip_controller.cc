@@ -18,20 +18,20 @@ using media_session::mojom::MediaSessionAction;
 namespace vivaldi {
 
 VideoPIPController::VideoPIPController(
-  vivaldi::VideoPIPController::Delegate* delegate,
-  content::WebContents* web_contents)
-  : content::WebContentsObserver(web_contents), delegate_(delegate) {
+    vivaldi::VideoPIPController::Delegate* delegate,
+    content::WebContents* web_contents)
+    : content::WebContentsObserver(web_contents), delegate_(delegate) {
   mojo::Remote<media_session::mojom::MediaControllerManager>
-    controller_manager_remote;
+      controller_manager_remote;
   content::GetMediaSessionService().BindMediaControllerManager(
-    controller_manager_remote.BindNewPipeAndPassReceiver());
+      controller_manager_remote.BindNewPipeAndPassReceiver());
   controller_manager_remote->CreateActiveMediaController(
-    media_controller_remote_.BindNewPipeAndPassReceiver());
+      media_controller_remote_.BindNewPipeAndPassReceiver());
 
   // Observe the active media controller for changes to playback state and
   // supported actions.
   media_controller_remote_->AddObserver(
-    media_controller_observer_receiver_.BindNewPipeAndPassRemote());
+      media_controller_observer_receiver_.BindNewPipeAndPassRemote());
 }
 
 VideoPIPController::~VideoPIPController() {}
@@ -49,8 +49,7 @@ void VideoPIPController::MediaSessionPositionChanged(
   }
 }
 
-bool VideoPIPController::SupportsAction(
-    MediaSessionAction action) const {
+bool VideoPIPController::SupportsAction(MediaSessionAction action) const {
   return actions_.contains(action);
 }
 
@@ -68,7 +67,7 @@ void VideoPIPController::WebContentsDestroyed() {
 void VideoPIPController::DidUpdateAudioMutingState(bool muted) {
   if (delegate_) {
     delegate_->AudioMutingStateChanged(muted);
- }
+  }
 }
 
 void VideoPIPController::SeekTo(double current_position, double seek_progress) {
@@ -80,13 +79,13 @@ void VideoPIPController::SeekTo(double current_position, double seek_progress) {
              SupportsAction(MediaSessionAction::kSeekForward)) {
     base::TimeDelta delta =
         base::TimeDelta::FromSecondsD((seek_progress - current_position) *
-                                     position_->duration().InSecondsF());
+                                      position_->duration().InSecondsF());
     media_controller_remote_->Seek(delta);
   } else if (current_position > seek_progress &&
              SupportsAction(MediaSessionAction::kSeekBackward)) {
     base::TimeDelta delta =
         base::TimeDelta::FromSecondsD(-(current_position - seek_progress) *
-                                     position_->duration().InSecondsF());
+                                      position_->duration().InSecondsF());
     media_controller_remote_->Seek(delta);
   }
 }

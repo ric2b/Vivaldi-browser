@@ -882,7 +882,7 @@ TEST_F(HistoryBackendDBTest, DownloadCreateAndQuery) {
   url_chain.push_back(GURL("http://example.com/c"));
 
   base::Time start_time(base::Time::Now());
-  base::Time end_time(start_time + base::TimeDelta::FromHours(1));
+  base::Time end_time(start_time + base::Hours(1));
   base::Time last_access_time;
 
   DownloadRow download_A;
@@ -918,9 +918,9 @@ TEST_F(HistoryBackendDBTest, DownloadCreateAndQuery) {
 
   url_chain.push_back(GURL("http://example.com/d"));
 
-  base::Time start_time2(start_time + base::TimeDelta::FromHours(10));
-  base::Time end_time2(end_time + base::TimeDelta::FromHours(10));
-  base::Time last_access_time2(start_time2 + base::TimeDelta::FromHours(5));
+  base::Time start_time2(start_time + base::Hours(10));
+  base::Time end_time2(end_time + base::Hours(10));
+  base::Time last_access_time2(start_time2 + base::Hours(5));
 
   DownloadRow download_B;
   download_B.current_path = base::FilePath(FILE_PATH_LITERAL("/path/3"));
@@ -977,8 +977,8 @@ TEST_F(HistoryBackendDBTest, DownloadCreateAndUpdate_VolatileFields) {
   url_chain.push_back(GURL("http://example.com/c"));
 
   base::Time start_time(base::Time::Now());
-  base::Time end_time(start_time + base::TimeDelta::FromHours(1));
-  base::Time last_access_time(start_time + base::TimeDelta::FromHours(5));
+  base::Time end_time(start_time + base::Hours(1));
+  base::Time last_access_time(start_time + base::Hours(5));
 
   DownloadRow download;
   download.current_path = base::FilePath(FILE_PATH_LITERAL("/path/1"));
@@ -1019,7 +1019,7 @@ TEST_F(HistoryBackendDBTest, DownloadCreateAndUpdate_VolatileFields) {
   download.state = DownloadState::CANCELLED;
   download.danger_type = DownloadDangerType::USER_VALIDATED;
   download.interrupt_reason = 4;
-  download.end_time += base::TimeDelta::FromHours(1);
+  download.end_time += base::Hours(1);
   download.total_bytes += 1;
   download.hash = "some-other-hash";
   download.opened = !download.opened;
@@ -1057,14 +1057,10 @@ TEST_F(HistoryBackendDBTest, ConfirmDownloadRowCreateAndDelete) {
       DownloadSliceInfo(id1, 500, 100, false));
   ASSERT_TRUE(db_->UpdateDownload(results[0]));
 
-  AddDownload(id2,
-              "05AF6C8E-E4E0-45D7-B5CE-BC99F7019919",
-              DownloadState::COMPLETE,
-              now + base::TimeDelta::FromDays(2));
-  AddDownload(id3,
-              "05AF6C8E-E4E0-45D7-B5CE-BC99F701991A",
-              DownloadState::COMPLETE,
-              now - base::TimeDelta::FromDays(2));
+  AddDownload(id2, "05AF6C8E-E4E0-45D7-B5CE-BC99F7019919",
+              DownloadState::COMPLETE, now + base::Days(2));
+  AddDownload(id3, "05AF6C8E-E4E0-45D7-B5CE-BC99F701991A",
+              DownloadState::COMPLETE, now - base::Days(2));
 
   // Confirm that resulted in the correct number of rows in the DB.
   DeleteBackend();
@@ -1256,7 +1252,7 @@ TEST_F(HistoryBackendDBTest, CreateAndUpdateDownloadingSlice) {
   download.mime_type = "mime/type";
   download.original_mime_type = "original/mime-type";
   download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::TimeDelta::FromHours(1);
+  download.end_time = download.start_time + base::Hours(1);
   download.etag = "etag1";
   download.last_modified = "last_modified_1";
   download.received_bytes = 10;
@@ -1268,8 +1264,7 @@ TEST_F(HistoryBackendDBTest, CreateAndUpdateDownloadingSlice) {
   download.id = 1;
   download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
   download.opened = false;
-  download.last_access_time =
-      download.start_time + base::TimeDelta::FromHours(5);
+  download.last_access_time = download.start_time + base::Hours(5);
   download.transient = false;
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
@@ -1306,7 +1301,7 @@ TEST_F(HistoryBackendDBTest, UpdateDownloadWithNewSlice) {
   download.mime_type = "mime/type";
   download.original_mime_type = "original/mime-type";
   download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::TimeDelta::FromHours(1);
+  download.end_time = download.start_time + base::Hours(1);
   download.etag = "etag1";
   download.last_modified = "last_modified_1";
   download.received_bytes = 0;
@@ -1318,8 +1313,7 @@ TEST_F(HistoryBackendDBTest, UpdateDownloadWithNewSlice) {
   download.id = 1;
   download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
   download.opened = false;
-  download.last_access_time =
-      download.start_time + base::TimeDelta::FromHours(5);
+  download.last_access_time = download.start_time + base::Hours(5);
   download.transient = true;
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
@@ -1351,7 +1345,7 @@ TEST_F(HistoryBackendDBTest, DownloadSliceDeletedIfEmpty) {
   download.mime_type = "mime/type";
   download.original_mime_type = "original/mime-type";
   download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::TimeDelta::FromHours(1);
+  download.end_time = download.start_time + base::Hours(1);
   download.etag = "etag1";
   download.last_modified = "last_modified_1";
   download.received_bytes = 10;
@@ -1363,8 +1357,7 @@ TEST_F(HistoryBackendDBTest, DownloadSliceDeletedIfEmpty) {
   download.id = 1;
   download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
   download.opened = false;
-  download.last_access_time =
-      download.start_time + base::TimeDelta::FromHours(5);
+  download.last_access_time = download.start_time + base::Hours(5);
   download.transient = true;
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
@@ -1408,7 +1401,7 @@ TEST_F(HistoryBackendDBTest, CreateAndUpdateDownloadRerouteInfoThenRemoveItem) {
   download.mime_type = "mime/type";
   download.original_mime_type = "original/mime-type";
   download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::TimeDelta::FromHours(1);
+  download.end_time = download.start_time + base::Hours(1);
   download.etag = "etag1";
   download.last_modified = "last_modified_1";
   download.received_bytes = 10;
@@ -1420,8 +1413,7 @@ TEST_F(HistoryBackendDBTest, CreateAndUpdateDownloadRerouteInfoThenRemoveItem) {
   download.id = 1;
   download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
   download.opened = false;
-  download.last_access_time =
-      download.start_time + base::TimeDelta::FromHours(5);
+  download.last_access_time = download.start_time + base::Hours(5);
   download.transient = false;
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
@@ -1511,7 +1503,7 @@ TEST_F(HistoryBackendDBTest, DownloadRerouteInfoDeletedIfEmpty) {
   download.mime_type = "mime/type";
   download.original_mime_type = "original/mime-type";
   download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::TimeDelta::FromHours(1);
+  download.end_time = download.start_time + base::Hours(1);
   download.etag = "etag1";
   download.last_modified = "last_modified_1";
   download.received_bytes = 10;
@@ -1523,8 +1515,7 @@ TEST_F(HistoryBackendDBTest, DownloadRerouteInfoDeletedIfEmpty) {
   download.id = 1;
   download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
   download.opened = false;
-  download.last_access_time =
-      download.start_time + base::TimeDelta::FromHours(5);
+  download.last_access_time = download.start_time + base::Hours(5);
   download.transient = true;
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
@@ -1845,8 +1836,8 @@ TEST_F(HistoryBackendDBTest, MigrateVisitsWithoutIncrementedOmniboxTypedScore) {
   const ui::PageTransition transition2 = ui::PAGE_TRANSITION_TYPED;
   const SegmentID segment_id1 = 7;
   const SegmentID segment_id2 = 8;
-  const base::TimeDelta visit_duration1(base::TimeDelta::FromSeconds(30));
-  const base::TimeDelta visit_duration2(base::TimeDelta::FromSeconds(45));
+  const base::TimeDelta visit_duration1(base::Seconds(30));
+  const base::TimeDelta visit_duration2(base::Seconds(45));
 
   const char kInsertStatement[] =
       "INSERT INTO visits "
@@ -1909,7 +1900,7 @@ TEST_F(HistoryBackendDBTest,
   const VisitID referring_visit = 1;
   const ui::PageTransition transition = ui::PAGE_TRANSITION_TYPED;
   const SegmentID segment_id = 8;
-  const base::TimeDelta visit_duration(base::TimeDelta::FromSeconds(45));
+  const base::TimeDelta visit_duration(base::Seconds(45));
 
   const char kInsertStatement[] =
       "INSERT INTO visits "
@@ -1950,7 +1941,7 @@ TEST_F(HistoryBackendDBTest, MigrateVisitsWithoutPubliclyRoutableColumn) {
   const VisitID referring_visit = 0;
   const ui::PageTransition transition = ui::PAGE_TRANSITION_TYPED;
   const base::Time visit_time(base::Time::Now());
-  const base::TimeDelta visit_duration(base::TimeDelta::FromSeconds(30));
+  const base::TimeDelta visit_duration(base::Seconds(30));
 
   // The first visit has both a DB entry and a metadata entry.
   const VisitID visit_id1 = 1;
@@ -1985,16 +1976,6 @@ TEST_F(HistoryBackendDBTest, MigrateVisitsWithoutPubliclyRoutableColumn) {
 
   // The version should have been updated.
   ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 44);
-
-  // Confirm that publicly_routable column has a default value "false".
-  {
-    sql::Statement s(
-        db.GetUniqueStatement("SELECT publicly_routable FROM visits"));
-    ASSERT_TRUE(s.Step());
-
-    EXPECT_FALSE(s.ColumnBool(0));
-    EXPECT_FALSE(s.Step());
-  }
 
   // content_annotations should exist.
   EXPECT_TRUE(db.DoesTableExist("content_annotations"));
@@ -2103,7 +2084,7 @@ TEST_F(HistoryBackendDBTest, MigrateFlocAllowedToAnnotationsTable) {
   // Check the entries in the content_annotations table.
   {
     sql::Statement s(db.GetUniqueStatement(
-        "SELECT visit_id,floc_protected_score,"
+        "SELECT visit_id,visibility_score,"
         "categories,page_topics_model_version,annotation_flags "
         "FROM content_annotations "
         "ORDER BY visit_id"));
@@ -2118,7 +2099,7 @@ TEST_F(HistoryBackendDBTest, MigrateFlocAllowedToAnnotationsTable) {
 
     EXPECT_TRUE(s.Step());
     EXPECT_EQ(visit_id2, s.ColumnInt64(0));
-    EXPECT_EQ(0.5, s.ColumnDouble(1));
+    EXPECT_EQ(-1, s.ColumnDouble(1));
     EXPECT_EQ("1:1", s.ColumnString(2));
     EXPECT_EQ(123, s.ColumnInt64(3));
     EXPECT_EQ(VisitContentAnnotationFlag::kNone,
@@ -2243,7 +2224,7 @@ TEST_F(HistoryBackendDBTest, MigrateTypedURLLeftoverMetadata) {
   const VisitID referring_visit = 0;
   const ui::PageTransition transition = ui::PAGE_TRANSITION_TYPED;
   const base::Time visit_time(base::Time::Now());
-  const base::TimeDelta visit_duration(base::TimeDelta::FromSeconds(30));
+  const base::TimeDelta visit_duration(base::Seconds(30));
 
   // The first visit has both a DB entry and a metadata entry.
   const VisitID visit_id1 = 1;
@@ -2425,6 +2406,85 @@ TEST_F(HistoryBackendDBTest,
     VisitContentAnnotations visit_content_annotations;
     db_->GetContentAnnotationsForVisit(visit_id1, &visit_content_annotations);
     EXPECT_TRUE(visit_content_annotations.related_searches.empty());
+  }
+}
+
+TEST_F(HistoryBackendDBTest,
+       MigrateVisitsWithoutOpenerVisitColumnAndDropPubliclyRoutableColumn) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(47));
+
+  const VisitID visit_id1 = 1;
+
+  // Open the db for manual manipulation.
+  sql::Database db;
+  ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+  const char kInsertVisitStatement[] =
+      "INSERT INTO visits "
+      "(id, url, visit_time) VALUES (?, ?, ?)";
+
+  // Add a row to `visits` table.
+  {
+    sql::Statement s(db.GetUniqueStatement(kInsertVisitStatement));
+    s.BindInt64(0, 1);
+    s.BindInt64(1, 1);
+    s.BindTime(2, base::Time::Now());
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // The version should have been updated.
+  ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 48);
+
+  // After the migration, the opener visit should be 0.
+  {
+    VisitRow visit;
+    db_->GetRowForVisit(visit_id1, &visit);
+    EXPECT_EQ(visit.opener_visit, 0);
+  }
+}
+
+TEST_F(HistoryBackendDBTest,
+       MigrateContextAnnotationsAddTotalForegroundDurationColumn) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(49));
+
+  const VisitID visit_id = 1;
+
+  // Open the db for manual manipulation.
+  sql::Database db;
+  ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+  const char kInsertContextAnnotationsStatement[] =
+      "INSERT INTO context_annotations "
+      "(visit_id,context_annotation_flags,duration_since_last_visit,"
+      "page_end_reason) "
+      "VALUES (?, ?, ?, ?)";
+
+  // Add an entry to "context_annotations" table.
+  {
+    sql::Statement s(db.GetUniqueStatement(kInsertContextAnnotationsStatement));
+    s.BindInt64(0, visit_id);
+    s.BindInt64(1, 1);
+    s.BindInt64(2, 3);
+    s.BindInt(3, 0);
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // The version should have been updated.
+  ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 50);
+
+  // After the migration, the total foreground duration should have a default of
+  // -1.
+  {
+    VisitContextAnnotations visit_context_annotations;
+    db_->GetContextAnnotationsForVisit(visit_id, &visit_context_annotations);
+    EXPECT_EQ(visit_context_annotations.total_foreground_duration,
+              base::Seconds(-1));
   }
 }
 

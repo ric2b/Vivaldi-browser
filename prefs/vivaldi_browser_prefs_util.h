@@ -10,6 +10,6 @@ namespace vivaldi {
 bool GetDeveloperFilePath(const base::FilePath::StringPieceType& filename,
                           base::FilePath* file);
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif  // PREFS_VIVALDI_BROWSERPREFS_UTIL_H_

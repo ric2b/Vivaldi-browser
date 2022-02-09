@@ -10,12 +10,12 @@
 
 namespace vivaldi {
 
-BookmarkSorter::BookmarkSorter(SortField sort_field, SortOrder sort_order,
+BookmarkSorter::BookmarkSorter(SortField sort_field,
+                               SortOrder sort_order,
                                bool group_folders)
-  :sort_field_(sort_field)
-  ,sort_order_(sort_order)
-  ,group_folders_(group_folders) {
-
+    : sort_field_(sort_field),
+      sort_order_(sort_order),
+      group_folders_(group_folders) {
   if (sort_order_ == ORDER_NONE)
     sort_field_ = FIELD_NONE;
 
@@ -26,122 +26,127 @@ BookmarkSorter::BookmarkSorter(SortField sort_field, SortOrder sort_order,
   }
 }
 
-BookmarkSorter::~BookmarkSorter() {
-}
+BookmarkSorter::~BookmarkSorter() {}
 
 void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
   switch (sort_field_) {
     case FIELD_TITLE:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          const icu::Collator* collator = collator_.get();
+      std::sort(
+          vector.begin(), vector.end(),
+          [this](bookmarks::BookmarkNode* b1, bookmarks::BookmarkNode* b2) {
+            if ((b1->type() == b2->type()) || !group_folders_) {
+              const icu::Collator* collator = collator_.get();
 
-          std::string n1 = vivaldi_bookmark_kit::GetNickname(b1);
-          std::string n2 = vivaldi_bookmark_kit::GetNickname(b2);
-          size_t l1 = n1.length();
-          size_t l2 = n2.length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator, b1, b2, l1, l2);
-          }
+              std::string n1 = vivaldi_bookmark_kit::GetNickname(b1);
+              std::string n2 = vivaldi_bookmark_kit::GetNickname(b2);
+              size_t l1 = n1.length();
+              size_t l2 = n2.length();
+              if (l1 == 0 || l2 == 0) {
+                return fallbackToTitleSort(collator, b1, b2, l1, l2);
+              }
 
-          if (sort_order_ == ORDER_ASCENDING) {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b1->GetTitle(), b2->GetTitle()) == UCOL_LESS;
-          } else {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b2->GetTitle(), b1->GetTitle()) == UCOL_LESS;
-          }
-        }
-        return b1->is_folder();
-      });
+              if (sort_order_ == ORDER_ASCENDING) {
+                return base::i18n::CompareString16WithCollator(
+                           *collator, b1->GetTitle(), b2->GetTitle()) ==
+                       UCOL_LESS;
+              } else {
+                return base::i18n::CompareString16WithCollator(
+                           *collator, b2->GetTitle(), b1->GetTitle()) ==
+                       UCOL_LESS;
+              }
+            }
+            return b1->is_folder();
+          });
       break;
     case FIELD_URL:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
+      std::sort(
+          vector.begin(), vector.end(),
+          [this](bookmarks::BookmarkNode* b1, bookmarks::BookmarkNode* b2) {
+            if ((b1->type() == b2->type()) || !group_folders_) {
+              int l1 = b1->url().spec().length();
+              int l2 = b2->url().spec().length();
+              if (l1 == 0 || l2 == 0) {
+                return fallbackToTitleSort(collator_.get(), b1, b2, l1, l2);
+              }
 
-          int l1 = b1->url().spec().length();
-          int l2 = b2->url().spec().length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator_.get(), b1, b2, l1, l2);
-          }
-
-          if (sort_order_ == ORDER_ASCENDING) {
-            return b1->url().spec() < b2->url().spec();
-          } else {
-            return b2->url().spec() < b1->url().spec();
-          }
-        }
-        return b1->is_folder();
-      });
+              if (sort_order_ == ORDER_ASCENDING) {
+                return b1->url().spec() < b2->url().spec();
+              } else {
+                return b2->url().spec() < b1->url().spec();
+              }
+            }
+            return b1->is_folder();
+          });
       break;
     case FIELD_NICKNAME:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          const icu::Collator* collator = collator_.get();
+      std::sort(
+          vector.begin(), vector.end(),
+          [this](bookmarks::BookmarkNode* b1, bookmarks::BookmarkNode* b2) {
+            if ((b1->type() == b2->type()) || !group_folders_) {
+              const icu::Collator* collator = collator_.get();
 
-          std::string n1 = vivaldi_bookmark_kit::GetNickname(b1);
-          std::string n2 = vivaldi_bookmark_kit::GetNickname(b2);
-          size_t l1 = n1.length();
-          size_t l2 = n2.length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator, b1, b2, l1, l2);
-          }
+              std::string n1 = vivaldi_bookmark_kit::GetNickname(b1);
+              std::string n2 = vivaldi_bookmark_kit::GetNickname(b2);
+              size_t l1 = n1.length();
+              size_t l2 = n2.length();
+              if (l1 == 0 || l2 == 0) {
+                return fallbackToTitleSort(collator, b1, b2, l1, l2);
+              }
 
-          if (sort_order_ == ORDER_ASCENDING) {
-            return base::i18n::CompareString16WithCollator(
-                       *collator, base::UTF8ToUTF16(n1),
-                       base::UTF8ToUTF16(n2)) == UCOL_LESS;
-          } else {
-            return base::i18n::CompareString16WithCollator(
-                       *collator, base::UTF8ToUTF16(n2),
-                       base::UTF8ToUTF16(n1)) == UCOL_LESS;
-          }
-        }
-        return b1->is_folder();
-      });
+              if (sort_order_ == ORDER_ASCENDING) {
+                return base::i18n::CompareString16WithCollator(
+                           *collator, base::UTF8ToUTF16(n1),
+                           base::UTF8ToUTF16(n2)) == UCOL_LESS;
+              } else {
+                return base::i18n::CompareString16WithCollator(
+                           *collator, base::UTF8ToUTF16(n2),
+                           base::UTF8ToUTF16(n1)) == UCOL_LESS;
+              }
+            }
+            return b1->is_folder();
+          });
       break;
     case FIELD_DESCRIPTION:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          const icu::Collator* collator = collator_.get();
+      std::sort(
+          vector.begin(), vector.end(),
+          [this](bookmarks::BookmarkNode* b1, bookmarks::BookmarkNode* b2) {
+            if ((b1->type() == b2->type()) || !group_folders_) {
+              const icu::Collator* collator = collator_.get();
 
-          std::string d1 = vivaldi_bookmark_kit::GetDescription(b1);
-          std::string d2 = vivaldi_bookmark_kit::GetDescription(b2);
-          size_t l1 = d1.length();
-          size_t l2 = d2.length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator, b1, b2, l1, l2);
-          }
+              std::string d1 = vivaldi_bookmark_kit::GetDescription(b1);
+              std::string d2 = vivaldi_bookmark_kit::GetDescription(b2);
+              size_t l1 = d1.length();
+              size_t l2 = d2.length();
+              if (l1 == 0 || l2 == 0) {
+                return fallbackToTitleSort(collator, b1, b2, l1, l2);
+              }
 
-          if (sort_order_ == ORDER_ASCENDING) {
-            return base::i18n::CompareString16WithCollator(
-                       *collator, base::UTF8ToUTF16(d1),
-                       base::UTF8ToUTF16(d2)) == UCOL_LESS;
-          } else {
-            return base::i18n::CompareString16WithCollator(
-                       *collator, base::UTF8ToUTF16(d2),
-                       base::UTF8ToUTF16(d1)) == UCOL_LESS;
-          }
-        }
-        return b1->is_folder();
-      });
+              if (sort_order_ == ORDER_ASCENDING) {
+                return base::i18n::CompareString16WithCollator(
+                           *collator, base::UTF8ToUTF16(d1),
+                           base::UTF8ToUTF16(d2)) == UCOL_LESS;
+              } else {
+                return base::i18n::CompareString16WithCollator(
+                           *collator, base::UTF8ToUTF16(d2),
+                           base::UTF8ToUTF16(d1)) == UCOL_LESS;
+              }
+            }
+            return b1->is_folder();
+          });
       break;
     case FIELD_DATEADDED:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          if (sort_order_ == ORDER_ASCENDING) {
-            return b1->date_added() < b2->date_added();
-          } else {
-            return b2->date_added() < b1->date_added();
-          }
-        }
-        return b1->is_folder();
-      });
+      std::sort(
+          vector.begin(), vector.end(),
+          [this](bookmarks::BookmarkNode* b1, bookmarks::BookmarkNode* b2) {
+            if ((b1->type() == b2->type()) || !group_folders_) {
+              if (sort_order_ == ORDER_ASCENDING) {
+                return b1->date_added() < b2->date_added();
+              } else {
+                return b2->date_added() < b1->date_added();
+              }
+            }
+            return b1->is_folder();
+          });
       break;
     // Keep compiler happy.
     case FIELD_NONE:
@@ -150,8 +155,8 @@ void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
 }
 
 bool BookmarkSorter::fallbackToTitleSort(const icu::Collator* collator,
-                                         bookmarks::BookmarkNode *b1,
-                                         bookmarks::BookmarkNode *b2,
+                                         bookmarks::BookmarkNode* b1,
+                                         bookmarks::BookmarkNode* b2,
                                          size_t l1,
                                          size_t l2) {
   if (l1 == 0 && l2 == 0) {
@@ -163,10 +168,10 @@ bool BookmarkSorter::fallbackToTitleSort(const icu::Collator* collator,
     }
     if (sort_order_ == ORDER_ASCENDING) {
       return base::i18n::CompareString16WithCollator(
-          *collator, b1->GetTitle(), b2->GetTitle()) == UCOL_LESS;
+                 *collator, b1->GetTitle(), b2->GetTitle()) == UCOL_LESS;
     } else {
       return base::i18n::CompareString16WithCollator(
-          *collator, b2->GetTitle(), b1->GetTitle()) == UCOL_LESS;
+                 *collator, b2->GetTitle(), b1->GetTitle()) == UCOL_LESS;
     }
   } else if (l1 == 0) {
     return sort_order_ == ORDER_ASCENDING ? false : true;
@@ -175,8 +180,8 @@ bool BookmarkSorter::fallbackToTitleSort(const icu::Collator* collator,
   }
 }
 
-bool BookmarkSorter::fallbackToDateSort(bookmarks::BookmarkNode *b1,
-                                        bookmarks::BookmarkNode *b2,
+bool BookmarkSorter::fallbackToDateSort(bookmarks::BookmarkNode* b1,
+                                        bookmarks::BookmarkNode* b2,
                                         size_t l1,
                                         size_t l2) {
   if (l1 == 0 && l2 == 0) {
@@ -192,4 +197,4 @@ bool BookmarkSorter::fallbackToDateSort(bookmarks::BookmarkNode *b1,
   }
 }
 
-}  // vivaldi
+}  // namespace vivaldi

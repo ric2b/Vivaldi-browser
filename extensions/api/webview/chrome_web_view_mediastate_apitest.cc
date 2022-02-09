@@ -9,7 +9,7 @@ using base::PathService;
 
 namespace extensions {
 
- #if 0
+#if 0
 class VivaldiExtensionApiTest : public ExtensionApiTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {

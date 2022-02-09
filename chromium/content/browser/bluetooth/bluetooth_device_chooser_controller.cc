@@ -81,6 +81,9 @@ const int k40thPercentileRSSI = -69;
 const int k60thPercentileRSSI = -61;
 const int k80thPercentileRSSI = -52;
 
+// Client name for logging in BLE scanning.
+constexpr char kScanClientName[] = "Web Bluetooth Device Chooser";
+
 }  // namespace
 
 namespace content {
@@ -227,7 +230,7 @@ BluetoothDeviceChooserController::BluetoothDeviceChooserController(
       render_frame_host_(render_frame_host),
       discovery_session_timer_(
           FROM_HERE,
-          base::TimeDelta::FromSeconds(scan_duration_),
+          base::Seconds(scan_duration_),
           base::BindRepeating(
               &BluetoothDeviceChooserController::StopDeviceDiscovery,
               // base::Timer guarantees it won't call back after its
@@ -429,7 +432,7 @@ void BluetoothDeviceChooserController::StartDeviceDiscovery() {
 
   chooser_->ShowDiscoveryState(BluetoothChooser::DiscoveryState::DISCOVERING);
   adapter_->StartDiscoverySessionWithFilter(
-      ComputeScanFilter(options_->filters),
+      ComputeScanFilter(options_->filters), kScanClientName,
       base::BindOnce(
           &BluetoothDeviceChooserController::OnStartDiscoverySessionSuccess,
           weak_ptr_factory_.GetWeakPtr()),

@@ -14,6 +14,7 @@
 
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/file_watcher.h"
@@ -64,6 +65,10 @@ class EventRouter
                                    const std::vector<url::Origin>& listeners)>;
 
   explicit EventRouter(Profile* profile);
+
+  EventRouter(const EventRouter&) = delete;
+  EventRouter& operator=(const EventRouter&) = delete;
+
   ~EventRouter() override;
 
   // arc::ArcIntentHelperObserver overrides.
@@ -272,8 +277,6 @@ class EventRouter
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate the weak pointers before any other members are destroyed.
   base::WeakPtrFactory<EventRouter> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(EventRouter);
 };
 
 }  // namespace file_manager

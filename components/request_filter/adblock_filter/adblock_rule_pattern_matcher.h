@@ -30,6 +30,8 @@ class RulePatternMatcher {
     // The |url| must outlive this instance.
     explicit UrlInfo(const GURL& url);
     ~UrlInfo();
+    UrlInfo(const UrlInfo&) = delete;
+    UrlInfo& operator=(const UrlInfo&) = delete;
 
     base::StringPiece spec() const { return spec_; }
     base::StringPiece fold_case_spec() const { return fold_case_spec_; }
@@ -45,14 +47,13 @@ class RulePatternMatcher {
 
     // The url host component.
     const url::Component host_;
-
-    DISALLOW_COPY_AND_ASSIGN(UrlInfo);
   };
 
   // The passed in |rule| must outlive the created instance.
   explicit RulePatternMatcher(const flat::RequestFilterRule& rule);
-
   ~RulePatternMatcher();
+  RulePatternMatcher(const RulePatternMatcher&) = delete;
+  RulePatternMatcher& operator=(const RulePatternMatcher&) = delete;
 
   // Returns whether the |url| matches the URL |pattern|. Requires the type of
   // |this| pattern to be either SUBSTRING or WILDCARDED.
@@ -66,7 +67,6 @@ class RulePatternMatcher {
  private:
   const flat::RequestFilterRule& rule_;
   base::StringPiece pattern_;
-  DISALLOW_COPY_AND_ASSIGN(RulePatternMatcher);
 };
 
 }  // namespace adblock_filter

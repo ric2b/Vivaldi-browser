@@ -525,7 +525,7 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
     return;
   // We only have a single TouchEmulator for all frames, so let the main frame's
   // EmulationHandler enable/disable it.
-  if (!host_->frame_tree_node()->IsMainFrame())
+  if (!host_->is_main_frame())
     return;
 
   if (touch_emulation_enabled_) {
@@ -549,7 +549,7 @@ void EmulationHandler::UpdateDeviceEmulationState() {
   if (!host_)
     return;
   // Device emulation only happens on the main frame.
-  if (!host_->frame_tree_node()->IsMainFrame())
+  if (!host_->is_main_frame())
     return;
 
   // TODO(eseckler): Once we change this to mojo, we should wait for an ack to
@@ -597,9 +597,12 @@ void EmulationHandler::UpdateDeviceEmulationStateForHost(
   }
 }
 
-void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers) {
-  if (!user_agent_.empty())
+void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
+                                      bool* user_agent_overridden) {
+  if (!user_agent_.empty()) {
     headers->SetHeader(net::HttpRequestHeaders::kUserAgent, user_agent_);
+  }
+  *user_agent_overridden = !user_agent_.empty();
   if (!accept_language_.empty()) {
     headers->SetHeader(
         net::HttpRequestHeaders::kAcceptLanguage,

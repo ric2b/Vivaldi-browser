@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_auction_ad.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_auction_ad_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_auction_ad_interest_group.h"
+#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/ad_auction/validate_blink_interest_group.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin_hash.h"
@@ -113,7 +114,7 @@ bool CopyOwnerFromIdlToMojo(const ExecutionContext& execution_context,
         "owner '%s' for AuctionAdInterestGroup with name '%s' match frame "
         "origin '%s'.",
         input.owner().Utf8().c_str(), input.name().Utf8().c_str(),
-        owner->ToString().Utf8().c_str()));
+        execution_context.GetSecurityOrigin()->ToRawString().Utf8().c_str()));
     return false;
   }
 
@@ -230,6 +231,37 @@ bool CopyAdsFromIdlToMojo(const ExecutionContext& context,
       }
     }
     output.ads->push_back(std::move(mojo_ad));
+  }
+  return true;
+}
+
+bool CopyAdComponentsFromIdlToMojo(const ExecutionContext& context,
+                                   const ScriptState& script_state,
+                                   ExceptionState& exception_state,
+                                   const AuctionAdInterestGroup& input,
+                                   mojom::blink::InterestGroup& output) {
+  if (!input.hasAdComponents())
+    return true;
+  output.ad_components.emplace();
+  for (const auto& ad : input.adComponents()) {
+    auto mojo_ad = mojom::blink::InterestGroupAd::New();
+    KURL render_url = context.CompleteURL(ad->renderUrl());
+    if (!render_url.IsValid()) {
+      exception_state.ThrowTypeError(
+          ErrorInvalidInterestGroup(input, "ad renderUrl", ad->renderUrl(),
+                                    "cannot be resolved to a valid URL."));
+      return false;
+    }
+    mojo_ad->render_url = render_url;
+    if (ad->hasMetadata()) {
+      if (!Jsonify(script_state, ad->metadata().V8Value().As<v8::Object>(),
+                   mojo_ad->metadata)) {
+        exception_state.ThrowTypeError(
+            ErrorInvalidInterestGroupJson(input, "ad metadata"));
+        return false;
+      }
+    }
+    output.ad_components->push_back(std::move(mojo_ad));
   }
   return true;
 }
@@ -373,14 +405,9 @@ bool CopyPerBuyerSignalsFromIdlToMojo(const ScriptState& script_state,
 
 NavigatorAuction::NavigatorAuction(Navigator& navigator)
     : Supplement(navigator),
-      ad_auction_service_(navigator.GetExecutionContext()),
-      interest_group_store_(navigator.GetExecutionContext()) {
+      ad_auction_service_(navigator.GetExecutionContext()) {
   navigator.GetExecutionContext()->GetBrowserInterfaceBroker().GetInterface(
       ad_auction_service_.BindNewPipeAndPassReceiver(
-          navigator.GetExecutionContext()->GetTaskRunner(
-              TaskType::kMiscPlatformAPI)));
-  navigator.GetExecutionContext()->GetBrowserInterfaceBroker().GetInterface(
-      interest_group_store_.BindNewPipeAndPassReceiver(
           navigator.GetExecutionContext()->GetTaskRunner(
               TaskType::kMiscPlatformAPI)));
 }
@@ -404,8 +431,7 @@ void NavigatorAuction::joinAdInterestGroup(ScriptState* script_state,
                                            ExceptionState& exception_state) {
   const ExecutionContext* context = ExecutionContext::From(script_state);
   auto mojo_group = mojom::blink::InterestGroup::New();
-  mojo_group->expiry =
-      base::Time::Now() + base::TimeDelta::FromSecondsD(duration_seconds);
+  mojo_group->expiry = base::Time::Now() + base::Seconds(duration_seconds);
   if (!CopyOwnerFromIdlToMojo(*context, exception_state, *group, *mojo_group))
     return;
   mojo_group->name = group->name();
@@ -431,18 +457,22 @@ void NavigatorAuction::joinAdInterestGroup(ScriptState* script_state,
                             *mojo_group)) {
     return;
   }
+  if (!CopyAdComponentsFromIdlToMojo(*context, *script_state, exception_state,
+                                     *group, *mojo_group)) {
+    return;
+  }
 
   String error_field_name;
   String error_field_value;
   String error;
-  if (!ValidateBlinkInterestGroup(
-          *mojo_group, error_field_name, error_field_value, error)) {
+  if (!ValidateBlinkInterestGroup(*mojo_group, error_field_name,
+                                  error_field_value, error)) {
     exception_state.ThrowTypeError(ErrorInvalidInterestGroup(
         *group, error_field_name, error_field_value, error));
     return;
   }
 
-  interest_group_store_->JoinInterestGroup(std::move(mojo_group));
+  ad_auction_service_->JoinInterestGroup(std::move(mojo_group));
 }
 
 /* static */
@@ -467,7 +497,7 @@ void NavigatorAuction::leaveAdInterestGroup(ScriptState* script_state,
                                    "' must be a valid https origin.");
     return;
   }
-  interest_group_store_->LeaveInterestGroup(owner, group->name());
+  ad_auction_service_->LeaveInterestGroup(owner, group->name());
 }
 
 /* static */
@@ -480,7 +510,7 @@ void NavigatorAuction::leaveAdInterestGroup(ScriptState* script_state,
 }
 
 void NavigatorAuction::updateAdInterestGroups() {
-  interest_group_store_->UpdateAdInterestGroups();
+  ad_auction_service_->UpdateAdInterestGroups();
 }
 
 /* static */
@@ -529,6 +559,43 @@ ScriptPromise NavigatorAuction::runAdAuction(ScriptState* script_state,
                                              ExceptionState& exception_state) {
   return From(ExecutionContext::From(script_state), navigator)
       .runAdAuction(script_state, config, exception_state);
+}
+
+ScriptPromise NavigatorAuction::createAdRequest(ScriptState* script_state,
+                                                ExceptionState&) {
+  // TODO(https://crbug.com/1249186): Add full impl of methods; for now just
+  // return a resolved promise.
+  return ScriptPromise::RejectWithDOMException(
+      script_state, MakeGarbageCollected<DOMException>(
+                        DOMExceptionCode::kNotSupportedError,
+                        "createAdRequest API not yet implemented"));
+}
+
+/* static */
+ScriptPromise NavigatorAuction::createAdRequest(
+    ScriptState* script_state,
+    Navigator& navigator,
+    ExceptionState& exception_state) {
+  return From(ExecutionContext::From(script_state), navigator)
+      .createAdRequest(script_state, exception_state);
+}
+
+ScriptPromise NavigatorAuction::finalizeAd(ScriptState* script_state,
+                                           ExceptionState&) {
+  // TODO(https://crbug.com/1249186): Add full impl of methods; for now just
+  // return a resolved promise.
+  return ScriptPromise::RejectWithDOMException(
+      script_state,
+      MakeGarbageCollected<DOMException>(DOMExceptionCode::kNotSupportedError,
+                                         "finalizeAd API not yet implemented"));
+}
+
+/* static */
+ScriptPromise NavigatorAuction::finalizeAd(ScriptState* script_state,
+                                           Navigator& navigator,
+                                           ExceptionState& exception_state) {
+  return From(ExecutionContext::From(script_state), navigator)
+      .finalizeAd(script_state, exception_state);
 }
 
 void NavigatorAuction::AuctionComplete(ScriptPromiseResolver* resolver,

@@ -5,17 +5,11 @@
 
 #include "base/sequenced_task_runner.h"
 
-//#include "base/threading/sequenced_task_runner_handle.h"
-//#include "base/threading/sequenced_task_runner_handle.h"
-//#include "base/threading/thread_task_runner_handle.h"
-
 namespace media {
 
 class IPCPipelineTestSetup {
  public:
   struct Fields;
-
-  static void InitStatics();
 
   IPCPipelineTestSetup();
 
@@ -27,7 +21,6 @@ class IPCPipelineTestSetup {
 
  private:
   std::unique_ptr<Fields> fields_;
-
 };
 
 }  // namespace media

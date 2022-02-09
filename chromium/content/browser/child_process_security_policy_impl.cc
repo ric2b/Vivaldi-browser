@@ -19,6 +19,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -157,11 +158,32 @@ base::debug::CrashKeyString* GetCanAccessDataFailureReasonKey() {
   return crash_key;
 }
 
+base::debug::CrashKeyString* GetCanAccessDataKeepAliveDurationKey() {
+  static auto* keep_alive_duration_key = base::debug::AllocateCrashKeyString(
+      "keep_alive_duration", base::debug::CrashKeySize::Size256);
+  return keep_alive_duration_key;
+}
+
+base::debug::CrashKeyString* GetCanAccessDataShutdownDelayRefCountKey() {
+  static auto* shutdown_delay_key = base::debug::AllocateCrashKeyString(
+      "shutdown_delay_ref_count", base::debug::CrashKeySize::Size32);
+  return shutdown_delay_key;
+}
+
+base::debug::CrashKeyString* GetCanAccessDataProcessRFHCount() {
+  static auto* process_rfh_count_key = base::debug::AllocateCrashKeyString(
+      "process_rfh_count", base::debug::CrashKeySize::Size32);
+  return process_rfh_count_key;
+}
+
 void LogCanAccessDataForOriginCrashKeys(
     const std::string& expected_process_lock,
     const std::string& killed_process_origin_lock,
     const std::string& requested_origin,
-    const std::string& failure_reason) {
+    const std::string& failure_reason,
+    const std::string& keep_alive_durations,
+    const std::string& shutdown_delay_ref_count,
+    const std::string& process_rfh_count) {
   base::debug::SetCrashKeyString(GetExpectedProcessLockKey(),
                                  expected_process_lock);
   base::debug::SetCrashKeyString(GetKilledProcessOriginLockKey(),
@@ -170,6 +192,12 @@ void LogCanAccessDataForOriginCrashKeys(
                                  requested_origin);
   base::debug::SetCrashKeyString(GetCanAccessDataFailureReasonKey(),
                                  failure_reason);
+  base::debug::SetCrashKeyString(GetCanAccessDataKeepAliveDurationKey(),
+                                 keep_alive_durations);
+  base::debug::SetCrashKeyString(GetCanAccessDataShutdownDelayRefCountKey(),
+                                 shutdown_delay_ref_count);
+  base::debug::SetCrashKeyString(GetCanAccessDataProcessRFHCount(),
+                                 process_rfh_count);
 }
 
 }  // namespace
@@ -182,18 +210,15 @@ ProcessLock ProcessLock::CreateAllowAnySite(
       SiteInfo(GURL(), GURL(), false, storage_partition_config,
                web_exposed_isolation_info, /* is_guest */ false,
                /* does_site_request_dedicated_process_for_coop */ false,
-               /* is_jit_disabled */ false));
+               /* is_jit_disabled */ false, /* is_pdf */ false));
 }
 
 // static
-ProcessLock ProcessLock::Create(
-    const IsolationContext& isolation_context,
-    const UrlInfo& url_info,
-    const WebExposedIsolationInfo& web_exposed_isolation_info) {
+ProcessLock ProcessLock::Create(const IsolationContext& isolation_context,
+                                const UrlInfo& url_info) {
   DCHECK(url_info.storage_partition_config.has_value());
   if (BrowserThread::CurrentlyOn(BrowserThread::UI))
-    return ProcessLock(SiteInfo::Create(isolation_context, url_info,
-                                        web_exposed_isolation_info));
+    return ProcessLock(SiteInfo::Create(isolation_context, url_info));
 
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -201,8 +226,7 @@ ProcessLock ProcessLock::Create(
   // we cannot properly compute some SiteInfo fields on that thread.
   // ProcessLocks must always match no matter which thread they were created on,
   // but the SiteInfo objects used to create them may not always match.
-  return ProcessLock(SiteInfo::CreateOnIOThread(isolation_context, url_info,
-                                                web_exposed_isolation_info));
+  return ProcessLock(SiteInfo::CreateOnIOThread(isolation_context, url_info));
 }
 
 ProcessLock::ProcessLock(const SiteInfo& site_info) : site_info_(site_info) {}
@@ -248,6 +272,7 @@ bool ProcessLock::operator==(const ProcessLock& rhs) const {
     is_equal =
         site_info_->process_lock_url() == rhs.site_info_->process_lock_url() &&
         site_info_->is_origin_keyed() == rhs.site_info_->is_origin_keyed() &&
+        site_info_->is_pdf() == rhs.site_info_->is_pdf() &&
         (site_info_->web_exposed_isolation_info() ==
          rhs.site_info_->web_exposed_isolation_info());
   }
@@ -261,12 +286,14 @@ bool ProcessLock::operator!=(const ProcessLock& rhs) const {
 
 bool ProcessLock::operator<(const ProcessLock& rhs) const {
   const auto this_is_origin_keyed = is_origin_keyed();
+  const auto this_is_pdf = is_pdf();
   const auto this_web_exposed_isolation_info = web_exposed_isolation_info();
   const auto rhs_is_origin_keyed = is_origin_keyed();
+  const auto rhs_is_pdf = rhs.is_pdf();
   const auto rhs_web_exposed_isolation_info = web_exposed_isolation_info();
-  return std::tie(lock_url(), this_is_origin_keyed,
+  return std::tie(lock_url(), this_is_origin_keyed, this_is_pdf,
                   this_web_exposed_isolation_info) <
-         std::tie(rhs.lock_url(), rhs_is_origin_keyed,
+         std::tie(rhs.lock_url(), rhs_is_origin_keyed, rhs_is_pdf,
                   rhs_web_exposed_isolation_info);
 }
 
@@ -278,6 +305,9 @@ std::string ProcessLock::ToString() const {
 
     if (is_origin_keyed())
       ret += " origin-keyed";
+
+    if (is_pdf())
+      ret += " pdf";
 
     if (web_exposed_isolation_info().is_isolated()) {
       ret += " cross-origin-isolated";
@@ -378,7 +408,9 @@ bool ChildProcessSecurityPolicyImpl::Handle::CanAccessDataForOrigin(
     const url::Origin& origin) {
   if (child_id_ == ChildProcessHost::kInvalidUniqueID) {
     LogCanAccessDataForOriginCrashKeys(
-        "(unknown)", "(unknown)", origin.GetDebugString(), "handle_not_valid");
+        "(unknown)", "(unknown)", origin.GetDebugString(), "handle_not_valid",
+        "no_keep_alive_durations", "no shutdown delay ref count",
+        "no process rfh count");
     return false;
   }
 
@@ -396,6 +428,9 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
         can_send_midi_sysex_(false),
         browser_context_(browser_context),
         resource_context_(browser_context->GetResourceContext()) {}
+
+  SecurityState(const SecurityState&) = delete;
+  SecurityState& operator=(const SecurityState&) = delete;
 
   ~SecurityState() {
     storage::IsolatedContext* isolated_context =
@@ -654,6 +689,11 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
       browser_context_ = nullptr;
   }
 
+  int render_frame_host_count() const { return render_frame_host_count_; }
+  void set_render_frame_host_count(int count) {
+    render_frame_host_count_ = count;
+  }
+
  private:
   enum class CommitRequestPolicy {
     kRequestOnly,
@@ -722,13 +762,15 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   // SecurityState's RenderProcessHost, for metrics.
   unsigned max_browsing_instance_count_ = 0;
 
+  // Diagnostic code for https://crbug.com/1148542.
+  // TODO(wjmaclean): Remove once that issue is resolved.
+  int render_frame_host_count_ = 0;
+
   // The set of isolated filesystems the child process is permitted to access.
   FileSystemMap filesystem_permissions_;
 
   BrowserContext* browser_context_;
   ResourceContext* resource_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(SecurityState);
 };
 
 // IsolatedOriginEntry implementation.
@@ -811,7 +853,7 @@ bool ChildProcessSecurityPolicyImpl::IsolatedOriginEntry::
 ChildProcessSecurityPolicyImpl::ChildProcessSecurityPolicyImpl()
     : browsing_instance_cleanup_delay_(
           RenderProcessHostImpl::kKeepAliveHandleFactoryTimeout +
-          base::TimeDelta::FromSeconds(2)) {
+          base::Seconds(2)) {
   // We know about these schemes and believe them to be safe.
   RegisterWebSafeScheme(url::kHttpScheme);
   RegisterWebSafeScheme(url::kHttpsScheme);
@@ -1553,16 +1595,15 @@ bool ChildProcessSecurityPolicyImpl::ChildProcessHasPermissionsForFile(
 CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
     int child_id,
     const IsolationContext& isolation_context,
-    const url::Origin& origin,
-    const UrlInfo& url_info,
-    const WebExposedIsolationInfo& web_exposed_isolation_info) {
-  const url::Origin url_origin = url::Origin::Resolve(url_info.url, origin);
+    const UrlInfo& url_info) {
+  const url::Origin url_origin =
+      url::Origin::Resolve(url_info.url, url_info.origin);
   if (!CanAccessDataForOrigin(child_id, url_origin)) {
     // Check for special cases, like blob:null/ and data: URLs, where the
     // origin does not contain information to match against the process lock,
     // but using the whole URL can result in a process lock match.
-    const auto expected_process_lock = ProcessLock::Create(
-        isolation_context, url_info, web_exposed_isolation_info);
+    const auto expected_process_lock =
+        ProcessLock::Create(isolation_context, url_info);
     const ProcessLock& actual_process_lock = GetProcessLock(child_id);
     if (actual_process_lock == expected_process_lock)
       return CanCommitStatus::CAN_COMMIT_ORIGIN_AND_URL;
@@ -1570,7 +1611,7 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
     return CanCommitStatus::CANNOT_COMMIT_URL;
   }
 
-  if (!CanAccessDataForOrigin(child_id, origin))
+  if (!CanAccessDataForOrigin(child_id, url_info.origin))
     return CanCommitStatus::CANNOT_COMMIT_ORIGIN;
 
   // Ensure that the origin derived from |url| is consistent with |origin|.
@@ -1579,7 +1620,7 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
   const auto url_tuple_or_precursor_tuple =
       url_origin.GetTupleOrPrecursorTupleIfOpaque();
   const auto origin_tuple_or_precursor_tuple =
-      origin.GetTupleOrPrecursorTupleIfOpaque();
+      url_info.origin.GetTupleOrPrecursorTupleIfOpaque();
 
   if (url_tuple_or_precursor_tuple.IsValid() &&
       origin_tuple_or_precursor_tuple.IsValid() &&
@@ -1718,9 +1759,12 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(
         // |actual_process_lock|.
         expected_process_lock = ProcessLock::Create(
             isolation_context,
-            UrlInfo(UrlInfoInit(url).WithStoragePartitionConfig(
-                actual_process_lock.storage_partition_config())),
-            actual_process_lock.web_exposed_isolation_info());
+            UrlInfo(UrlInfoInit(url)
+                        .WithStoragePartitionConfig(
+                            actual_process_lock.storage_partition_config())
+                        .WithWebExposedIsolationInfo(
+                            actual_process_lock.web_exposed_isolation_info())
+                        .WithIsPdf(actual_process_lock.is_pdf())));
 
         if (actual_process_lock.is_locked_to_site()) {
           // Jail-style enforcement - a process with a lock can only access
@@ -1803,8 +1847,9 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(
           // See the ProcessLock::Create() call above regarding why we pass
           // kNone for |origin_isolation_request| below.
           SiteInfo site_info = SiteInfo::Create(
-              isolation_context, UrlInfo(UrlInfoInit(url)),
-              actual_process_lock.web_exposed_isolation_info());
+              isolation_context,
+              UrlInfo(UrlInfoInit(url).WithWebExposedIsolationInfo(
+                  actual_process_lock.web_exposed_isolation_info())));
 
           // A process that's not locked to any site can only access data from
           // origins that do not require a locked process.
@@ -1817,11 +1862,28 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(
     }
   }
 
+  // Record the duration of KeepAlive requests to include in the crash keys.
+  std::string keep_alive_durations;
+  std::string shutdown_delay_ref_count;
+  std::string process_rfh_count;
+  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+    if (auto* process = RenderProcessHostImpl::FromID(child_id)) {
+      keep_alive_durations = process->GetKeepAliveDurations();
+      shutdown_delay_ref_count =
+          base::NumberToString(process->GetShutdownDelayRefCount());
+      process_rfh_count = base::NumberToString(process->GetRfhCount());
+    }
+  } else {
+    keep_alive_durations = "no durations available: on IO thread.";
+  }
+
   // Returning false here will result in a renderer kill.  Set some crash
   // keys that will help understand the circumstances of that kill.
-  LogCanAccessDataForOriginCrashKeys(expected_process_lock.ToString(),
-                                     GetKilledProcessOriginLock(security_state),
-                                     url.GetOrigin().spec(), failure_reason);
+  LogCanAccessDataForOriginCrashKeys(
+      expected_process_lock.ToString(),
+      GetKilledProcessOriginLock(security_state), url.GetOrigin().spec(),
+      failure_reason, keep_alive_durations, shutdown_delay_ref_count,
+      process_rfh_count);
   return false;
 }
 
@@ -1833,6 +1895,15 @@ void ChildProcessSecurityPolicyImpl::IncludeIsolationContext(
   auto* state = GetSecurityState(child_id);
   DCHECK(state);
   state->AddBrowsingInstanceId(isolation_context.browsing_instance_id());
+}
+
+void ChildProcessSecurityPolicyImpl::SetRenderFrameHostCount(int child_id,
+                                                             int count) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  base::AutoLock lock(lock_);
+  auto state = security_state_.find(child_id);
+  DCHECK(state != security_state_.end());
+  state->second->set_render_frame_host_count(count);
 }
 
 void ChildProcessSecurityPolicyImpl::LockProcess(
@@ -2398,8 +2469,24 @@ void ChildProcessSecurityPolicyImpl::
     // content_unittests don't always report being on the IO thread.
     DCHECK(IsRunningOnExpectedThread());
     base::AutoLock lock(lock_);
-    for (auto& it : security_state_)
+    for (auto& it : security_state_) {
       it.second->ClearBrowsingInstanceId(browsing_instance_id);
+
+      // TODO(wjmaclean): Remove when https://crbug.com/1148542 is resolved.
+      if (it.second->browsing_instance_ids().empty() &&
+          it.second->render_frame_host_count() > 0) {
+        // When there are no more BrowsingInstanceIDs associated with a
+        // RenderProcess, then there should not be any RenderFrameHosts either.
+        // Send a crash dump to alert if this happens and collect state for
+        // debugging.
+        SCOPED_CRASH_KEY_NUMBER("NoBIIDsButHasRFH", "num_rfhs",
+                                it.second->render_frame_host_count());
+        SCOPED_CRASH_KEY_STRING256("NoBIIDsButHasRFH", "process_lock",
+                                   it.second->process_lock().ToString());
+        NOTREACHED();
+        base::debug::DumpWithoutCrashing();
+      }
+    }
     // Note: if the BrowsingInstanceId set is empty at the end of this function,
     // we must never remove the ProcessLock in case the associated RenderProcess
     // is compromised, in which case we wouldn't want to reuse it for another

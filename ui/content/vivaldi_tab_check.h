@@ -32,9 +32,8 @@ class CONTENT_EXPORT VivaldiTabCheck {
   // Mark contents as managed by DevTools
   static void MarkAsDevToolContents(content::WebContents* web_contents);
 
-  private:
-   static const int kDevToolContextKey;
-
+ private:
+  static const int kDevToolContextKey;
 };
 
 #endif  // UI_CONTENT_VIVALDI_TAB_CHECK_H_

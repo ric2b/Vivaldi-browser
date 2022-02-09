@@ -35,6 +35,9 @@ class CompositorFrameSinkImpl : public mojom::CompositorFrameSink {
       mojo::PendingReceiver<mojom::CompositorFrameSink> receiver,
       mojo::PendingRemote<mojom::CompositorFrameSinkClient> client);
 
+  CompositorFrameSinkImpl(const CompositorFrameSinkImpl&) = delete;
+  CompositorFrameSinkImpl& operator=(const CompositorFrameSinkImpl&) = delete;
+
   ~CompositorFrameSinkImpl() override;
 
   // mojom::CompositorFrameSink:
@@ -68,9 +71,6 @@ class CompositorFrameSinkImpl : public mojom::CompositorFrameSink {
 
   void OnClientConnectionLost();
 
-  FrameSinkManagerImpl& manager_;
-  const absl::optional<FrameSinkBundleId> bundle_id_;
-
   mojo::Remote<mojom::CompositorFrameSinkClient> compositor_frame_sink_client_;
   std::unique_ptr<mojom::CompositorFrameSinkClient> proxying_client_;
 
@@ -79,8 +79,6 @@ class CompositorFrameSinkImpl : public mojom::CompositorFrameSink {
   // Must be destroyed before |compositor_frame_sink_client_|. This must never
   // change for the lifetime of CompositorFrameSinkImpl.
   const std::unique_ptr<CompositorFrameSinkSupport> support_;
-
-  DISALLOW_COPY_AND_ASSIGN(CompositorFrameSinkImpl);
 };
 
 }  // namespace viz

@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "components/history/core/browser/keyword_id.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/keyword_extensions_delegate.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/shortcuts_backend.h"
@@ -65,7 +66,7 @@ class MostVisitedSites;
 
 class TemplateURLService;
 
-class AutocompleteProviderClient {
+class AutocompleteProviderClient : public OmniboxAction::Client {
  public:
   virtual ~AutocompleteProviderClient() {}
 
@@ -190,6 +191,9 @@ class AutocompleteProviderClient {
 
   // Returns whether user is currently allowed to enter incognito mode.
   virtual bool IsIncognitoModeAvailable() const;
+
+  // Returns true if the sharing hub command is enabled.
+  virtual bool IsSharingHubAvailable() const;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_PROVIDER_CLIENT_H_

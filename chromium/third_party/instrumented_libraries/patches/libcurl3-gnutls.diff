@@ -1,11 +1,14 @@
---- curl-7.35.0/lib/vtls/gtls.c	2014-01-22 13:41:08.000000000 -0800
-+++ curl-7.35.0-patched/lib/vtls/gtls.c	2021-03-30 10:33:59.396439588 -0700
-@@ -851,7 +851,7 @@ gtls_connect_step3(struct connectdata *c
-        might've been rejected and then a new one is in use now and we need to
-        detect that. */
-     void *connect_sessionid;
--    size_t connect_idsize;
-+    size_t connect_idsize = 0;
+diff -rupN curl-7.47.0/scripts/Makefile.am curl-7.47.0.new/scripts/Makefile.am
+--- curl-7.47.0/scripts/Makefile.am	2021-09-24 22:17:11.304187277 +0000
++++ curl-7.47.0.new/scripts/Makefile.am	2021-09-24 22:15:59.739606569 +0000
+@@ -30,8 +30,8 @@ $(ZSH_COMPLETION_FUNCTION_FILENAME): zsh
+ if CROSSCOMPILING
+ 	@echo "NOTICE: we can't generate zsh completion when cross-compiling!"
+ else # if not cross-compiling:
+-	@if ! test -x "$(PERL)"; then echo "No perl: can't install zsh.pl"; exit 0; fi
+-	$(PERL) $(srcdir)/zsh.pl $(top_builddir)/src/curl > $@
++	@echo "NOTICE: we can't generate zsh completion in MSAN builds"
++	touch $@
+ endif
  
-     /* get the session ID data size */
-     gnutls_session_get_data(session, NULL, &connect_idsize);
+ install-data-local:

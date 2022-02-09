@@ -23,15 +23,13 @@ namespace vivaldi {
 DeveloperToolsMenuController::DeveloperToolsMenuController(
     content::WebContents* web_contents,
     const gfx::Point& location)
-  :web_contents_(web_contents),
-   browser_(FindBrowserForEmbedderWebContents(web_contents)),
-   location_(location),
-   enabled_(HasFeature()) {
-}
+    : web_contents_(web_contents),
+      browser_(FindBrowserForEmbedderWebContents(web_contents)),
+      location_(location),
+      enabled_(HasFeature()) {}
 
-
-const extensions::Extension*
-    DeveloperToolsMenuController::GetExtension() const {
+const extensions::Extension* DeveloperToolsMenuController::GetExtension()
+    const {
   extensions::ProcessManager* process_manager =
       extensions::ProcessManager::Get(browser_->profile());
   return process_manager->GetExtensionForWebContents(web_contents_);
@@ -40,12 +38,12 @@ const extensions::Extension*
 bool DeveloperToolsMenuController::HasFeature() {
   const extensions::Extension* platform_app = GetExtension();
   return extensions::Manifest::IsUnpackedLocation(platform_app->location()) ||
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kDebugPackedApps);
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kDebugPackedApps);
 }
 
 void DeveloperToolsMenuController::PopulateModel(
-      ui::SimpleMenuModel* menu_model) {
+    ui::SimpleMenuModel* menu_model) {
   if (enabled_) {
     menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
     // NOTE(pettern): Reload will not work with our app, disable it for now.
@@ -67,7 +65,6 @@ bool DeveloperToolsMenuController::IsCommand(int command_id) const {
       command_id == IDC_CONTENT_CONTEXT_INSPECTELEMENT ||
       command_id == IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE;
 }
-
 
 bool DeveloperToolsMenuController::HandleCommand(int command_id) {
   if (enabled_) {
@@ -115,10 +112,7 @@ bool DeveloperToolsMenuController::GetAcceleratorForCommandId(
     return true;
   }
 
-
-
   return false;
 }
-
 
 }  // namespace vivaldi

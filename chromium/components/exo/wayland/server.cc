@@ -16,20 +16,25 @@
 #include <keyboard-extension-unstable-v1-server-protocol.h>
 #include <linux-explicit-synchronization-unstable-v1-server-protocol.h>
 #include <notification-shell-unstable-v1-server-protocol.h>
+#include <overlay-prioritizer-server-protocol.h>
 #include <pointer-constraints-unstable-v1-server-protocol.h>
 #include <pointer-gestures-unstable-v1-server-protocol.h>
 #include <presentation-time-server-protocol.h>
 #include <relative-pointer-unstable-v1-server-protocol.h>
 #include <remote-shell-unstable-v1-server-protocol.h>
+#include <remote-shell-unstable-v2-server-protocol.h>
 #include <secure-output-unstable-v1-server-protocol.h>
 #include <stylus-tools-unstable-v1-server-protocol.h>
 #include <stylus-unstable-v2-server-protocol.h>
+#include <surface-augmenter-server-protocol.h>
+#include <text-input-extension-unstable-v1-server-protocol.h>
 #include <text-input-unstable-v1-server-protocol.h>
 #include <viewporter-server-protocol.h>
 #include <vsync-feedback-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
 #include <xdg-decoration-unstable-v1-server-protocol.h>
+#include <xdg-output-unstable-v1-server-protocol.h>
 #include <xdg-shell-server-protocol.h>
 #include <xdg-shell-unstable-v6-server-protocol.h>
 
@@ -45,7 +50,9 @@
 #include "build/chromeos_buildflags.h"
 #include "components/exo/buildflags.h"
 #include "components/exo/display.h"
+#include "components/exo/wayland/overlay_prioritizer.h"
 #include "components/exo/wayland/serial_tracker.h"
+#include "components/exo/wayland/surface_augmenter.h"
 #include "components/exo/wayland/wayland_display_output.h"
 #include "components/exo/wayland/wl_compositor.h"
 #include "components/exo/wayland/wl_data_device_manager.h"
@@ -76,6 +83,7 @@
 #include "components/exo/wayland/zcr_keyboard_extension.h"
 #include "components/exo/wayland/zcr_notification_shell.h"
 #include "components/exo/wayland/zcr_remote_shell.h"
+#include "components/exo/wayland/zcr_remote_shell_v2.h"
 #include "components/exo/wayland/zcr_stylus_tools.h"
 #include "components/exo/wayland/zwp_input_timestamps_manager.h"
 #include "components/exo/wayland/zwp_pointer_constraints.h"
@@ -83,11 +91,17 @@
 #include "components/exo/wayland/zwp_relative_pointer_manager.h"
 #include "components/exo/wayland/zwp_text_input_manager.h"
 #include "components/exo/wayland/zxdg_decoration_manager.h"
+#include "components/exo/wayland/zxdg_output_manager.h"
 #include "components/exo/wayland/zxdg_shell.h"
 
 #if BUILDFLAG(ENABLE_WESTON_TEST)
 #include <weston-test-server-protocol.h>
 #include "components/exo/wayland/weston_test.h"
+#endif
+
+#if BUILDFLAG(ENABLE_COLOR_MANAGER)
+#include <color-management-unstable-v1-server-protocol.h>
+#include "components/exo/wayland/zwp_color_manager.h"
 #endif
 #endif
 
@@ -123,7 +137,7 @@ const char kWaylandSocketGroup[] = "wayland";
 bool IsDrmAtomicAvailable() {
 #if defined(USE_OZONE)
   auto& host_properties =
-      ui::OzonePlatform::GetInstance()->GetInitializedHostProperties();
+      ui::OzonePlatform::GetInstance()->GetPlatformRuntimeProperties();
   return host_properties.supports_overlays;
 #else
   LOG(WARNING) << "Ozone disabled, cannot determine whether DrmAtomic is "
@@ -145,7 +159,9 @@ Server::Server(Display* display) : display_(display) {
   wl_log_set_handler_server(wayland_log);
 
   wl_display_.reset(wl_display_create());
+}
 
+void Server::Initialize() {
   serial_tracker_ = std::make_unique<SerialTracker>(wl_display_.get());
   wl_global_create(wl_display_.get(), &wl_compositor_interface,
                    kWlCompositorVersion, this, bind_compositor);
@@ -167,6 +183,10 @@ Server::Server(Display* display) : display_(display) {
                    kWlDataDeviceManagerVersion, data_device_manager_data_.get(),
                    bind_data_device_manager);
 
+  wl_global_create(wl_display_.get(), &surface_augmenter_interface, 1, display_,
+                   bind_surface_augmenter);
+  wl_global_create(wl_display_.get(), &overlay_prioritizer_interface, 1,
+                   display_, bind_overlay_prioritizer);
   wl_global_create(wl_display_.get(), &wp_viewporter_interface, 1, display_,
                    bind_viewporter);
   wl_global_create(wl_display_.get(), &wp_presentation_interface, 1, display_,
@@ -213,6 +233,9 @@ Server::Server(Display* display) : display_(display) {
   wl_global_create(wl_display_.get(), &zcr_remote_shell_v1_interface,
                    zcr_remote_shell_v1_interface.version,
                    remote_shell_data_.get(), bind_remote_shell);
+  wl_global_create(wl_display_.get(), &zcr_remote_shell_v2_interface,
+                   zcr_remote_shell_v2_interface.version,
+                   remote_shell_data_.get(), bind_remote_shell_v2);
 
   wl_global_create(wl_display_.get(), &zcr_stylus_tools_v1_interface, 1,
                    display_, bind_stylus_tools);
@@ -226,12 +249,18 @@ Server::Server(Display* display) : display_(display) {
   wl_global_create(wl_display_.get(),
                    &zwp_relative_pointer_manager_v1_interface, 1, display_,
                    bind_relative_pointer_manager);
+#if BUILDFLAG(ENABLE_COLOR_MANAGER)
+  wl_global_create(wl_display_.get(), &zwp_color_manager_v1_interface, 1,
+                   display_, bind_zwp_color_manager);
+#endif
   wl_global_create(wl_display_.get(), &zcr_color_space_v1_interface, 1,
                    display_, bind_color_space);
   wl_global_create(wl_display_.get(), &zxdg_decoration_manager_v1_interface, 1,
                    display_, bind_zxdg_decoration_manager);
   wl_global_create(wl_display_.get(), &zcr_extended_drag_v1_interface, 1,
                    display_, bind_extended_drag);
+  wl_global_create(wl_display_.get(), &zxdg_output_manager_v1_interface, 3,
+                   display_, bind_zxdg_output_manager);
 
 #if BUILDFLAG(ENABLE_WESTON_TEST)
   weston_test_data_ = std::make_unique<WestonTestState>();
@@ -248,6 +277,12 @@ Server::Server(Display* display) : display_(display) {
       display_->seat()->xkb_tracker(), serial_tracker_.get());
   wl_global_create(wl_display_.get(), &zwp_text_input_manager_v1_interface, 1,
                    zwp_text_manager_data_.get(), bind_text_input_manager);
+
+  zcr_text_input_extension_data_ =
+      std::make_unique<WaylandTextInputExtension>();
+  wl_global_create(wl_display_.get(), &zcr_text_input_extension_v1_interface, 1,
+                   zcr_text_input_extension_data_.get(),
+                   bind_text_input_extension);
 
   zxdg_shell_data_ =
       std::make_unique<WaylandZxdgShell>(display_, serial_tracker_.get());
@@ -276,6 +311,7 @@ Server::~Server() {
 // static
 std::unique_ptr<Server> Server::Create(Display* display) {
   std::unique_ptr<Server> server(new Server(display));
+  server->Initialize();
 
   char* runtime_dir_str = getenv("XDG_RUNTIME_DIR");
   if (!runtime_dir_str) {
@@ -379,6 +415,11 @@ wl_resource* Server::GetOutputResource(wl_client* client, int64_t display_id) {
   if (iter == outputs_.end())
     return nullptr;
   return iter->second.get()->GetOutputResourceForClient(client);
+}
+
+void Server::AddWaylandOutput(int64_t id,
+                              std::unique_ptr<WaylandDisplayOutput> output) {
+  outputs_.insert(std::make_pair(id, std::move(output)));
 }
 
 }  // namespace wayland

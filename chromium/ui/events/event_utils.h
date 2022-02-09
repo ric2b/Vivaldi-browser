@@ -23,7 +23,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
+#include "base/win/windows_types.h"
 #endif
 
 namespace gfx {
@@ -209,11 +209,12 @@ EVENTS_EXPORT bool IsMouseEventFromTouch(UINT message);
 EVENTS_EXPORT uint16_t GetScanCodeFromLParam(LPARAM lParam);
 EVENTS_EXPORT LPARAM GetLParamFromScanCode(uint16_t scan_code);
 
-// Creates an MSG from the given KeyEvent if there is no native_event.
-EVENTS_EXPORT MSG MSGFromKeyEvent(KeyEvent* key_event, HWND hwnd = nullptr);
-EVENTS_EXPORT KeyEvent KeyEventFromMSG(const MSG& msg);
-EVENTS_EXPORT MouseEvent MouseEventFromMSG(const MSG& msg);
-EVENTS_EXPORT MouseWheelEvent MouseWheelEventFromMSG(const MSG& msg);
+// Creates a CHROME_MSG from the given KeyEvent if there is no native_event.
+EVENTS_EXPORT CHROME_MSG MSGFromKeyEvent(KeyEvent* key_event,
+                                         HWND hwnd = nullptr);
+EVENTS_EXPORT KeyEvent KeyEventFromMSG(const CHROME_MSG& msg);
+EVENTS_EXPORT MouseEvent MouseEventFromMSG(const CHROME_MSG& msg);
+EVENTS_EXPORT MouseWheelEvent MouseWheelEventFromMSG(const CHROME_MSG& msg);
 
 #endif  // defined(OS_WIN)
 

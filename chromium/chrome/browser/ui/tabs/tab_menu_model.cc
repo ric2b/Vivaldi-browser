@@ -49,7 +49,8 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
   int num_tabs = indices.size();
   AddItemWithStringId(TabStripModel::CommandNewTabToRight,
                       IDS_TAB_CXMENU_NEWTABTORIGHT);
-  if (reading_list::switches::IsReadingListEnabled()) {
+  if (reading_list::switches::IsReadingListEnabled() &&
+      !tab_strip->profile()->IsGuestSession()) {
     AddItem(
         TabStripModel::CommandAddToReadLater,
         l10n_util::GetPluralStringFUTF16(IDS_TAB_CXMENU_READ_LATER, num_tabs));
@@ -73,6 +74,7 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
     AddItem(TabStripModel::CommandAddToNewGroup,
             l10n_util::GetPluralStringFUTF16(
                 IDS_TAB_CXMENU_ADD_TAB_TO_NEW_GROUP, num_tabs));
+    SetElementIdentifierAt(GetItemCount() - 1, kAddToNewGroupItemIdentifier);
     if (base::FeatureList::IsEnabled(features::kTabGroupsNewBadgePromo))
       SetIsNewFeatureAt(GetItemCount() - 1, true);
   }
@@ -158,3 +160,6 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
   AddItemWithStringId(TabStripModel::CommandCloseTabsToRight,
                       IDS_TAB_CXMENU_CLOSETABSTORIGHT);
 }
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TabMenuModel,
+                                      kAddToNewGroupItemIdentifier);

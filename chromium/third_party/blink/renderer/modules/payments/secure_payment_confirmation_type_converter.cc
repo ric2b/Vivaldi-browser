@@ -43,11 +43,14 @@ TypeConverter<payments::mojom::blink::SecurePaymentConfirmationRequestPtr,
   // If a timeout was not specified in JavaScript, then pass a null `timeout`
   // through mojo IPC, so the browser can set a default (e.g., 3 minutes).
   if (input->hasTimeout())
-    output->timeout = base::TimeDelta::FromMilliseconds(input->timeout());
+    output->timeout = base::Milliseconds(input->timeout());
 
-  output->instrument = payments::mojom::blink::PaymentCredentialInstrument::New(
+  output->instrument = blink::mojom::blink::PaymentCredentialInstrument::New(
       input->instrument()->displayName(),
       blink::KURL(input->instrument()->icon()));
+
+  output->payee_origin =
+      blink::SecurityOrigin::CreateFromString(input->payeeOrigin());
 
   return output;
 }

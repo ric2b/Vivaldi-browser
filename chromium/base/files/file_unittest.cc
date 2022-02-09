@@ -365,6 +365,15 @@ TEST(FileTest, Length) {
   for (int i = 0; i < file_size; i++)
     EXPECT_EQ(data_to_write[i], data_read[i]);
 
+#if !defined(OS_FUCHSIA)  // Fuchsia doesn't seem to support big files.
+  // Expand the file past the 4 GB limit.
+  const int64_t kBigFileLength = 5'000'000'000;
+  EXPECT_TRUE(file.SetLength(kBigFileLength));
+  EXPECT_EQ(kBigFileLength, file.GetLength());
+  EXPECT_TRUE(GetFileSize(file_path, &file_size));
+  EXPECT_EQ(kBigFileLength, file_size);
+#endif
+
   // Close the file and reopen with base::File::FLAG_CREATE_ALWAYS, and make
   // sure the file is empty (old file was overridden).
   file.Close();
@@ -392,7 +401,7 @@ TEST(FileTest, DISABLED_TouchGetInfo) {
 
   // Add 2 seconds to account for possible rounding errors on
   // filesystems that use a 1s or 2s timestamp granularity.
-  base::Time now = base::Time::Now() + base::TimeDelta::FromSeconds(2);
+  base::Time now = base::Time::Now() + base::Seconds(2);
   EXPECT_EQ(0, info.size);
   EXPECT_FALSE(info.is_directory);
   EXPECT_FALSE(info.is_symbolic_link);
@@ -411,10 +420,8 @@ TEST(FileTest, DISABLED_TouchGetInfo) {
   // It's best to add values that are multiples of 2 (in seconds)
   // to the current last_accessed and last_modified times, because
   // FATxx uses a 2s timestamp granularity.
-  base::Time new_last_accessed =
-      info.last_accessed + base::TimeDelta::FromSeconds(234);
-  base::Time new_last_modified =
-      info.last_modified + base::TimeDelta::FromMinutes(567);
+  base::Time new_last_accessed = info.last_accessed + base::Seconds(234);
+  base::Time new_last_modified = info.last_modified + base::Minutes(567);
 
   EXPECT_TRUE(file.SetTimes(new_last_accessed, new_last_modified));
 

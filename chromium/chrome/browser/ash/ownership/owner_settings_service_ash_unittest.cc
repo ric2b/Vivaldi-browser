@@ -47,6 +47,9 @@ class PrefsChecker : public ownership::OwnerSettingsService::Observer {
     service_->AddObserver(this);
   }
 
+  PrefsChecker(const PrefsChecker&) = delete;
+  PrefsChecker& operator=(const PrefsChecker&) = delete;
+
   ~PrefsChecker() override { service_->RemoveObserver(this); }
 
   // OwnerSettingsService::Observer implementation:
@@ -79,15 +82,12 @@ class PrefsChecker : public ownership::OwnerSettingsService::Observer {
 
   using SetRequest = std::pair<std::string, base::Value>;
   base::queue<SetRequest> set_requests_;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefsChecker);
 };
 
 bool FindInListValue(const std::string& needle, const base::Value* haystack) {
-  const base::ListValue* list;
-  if (!haystack->GetAsList(&list))
+  if (!haystack->is_list())
     return false;
-  return base::Contains(list->GetList(), base::Value(needle));
+  return base::Contains(haystack->GetList(), base::Value(needle));
 }
 
 }  // namespace
@@ -99,6 +99,10 @@ class OwnerSettingsServiceAshTest : public DeviceSettingsTestBase {
         local_state_(TestingBrowserProcess::GetGlobal()),
         user_data_dir_override_(chrome::DIR_USER_DATA),
         management_settings_set_(false) {}
+
+  OwnerSettingsServiceAshTest(const OwnerSettingsServiceAshTest&) = delete;
+  OwnerSettingsServiceAshTest& operator=(const OwnerSettingsServiceAshTest&) =
+      delete;
 
   void SetUp() override {
     DeviceSettingsTestBase::SetUp();
@@ -153,9 +157,6 @@ class OwnerSettingsServiceAshTest : public DeviceSettingsTestBase {
   std::unique_ptr<DeviceSettingsProvider> provider_;
   base::ScopedPathOverride user_data_dir_override_;
   bool management_settings_set_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(OwnerSettingsServiceAshTest);
 };
 
 TEST_F(OwnerSettingsServiceAshTest, SingleSetTest) {
@@ -380,6 +381,12 @@ class OwnerSettingsServiceAshNoOwnerTest
     : public OwnerSettingsServiceAshTest {
  public:
   OwnerSettingsServiceAshNoOwnerTest() {}
+
+  OwnerSettingsServiceAshNoOwnerTest(
+      const OwnerSettingsServiceAshNoOwnerTest&) = delete;
+  OwnerSettingsServiceAshNoOwnerTest& operator=(
+      const OwnerSettingsServiceAshNoOwnerTest&) = delete;
+
   ~OwnerSettingsServiceAshNoOwnerTest() override {}
 
   void SetUp() override {
@@ -393,9 +400,6 @@ class OwnerSettingsServiceAshNoOwnerTest
     ASSERT_TRUE(service_);
     ASSERT_FALSE(service_->IsOwner());
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(OwnerSettingsServiceAshNoOwnerTest);
 };
 
 TEST_F(OwnerSettingsServiceAshNoOwnerTest, SingleSetTest) {

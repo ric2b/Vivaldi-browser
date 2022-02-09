@@ -58,8 +58,7 @@ namespace {
 
 // The splash screen should be removed either when this timeout passes or the
 // screensaver app is shown, whichever comes first.
-constexpr base::TimeDelta kRemoveSplashScreenTimeout =
-    base::TimeDelta::FromSeconds(10);
+constexpr base::TimeDelta kRemoveSplashScreenTimeout = base::Seconds(10);
 
 // Global DemoSession instance.
 DemoSession* g_demo_session = nullptr;
@@ -171,7 +170,7 @@ std::vector<LocaleInfo> GetSupportedLocales() {
        "nb", "nl", "sv"});
 
   const std::vector<std::string>& available_locales =
-      l10n_util::GetLocalesWithStrings();
+      l10n_util::GetUserFacingUILocaleList();
   const std::string current_locale_iso_code =
       ProfileManager::GetActiveUserProfile()->GetPrefs()->GetString(
           language::prefs::kApplicationLocale);

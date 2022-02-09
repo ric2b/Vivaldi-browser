@@ -186,7 +186,7 @@ public class Fido2CredentialRequestTest {
                 PendingIntent intent, WindowAndroid.IntentCallback callback, Integer errorId) {
             // Bypass GmsCore and just call onIntentCompleted.
             if (mCancelableIntentSuccess) {
-                callback.onIntentCompleted(this, mResultCode, mResponseIntent);
+                callback.onIntentCompleted(mResultCode, mResponseIntent);
                 return 0;
             }
             return WindowAndroid.START_INTENT_FAILURE;
@@ -881,8 +881,8 @@ public class Fido2CredentialRequestTest {
                         -> mCallback.onSignResponse(responseStatus, response),
                 errorStatus -> mCallback.onError(errorStatus));
         mCallback.blockUntilCalled();
-        Assert.assertEquals(mCallback.getStatus(),
-                Integer.valueOf(AuthenticatorStatus.CREDENTIAL_NOT_RECOGNIZED));
+        Assert.assertEquals(
+                mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.NOT_ALLOWED_ERROR));
         Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
     }
 

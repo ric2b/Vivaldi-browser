@@ -280,8 +280,8 @@ class CC_EXPORT LayerTreeImpl {
     hud_layer_ = layer_impl;
   }
 
-  gfx::ScrollOffset TotalScrollOffset() const;
-  gfx::ScrollOffset TotalMaxScrollOffset() const;
+  gfx::Vector2dF TotalScrollOffset() const;
+  gfx::Vector2dF TotalMaxScrollOffset() const;
 
   void AddPresentationCallbacks(
       std::vector<PresentationTimeCallbackBuffer::MainCallback> callbacks);
@@ -386,6 +386,12 @@ class CC_EXPORT LayerTreeImpl {
   bool TakeNewLocalSurfaceIdRequest();
   bool new_local_surface_id_request_for_testing() const {
     return new_local_surface_id_request_;
+  }
+
+  void SetVisualPropertiesUpdateDuration(
+      base::TimeDelta visual_properties_update_duration);
+  base::TimeDelta visual_properties_update_duration() const {
+    return visual_properties_update_duration_;
   }
 
   void SetDeviceViewportRect(const gfx::Rect& device_viewport_rect);
@@ -735,8 +741,8 @@ class CC_EXPORT LayerTreeImpl {
     return host_impl_->GetActivelyScrollingType();
   }
 
-  bool CurrentScrollDidCheckerboardLargeArea() {
-    return host_impl_->CurrentScrollDidCheckerboardLargeArea();
+  bool CurrentScrollCheckerboardsDueToNoRecording() {
+    return host_impl_->CurrentScrollCheckerboardsDueToNoRecording();
   }
 
   // These functions are used for plumbing DelegatedInkMetadata from blink
@@ -823,6 +829,7 @@ class CC_EXPORT LayerTreeImpl {
 
   viz::LocalSurfaceId local_surface_id_from_parent_;
   bool new_local_surface_id_request_ = false;
+  base::TimeDelta visual_properties_update_duration_;
   // Contains the physical rect of the device viewport, to be used in
   // determining what needs to be drawn.
   bool device_viewport_rect_changed_ = false;

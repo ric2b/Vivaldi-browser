@@ -4,8 +4,7 @@
 
 namespace blink {
 
-void ResourceFetcher::setServeOnlyCachedResources(bool enable)
-{
+void ResourceFetcher::setServeOnlyCachedResources(bool enable) {
   if (enable == onlyLoadServeCachedResources_)
     return;
 

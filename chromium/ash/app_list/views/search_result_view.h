@@ -20,12 +20,10 @@
 #include "base/memory/weak_ptr.h"
 #include "ui/views/context_menu_controller.h"
 
-namespace gfx {
-class RenderText;
-}
-
 namespace views {
 class ImageView;
+class StyledLabel;
+class Label;
 }  // namespace views
 
 namespace ash {
@@ -44,25 +42,47 @@ class ASH_EXPORT SearchResultView : public SearchResultBaseView,
                                     public views::ContextMenuController,
                                     public SearchResultActionsViewDelegate {
  public:
+  enum class SearchResultViewType {
+    // The default vew type used for the majority of search results.
+    kDefault,
+    // The classic view type continues support for pre-BubbleView launcher's
+    // search UI.
+    kClassic,
+    // Inline Answer views are used to directly answer questions posed by the
+    // search query.
+    kInlineAnswer,
+  };
+
   // Internal class name.
   static const char kViewClassName[];
 
-  explicit SearchResultView(SearchResultListView* list_view,
-                            AppListViewDelegate* view_delegate);
+  SearchResultView(SearchResultListView* list_view,
+                   AppListViewDelegate* view_delegate,
+                   SearchResultViewType view_type);
+
+  SearchResultView(const SearchResultView&) = delete;
+  SearchResultView& operator=(const SearchResultView&) = delete;
+
   ~SearchResultView() override;
 
   // Sets/gets SearchResult displayed by this view.
   void OnResultChanged() override;
 
+  void SetSearchResultViewType(SearchResultViewType type) { view_type_ = type; }
+
  private:
   friend class test::SearchResultListViewTest;
+  friend class SearchResultListView;
+
+  int PreferredHeight() const;
+  int PrimaryTextHeight() const;
+  int SecondaryTextHeight() const;
 
   void UpdateTitleText();
   void UpdateDetailsText();
 
-  // Creates title/details render text.
-  void CreateTitleRenderText();
-  void CreateDetailsRenderText();
+  void StyleTitleLabel();
+  void StyleDetailsLabel();
 
   // Callback for query suggstion removal confirmation.
   void OnQueryRemovalAccepted(bool accepted);
@@ -77,6 +97,7 @@ class ASH_EXPORT SearchResultView : public SearchResultBaseView,
   void OnMouseExited(const ui::MouseEvent& event) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
+  void OnThemeChanged() override;
 
   // ui::EventHandler overrides:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -116,19 +137,20 @@ class ASH_EXPORT SearchResultView : public SearchResultBaseView,
 
   AppListViewDelegate* view_delegate_;
 
-  MaskedImageView* icon_;         // Owned by views hierarchy.
-  views::ImageView* badge_icon_;  // Owned by views hierarchy.
-  std::unique_ptr<gfx::RenderText> title_text_;
-  std::unique_ptr<gfx::RenderText> details_text_;
+  MaskedImageView* icon_ = nullptr;              // Owned by views hierarchy.
+  views::ImageView* badge_icon_ = nullptr;       // Owned by views hierarchy.
+  views::StyledLabel* title_label_ = nullptr;    // Owned by view hierarchy.
+  views::StyledLabel* details_label_ = nullptr;  // Owned by view hierarchy.
+  views::Label* separator_label_ = nullptr;      // Owned by view hierarchy.
 
   std::unique_ptr<AppListMenuModelAdapter> context_menu_;
 
   // Whether the removal confirmation dialog is invoked by long press touch.
   bool confirm_remove_by_long_press_ = false;
 
-  base::WeakPtrFactory<SearchResultView> weak_ptr_factory_{this};
+  SearchResultViewType view_type_;
 
-  DISALLOW_COPY_AND_ASSIGN(SearchResultView);
+  base::WeakPtrFactory<SearchResultView> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

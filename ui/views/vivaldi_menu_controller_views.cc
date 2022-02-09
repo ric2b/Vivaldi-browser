@@ -13,7 +13,7 @@ void MenuController::VivaldiAdjustMenubarMenuGeometry(
     const gfx::Rect& anchor_bounds) {
   // Adjust x to avoid horizontal clipping
   if (menu_bounds->right() > monitor_bounds.right())
-      menu_bounds->set_x(monitor_bounds.right() - menu_bounds->width());
+    menu_bounds->set_x(monitor_bounds.right() - menu_bounds->width());
   // Adjust y to use area with most available space.
   int above = anchor_bounds.y() - monitor_bounds.y();
   int below = monitor_bounds.bottom() - anchor_bounds.bottom();
@@ -28,9 +28,8 @@ void MenuController::VivaldiAdjustMenubarMenuGeometry(
 
 // Wrapper for access to private function
 void MenuController::VivaldiOpenMenu(MenuItemView* item) {
-  SetSelection(item,
-      views::MenuController::SELECTION_OPEN_SUBMENU |
-      views::MenuController::SELECTION_UPDATE_IMMEDIATELY);
+  SetSelection(item, views::MenuController::SELECTION_OPEN_SUBMENU |
+                         views::MenuController::SELECTION_UPDATE_IMMEDIATELY);
 }
 
 bool MenuController::VivaldiHandleKeyPressed(ui::KeyboardCode key_code) {
@@ -61,7 +60,7 @@ bool MenuController::VivaldiHandleKeyPressed(ui::KeyboardCode key_code) {
     // Menubar navigation
     if ((!item->HasSubmenu() || item == item->GetRootMenuItem()) &&
         (!item->GetParentMenuItem() ||
-          item->GetParentMenuItem() == item->GetRootMenuItem())) {
+         item->GetParentMenuItem() == item->GetRootMenuItem())) {
       StepSiblingMenu(true);
       return true;
     }
@@ -75,10 +74,12 @@ bool MenuController::StepSiblingMenu(bool next) {
     return false;
   }
 
-  SubmenuView* source = pending_state_.item->HasSubmenu() ?
-      pending_state_.item->GetSubmenu() :
-          pending_state_.item->GetParentMenuItem() ?
-            pending_state_.item->GetParentMenuItem()->GetSubmenu() : nullptr;
+  SubmenuView* source =
+      pending_state_.item->HasSubmenu()
+          ? pending_state_.item->GetSubmenu()
+          : pending_state_.item->GetParentMenuItem()
+                ? pending_state_.item->GetParentMenuItem()->GetSubmenu()
+                : nullptr;
   if (!source) {
     return false;
   }
@@ -87,15 +88,15 @@ bool MenuController::StepSiblingMenu(bool next) {
   bool has_mnemonics;
   views::MenuAnchorPosition anchor;
   MenuItemView* alt_menu =
-    source->GetMenuItem()->GetDelegate()->GetNextSiblingMenu(
-        next, &has_mnemonics, &rect, &anchor);
-  if (!alt_menu ||
-      (state_.item && state_.item->GetRootMenuItem() == alt_menu))
+      source->GetMenuItem()->GetDelegate()->GetNextSiblingMenu(
+          next, &has_mnemonics, &rect, &anchor);
+  if (!alt_menu || (state_.item && state_.item->GetRootMenuItem() == alt_menu))
     return false;
   delegate_->SiblingMenuCreated(alt_menu);
   did_capture_ = false;
   UpdateInitialLocation(rect, anchor, false);
-  alt_menu->PrepareForRun(false, has_mnemonics,
+  alt_menu->PrepareForRun(
+      false, has_mnemonics,
       source->GetMenuItem()->GetRootMenuItem()->show_mnemonics_);
   alt_menu->controller_ = AsWeakPtr();
   SetSelection(alt_menu, SELECTION_OPEN_SUBMENU | SELECTION_UPDATE_IMMEDIATELY);

@@ -96,7 +96,8 @@ public interface NativePage {
 
     @IntDef({NativePageType.NONE, NativePageType.CANDIDATE, NativePageType.NTP,
             NativePageType.BOOKMARKS, NativePageType.RECENT_TABS, NativePageType.DOWNLOADS,
-            NativePageType.HISTORY, NativePageType.EXPLORE, NativePageType.LAUNCHPAD})
+            NativePageType.HISTORY, NativePageType.EXPLORE, NativePageType.LAUNCHPAD,
+            NativePageType.MANAGEMENT})
     @Retention(RetentionPolicy.SOURCE)
     public @interface NativePageType {
         int NONE = 0;
@@ -108,7 +109,8 @@ public interface NativePage {
         int HISTORY = 6;
         int EXPLORE = 7;
         int LAUNCHPAD = 8;
-        int VIVALDI_NOTES = 9;
+        int MANAGEMENT = 9;
+        int VIVALDI_NOTES = 10;
     }
 
     /**
@@ -165,6 +167,8 @@ public interface NativePage {
             return NativePageType.EXPLORE;
         } else if (UrlConstants.LAUNCHPAD_HOST.equals(host)) {
             return NativePageType.LAUNCHPAD;
+        } else if (UrlConstants.MANAGEMENT_HOST.equals(host)) {
+            return NativePageType.MANAGEMENT;
             // Vivaldi
         } else if (VivaldiUrlConstants.VIVALDI_NOTES_HOST.equals(host)) {
             return NativePageType.VIVALDI_NOTES;

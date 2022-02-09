@@ -29,6 +29,10 @@ class ExtensionIconManager {
   };
 
   ExtensionIconManager();
+
+  ExtensionIconManager(const ExtensionIconManager&) = delete;
+  ExtensionIconManager& operator=(const ExtensionIconManager&) = delete;
+
   virtual ~ExtensionIconManager();
 
   // Start loading the icon for the given extension.
@@ -71,8 +75,6 @@ class ExtensionIconManager {
   content::BrowserContext* context_;
 
   base::WeakPtrFactory<ExtensionIconManager> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionIconManager);
 };
 
 #endif  // CHROME_BROWSER_EXTENSIONS_EXTENSION_ICON_MANAGER_H_

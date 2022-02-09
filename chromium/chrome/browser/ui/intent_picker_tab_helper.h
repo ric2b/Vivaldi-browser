@@ -12,19 +12,22 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
-#include "chrome/browser/web_applications/components/app_registrar_observer.h"
+#include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/services/app_service/public/mojom/types.mojom-forward.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 // Controls the visibility of IntentPickerView by updating the visibility based
-// on stored state.
+// on stored state. This class is instantiated for both web apps and SWAs.
 class IntentPickerTabHelper
     : public content::WebContentsObserver,
       public content::WebContentsUserData<IntentPickerTabHelper>,
       public web_app::AppRegistrarObserver {
  public:
+  IntentPickerTabHelper(const IntentPickerTabHelper&) = delete;
+  IntentPickerTabHelper& operator=(const IntentPickerTabHelper&) = delete;
+
   ~IntentPickerTabHelper() override;
 
   static void SetShouldShowIcon(content::WebContents* web_contents,
@@ -62,6 +65,8 @@ class IntentPickerTabHelper
   void OnWebAppWillBeUninstalled(const web_app::AppId& app_id) override;
   void OnAppRegistrarDestroyed() override;
 
+  web_app::WebAppRegistrar* const registrar_;
+
   bool should_show_icon_ = false;
 
   base::ScopedObservation<web_app::WebAppRegistrar,
@@ -69,8 +74,6 @@ class IntentPickerTabHelper
       registrar_observation_{this};
 
   base::WeakPtrFactory<IntentPickerTabHelper> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(IntentPickerTabHelper);
 };
 
 #endif  // CHROME_BROWSER_UI_INTENT_PICKER_TAB_HELPER_H_

@@ -10,6 +10,7 @@
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/public/cpp/accelerators.h"
+#include "ash/public/cpp/style/color_provider.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
@@ -31,7 +32,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/painter.h"
@@ -70,12 +71,13 @@ BubbleBorder::Arrow GetArrowAlignment(ash::ShelfAlignment alignment) {
 class MouseMoveDetectorHost : public views::MouseWatcherHost {
  public:
   MouseMoveDetectorHost();
+
+  MouseMoveDetectorHost(const MouseMoveDetectorHost&) = delete;
+  MouseMoveDetectorHost& operator=(const MouseMoveDetectorHost&) = delete;
+
   ~MouseMoveDetectorHost() override;
 
   bool Contains(const gfx::Point& screen_point, EventType type) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MouseMoveDetectorHost);
 };
 
 MouseMoveDetectorHost::MouseMoveDetectorHost() {}
@@ -94,6 +96,9 @@ class BottomAlignedBoxLayout : public views::BoxLayout {
   explicit BottomAlignedBoxLayout(TrayBubbleView* bubble_view)
       : BoxLayout(BoxLayout::Orientation::kVertical),
         bubble_view_(bubble_view) {}
+
+  BottomAlignedBoxLayout(const BottomAlignedBoxLayout&) = delete;
+  BottomAlignedBoxLayout& operator=(const BottomAlignedBoxLayout&) = delete;
 
   ~BottomAlignedBoxLayout() override {}
 
@@ -120,8 +125,6 @@ class BottomAlignedBoxLayout : public views::BoxLayout {
   }
 
   TrayBubbleView* bubble_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(BottomAlignedBoxLayout);
 };
 
 }  // namespace
@@ -241,6 +244,10 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
       owned_bubble_border_(bubble_border_),
       is_gesture_dragging_(false),
       mouse_actively_entered_(false) {
+  // We set the dialog role because views::BubbleDialogDelegate defaults this to
+  // an alert dialog. This would make screen readers announce the whole of the
+  // system tray which is undesirable.
+  SetAccessibleRole(ax::mojom::Role::kDialog);
   // Bubbles that use transparent colors should not paint their ClientViews to a
   // layer as doing so could result in visual artifacts.
   SetPaintClientToLayer(false);
@@ -271,7 +278,7 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
         gfx::RoundedCornersF{kUnifiedTrayCornerRadius});
     layer()->SetFillsBoundsOpaquely(false);
     layer()->SetIsFastRoundedCorner(true);
-    layer()->SetBackgroundBlur(kUnifiedMenuBackgroundBlur);
+    layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
   } else {
     // Create a layer so that the layer for FocusRing stays in this view's
     // layer. Without it, the layer for FocusRing goes above the
@@ -374,13 +381,6 @@ bool TrayBubbleView::IsAnchoredToStatusArea() const {
 
 void TrayBubbleView::StopReroutingEvents() {
   reroute_event_handler_.reset();
-}
-
-ax::mojom::Role TrayBubbleView::GetAccessibleWindowRole() {
-  // We override the role because the base class sets it to alert dialog.
-  // This would make screen readers announce the whole of the system tray
-  // which is undesirable.
-  return ax::mojom::Role::kDialog;
 }
 
 void TrayBubbleView::OnBeforeBubbleWidgetInit(Widget::InitParams* params,

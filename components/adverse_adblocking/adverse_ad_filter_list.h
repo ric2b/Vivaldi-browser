@@ -35,8 +35,10 @@ class AdverseAdFilterListService : public KeyedService,
   typedef base::OnceCallback<void()> ListFailedCallback;
 
   AdverseAdFilterListService(Profile* profile);
-
   ~AdverseAdFilterListService() override;
+  AdverseAdFilterListService(const AdverseAdFilterListService&) = delete;
+  AdverseAdFilterListService& operator=(const AdverseAdFilterListService&) =
+      delete;
 
   void LoadList(ListFailedCallback callback);
   void LoadList(const base::FilePath& json_filename,
@@ -104,8 +106,6 @@ class AdverseAdFilterListService : public KeyedService,
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   base::WeakPtrFactory<AdverseAdFilterListService> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(AdverseAdFilterListService);
 };
 
 #endif  // COMPONENTS_ADVERSE_ADBLOCKING_ADVERSE_AD_FILTER_LIST_H_

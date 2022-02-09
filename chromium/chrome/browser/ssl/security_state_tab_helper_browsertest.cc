@@ -156,20 +156,22 @@ void WaitForInterstitial(content::WebContents* tab) {
   ASSERT_TRUE(WaitForRenderFrameReady(tab->GetMainFrame()));
 }
 
-// Inject a script into every frame in the page. Used by tests that check for
-// visible password fields to wait for notifications about these
-// fields. Notifications about visible password fields are queued at the end of
-// the event loop, so waiting for a dummy script to run ensures that these
+// Inject a script into every frame in the active page. Used by tests that check
+// for visible password fields to wait for notifications about these fields.
+// Notifications about visible password fields are queued at the end of the
+// event loop, so waiting for a dummy script to run ensures that these
 // notifications have been sent.
 void InjectScript(content::WebContents* contents) {
-  // Any frame in the page might have a password field, so inject scripts into
-  // all of them to ensure that notifications from all of them have been sent.
-  for (auto* frame : contents->GetAllFrames()) {
-    bool js_result = false;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-        frame, "window.domAutomationController.send(true);", &js_result));
-    EXPECT_TRUE(js_result);
-  }
+  // Any frame in the active page might have a password field, so inject scripts
+  // into all of them to ensure that notifications from all of them have been
+  // sent.
+  contents->GetMainFrame()->ForEachRenderFrameHost(
+      base::BindRepeating([](content::RenderFrameHost* frame) {
+        bool js_result = false;
+        EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+            frame, "window.domAutomationController.send(true);", &js_result));
+        EXPECT_TRUE(js_result);
+      }));
 }
 
 // A WebContentsObserver useful for testing the DidChangeVisibleSecurityState()
@@ -180,6 +182,11 @@ class SecurityStyleTestObserver : public content::WebContentsObserver {
   explicit SecurityStyleTestObserver(content::WebContents* web_contents)
       : content::WebContentsObserver(web_contents),
         latest_security_style_(blink::SecurityStyle::kUnknown) {}
+
+  SecurityStyleTestObserver(const SecurityStyleTestObserver&) = delete;
+  SecurityStyleTestObserver& operator=(const SecurityStyleTestObserver&) =
+      delete;
+
   ~SecurityStyleTestObserver() override {}
 
   void DidChangeVisibleSecurityState() override {
@@ -209,7 +216,6 @@ class SecurityStyleTestObserver : public content::WebContentsObserver {
   blink::SecurityStyle latest_security_style_;
   content::SecurityStyleExplanations latest_explanations_;
   base::RunLoop run_loop_;
-  DISALLOW_COPY_AND_ASSIGN(SecurityStyleTestObserver);
 };
 
 // Check that |observer|'s latest event was for an expired certificate
@@ -408,6 +414,10 @@ class SecurityStateTabHelperTest : public CertVerifierBrowserTest {
         true);
   }
 
+  SecurityStateTabHelperTest(const SecurityStateTabHelperTest&) = delete;
+  SecurityStateTabHelperTest& operator=(const SecurityStateTabHelperTest&) =
+      delete;
+
   ~SecurityStateTabHelperTest() override {
     SystemNetworkContextManager::SetEnableCertificateTransparencyForTesting(
         absl::nullopt);
@@ -453,11 +463,11 @@ class SecurityStateTabHelperTest : public CertVerifierBrowserTest {
         SecurityStateTabHelper::FromWebContents(contents);
     ASSERT_TRUE(helper);
 
-    ui_test_utils::NavigateToURL(
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(),
         GetURLWithNonLocalHostname(
             use_secure_inner_origin ? &https_server_ : embedded_test_server(),
-            "/empty.html"));
+            "/empty.html")));
 
     // Create a URL and navigate to it.
     std::string blob_or_filesystem_url;
@@ -465,7 +475,8 @@ class SecurityStateTabHelperTest : public CertVerifierBrowserTest {
         contents, javascript, &blob_or_filesystem_url));
     EXPECT_TRUE(GURL(blob_or_filesystem_url).SchemeIs(scheme));
 
-    ui_test_utils::NavigateToURL(browser(), GURL(blob_or_filesystem_url));
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(browser(), GURL(blob_or_filesystem_url)));
     InjectScript(contents);
 
     content::NavigationEntry* entry =
@@ -478,15 +489,17 @@ class SecurityStateTabHelperTest : public CertVerifierBrowserTest {
   }
 
   net::EmbeddedTestServer https_server_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SecurityStateTabHelperTest);
 };
 
 // Same as SecurityStateTabHelperTest, but with Incognito enabled.
 class SecurityStateTabHelperIncognitoTest : public SecurityStateTabHelperTest {
  public:
   SecurityStateTabHelperIncognitoTest() : SecurityStateTabHelperTest() {}
+
+  SecurityStateTabHelperIncognitoTest(
+      const SecurityStateTabHelperIncognitoTest&) = delete;
+  SecurityStateTabHelperIncognitoTest& operator=(
+      const SecurityStateTabHelperIncognitoTest&) = delete;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SecurityStateTabHelperTest::SetUpCommandLine(command_line);
@@ -498,7 +511,6 @@ class SecurityStateTabHelperIncognitoTest : public SecurityStateTabHelperTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  DISALLOW_COPY_AND_ASSIGN(SecurityStateTabHelperIncognitoTest);
 };
 
 class DidChangeVisibleSecurityStateTest
@@ -509,6 +521,11 @@ class DidChangeVisibleSecurityStateTest
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     https_server_.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
   }
+
+  DidChangeVisibleSecurityStateTest(const DidChangeVisibleSecurityStateTest&) =
+      delete;
+  DidChangeVisibleSecurityStateTest& operator=(
+      const DidChangeVisibleSecurityStateTest&) = delete;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Browser will both run and display insecure content.
@@ -521,15 +538,12 @@ class DidChangeVisibleSecurityStateTest
 
  protected:
   net::EmbeddedTestServer https_server_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DidChangeVisibleSecurityStateTest);
 };
 
 IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, HttpPage) {
   GURL http_url =
       GetURLWithNonLocalHostname(embedded_test_server(), "/ssl/google.html");
-  ui_test_utils::NavigateToURL(browser(), http_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), http_url));
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(contents);
@@ -556,8 +570,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, HttpPage) {
 IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, HttpsPage) {
   SetUpMockCertVerifierForHttpsServer(0, net::OK);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::SECURE, false, false, false,
@@ -566,7 +580,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, HttpsPage) {
 
 IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, DevToolsPage) {
   GURL devtools_url("devtools://devtools/bundled/");
-  ui_test_utils::NavigateToURL(browser(), devtools_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), devtools_url));
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(contents);
@@ -587,8 +601,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, UMALogsVisitsAfterWarning) {
   base::HistogramTester histograms;
   SetUpMockCertVerifierForHttpsServer(net::CERT_STATUS_DATE_INVALID,
                                       net::ERR_CERT_DATE_INVALID);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   // Histogram shouldn't log before clicking through interstitial.
   histograms.ExpectTotalCount(kHistogramName, 0);
   ProceedThroughInterstitial(
@@ -608,8 +622,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
   SetUpMockCertVerifierForHttpsServer(
       net::CERT_STATUS_UNABLE_TO_CHECK_REVOCATION,
       net::ERR_CERT_UNABLE_TO_CHECK_REVOCATION);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   // Histogram shouldn't log before clicking through interstitial.
   histograms.ExpectTotalCount(kHistogramName, 0);
   ProceedThroughInterstitial(
@@ -629,8 +643,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, SHA1CertificateBlocked) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   SecurityStyleTestObserver observer(web_contents);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, true, false, false,
@@ -667,8 +681,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, SHA1CertificateWarning) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   SecurityStyleTestObserver observer(web_contents);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::NONE, true, false, false,
@@ -705,8 +719,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that displays mixed content.
   std::string replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_displays_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::WARNING, false, true, false,
@@ -715,8 +729,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that displays mixed content dynamically.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_with_dynamic_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::SECURE, false, false, false,
@@ -735,8 +749,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that runs mixed content.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_runs_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, false, false, true,
@@ -745,8 +759,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that runs and displays mixed content.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_runs_and_displays_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, false, true, true,
@@ -758,8 +772,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   host_port_pair.set_host("different-host.test");
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_runs_insecure_content_in_iframe.html", host_port_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, false, false, true,
@@ -798,8 +812,8 @@ IN_PROC_BROWSER_TEST_F(
   // Navigate to an HTTPS page that displays mixed content.
   std::string replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_displays_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::WARNING, false, true, false,
@@ -808,8 +822,8 @@ IN_PROC_BROWSER_TEST_F(
   // Navigate to an HTTPS page that displays mixed content dynamically.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_with_dynamic_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::SECURE, false, false, false,
@@ -832,7 +846,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
 
   // Navigate to an HTTPS page and simulate active content with
   // certificate errors.
-  ui_test_utils::NavigateToURL(browser(), https_server_.GetURL("/title1.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/title1.html")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(web_contents);
@@ -860,7 +875,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
 
   // Navigate to an HTTPS page and simulate passive content with
   // certificate errors.
-  ui_test_utils::NavigateToURL(browser(), https_server_.GetURL("/title1.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/title1.html")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(web_contents);
@@ -888,7 +904,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
 
   // Navigate to an HTTPS page and simulate active and passive content
   // with certificate errors.
-  ui_test_utils::NavigateToURL(browser(), https_server_.GetURL("/title1.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/title1.html")));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(web_contents);
@@ -925,8 +942,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that displays mixed content.
   std::string replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_displays_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::NONE, true, true, false,
@@ -935,8 +952,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that displays mixed content dynamically.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_with_dynamic_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::NONE, true, false, false,
@@ -955,8 +972,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that runs mixed content.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_runs_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, true, false, true,
@@ -965,8 +982,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // Navigate to an HTTPS page that runs and displays mixed content.
   replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_runs_and_displays_insecure_content.html", replacement_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, true, true, true,
@@ -987,8 +1004,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   std::string replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_runs_insecure_content_in_iframe_with_strict_blocking.html",
       host_port_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::SECURE, false, false, false,
@@ -1000,8 +1017,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   SetUpMockCertVerifierForHttpsServer(net::CERT_STATUS_DATE_INVALID,
                                       net::ERR_CERT_DATE_INVALID);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, false, false, false,
@@ -1019,8 +1036,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   std::string replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_displays_insecure_content.html",
       embedded_test_server()->host_port_pair());
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::DANGEROUS, false, true, false,
@@ -1041,7 +1058,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, SecurityStyleForHttpPage) {
 
   GURL http_url =
       GetURLWithNonLocalHostname(embedded_test_server(), "/title1.html");
-  ui_test_utils::NavigateToURL(browser(), http_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), http_url));
   EXPECT_EQ(security_state::WARNING, helper->GetSecurityLevel());
   EXPECT_EQ(0u, observer.latest_explanations().neutral_explanations.size());
   EXPECT_EQ(blink::SecurityStyle::kInsecure, observer.latest_security_style());
@@ -1065,7 +1082,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
       SecurityStateTabHelper::FromWebContents(contents);
   ASSERT_TRUE(helper);
 
-  ui_test_utils::NavigateToURL(browser(), GURL("data:text/html,<html></html>"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), GURL("data:text/html,<html></html>")));
   EXPECT_EQ(security_state::WARNING, helper->GetSecurityLevel());
 
   // Ensure that WebContentsObservers don't show an incorrect Form Not Secure
@@ -1097,8 +1115,8 @@ IN_PROC_BROWSER_TEST_F(
       SecurityStateTabHelper::FromWebContents(contents);
   ASSERT_TRUE(helper);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   // Update security state of the current page to match
   // SB_THREAT_TYPE_GAIA_PASSWORD_REUSE.
   safe_browsing::ChromePasswordProtectionService* service =
@@ -1150,8 +1168,8 @@ IN_PROC_BROWSER_TEST_F(
   SecurityStateTabHelper* helper =
       SecurityStateTabHelper::FromWebContents(contents);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   // Update security state of the current page to match
   // SB_THREAT_TYPE_ENTERPRISE_PASSWORD_REUSE.
   safe_browsing::ChromePasswordProtectionService* service =
@@ -1240,8 +1258,8 @@ IN_PROC_BROWSER_TEST_F(PKPModelClientTest, PKPBypass) {
 
   mock_cert_verifier()->AddResultForCert(cert, verify_result, net::OK);
 
-  ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(kPKPHost, "/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(kPKPHost, "/ssl/google.html")));
 
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
@@ -1269,8 +1287,8 @@ IN_PROC_BROWSER_TEST_F(PKPModelClientTest, PKPEnforced) {
 
   mock_cert_verifier()->AddResultForCert(cert, verify_result, net::OK);
 
-  ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(kPKPHost, "/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(kPKPHost, "/ssl/google.html")));
   CheckBrokenSecurityStyle(observer, net::ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN,
                            browser(), cert.get());
 }
@@ -1278,15 +1296,16 @@ IN_PROC_BROWSER_TEST_F(PKPModelClientTest, PKPEnforced) {
 class SecurityStateLoadingTest : public SecurityStateTabHelperTest {
  public:
   SecurityStateLoadingTest() : SecurityStateTabHelperTest() {}
+
+  SecurityStateLoadingTest(const SecurityStateLoadingTest&) = delete;
+  SecurityStateLoadingTest& operator=(const SecurityStateLoadingTest&) = delete;
+
   ~SecurityStateLoadingTest() override {}
 
  protected:
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SecurityStateLoadingTest);
 };
 
 // Tests that navigation state changes cause the security state to be
@@ -1296,8 +1315,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateLoadingTest, NavigationStateChanges) {
   SetUpMockCertVerifierForHttpsServer(0, net::OK);
 
   // Navigate to an HTTPS page.
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("/ssl/google.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::SECURE, false, false, false,
@@ -1408,7 +1427,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // Visit an HTTP url.
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(), http_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), http_url));
   EXPECT_EQ(blink::SecurityStyle::kNeutral, observer.latest_security_style());
   EXPECT_EQ(0u, observer.latest_explanations().neutral_explanations.size());
   EXPECT_EQ(0u, observer.latest_explanations().insecure_explanations.size());
@@ -1426,7 +1445,7 @@ IN_PROC_BROWSER_TEST_F(
       embedded_test_server()->host_port_pair());
 
   GURL mixed_content_url(https_server_.GetURL(replacement_path));
-  ui_test_utils::NavigateToURL(browser(), mixed_content_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), mixed_content_url));
 
   EXPECT_EQ(blink::SecurityStyle::kInsecure, observer.latest_security_style());
 
@@ -1446,7 +1465,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // Visit a broken HTTPS url.
   GURL expired_url(https_test_server_expired.GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(), expired_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), expired_url));
 
   // An interstitial should show, and an event for the lock icon on the
   // interstitial should fire.
@@ -1465,7 +1484,7 @@ IN_PROC_BROWSER_TEST_F(
   // Before clicking through, navigate to a different page, and then go
   // back to the interstitial.
   GURL valid_https_url(https_server_.GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(), valid_https_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), valid_https_url));
   EXPECT_EQ(blink::SecurityStyle::kSecure, observer.latest_security_style());
   EXPECT_EQ(0u, observer.latest_explanations().neutral_explanations.size());
   EXPECT_EQ(0u, observer.latest_explanations().insecure_explanations.size());
@@ -1483,7 +1502,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // After going back to the interstitial, an event for a broken lock
   // icon should fire again.
-  ui_test_utils::NavigateToURL(browser(), expired_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), expired_url));
   WaitForInterstitial(web_contents);
   CheckBrokenSecurityStyle(observer, net::ERR_CERT_DATE_INVALID, browser(),
                            https_test_server_expired.GetCertificate().get());
@@ -1536,7 +1555,7 @@ IN_PROC_BROWSER_TEST_F(DidChangeVisibleSecurityStateTest,
 
   // Visit a valid HTTPS url.
   GURL valid_https_url(https_server_.GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(), valid_https_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), valid_https_url));
   EXPECT_EQ(blink::SecurityStyle::kSecure, observer.latest_security_style());
   EXPECT_EQ(0u, observer.latest_explanations().neutral_explanations.size());
   EXPECT_EQ(0u, observer.latest_explanations().insecure_explanations.size());
@@ -1559,7 +1578,8 @@ IN_PROC_BROWSER_TEST_F(DidChangeVisibleSecurityStateTest,
   GURL https_url_different_host =
       expired_https_url.ReplaceComponents(replace_host);
 
-  ui_test_utils::NavigateToURL(browser(), https_url_different_host);
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), https_url_different_host));
 
   WaitForInterstitial(web_contents);
   CheckBrokenSecurityStyle(observer, net::ERR_CERT_COMMON_NAME_INVALID,
@@ -1605,6 +1625,11 @@ class BrowserTestNonsecureURLRequestWithLegacyTLSWarnings
  public:
   BrowserTestNonsecureURLRequestWithLegacyTLSWarnings() {}
 
+  BrowserTestNonsecureURLRequestWithLegacyTLSWarnings(
+      const BrowserTestNonsecureURLRequestWithLegacyTLSWarnings&) = delete;
+  BrowserTestNonsecureURLRequestWithLegacyTLSWarnings& operator=(
+      const BrowserTestNonsecureURLRequestWithLegacyTLSWarnings&) = delete;
+
   void SetUpOnMainThread() override {
     net::SSLServerConfig config;
     config.version_max = net::SSL_PROTOCOL_VERSION_TLS1_1;
@@ -1619,8 +1644,6 @@ class BrowserTestNonsecureURLRequestWithLegacyTLSWarnings
  private:
   net::EmbeddedTestServer https_server_{
       net::test_server::EmbeddedTestServer::TYPE_HTTPS};
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserTestNonsecureURLRequestWithLegacyTLSWarnings);
 };
 
 // Tests that a connection with obsolete TLS settings does not get a
@@ -1631,8 +1654,8 @@ IN_PROC_BROWSER_TEST_F(
   auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
   SecurityStyleTestObserver observer(tab);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server()->GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("/ssl/google.html")));
   WaitForInterstitial(tab);
   ProceedThroughInterstitial(tab);
 
@@ -1666,8 +1689,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTestNonsecureURLRequestWithLegacyTLSWarnings,
   auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
   auto* helper = SecurityStateTabHelper::FromWebContents(tab);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server()->GetURL("/ssl/google.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("/ssl/google.html")));
   WaitForInterstitial(tab);
   ProceedThroughInterstitial(tab);
 
@@ -1686,7 +1709,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperIncognitoTest, HttpErrorPage) {
   // Navigate to a URL that results in an error page. Even though the displayed
   // URL is http://, there shouldn't be a Not Secure warning because the browser
   // hasn't really navigated to an http:// page.
-  ui_test_utils::NavigateToURL(browser(), GURL("http://nonexistent.test:17"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           GURL("http://nonexistent.test:17")));
   // Sanity-check that it is indeed an error page.
   content::NavigationEntry* entry = browser()
                                         ->tab_strip_model()
@@ -1710,8 +1734,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
 
   {
     base::HistogramTester histograms;
-    ui_test_utils::NavigateToURL(browser(),
-                                 https_server_.GetURL("/title1.html"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), https_server_.GetURL("/title1.html")));
     histograms.ExpectUniqueSample(kHistogramName, security_state::SECURE, 1);
   }
 
@@ -1731,8 +1755,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithAutoupgradesDisabled,
   // the new navigation commits.
   {
     base::HistogramTester histograms;
-    ui_test_utils::NavigateToURL(browser(),
-                                 https_server_.GetURL("/title2.html"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), https_server_.GetURL("/title2.html")));
     histograms.ExpectUniqueSample(kHistogramName, security_state::SECURE, 1);
   }
 }
@@ -1754,8 +1778,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, FormSecurityLevelHistogram) {
       broken_https_server.GetURL("/ssl/google.html"));
   std::string replacement_path = GetFilePathWithHostAndPortReplacement(
       "/ssl/page_with_form_targeting_insecure_url.html", host_port_pair);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(replacement_path)));
   content::TestNavigationObserver navigation_observer(
       browser()->tab_strip_model()->GetActiveWebContents());
   ASSERT_TRUE(content::ExecuteScript(
@@ -1792,7 +1816,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, SafetyTipFormHistogram) {
         form_server.GetURL("example.test", "/ssl/google.html"));
     std::string replacement_path = GetFilePathWithHostAndPortReplacement(
         "/ssl/page_with_form_targeting_http_url.html", host_port_pair);
-    ui_test_utils::NavigateToURL(browser(), server.GetURL(replacement_path));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                             server.GetURL(replacement_path)));
 
     ReputationWebContentsObserver* rep_observer =
         ReputationWebContentsObserver::FromWebContents(
@@ -1844,8 +1869,9 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithMixedFormsWarnings,
                        MixedFormsShowLockIfWarningsAreEnabled) {
   SetUpMockCertVerifierForHttpsServer(0, net::OK);
 
-  ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL("/ssl/page_displays_insecure_form.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      https_server_.GetURL("/ssl/page_displays_insecure_form.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::SECURE, false, false, false,
@@ -1859,8 +1885,9 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithMixedFormsWarnings,
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kMixedFormsWarningsEnabled, false);
 
-  ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL("/ssl/page_displays_insecure_form.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      https_server_.GetURL("/ssl/page_displays_insecure_form.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::NONE, false, false, false,
@@ -1885,8 +1912,9 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithMixedFormsWarningsDisabled,
                        MixedFormsDontShowLockIfWarningsAreDisabled) {
   SetUpMockCertVerifierForHttpsServer(0, net::OK);
 
-  ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL("/ssl/page_displays_insecure_form.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      https_server_.GetURL("/ssl/page_displays_insecure_form.html")));
   CheckSecurityInfoForSecure(
       browser()->tab_strip_model()->GetActiveWebContents(),
       security_state::NONE, false, false, false,
@@ -1896,7 +1924,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithMixedFormsWarningsDisabled,
 class SignedExchangeSecurityStateTest
     : public CertVerifierBrowserTest,
       public testing::WithParamInterface<
-          bool /* sxg_prefetch_cache_for_navigations_enabled */> {
+          bool /* sxg_subresource_prefetch_enabled */> {
  public:
   SignedExchangeSecurityStateTest() = default;
   ~SignedExchangeSecurityStateTest() override = default;
@@ -1915,15 +1943,13 @@ class SignedExchangeSecurityStateTest
 
  private:
   void SetUp() override {
-    const bool sxg_prefetch_cache_for_navigations_enabled = GetParam();
+    const bool sxg_subresource_prefetch_enabled = GetParam();
     std::vector<base::Feature> enabled_features;
     std::vector<base::Feature> disabled_features;
-    if (sxg_prefetch_cache_for_navigations_enabled) {
-      enabled_features.push_back(
-          features::kSignedExchangePrefetchCacheForNavigations);
+    if (sxg_subresource_prefetch_enabled) {
+      enabled_features.push_back(features::kSignedExchangeSubresourcePrefetch);
     } else {
-      disabled_features.push_back(
-          features::kSignedExchangePrefetchCacheForNavigations);
+      disabled_features.push_back(features::kSignedExchangeSubresourcePrefetch);
     }
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
 
@@ -1953,7 +1979,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeSecurityStateTest, SecurityLevelIsSecure) {
       embedded_test_server()->GetURL("/sxg/test.example.org_test.sxg");
   std::u16string expected_title = base::ASCIIToUTF16(inner_url.spec());
   content::TitleWatcher title_watcher(contents, expected_title);
-  ui_test_utils::NavigateToURL(browser(), sxg_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), sxg_url));
   // The inner content of test.example.org_test.sxg has
   // "<script> document.title = document.location.href; </script>".
   EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
@@ -1987,7 +2013,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeSecurityStateTest,
   {
     std::u16string expected_title = u"OK";
     content::TitleWatcher title_watcher(contents, expected_title);
-    ui_test_utils::NavigateToURL(browser(), prefetch_html_url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), prefetch_html_url));
     EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
   }
 
@@ -2077,7 +2103,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperPrerenderTest, InvalidPrerender) {
 
   // Load a valid HTTPS page.
   auto primary_url = test_server->GetURL("/empty.html");
-  ui_test_utils::NavigateToURL(browser(), primary_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), primary_url));
   CheckSecurityInfoForSecure(web_contents(), security_state::SECURE, false,
                              false, false,
                              false /* expect cert status error */);
@@ -2149,7 +2175,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperPrerenderTest,
 
   // Load a valid HTTPS page.
   auto primary_url = test_server->GetURL("/empty.html");
-  ui_test_utils::NavigateToURL(browser(), primary_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), primary_url));
   CheckSecurityInfoForSecure(web_contents(), security_state::SECURE, false,
                              false, false,
                              false /* expect cert status error */);

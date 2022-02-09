@@ -12,14 +12,16 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/password_manager/core/browser/password_form.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_ui.h"
-#include "extensions/schema/savedpasswords.h"
+
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "extensions/schema/savedpasswords.h"
+#include "ui/vivaldi_browser_window.h"
 
 #if defined(OS_MAC)
 #include "extraparts/vivaldi_keychain_util.h"
@@ -33,8 +35,7 @@ void FilterAndSortPasswords(
     std::vector<std::unique_ptr<password_manager::PasswordForm>>*
         password_list) {
   password_list->erase(
-      std::remove_if(
-          password_list->begin(), password_list->end(),
+      std::remove_if(password_list->begin(), password_list->end(),
                      [](const auto& form) { return form->blocked_by_user; }),
       password_list->end());
 
@@ -47,7 +48,7 @@ void FilterAndSortPasswords(
 
 ExtensionFunction::ResponseAction SavedpasswordsGetListFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<password_manager::PasswordStore> password_store =
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store =
       PasswordStoreFactory::GetForProfile(profile,
                                           ServiceAccessType::EXPLICIT_ACCESS);
 
@@ -87,7 +88,7 @@ SavedpasswordsRemoveFunction::~SavedpasswordsRemoveFunction() {}
 ExtensionFunction::ResponseAction SavedpasswordsRemoveFunction::Run() {
   using vivaldi::savedpasswords::Remove::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (!base::StringToSizeT(params->id, &id_to_remove_)) {
@@ -122,7 +123,7 @@ void SavedpasswordsRemoveFunction::OnGetPasswordStoreResults(
 ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   using vivaldi::savedpasswords::Add::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (!params->password_form.password.get()) {
@@ -146,7 +147,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   password_form.date_created = base::Time::Now();
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<password_manager::PasswordStore> password_store =
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store =
       PasswordStoreFactory::GetForProfile(
           profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
                                        : ServiceAccessType::IMPLICIT_ACCESS);
@@ -158,13 +159,13 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
 ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   using vivaldi::savedpasswords::Get::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   // EXPLICIT_ACCESS used as this is a read operation that must work in
   // incognito too.
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<password_manager::PasswordStore> password_store =
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store =
       PasswordStoreFactory::GetForProfile(profile,
                                           ServiceAccessType::EXPLICIT_ACCESS);
 
@@ -206,11 +207,11 @@ void SavedpasswordsGetFunction::OnGetPasswordStoreResults(
 ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
   using vivaldi::savedpasswords::Delete::Params;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
+  std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<password_manager::PasswordStore> password_store(
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store(
       PasswordStoreFactory::GetForProfile(
           profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
                                        : ServiceAccessType::IMPLICIT_ACCESS));
@@ -228,12 +229,29 @@ ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SavedpasswordsAuthenticateFunction::Run() {
+  using vivaldi::savedpasswords::Authenticate::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+
+  VivaldiUtilitiesAPI::AuthenticateUser(
+      window->web_contents(),
+      base::BindOnce(
+          &SavedpasswordsAuthenticateFunction::AuthenticationComplete, this));
+
+  return RespondLater();
+}
+
+void SavedpasswordsAuthenticateFunction::AuthenticationComplete(
+    bool authenticated) {
   namespace Results = vivaldi::savedpasswords::Authenticate::Results;
-
-  bool success = VivaldiUtilitiesAPI::AuthenticateUser(
-      browser_context(), dispatcher()->GetAssociatedWebContents());
-
-  return RespondNow(ArgumentList(Results::Create(success)));
+  Respond(ArgumentList(Results::Create(authenticated)));
 }
 
 }  // namespace extensions

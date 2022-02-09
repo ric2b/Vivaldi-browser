@@ -11,8 +11,11 @@ struct ParseResult;
 
 class RulesetFileParser {
  public:
-  explicit RulesetFileParser(ParseResult* parse_result, bool allow_abp_snippets);
+  explicit RulesetFileParser(ParseResult* parse_result,
+                             bool allow_abp_snippets);
   ~RulesetFileParser();
+  RulesetFileParser(const RulesetFileParser&) = delete;
+  RulesetFileParser& operator=(const RulesetFileParser&) = delete;
 
   void Parse(base::StringPiece file_contents);
 
@@ -21,8 +24,6 @@ class RulesetFileParser {
 
   ParseResult* parse_result_;
   RuleParser parser_;
-
-  DISALLOW_COPY_AND_ASSIGN(RulesetFileParser);
 };
 }  // namespace adblock_filter
 

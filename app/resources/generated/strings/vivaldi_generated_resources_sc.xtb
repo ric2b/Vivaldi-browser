@@ -19,8 +19,6 @@
 <translation id="1588438908519853928">Normale</translation>
 <translation id="1601560923496285236">Aplica</translation>
 <translation id="1603914832182249871">(Anonimu)</translation>
-<translation id="1620510694547887537">Fotocamera</translation>
-<translation id="1706625117072057435">Livellos de zoom</translation>
 <translation id="1708338024780164500">(Inativu)</translation>
 <translation id="174123615272205933">Personalitzadu</translation>
 <translation id="1744108098763830590">pàgina de lugania</translation>
@@ -52,9 +50,7 @@
 <translation id="2445081178310039857">Depes nàrrere in-ue cheres estrarre sa cartella istrinta.</translation>
 <translation id="2470702053775288986">Un'estensione chi no podet funtzionare cun Vivaldi est bistada istudada</translation>
 <translation id="2476578072172137802">Assetios de su giassu web</translation>
-<translation id="2482878487686419369">Avisos</translation>
 <translation id="2509495747794740764">Su valore de s'iscala depet èssere unu nùmeru intre 10 e 200.</translation>
-<translation id="2546283357679194313">Pistocus e datos de su giassu web</translation>
 <translation id="26224892172169984">No permites a giassu web perunu de gestire sos protocollos</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Torra a àtivare</translation>
@@ -69,7 +65,6 @@
 <translation id="2941112035454246133">Bassu</translation>
 <translation id="2972581237482394796">Torre-lu a comente fut</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3036546437875325427">Ativa Flash</translation>
 <translation id="3080207940057008665">B'at aterun'aplicu in su'elaboradore chi at agiuntu unu tema chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="3084548735795614657">Tratze-lu pro l'assetare</translation>
@@ -78,7 +73,6 @@
 <translation id="3129173833825111527">Oru de manca</translation>
 <translation id="3154429428035006212">Est offline dae prus de unu mese</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Microfonu</translation>
 <translation id="3241680850019875542">Sèbera sa cartella in-ue istringhere s'estensione. Pro annoare un'estensione sèbera fintzas su file de sa crae privada chi depes torrare a impreare.</translation>
 <translation id="3288047731229977326">Sas estensiones chi funtzionant in modalidade isvilupadore podent arruinare s'elaboradore tou. Si no ses un'isvilupadore est metzus chi nde las istudes pro abbarrare siguru.</translation>
 <translation id="329838636886466101">Acontza</translation>
@@ -94,7 +88,6 @@
 <translation id="3560034655160545939">Cuntrollu de sa sillabatzione</translation>
 <translation id="3587482841069643663">Totu</translation>
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
-<translation id="3744111561329211289">Background Sync</translation>
 <translation id="3797900183766075808">Chirca <ph name="SEARCH_ENGINE" /> for “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3800806661949714323">Ammustra totus (cunsigiadu)</translation>
 <translation id="3810973564298564668">Manigia</translation>
@@ -125,7 +118,6 @@
 <translation id="4384652540891215547">Ativa s'estensione</translation>
 <translation id="4394049700291259645">Disativadu</translation>
 <translation id="4409697491990005945">Oros</translation>
-<translation id="4434045419905280838">Pop-up e reindiritzadas</translation>
 <translation id="4593021220803146968">Bae ae <ph name="URL" /></translation>
 <translation id="4595560905247879544">Sos aplicos e sas estensiones podent èssere mudados dae su manager ebbia  (<ph name="CUSTODIAN_NAME" /> 1).</translation>
 <translation id="4726710629007580002">B'ant bistados avisos cando as provadu a assetare cust'estensione:</translation>
@@ -160,9 +152,7 @@
 <translation id="5575473780076478375">Estensione incognita: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="563535393368633106">Pregunta-mi primu de bintrare (cunsigiadu)</translation>
-<translation id="5649053991847567735">Iscarrigamentos automaticos</translation>
 <translation id="5677928146339483299">No dones s'òrdine</translation>
-<translation id="5689516760719285838">Logu</translation>
 <translation id="5707185214361380026">B'at istadu una faddina carrigande s'estensione dae:</translation>
 <translation id="5715711091495208045">Plugin Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Ammenta-lu che a PDF</translation>
@@ -177,7 +167,6 @@
 <translation id="5979421442488174909">&amp;Borta in <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Burra sos datos de su zassu web</translation>
 <translation id="6042308850641462728">Ateru</translation>
-<translation id="6059925163896151826">Dispositivos USB</translation>
 <translation id="6101226222197207147">Aplicu nou agiuntu (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">S'atacadura a internet tua est cuntrollada</translation>
 <translation id="6147020289383635445">No soe resurtadu a carrigare s'anteprima.</translation>
@@ -191,7 +180,6 @@
 <translation id="6498249116389603658">Totus sas limbas tuas</translation>
 <translation id="6508261954199872201">Aplicu: <ph name="APP_NAME" /></translation>
 <translation id="6550675742724504774">Optziones</translation>
-<translation id="6612358246767739896">Cuntenutu protetu</translation>
 <translation id="6691936601825168937">&amp;Adenanti</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6817174620439930047">Pregunta-mi cando unu giassu web cheret impreare unu sistema esclusivu pro impitare dispositivos MIDI (cunsigiadu)</translation>
@@ -213,7 +201,6 @@
 <translation id="7423098979219808738">Pregunta-mi a primu</translation>
 <translation id="7427348830195639090">Pàgina in background: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Seberande cust'imprentadora ses dande a cust'estensione s'òrdine de impreare s'imprentadora:</translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7576690715254076113">Pone a pare</translation>
 <translation id="7629827748548208700">Ischeda: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">No lu fetes</translation>
@@ -248,7 +235,6 @@ Mantene su file cun sa crae in d-unu zassu siguru. Podet dare puru chi as a depe
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {iscarrigamentu est andande adenanti} àteros {iscarrrigamentos sunt andande adenanti}}</translation>
 <translation id="8261378640211443080">Cust'estensione no est elencada in <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e podet dare chi siet bisada agiunta chentza s'òrdine tou.</translation>
-<translation id="8270242299912238708">Documentos PDF</translation>
 <translation id="8339059274628563283"><ph name="SITE" /> datos ammentados in s'elaboradore</translation>
 <translation id="8413385045638830869">Pregunta-mi a primu (cunsigiadu)</translation>
 <translation id="8569682776816196752">No apo aciapadu sas destinatziones</translation>
@@ -272,7 +258,6 @@ Mantene su file cun sa crae in d-unu zassu siguru. Podet dare puru chi as a depe
 <translation id="9170848237812810038">Iscontza</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" agiunta</translation>
 <translation id="9218430445555521422">Asseta che a predefinidu</translation>
-<translation id="9219103736887031265">Immàgines</translation>
 <translation id="93766956588638423">Acontza s'estensione</translation>
 <translation id="98515147261107953">Panorama</translation>
 <translation id="994289308992179865">&amp;Loop</translation>

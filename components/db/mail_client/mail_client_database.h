@@ -33,6 +33,8 @@ class MailClientDatabase : public MessageTable {
  public:
   MailClientDatabase();
   ~MailClientDatabase() override;
+  MailClientDatabase(const MailClientDatabase&) = delete;
+  MailClientDatabase& operator=(const MailClientDatabase&) = delete;
 
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
@@ -87,8 +89,6 @@ class MailClientDatabase : public MessageTable {
   sql::MetaTable meta_table_;
 
   base::Time cached_early_expiration_threshold_;
-
-  DISALLOW_COPY_AND_ASSIGN(MailClientDatabase);
 };
 
 }  // namespace mail_client

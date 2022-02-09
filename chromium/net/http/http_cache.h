@@ -22,6 +22,7 @@
 #include <unordered_set>
 
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/clock.h"
@@ -37,10 +38,6 @@
 class GURL;
 
 namespace base {
-namespace trace_event {
-class ProcessMemoryDump;
-}
-
 namespace android {
 class ApplicationStatusListener;
 }  // namespace android
@@ -229,7 +226,8 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
   void OnExternalCacheHit(const GURL& url,
                           const std::string& http_method,
                           const NetworkIsolationKey& network_isolation_key,
-                          bool is_subframe_document_resource);
+                          bool is_subframe_document_resource,
+                          bool include_credentials);
 
   // Causes all transactions created after this point to simulate lock timeout
   // and effectively bypass the cache lock whenever there is lock contention.
@@ -264,13 +262,7 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
   SetHttpNetworkTransactionFactoryForTesting(
       std::unique_ptr<HttpTransactionFactory> new_network_layer);
 
-  // Dumps memory allocation stats. |parent_dump_absolute_name| is the name
-  // used by the parent MemoryAllocatorDump in the memory dump hierarchy.
-  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
-                       const std::string& parent_absolute_name) const;
-
-  // Get the URL from the entry's cache key. If double-keying is not enabled,
-  // this will be the key itself.
+  // Get the URL from the entry's cache key.
   static std::string GetResourceURLFromHttpCacheKey(const std::string& key);
 
   // Function to generate cache key for testing.
@@ -358,7 +350,6 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
   struct NET_EXPORT_PRIVATE ActiveEntry {
     ActiveEntry(disk_cache::Entry* entry, bool opened_in);
     ~ActiveEntry();
-    size_t EstimateMemoryUsage() const;
 
     // Returns true if no transactions are associated with this entry.
     bool HasNoTransactions();

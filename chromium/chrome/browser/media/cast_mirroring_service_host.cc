@@ -20,9 +20,9 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/net/system_network_context_manager.h"
-#include "chrome/browser/service_sandbox_type.h"
 #include "components/mirroring/browser/single_client_video_capture_host.h"
 #include "components/mirroring/mojom/cast_message_channel.mojom.h"
+#include "components/mirroring/mojom/mirroring_service.mojom.h"
 #include "components/mirroring/mojom/session_observer.mojom.h"
 #include "components/mirroring/mojom/session_parameters.mojom.h"
 #include "content/public/browser/audio_service.h"
@@ -285,7 +285,6 @@ void CastMirroringServiceHost::GetNetworkContext(
   network::mojom::NetworkContextParamsPtr network_context_params =
       g_browser_process->system_network_context_manager()
           ->CreateDefaultNetworkContextParams();
-  network_context_params->context_name = "mirroring";
   content::CreateNetworkContextInNetworkService(
       std::move(receiver), std::move(network_context_params));
 }

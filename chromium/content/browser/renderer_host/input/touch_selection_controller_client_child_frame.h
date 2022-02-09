@@ -31,6 +31,12 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
   TouchSelectionControllerClientChildFrame(
       RenderWidgetHostViewChildFrame* rwhv,
       TouchSelectionControllerClientManager* manager);
+
+  TouchSelectionControllerClientChildFrame(
+      const TouchSelectionControllerClientChildFrame&) = delete;
+  TouchSelectionControllerClientChildFrame& operator=(
+      const TouchSelectionControllerClientChildFrame&) = delete;
+
   ~TouchSelectionControllerClientChildFrame() override;
 
   void DidStopFlinging();
@@ -56,7 +62,6 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
   void DidScroll() override;
 
   // ui::TouchSelectionMenuClient:
-  const char* GetType() override;
   bool IsCommandIdEnabled(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
   void RunContextMenu() override;
@@ -78,8 +83,6 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
   // The last selection bounds reported by the view, in view coordinates.
   gfx::SelectionBound selection_start_;
   gfx::SelectionBound selection_end_;
-
-  DISALLOW_COPY_AND_ASSIGN(TouchSelectionControllerClientChildFrame);
 };
 
 }  // namespace content

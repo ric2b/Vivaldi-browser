@@ -577,7 +577,7 @@ Extra input files:
       outfile.write('\n#ifndef RC_INVOKED')
       outfile.write(' \\\n'.join(do_languages_lines))
       outfile.write(' \\\n'.join(installer_string_mapping_lines))
-      outfile.write(' \\\n'.join(do_mode_strings_lines))
+      outfile.write(' \\\n'.join(do_mode_strings_lines if len(do_mode_strings_lines) >1 else []))
       # .rc files must end in a new line
       outfile.write('\n#endif  // ndef RC_INVOKED\n')
 

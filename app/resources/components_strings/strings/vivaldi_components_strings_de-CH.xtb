@@ -8,31 +8,24 @@
 <translation id="1375198122581997741">Öber die Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> het kei Date gscheckt.</translation>
 <translation id="1559528461873125649">Datei oder Verzeichnis ned ome</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Probieret Sie <ph name="BEGIN_LINK" /> d'Startsite ufzrüefe<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Ned onterstötzts Protokoll</translation>
 <translation id="1710259589646384581">Betriebssystem</translation>
 <translation id="1728677426644403582">Das esch dä Quelltext vonere Internetsite</translation>
 <translation id="1734878702283171397">Probieret Sie dä Systemadministrator z'kontaktiere.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probieret Sie en Windows Netzwerchdiagnose uszfüehre<ph name="END_LINK" />.</translation>
-<translation id="1919345977826869612">Werbig</translation>
 <translation id="1974060860693918893">Erwiteret</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy ond Firewall prüefe<ph name="END_LINK" /></translation>
-<translation id="2091887806945687916">Ton</translation>
-<translation id="2147827593068025794">Hentergrond-Abglich</translation>
 <translation id="2166378884831602661">Die Internetsite chan kei secheri Verbendig herstelle</translation>
 <translation id="2230458221926704099">Löset Sie dä Verbendigsfähler met Helf vo dä <ph name="BEGIN_LINK" />Diagnose Ahwendig<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Ehri Internetverbendig esch gsperrt</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> verlangt Benotzername ond Passwort.</translation>
-<translation id="2344028582131185878">Automatischs Abelade</translation>
 <translation id="2355395290879513365">Ahgriffer chönd onder Omständ d'Belder gseh, wo Sie uf dere Internetsite ahluegit ond chönd dä probiere, Sie met andere Belder z'tüsche.</translation>
 <translation id="2356070529366658676">Nachefroge</translation>
 <translation id="2359808026110333948">Wiiter</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netzwerchdiagnose usfüehre<ph name="END_LINK" /></translation>
-<translation id="2482878487686419369">Nachricht</translation>
 <translation id="2539524384386349900">Erkänne</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> het en ongöltigi Antwort gscheckt.</translation>
-<translation id="2586657967955657006">Zwüscheablag</translation>
 <translation id="2609632851001447353">Möglechkeite</translation>
 <translation id="2634124572758952069">IP-Adresse vom Server <ph name="HOST_NAME" /> ned gfunde.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -53,7 +46,6 @@
       Wenn Sie kei Proxyserver wend, schteled Sie dä eso ab:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Dröcket Sie uf "neu lade", om alli benötigte Date förs Lade vo dä Site nomal z'schecke.</translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Wechtigi Inhalt uf dere Site emmer erkenne</translation>
 <translation id="3308738399950580893">Reklame</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> esch momentan ned erreichbar.</translation>
@@ -104,7 +96,6 @@
 <translation id="5610142619324316209">Verbendig prüefe</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> het Sie z'vell witergleitet.</translation>
 <translation id="5675650730144413517">Die Site fonktioniert ned</translation>
-<translation id="5689516760719285838">Ort</translation>
 <translation id="5799902971440853357">Sie chönd <ph name="SITE" /> jetzt ned öffne, well die Internetsite verschlössleti Informatione zor Identifikation gscheckt het, wo Vivaldi ned chan verarbeite. Netzwerkfähler ond Ahgreff send normalerwis nor korzwilig, so dass d'Site wahrschindlech spöter weder fonktioniert.</translation>
 <translation id="5869405914158311789">Die Internetsite esch ned erreichbar</translation>
 <translation id="6051221802930200923">Sie chönd <ph name="SITE" /> jetzt ned öffne, well d'Internetsite Zertifikat-Pinning brucht. Netzwerkfähler ond Ahgreff send normalerwis nor korzwilig, so dass d'Site wahrschindlech spöter weder fonktioniert.</translation>
@@ -131,7 +122,6 @@
 <translation id="7353601530677266744">Befählszile</translation>
 <translation id="7419106976560586862">Profil Pfad</translation>
 <translation id="7518003948725431193">För die folgend Adresse gets kei Internetsite: <ph name="URL" /></translation>
-<translation id="7521387064766892559">Javascript</translation>
 <translation id="7549584377607005141">Demet die Internetsite rechtig ahzeigt werd, bruchts die Date, wo Sie vorher ihgäh hend. Sie chönd die Date erneut schecke, denn werdet aber alli Aktione wederhollt, wo vorher dörr die Site usgfüehrt worde send.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> chan die Ahfrog jetzt ned verarbeite.</translation>
 <translation id="7714464543167945231">Zärtifikat</translation>
@@ -155,7 +145,6 @@
 <translation id="9025348182339809926">(Ongöltig)</translation>
 <translation id="9169664750068251925">Uf dere Site emmer verbiete</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> brucht es ned onterstötzts Protokoll.</translation>
-<translation id="9219103736887031265">Bilder</translation>
 <translation id="969892804517981540">Offizielli Version</translation>
 <translation id="988159990683914416">Entweckler Version</translation>
 </translationbundle>

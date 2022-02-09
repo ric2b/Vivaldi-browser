@@ -126,8 +126,7 @@ class TestPasswordManagerClient
                base::OnceCallback<void(ReauthSucceeded)>),
               (override));
 
-  MockPasswordStoreInterface* GetProfilePasswordStoreInterface()
-      const override {
+  MockPasswordStoreInterface* GetProfilePasswordStore() const override {
     return mock_profile_store_.get();
   }
 
@@ -1285,16 +1284,16 @@ TEST_F(ManagePasswordsUIControllerTest,
   controller()->OnBubbleShown();
 
   // Automatic form submission detected.
+  submitted_form().username_value = u"new_username";
+  submitted_form().password_value = u"12345";
   test_form_manager = CreateFormManagerWithBestMatches(&matches);
-  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(0);
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
-  // It should have no effect as the bubble was already open.
+  // It should update the bubble already open.
   ExpectIconAndControllerStateIs(password_manager::ui::PENDING_PASSWORD_STATE);
-  EXPECT_EQ(u"manual_username",
-            controller()->GetPendingPassword().username_value);
-  EXPECT_EQ(u"manual_pass1234",
-            controller()->GetPendingPassword().password_value);
+  EXPECT_EQ(u"new_username", controller()->GetPendingPassword().username_value);
+  EXPECT_EQ(u"12345", controller()->GetPendingPassword().password_value);
 }
 
 TEST_F(ManagePasswordsUIControllerTest,
@@ -1466,7 +1465,7 @@ TEST_F(ManagePasswordsUIControllerTest, SaveUnsyncedCredentialsInProfileStore) {
 
   // Set expectations on the store.
   MockPasswordStoreInterface* profile_store =
-      client().GetProfilePasswordStoreInterface();
+      client().GetProfilePasswordStore();
   EXPECT_CALL(*profile_store,
               AddLogin(MatchesLoginAndURL(credentials[0].username_value,
                                           credentials[0].password_value,
@@ -1495,7 +1494,7 @@ TEST_F(ManagePasswordsUIControllerTest, DiscardUnsyncedCredentials) {
 
   // No save should happen on the profile store.
   MockPasswordStoreInterface* profile_store =
-      client().GetProfilePasswordStoreInterface();
+      client().GetProfilePasswordStore();
   EXPECT_CALL(*profile_store, AddLogin).Times(0);
 
   // Discard.
@@ -1536,7 +1535,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenBubbleForMovableForm) {
 TEST_F(ManagePasswordsUIControllerTest, OpenSafeStateBubble) {
   profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
-      (base::Time::Now() - base::TimeDelta::FromMinutes(1)).ToDoubleT());
+      (base::Time::Now() - base::Minutes(1)).ToDoubleT());
   submitted_form() = test_local_form();
   submitted_form().password_value = u"new_password";
 
@@ -1555,8 +1554,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenSafeStateBubble) {
       .WillOnce(Return(saved));
   password_manager::PasswordStoreConsumer* post_save_helper = nullptr;
 
-  EXPECT_CALL(*client().GetProfilePasswordStoreInterface(),
-              GetAutofillableLogins)
+  EXPECT_CALL(*client().GetProfilePasswordStore(), GetAutofillableLogins)
       .WillOnce(testing::WithArg<0>([&post_save_helper](auto* consumer) {
         post_save_helper = consumer;
       }));
@@ -1580,7 +1578,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenSafeStateBubble) {
 TEST_F(ManagePasswordsUIControllerTest, OpenMoreToFixBubble) {
   profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
-      (base::Time::Now() - base::TimeDelta::FromMinutes(1)).ToDoubleT());
+      (base::Time::Now() - base::Minutes(1)).ToDoubleT());
   submitted_form() = test_local_form();
   submitted_form().password_value = u"new_password";
 
@@ -1599,8 +1597,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenMoreToFixBubble) {
 
   password_manager::PasswordStoreConsumer* post_save_helper = nullptr;
 
-  EXPECT_CALL(*client().GetProfilePasswordStoreInterface(),
-              GetAutofillableLogins)
+  EXPECT_CALL(*client().GetProfilePasswordStore(), GetAutofillableLogins)
       .WillOnce(testing::WithArg<0>([&post_save_helper](auto* consumer) {
         post_save_helper = consumer;
       }));
@@ -1632,7 +1629,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenMoreToFixBubble) {
 TEST_F(ManagePasswordsUIControllerTest, NoMoreToFixBubbleIfPromoStillOpen) {
   profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
-      (base::Time::Now() - base::TimeDelta::FromMinutes(1)).ToDoubleT());
+      (base::Time::Now() - base::Minutes(1)).ToDoubleT());
   submitted_form() = test_local_form();
   submitted_form().password_value = u"new_password";
 

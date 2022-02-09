@@ -25,8 +25,6 @@ class SessionsPrivateSaveOpenTabsFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SessionsPrivateSaveOpenTabsFunction);
 };
 
 class SessionsPrivateGetAllFunction : public ExtensionFunction {
@@ -38,12 +36,13 @@ class SessionsPrivateGetAllFunction : public ExtensionFunction {
   ~SessionsPrivateGetAllFunction() override = default;
 
   struct SessionEntry {
-    ~SessionEntry();
     SessionEntry();
+    ~SessionEntry();
+    SessionEntry(const SessionEntry&) = delete;
+    SessionEntry& operator=(const SessionEntry&) = delete;
+
     std::unique_ptr<extensions::vivaldi::sessions_private::SessionItem> item;
     std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
-
-    DISALLOW_COPY_AND_ASSIGN(SessionEntry);
   };
 
   std::vector<std::unique_ptr<SessionsPrivateGetAllFunction::SessionEntry>>
@@ -52,8 +51,6 @@ class SessionsPrivateGetAllFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SessionsPrivateGetAllFunction);
 };
 
 class SessionsPrivateOpenFunction : public ExtensionFunction {
@@ -66,8 +63,6 @@ class SessionsPrivateOpenFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SessionsPrivateOpenFunction);
 };
 
 class SessionsPrivateDeleteFunction : public ExtensionFunction {
@@ -80,8 +75,6 @@ class SessionsPrivateDeleteFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SessionsPrivateDeleteFunction);
 };
 
 }  // namespace extensions

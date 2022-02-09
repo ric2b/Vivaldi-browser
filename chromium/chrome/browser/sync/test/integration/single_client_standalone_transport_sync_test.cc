@@ -16,6 +16,7 @@
 #include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/send_tab_to_self/features.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/glue/sync_transport_data_prefs.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -39,9 +40,13 @@ syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
       syncer::DEVICE_INFO, syncer::USER_CONSENTS, syncer::SECURITY_EVENTS,
       syncer::AUTOFILL_WALLET_DATA, syncer::SHARING_MESSAGE);
   allowed_types.PutAll(syncer::ControlTypes());
+  if (base::FeatureList::IsEnabled(
+          send_tab_to_self::kSendTabToSelfWhenSignedIn)) {
+    allowed_types.Put(syncer::SEND_TAB_TO_SELF);
+  }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // OS sync types run in transport mode.
-  if (chromeos::features::IsSplitSettingsSyncEnabled()) {
+  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
     allowed_types.PutAll({syncer::APPS, syncer::APP_SETTINGS, syncer::APP_LIST,
                           syncer::APP_SETTINGS, syncer::ARC_PACKAGE,
                           syncer::PRINTERS, syncer::OS_PREFERENCES,
@@ -81,8 +86,8 @@ class SingleClientStandaloneTransportSyncTest : public SyncTest {
 IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
                        StartsSyncTransportOnSignin) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // On Chrome OS before SplitSettingSync, sync auto-starts on sign-in.
-  if (!chromeos::features::IsSplitSettingsSyncEnabled())
+  // On Chrome OS before SyncConsentOptional, sync auto-starts on sign-in.
+  if (!chromeos::features::IsSyncConsentOptionalEnabled())
     return;
 #endif
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -296,7 +301,7 @@ class SingleClientStandaloneTransportOsSyncTest
 
 IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportOsSyncTest,
                        OsTypesAreActiveWhenBrowserSyncIsOff) {
-  ASSERT_TRUE(chromeos::features::IsSplitSettingsSyncEnabled());
+  ASSERT_TRUE(chromeos::features::IsSyncConsentOptionalEnabled());
 
   // Setup clients but don't start syncing yet.
   ASSERT_TRUE(SetupClients());
@@ -321,18 +326,18 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportOsSyncTest,
   EXPECT_TRUE(active_types.Has(syncer::OS_PREFERENCES));
   EXPECT_TRUE(active_types.Has(syncer::OS_PRIORITY_PREFERENCES));
   EXPECT_TRUE(active_types.Has(syncer::PRINTERS));
-  EXPECT_TRUE(active_types.Has(syncer::WEB_APPS));
   EXPECT_TRUE(active_types.Has(syncer::WIFI_CONFIGURATIONS));
 
   // Verify that a few browser non-transport-mode types are not active.
   EXPECT_FALSE(active_types.Has(syncer::BOOKMARKS));
   EXPECT_FALSE(active_types.Has(syncer::SESSIONS));
   EXPECT_FALSE(active_types.Has(syncer::TYPED_URLS));
+  EXPECT_FALSE(active_types.Has(syncer::WEB_APPS));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportOsSyncTest,
                        OsTypesAreNotActiveWhenOsSyncIsOff) {
-  ASSERT_TRUE(chromeos::features::IsSplitSettingsSyncEnabled());
+  ASSERT_TRUE(chromeos::features::IsSyncConsentOptionalEnabled());
 
   // Setup clients but don't start syncing yet.
   ASSERT_TRUE(SetupClients());
@@ -357,13 +362,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportOsSyncTest,
   EXPECT_FALSE(active_types.Has(syncer::OS_PREFERENCES));
   EXPECT_FALSE(active_types.Has(syncer::OS_PRIORITY_PREFERENCES));
   EXPECT_FALSE(active_types.Has(syncer::PRINTERS));
-  EXPECT_FALSE(active_types.Has(syncer::WEB_APPS));
   EXPECT_FALSE(active_types.Has(syncer::WIFI_CONFIGURATIONS));
 
   // Browser non-transport-mode types are active.
   EXPECT_TRUE(active_types.Has(syncer::BOOKMARKS));
   EXPECT_TRUE(active_types.Has(syncer::SESSIONS));
   EXPECT_TRUE(active_types.Has(syncer::TYPED_URLS));
+  EXPECT_TRUE(active_types.Has(syncer::WEB_APPS));
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

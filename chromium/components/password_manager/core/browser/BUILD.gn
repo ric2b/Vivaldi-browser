@@ -31,8 +31,6 @@ static_library("browser") {
     "android_affiliation/affiliation_fetcher_delegate.cc",
     "android_affiliation/affiliation_fetcher_delegate.h",
     "android_affiliation/affiliation_fetcher_interface.h",
-    "android_affiliation/android_affiliation_service.cc",
-    "android_affiliation/android_affiliation_service.h",
     "android_affiliation/facet_manager.cc",
     "android_affiliation/facet_manager.h",
     "android_affiliation/facet_manager_host.h",
@@ -113,10 +111,6 @@ static_library("browser") {
     "manage_passwords_referrer.h",
     "move_password_to_account_store_helper.cc",
     "move_password_to_account_store_helper.h",
-    "multi_store_form_fetcher.cc",
-    "multi_store_form_fetcher.h",
-    "multi_store_password_save_manager.cc",
-    "multi_store_password_save_manager.h",
     "old_google_credentials_cleaner.cc",
     "old_google_credentials_cleaner.h",
     "origin_credential_store.cc",
@@ -226,6 +220,8 @@ static_library("browser") {
     "store_metrics_reporter.h",
     "sync/password_model_type_controller.cc",
     "sync/password_model_type_controller.h",
+    "sync/password_proto_utils.cc",
+    "sync/password_proto_utils.h",
     "sync/password_sync_bridge.cc",
     "sync/password_sync_bridge.h",
     "sync_credentials_filter.cc",
@@ -248,6 +244,7 @@ static_library("browser") {
     "ui/saved_passwords_presenter.h",
     "votes_uploader.cc",
     "votes_uploader.h",
+    "webauthn_credentials_delegate.h",
     "well_known_change_password_state.cc",
     "well_known_change_password_state.h",
     "well_known_change_password_util.cc",
@@ -319,6 +316,8 @@ static_library("browser") {
       "password_scripts_fetcher.h",
       "password_scripts_fetcher_impl.cc",
       "password_scripts_fetcher_impl.h",
+      "password_store_proxy_backend.cc",
+      "password_store_proxy_backend.h",
     ]
   }
 
@@ -505,8 +504,8 @@ static_library("test_support") {
     "mock_password_form_manager_for_ui.h",
     "mock_password_reuse_manager.cc",
     "mock_password_reuse_manager.h",
-    "mock_password_store.cc",
-    "mock_password_store.h",
+    "mock_password_store_backend.cc",
+    "mock_password_store_backend.h",
     "mock_password_store_interface.cc",
     "mock_password_store_interface.h",
     "mock_password_sync_metadata_store.cc",
@@ -515,8 +514,12 @@ static_library("test_support") {
     "mock_smart_bubble_stats_store.h",
     "password_manager_test_utils.cc",
     "password_manager_test_utils.h",
+    "site_affiliation/fake_affiliation_service.cc",
+    "site_affiliation/fake_affiliation_service.h",
     "site_affiliation/mock_affiliation_fetcher_factory.cc",
     "site_affiliation/mock_affiliation_fetcher_factory.h",
+    "site_affiliation/mock_affiliation_service.cc",
+    "site_affiliation/mock_affiliation_service.h",
     "stub_credentials_filter.cc",
     "stub_credentials_filter.h",
     "stub_form_saver.cc",
@@ -553,6 +556,7 @@ static_library("test_support") {
     "//base",
     "//components/autofill/core/common",
     "//net:net",
+    "//services/network:test_support",
   ]
 }
 
@@ -610,7 +614,6 @@ source_set("unit_tests") {
     "android_affiliation/affiliation_backend_unittest.cc",
     "android_affiliation/affiliation_database_unittest.cc",
     "android_affiliation/affiliation_fetch_throttler_unittest.cc",
-    "android_affiliation/android_affiliation_service_unittest.cc",
     "android_affiliation/facet_manager_unittest.cc",
     "browser_save_password_progress_logger_unittest.cc",
     "bulk_leak_check_service_unittest.cc",
@@ -643,8 +646,6 @@ source_set("unit_tests") {
     "leak_detection_delegate_unittest.cc",
     "leak_detection_dialog_utils_unittest.cc",
     "login_database_unittest.cc",
-    "multi_store_form_fetcher_unittest.cc",
-    "multi_store_password_save_manager_unittest.cc",
     "old_google_credentials_cleaner_unittest.cc",
     "origin_credential_store_unittest.cc",
     "password_access_authenticator_unittest.cc",
@@ -682,6 +683,7 @@ source_set("unit_tests") {
     "sql_table_builder_unittest.cc",
     "statistics_table_unittest.cc",
     "store_metrics_reporter_unittest.cc",
+    "sync/password_proto_utils_unittest.cc",
     "sync/password_sync_bridge_unittest.cc",
     "sync_credentials_filter_unittest.cc",
     "ui/bulk_leak_check_service_adapter_unittest.cc",
@@ -694,7 +696,10 @@ source_set("unit_tests") {
     "well_known_change_password_util_unittest.cc",
   ]
   if (is_android) {
-    sources += [ "password_scripts_fetcher_impl_unittests.cc" ]
+    sources += [
+      "password_scripts_fetcher_impl_unittests.cc",
+      "password_store_proxy_backend_unittest.cc",
+    ]
   }
   if (is_ios) {
     sources += [ "login_database_ios_unittest.cc" ]

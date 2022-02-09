@@ -17,6 +17,9 @@
 // Prints the currently active tab.
 - (void)printTab;
 
+// Prints an image.
+- (void)printImage:(UIImage*)image title:(NSString*)title;
+
 // Shows the downloads folder.
 - (void)showDownloadsFolder;
 
@@ -31,6 +34,9 @@
 
 // Displays the Badge popup menu showing |badgeItems|.
 - (void)displayPopupMenuWithBadgeItems:(NSArray<id<BadgeItem>>*)badgeItems;
+
+// Dismisses the Badge popup menu.
+- (void)dismissPopupMenu;
 
 @end
 

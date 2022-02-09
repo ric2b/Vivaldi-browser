@@ -20,7 +20,7 @@ namespace {
 const char kDefaultFallbackImageBase64[] =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mOsrwcAAYMBABbFvR"
     "QAAAAASUVORK5CYII=";
-}
+}  // namespace
 
 DesktopWallpaperDataClassHandlerWin::DesktopWallpaperDataClassHandlerWin() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -58,11 +58,11 @@ void DesktopWallpaperDataClassHandlerWin::GetData(
         // Try first without monitor id, this will work if the user
         // has the same image on all monitors.
         hr = desktop_w->GetWallpaper(nullptr,
-                                    reinterpret_cast<LPWSTR*>(&file_path));
+                                     reinterpret_cast<LPWSTR*>(&file_path));
         if (hr == S_FALSE) {
           file_path.Reset(nullptr);
           hr = desktop_w->GetWallpaper(monitor_id,
-                                      reinterpret_cast<LPWSTR*>(&file_path));
+                                       reinterpret_cast<LPWSTR*>(&file_path));
         }
         if (SUCCEEDED(hr)) {
           if (file_path.get() == previous_path_) {
@@ -115,8 +115,7 @@ void DesktopWallpaperDataClassHandlerWin::GetDataOnFileThread(
       break;
     }
     std::vector<unsigned char> buffer(len);
-    int read_len =
-      file.Read(0, reinterpret_cast<char*>(&buffer[0]), len);
+    int read_len = file.Read(0, reinterpret_cast<char*>(&buffer[0]), len);
     if (read_len != len) {
       break;
     }
@@ -129,8 +128,8 @@ void DesktopWallpaperDataClassHandlerWin::GetDataOnFileThread(
         FROM_HERE,
         base::BindOnce(
             &DesktopWallpaperDataClassHandlerWin::SendDataResultsOnUiThread,
-            base::Unretained(this), std::move(image_data),
-            std::move(file_path), std::move(callback)));
+            base::Unretained(this), std::move(image_data), std::move(file_path),
+            std::move(callback)));
     return;
   } while (false);
 

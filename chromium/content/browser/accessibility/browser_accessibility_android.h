@@ -49,6 +49,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsLink() const;
   bool IsMultiLine() const;
   bool IsMultiselectable() const;
+  bool IsRangeControlWithoutAriaValueText() const;
   bool IsReportingCheckable() const;
   bool IsScrollable() const;
   bool IsSeekControl() const;
@@ -202,6 +203,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
 
   bool HasOnlyTextChildren() const;
   bool HasOnlyTextAndImageChildren() const;
+  bool HasListMarkerChild() const;
   bool ShouldExposeValueAsName() const;
   int CountChildrenWithRole(ax::mojom::Role role) const;
 

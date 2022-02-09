@@ -26,7 +26,7 @@
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
-#include "third_party/blink/public/mojom/page/drag.mojom.h"
+#include "third_party/blink/public/mojom/drag/drag.mojom.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #include "components/content/vivaldi_content_delegates.h"
@@ -65,8 +65,9 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
 
  public:
   explicit TabsPrivateAPI(content::BrowserContext* context);
-
   ~TabsPrivateAPI() override;
+  TabsPrivateAPI(const TabsPrivateAPI&) = delete;
+  TabsPrivateAPI& operator=(const TabsPrivateAPI&) = delete;
 
   static void Init();
 
@@ -81,9 +82,6 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
   static BrowserContextKeyedAPIFactory<TabsPrivateAPI>* GetFactoryInstance();
 
   void NotifyTabChange(content::WebContents* web_contents);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateAPI);
 };
 
 // Tab contents observer that forward private settings to any new renderer.
@@ -99,6 +97,9 @@ class VivaldiPrivateTabObserver
  public:
   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
   ~VivaldiPrivateTabObserver() override;
+  VivaldiPrivateTabObserver(const VivaldiPrivateTabObserver&) = delete;
+  VivaldiPrivateTabObserver& operator=(const VivaldiPrivateTabObserver&) =
+      delete;
 
   static VivaldiPrivateTabObserver* FromTabId(
       content::BrowserContext* browser_context,
@@ -226,8 +227,6 @@ class VivaldiPrivateTabObserver
   // Replacement for WEB_CONTENTS_USER_DATA_KEY_DECL() to use an external key
   // from the content.
   static const int& kUserDataKey;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiPrivateTabObserver);
 };
 
 class TabsPrivateUpdateFunction : public ExtensionFunction {
@@ -242,8 +241,6 @@ class TabsPrivateUpdateFunction : public ExtensionFunction {
  private:
   // BookmarksFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateUpdateFunction);
 };
 
 class TabsPrivateGetFunction : public ExtensionFunction {
@@ -258,8 +255,6 @@ class TabsPrivateGetFunction : public ExtensionFunction {
  private:
   // BookmarksFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetFunction);
 };
 
 class TabsPrivateDiscardFunction : public ExtensionFunction {
@@ -274,8 +269,6 @@ class TabsPrivateDiscardFunction : public ExtensionFunction {
  private:
   // BookmarksFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateDiscardFunction);
 };
 
 class TabsPrivateInsertTextFunction : public ExtensionFunction {
@@ -289,8 +282,6 @@ class TabsPrivateInsertTextFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateInsertTextFunction);
 };
 
 class TabsPrivateStartDragFunction : public ExtensionFunction {
@@ -313,8 +304,6 @@ class TabsPrivateStartDragFunction : public ExtensionFunction {
   content::DropData drop_data_;
   blink::mojom::DragEventSourceInfo event_info_;
   gfx::Vector2d image_offset_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateStartDragFunction);
 };
 
 class TabsPrivateScrollPageFunction : public ExtensionFunction {
@@ -328,8 +317,6 @@ class TabsPrivateScrollPageFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateScrollPageFunction);
 };
 
 class TabsPrivateGetSpatialNavigationRectsFunction : public ExtensionFunction {
@@ -347,8 +334,6 @@ class TabsPrivateGetSpatialNavigationRectsFunction : public ExtensionFunction {
       std::vector<::vivaldi::mojom::SpatnavRectPtr> rects);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetSpatialNavigationRectsFunction);
 };
 
 class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
@@ -365,8 +350,6 @@ class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
   void GetScrollPositionResponse(int64_t x, int64_t y);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetScrollPositionFunction);
 };
 
 class TabsPrivateActivateElementFromPointFunction : public ExtensionFunction {
@@ -381,8 +364,6 @@ class TabsPrivateActivateElementFromPointFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateActivateElementFromPointFunction);
 };
 
 class TabsPrivateHasBeforeUnloadOrUnloadFunction : public ExtensionFunction {
@@ -397,8 +378,6 @@ class TabsPrivateHasBeforeUnloadOrUnloadFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateHasBeforeUnloadOrUnloadFunction);
 };
 
 class TabsPrivateTranslatePageFunction : public ExtensionFunction {
@@ -413,8 +392,6 @@ class TabsPrivateTranslatePageFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateTranslatePageFunction);
 };
 
 class TabsPrivateRevertTranslatePageFunction : public ExtensionFunction {
@@ -429,8 +406,6 @@ class TabsPrivateRevertTranslatePageFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateRevertTranslatePageFunction);
 };
 
 class TabsPrivateDetermineTextLanguageFunction : public ExtensionFunction {
@@ -446,8 +421,6 @@ class TabsPrivateDetermineTextLanguageFunction : public ExtensionFunction {
  private:
   ResponseAction Run() override;
   void DetermineTextLanguageDone(const std::string& langCode);
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateDetermineTextLanguageFunction);
 };
 
 }  // namespace extensions

@@ -1806,6 +1806,28 @@
     ],
     "events": [
       {
+        "name": "onIcsFileOpened",
+        "type": "function",
+        "description": "Called when the user opens a downloaded ics file",
+        "parameters": [
+          {
+            "name": "filePath",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "onWebcalUrlOpened",
+        "type": "function",
+        "description": "Called when the user opens a webcal link",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string"
+          }
+        ]
+      },
+      {
         "name": "onEventCreated",
         "type": "function",
         "description": "Fired when a event is created.",
@@ -1814,102 +1836,6 @@
             "name": "createdEvent",
             "$ref": "CalendarEvent",
             "description": "The created event."
-          }
-        ]
-      },
-      {
-        "name": "onEventRemoved",
-        "type": "function",
-        "description": "Fired when event is deleted.",
-        "parameters": [
-          {
-            "name": "removedEvent",
-            "$ref": "CalendarEvent",
-            "description": "The deleted event type."
-          }
-        ]
-      },
-      {
-        "name": "onEventChanged",
-        "type": "function",
-        "description": "Fired when event is updated.",
-        "parameters": [
-          {
-            "name": "changedEvent",
-            "$ref": "CalendarEvent",
-            "description": "The changed event."
-          }
-        ]
-      },
-      {
-        "name": "onEventTypeCreated",
-        "type": "function",
-        "description": "Fired when a event type is created.",
-        "parameters": [
-          {
-            "name": "createdEventType",
-            "$ref": "EventType",
-            "description": "The created event type."
-          }
-        ]
-      },
-      {
-        "name": "onEventTypeRemoved",
-        "type": "function",
-        "description": "Fired when event type is deleted.",
-        "parameters": [
-          {
-            "name": "removedEventType",
-            "$ref": "EventType",
-            "description": "The deleted event."
-          }
-        ]
-      },
-      {
-        "name": "onEventTypeChanged",
-        "type": "function",
-        "description": "Fired when event type is updated.",
-        "parameters": [
-          {
-            "name": "changedEventType",
-            "$ref": "EventType",
-            "description": "The changed event type."
-          }
-        ]
-      },
-      {
-        "name": "onCalendarCreated",
-        "type": "function",
-        "description": "Fired when a calendar is created.",
-        "parameters": [
-          {
-            "name": "createdCalendar",
-            "$ref": "Calendar",
-            "description": "The created calendar."
-          }
-        ]
-      },
-      {
-        "name": "onCalendarRemoved",
-        "type": "function",
-        "description": "Fired when calendar is deleted.",
-        "parameters": [
-          {
-            "name": "removedCalendar",
-            "$ref": "Calendar",
-            "description": "The deleted calendar."
-          }
-        ]
-      },
-      {
-        "name": "onCalendarChanged",
-        "type": "function",
-        "description": "Fired when calendar is updated.",
-        "parameters": [
-          {
-            "name": "changedCalendar",
-            "$ref": "Calendar",
-            "description": "The changed calendar."
           }
         ]
       },

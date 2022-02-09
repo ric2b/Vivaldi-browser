@@ -3,6 +3,7 @@
 #include "components/content_injection/content_injection_service_impl.h"
 
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/no_destructor.h"
 #include "base/pickle.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
@@ -17,10 +18,16 @@ ServiceImpl::~ServiceImpl() = default;
 absl::optional<int> ServiceImpl::RegisterWorldForJSInjection(
     mojom::JavascriptWorldInfoPtr world_info) {
   static int g_next_world_id = ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION;
+  static base::NoDestructor<std::map<std::string, int>> g_assigned_world_ids;
+
   if (g_next_world_id == ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END)
     return absl::nullopt;
 
-  const int world_id = g_next_world_id++;
+  const auto existing_id = g_assigned_world_ids->find(world_info->stable_id);
+
+  const int world_id = (existing_id == g_assigned_world_ids->end())
+                           ? g_next_world_id++
+                           : existing_id->second;
 
   auto registration =
       mojom::JavascriptWorldRegistration::New(world_id, std::move(world_info));
@@ -30,6 +37,9 @@ absl::optional<int> ServiceImpl::RegisterWorldForJSInjection(
   for (auto& manager : managers_) {
     manager->RegisterJavascriptWorldInfos(std::move(registrations));
   }
+
+  g_assigned_world_ids->emplace(registration->world_info->stable_id,
+                                registration->world_id);
 
   world_registrations_.push_back(std::move(registration));
   return world_id;

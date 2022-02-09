@@ -317,6 +317,11 @@ bool BrowserAccessibilityAndroid::IsMultiselectable() const {
   return HasState(ax::mojom::State::kMultiselectable);
 }
 
+bool BrowserAccessibilityAndroid::IsRangeControlWithoutAriaValueText() const {
+  return GetData().IsRangeValueSupported() &&
+         !HasStringAttribute(ax::mojom::StringAttribute::kValue);
+}
+
 bool BrowserAccessibilityAndroid::IsReportingCheckable() const {
   // To communicate kMixed state Checkboxes, we will rely on state description,
   // so we will not report node as checkable to avoid duplicate utterances.
@@ -459,10 +464,15 @@ bool BrowserAccessibilityAndroid::CanOpenPopup() const {
 const char* BrowserAccessibilityAndroid::GetClassName() const {
   ax::mojom::Role role = GetRole();
 
-  // On Android, contenteditable needs to be handled the same as any
-  // other text field.
-  if (IsTextField())
+  if (IsTextField()) {
+    // On Android, contenteditable needs to be handled the same as any
+    // other text field.
     role = ax::mojom::Role::kTextField;
+  } else if (ui::IsAndroidTextViewCandidate(role) && HasOnlyTextChildren()) {
+    // On Android, we want to report some extra nodes as TextViews. For example,
+    // a <div> that only contains text, or a <p> that only contains text.
+    role = ax::mojom::Role::kStaticText;
+  }
 
   return ui::AXRoleToAndroidClassName(role, PlatformGetParent() != nullptr);
 }
@@ -522,8 +532,9 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
       return IsLeafConsideringChildren();
     }
 
-    // Nodes with only static text can drop their children.
-    if (HasOnlyTextChildren())
+    // Nodes with only static text can drop their children, with the exception
+    // that list markers have a different role and should not be dropped.
+    if (HasOnlyTextChildren() && !HasListMarkerChild())
       return true;
   }
 
@@ -598,8 +609,15 @@ std::u16string BrowserAccessibilityAndroid::GetInnerText() const {
   }
 
   std::u16string text = GetNameAsString16();
-  if (text.empty())
+  if (text.empty()) {
+    // When a node does not have a name (e.g. a label), use its value instead.
     text = value;
+  } else if (ui::IsRangeValueSupported(GetRole()) && !value.empty()) {
+    // For controls that support range values such as sliders, when a non-empty
+    // name is present (e.g. a label), append this to the value so both the
+    // valuetext and label are included, rather than replacing the value.
+    text = value + u", " + text;
+  }
 
   // For almost all focusable nodes we try to get text from contents, but for
   // the root node that's redundant and often way too verbose.
@@ -611,10 +629,10 @@ std::u16string BrowserAccessibilityAndroid::GetInnerText() const {
   if (GetRole() == ax::mojom::Role::kSplitter)
     return text;
 
-  // Append image description strings to the text, if not running as WebView.
+  // Append image description strings to the text.
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-  if (!manager->IsRunningAsWebView()) {
+  if (manager->AllowImageDescriptions()) {
     auto status = GetData().GetImageAnnotationStatus();
     switch (status) {
       case ax::mojom::ImageAnnotationStatus::kEligibleForAnnotation:
@@ -641,7 +659,7 @@ std::u16string BrowserAccessibilityAndroid::GetInnerText() const {
 
   // This is called from IsLeaf, so don't call PlatformChildCount
   // from within this!
-  if (text.empty() && (HasOnlyTextChildren() ||
+  if (text.empty() && ((HasOnlyTextChildren() && !HasListMarkerChild()) ||
                        (IsFocusable() && HasOnlyTextAndImageChildren()))) {
     for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
       text +=
@@ -1022,10 +1040,9 @@ std::u16string BrowserAccessibilityAndroid::GetRoleDescription() const {
   }
 
   // If this node is an image, check status and potentially add unlabeled role.
-  // If running inside a WebView, do not change default image role description.
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-  if (!manager->IsRunningAsWebView()) {
+  if (manager->AllowImageDescriptions()) {
     auto status = GetData().GetImageAnnotationStatus();
     switch (status) {
       case ax::mojom::ImageAnnotationStatus::kEligibleForAnnotation:
@@ -1567,8 +1584,14 @@ std::u16string BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kStrong:
       // No role description.
       break;
+    case ax::mojom::Role::kSubscript:
+      // No role description.
+      break;
     case ax::mojom::Role::kSuggestion:
       message_id = IDS_AX_ROLE_SUGGESTION;
+      break;
+    case ax::mojom::Role::kSuperscript:
+      // No role description.
       break;
     case ax::mojom::Role::kSwitch:
       message_id = IDS_AX_ROLE_SWITCH;
@@ -1649,9 +1672,10 @@ std::u16string BrowserAccessibilityAndroid::GetRoleDescription() const {
 
 int BrowserAccessibilityAndroid::GetItemIndex() const {
   int index = 0;
-  if (GetData().IsRangeValueSupported()) {
+  if (IsRangeControlWithoutAriaValueText()) {
     // Return a percentage here for live feedback in an AccessibilityEvent.
-    // The exact value is returned in RangeCurrentValue.
+    // The exact value is returned in RangeCurrentValue. Exclude sliders with
+    // an aria-valuetext set, as a percentage is not meaningful in those cases.
     float min = GetFloatAttribute(ax::mojom::FloatAttribute::kMinValueForRange);
     float max = GetFloatAttribute(ax::mojom::FloatAttribute::kMaxValueForRange);
     float value = GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange);
@@ -1667,10 +1691,11 @@ int BrowserAccessibilityAndroid::GetItemIndex() const {
 
 int BrowserAccessibilityAndroid::GetItemCount() const {
   int count = 0;
-  if (GetData().IsRangeValueSupported()) {
+  if (IsRangeControlWithoutAriaValueText()) {
     // An AccessibilityEvent can only return integer information about a
     // seek control, so we return a percentage. The real range is returned
-    // in RangeMin and RangeMax.
+    // in RangeMin and RangeMax. Exclude sliders with an aria-valuetext set,
+    // as a percentage is not meaningful in those cases.
     count = 100;
   } else {
     if (IsCollection() && node()->GetSetSize())
@@ -2332,6 +2357,16 @@ bool BrowserAccessibilityAndroid::HasOnlyTextAndImageChildren() const {
     }
   }
   return true;
+}
+
+bool BrowserAccessibilityAndroid::HasListMarkerChild() const {
+  // This is called from IsLeaf, so don't call PlatformChildCount
+  // from within this!
+  for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
+    if (it->GetRole() == ax::mojom::Role::kListMarker)
+      return true;
+  }
+  return false;
 }
 
 bool BrowserAccessibilityAndroid::ShouldExposeValueAsName() const {

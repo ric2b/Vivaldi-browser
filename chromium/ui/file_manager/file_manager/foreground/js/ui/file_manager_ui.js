@@ -11,6 +11,7 @@ import {MenuItem} from 'chrome://resources/js/cr/ui/menu_item.m.js';
 import {Splitter} from 'chrome://resources/js/cr/ui/splitter.js';
 import {queryRequiredElement} from 'chrome://resources/js/util.m.js';
 
+import {DialogType} from '../../../common/js/dialog_type.js';
 import {str, strf, util} from '../../../common/js/util.js';
 import {AllowedPaths} from '../../../common/js/volume_manager_types.js';
 import {VolumeManager} from '../../../externs/volume_manager.js';
@@ -18,7 +19,6 @@ import {FilesPasswordDialog} from '../../elements/files_password_dialog.js';
 import {FilesToast} from '../../elements/files_toast.js';
 import {FilesTooltip} from '../../elements/files_tooltip.js';
 import {BannerController} from '../banner_controller.js';
-import {DialogType} from '../dialog_type.js';
 import {LaunchParam} from '../launch_param.js';
 import {ProvidersModel} from '../providers_model.js';
 
@@ -330,30 +330,6 @@ export class FileManagerUI {
       }
       ComboButton.prototype.showMenu.call(this, shouldSetFocus);
     };
-
-    /**
-     * The menu button for share options
-     * @type {!MultiMenuButton}
-     * @const
-     */
-    this.shareMenuButton =
-        util.queryDecoratedElement('#share-menu-button', MultiMenuButton);
-    const shareMenuButtonToggleRipple =
-        /** @type {!FilesToggleRippleElement} */ (
-            queryRequiredElement('files-toggle-ripple', this.shareMenuButton));
-    this.shareMenuButton.addEventListener('menushow', () => {
-      shareMenuButtonToggleRipple.activated = true;
-    });
-    this.shareMenuButton.addEventListener('menuhide', () => {
-      shareMenuButtonToggleRipple.activated = false;
-    });
-
-    /**
-     * @type {!Menu}
-     * @const
-     */
-    this.shareSubMenu = util.queryDecoratedElement('#share-sub-menu', Menu);
-    this.shareMenuButton.overflow = this.shareSubMenu;
 
     /**
      * Banners in the file list.

@@ -18,21 +18,16 @@ class ContextMenuAPI {
                           const vivaldi::context_menu::DocumentParams& request);
 };
 
-class ContextMenuShowFunction :
-    public ExtensionFunction {
+class ContextMenuShowFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("contextMenu.show",
-                             CONTEXTMENU_SHOW)
+  DECLARE_EXTENSION_FUNCTION("contextMenu.show", CONTEXTMENU_SHOW)
   ContextMenuShowFunction();
 
- protected:
+ private:
   ~ContextMenuShowFunction() override;
 
   // ExtensionFunction
   ExtensionFunction::ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContextMenuShowFunction);
 };
 
 }  // namespace extensions

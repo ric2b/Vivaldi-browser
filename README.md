@@ -49,7 +49,7 @@ git config --global user.email "..."
 #### Committing a version
 
 ```bash
-git clone --depth=1 https://github.com/ric2b/Vivaldi-browser w
+git clone --depth=1 git@github.com:ric2b/Vivaldi-browser.git w
 
 wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
 tar --xz -xf ... && mv vivaldi-source v0 && ls -la

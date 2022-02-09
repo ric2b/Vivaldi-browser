@@ -14,7 +14,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/timer/timer.h"
-#include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/media/session/audio_focus_delegate.h"
 #include "content/browser/media/session/media_session_controller.h"
@@ -149,6 +148,8 @@ MediaSessionUserAction MediaSessionActionToUserAction(
       return MediaSessionUserAction::kHangUp;
     case media_session::mojom::MediaSessionAction::kRaise:
       return MediaSessionUserAction::kRaise;
+    case media_session::mojom::MediaSessionAction::kSetMute:
+      return MediaSessionUserAction::kSetMute;
   }
   NOTREACHED();
   return MediaSessionUserAction::kPlay;
@@ -186,6 +187,10 @@ std::u16string SanitizeMediaTitle(const std::u16string title) {
 
 }  // anonymous namespace
 
+constexpr int MediaSessionImpl::kDurationUpdateMaxAllowance;
+constexpr base::TimeDelta
+    MediaSessionImpl::kDurationUpdateAllowanceIncreaseInterval;
+
 MediaSessionImpl::PlayerIdentifier::PlayerIdentifier(
     MediaSessionPlayerObserver* observer,
     int player_id)
@@ -194,6 +199,11 @@ MediaSessionImpl::PlayerIdentifier::PlayerIdentifier(
 bool MediaSessionImpl::PlayerIdentifier::operator==(
     const PlayerIdentifier& other) const {
   return this->observer == other.observer && this->player_id == other.player_id;
+}
+
+bool MediaSessionImpl::PlayerIdentifier::operator!=(
+    const PlayerIdentifier& other) const {
+  return this->observer != other.observer || this->player_id != other.player_id;
 }
 
 bool MediaSessionImpl::PlayerIdentifier::operator<(
@@ -376,8 +386,9 @@ void MediaSessionImpl::MediaPictureInPictureChanged(
 }
 
 bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
-                                 int player_id,
-                                 media::MediaContentType media_content_type) {
+                                 int player_id) {
+  media::MediaContentType media_content_type = observer->GetMediaContentType();
+
   if (media_content_type == media::MediaContentType::OneShot)
     return AddOneShotPlayer(observer, player_id);
   if (media_content_type == media::MediaContentType::Pepper)
@@ -450,6 +461,9 @@ void MediaSessionImpl::RemovePlayer(MediaSessionPlayerObserver* observer,
   pepper_players_.erase(identifier);
   one_shot_players_.erase(identifier);
 
+  if (guarding_player_id_ && *guarding_player_id_ == identifier)
+    ResetDurationUpdateGuard();
+
   AbandonSystemAudioFocusIfNeeded();
   UpdateRoutedService();
 
@@ -479,6 +493,9 @@ void MediaSessionImpl::RemovePlayers(MediaSessionPlayerObserver* observer) {
     else
       ++it;
   }
+
+  if (guarding_player_id_ && guarding_player_id_->observer == observer)
+    ResetDurationUpdateGuard();
 
   AbandonSystemAudioFocusIfNeeded();
   UpdateRoutedService();
@@ -530,14 +547,29 @@ void MediaSessionImpl::RebuildAndNotifyMediaPositionChanged() {
   absl::optional<media_session::MediaPosition> position;
 
   // If there was a position specified from Blink then we should use that.
-  if (routed_service_ && routed_service_->position())
+  if (routed_service_ && routed_service_->position()) {
     position = routed_service_->position();
+
+    // We do not throttle updates from media session API because there's
+    // no effective way to disdinguish updates from single player or
+    // different players.
+    ResetDurationUpdateGuard();
+  }
 
   // If we only have a single player then we should use the position from that.
   if (!position && normal_players_.size() == 1 && one_shot_players_.empty() &&
       pepper_players_.empty()) {
     auto& first = normal_players_.begin()->first;
     position = first.observer->GetPosition(first.player_id);
+
+    if (should_throttle_duration_update_) {
+      if (!guarding_player_id_ || *guarding_player_id_ != first) {
+        ResetDurationUpdateGuard();
+        guarding_player_id_ = first;
+      }
+
+      position = MaybeGuardDurationUpdate(position);
+    }
   }
 
   if (position == position_)
@@ -890,6 +922,7 @@ MediaSessionImpl::MediaSessionImpl(WebContents* web_contents)
       routed_service_(nullptr) {
 #if defined(OS_ANDROID)
   session_android_ = std::make_unique<MediaSessionAndroid>(this);
+  should_throttle_duration_update_ = true;
 #endif  // defined(OS_ANDROID)
   if (web_contents && web_contents->GetMainFrame() &&
       web_contents->GetMainFrame()->GetView()) {
@@ -1012,6 +1045,8 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
     info->microphone_state = media_session::mojom::MicrophoneState::kUnknown;
     info->camera_state = media_session::mojom::CameraState::kUnknown;
   }
+
+  info->muted = is_muted_;
 
   return info;
 }
@@ -1173,6 +1208,12 @@ void MediaSessionImpl::Raise() {
   delegate->ActivateContents(web_contents());
 }
 
+void MediaSessionImpl::SetMute(bool mute) {
+  DCHECK_EQ(normal_players_.size(), 1u);
+  normal_players_.begin()->first.observer->OnSetMute(
+      normal_players_.begin()->first.player_id, mute);
+}
+
 void MediaSessionImpl::GetMediaImageBitmap(
     const media_session::MediaImage& image,
     int minimum_size_px,
@@ -1203,8 +1244,9 @@ void MediaSessionImpl::GetMediaImageBitmap(
     return;
   }
 
+  const gfx::Size preferred_size(desired_size_px, desired_size_px);
   web_contents()->DownloadImage(
-      image.src, false /* is_favicon */, desired_size_px /* preferred_size */,
+      image.src, false /* is_favicon */, preferred_size,
       desired_size_px /* max_bitmap_size */, false /* bypass_cache */,
       base::BindOnce(&MediaSessionImpl::OnImageDownloadComplete,
                      base::Unretained(this),
@@ -1314,13 +1356,6 @@ bool MediaSessionImpl::AddOneShotPlayer(MediaSessionPlayerObserver* observer,
 void MediaSessionImpl::OnServiceCreated(MediaSessionServiceImpl* service) {
   const auto rfh_id = service->GetRenderFrameHostId();
 
-  if (!BackForwardCacheImpl::IsMediaSessionImplOnServiceCreatedAllowed()) {
-    BackForwardCache::DisableForRenderFrameHost(
-        rfh_id, BackForwardCacheDisable::DisabledReason(
-                    BackForwardCacheDisable::DisabledReasonId::
-                        kMediaSessionImplOnServiceCreated));
-  }
-
   services_[rfh_id] = service;
   UpdateRoutedService();
 }
@@ -1334,13 +1369,15 @@ void MediaSessionImpl::OnServiceDestroyed(MediaSessionServiceImpl* service) {
 
 void MediaSessionImpl::OnMediaSessionPlaybackStateChanged(
     MediaSessionServiceImpl* service) {
-  // Even though the back-forward cache is allowed at OnServiceCreated, it is
-  // disabled when the playback state is changed as this affects the visible UI
-  // for MediaSession.
-  BackForwardCache::DisableForRenderFrameHost(
-      service->GetRenderFrameHostId(),
-      BackForwardCacheDisable::DisabledReason(
-          BackForwardCacheDisable::DisabledReasonId::kMediaSession));
+  if (!BackForwardCacheImpl::IsMediaSessionPlaybackStateChangedAllowed()) {
+    // Even though the back-forward cache is allowed at OnServiceCreated, it is
+    // disabled when the playback state is changed as this affects the visible
+    // UI for MediaSession.
+    BackForwardCache::DisableForRenderFrameHost(
+        service->GetRenderFrameHostId(),
+        BackForwardCacheDisable::DisabledReason(
+            BackForwardCacheDisable::DisabledReasonId::kMediaSession));
+  }
 
   if (service != routed_service_)
     return;
@@ -1438,6 +1475,17 @@ void MediaSessionImpl::UpdateRoutedService() {
   RebuildAndNotifyActionsChanged();
   RebuildAndNotifyMediaSessionInfoChanged();
   RebuildAndNotifyMediaPositionChanged();
+
+  if (routed_service_ &&
+      !BackForwardCacheImpl::IsMediaSessionServiceAllowed()) {
+    // A page in the back-forward cache may affect the media control UI
+    // displayed to users. So it is marked as ineligible as soon as a
+    // MediaSession service is associated with it.
+    BackForwardCache::DisableForRenderFrameHost(
+        routed_service_->GetRenderFrameHostId(),
+        BackForwardCacheDisable::DisabledReason(
+            BackForwardCacheDisable::DisabledReasonId::kMediaSessionService));
+  }
 }
 
 MediaSessionServiceImpl* MediaSessionImpl::ComputeServiceForRouting() {
@@ -1479,6 +1527,11 @@ MediaSessionServiceImpl* MediaSessionImpl::ComputeServiceForRouting() {
   }
 
   return best_frame ? services_[best_frame->GetGlobalId()] : nullptr;
+}
+
+void MediaSessionImpl::OnMediaMutedStatusChanged(bool mute) {
+  is_muted_ = mute;
+  RebuildAndNotifyMediaSessionInfoChanged();
 }
 
 void MediaSessionImpl::OnPictureInPictureAvailabilityChanged() {
@@ -1703,6 +1756,68 @@ void MediaSessionImpl::ForAllPlayers(
     callback.Run(player);
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(MediaSessionImpl)
+absl::optional<media_session::MediaPosition>
+MediaSessionImpl::MaybeGuardDurationUpdate(
+    absl::optional<media_session::MediaPosition> position) {
+  if (!position) {
+    // |position| should never go back to unset state once it's
+    // set. Therefore it's safe to return it here when it's unset.
+    DCHECK(!is_throttling_);
+    return position;
+  }
+
+  if (position_ && position_->duration() == position->duration())
+    return position;
+
+  if (duration_update_allowance_ == 0) {
+    is_throttling_ = true;
+    DCHECK(duration_update_allowance_timer_.IsRunning());
+
+    // Reset the timer so that we can keep the media as livestream
+    // until the time difference between two updates is greater
+    // than |kDurationUpdateAllowanceIncreaseInterval|.
+    duration_update_allowance_timer_.Reset();
+
+    return media_session::MediaPosition(
+        position->playback_rate(), base::TimeDelta::Max(),
+        position->GetPosition(), position->end_of_media());
+  }
+
+  --duration_update_allowance_;
+  DCHECK_GE(duration_update_allowance_, 0);
+  if (!duration_update_allowance_timer_.IsRunning()) {
+    duration_update_allowance_timer_.Start(
+        FROM_HERE, kDurationUpdateAllowanceIncreaseInterval, this,
+        &MediaSessionImpl::IncreaseDurationUpdateAllowance);
+  }
+
+  return position;
+}
+
+void MediaSessionImpl::IncreaseDurationUpdateAllowance() {
+  ++duration_update_allowance_;
+
+  if (duration_update_allowance_ == kDurationUpdateMaxAllowance)
+    duration_update_allowance_timer_.Stop();
+
+  if (is_throttling_) {
+    is_throttling_ = false;
+    RebuildAndNotifyMediaPositionChanged();
+  }
+}
+
+void MediaSessionImpl::ResetDurationUpdateGuard() {
+  duration_update_allowance_timer_.Stop();
+  duration_update_allowance_ = kDurationUpdateMaxAllowance;
+  is_throttling_ = false;
+  guarding_player_id_.reset();
+}
+
+void MediaSessionImpl::SetShouldThrottleDurationUpdateForTest(
+    bool should_throttle) {
+  should_throttle_duration_update_ = should_throttle;
+}
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(MediaSessionImpl);
 
 }  // namespace content

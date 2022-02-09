@@ -48,6 +48,8 @@ class NearbyShareSettings : public nearby_share::mojom::NearbyShareSettings,
 
   // Synchronous getters for C++ clients, mojo setters can be used as is
   bool GetEnabled() const;
+  nearby_share::mojom::FastInitiationNotificationState
+  GetFastInitiationNotificationState() const;
   std::string GetDeviceName() const;
   nearby_share::mojom::DataUsage GetDataUsage() const;
   nearby_share::mojom::Visibility GetVisibility() const;
@@ -62,7 +64,13 @@ class NearbyShareSettings : public nearby_share::mojom::NearbyShareSettings,
       ::mojo::PendingRemote<nearby_share::mojom::NearbyShareSettingsObserver>
           observer) override;
   void GetEnabled(base::OnceCallback<void(bool)> callback) override;
+  void GetFastInitiationNotificationState(
+      base::OnceCallback<
+          void(nearby_share::mojom::FastInitiationNotificationState)> callback)
+      override;
   void SetEnabled(bool enabled) override;
+  void SetFastInitiationNotificationState(
+      nearby_share::mojom::FastInitiationNotificationState state) override;
   void IsOnboardingComplete(base::OnceCallback<void(bool)> callback) override;
   void GetDeviceName(
       base::OnceCallback<void(const std::string&)> callback) override;
@@ -95,9 +103,16 @@ class NearbyShareSettings : public nearby_share::mojom::NearbyShareSettings,
 
  private:
   void OnEnabledPrefChanged();
+  void OnFastInitiationNotificationStatePrefChanged();
   void OnDataUsagePrefChanged();
   void OnVisibilityPrefChanged();
   void OnAllowedContactsPrefChanged();
+  void OnIsOnboardingCompletePrefChanged();
+
+  // If the Nearby Share parent feature is toggled on then Fast Initiation
+  // notifications should be re-enabled unless the user explicitly disabled the
+  // notification sub-feature.
+  void ProcessFastInitiationNotificationParentPrefChanged(bool enabled);
 
   mojo::RemoteSet<nearby_share::mojom::NearbyShareSettingsObserver>
       observers_set_;

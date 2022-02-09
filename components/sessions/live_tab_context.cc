@@ -24,10 +24,10 @@ LiveTab* LiveTabContext::AddRestoredTab(
     const SessionID* tab_id) {
   const std::map<std::string, bool> dummy_page_action_overrides;
   const std::string dummy_ext_data;
-  return AddRestoredTab(
-      navigations, tab_index, selected_navigation, extension_app_id, group,
-      group_visual_data, select, pin, tab_platform_data,
-      user_agent_override, tab_id, dummy_page_action_overrides, dummy_ext_data);
+  return AddRestoredTab(navigations, tab_index, selected_navigation,
+                        extension_app_id, group, group_visual_data, select, pin,
+                        tab_platform_data, user_agent_override, tab_id,
+                        dummy_page_action_overrides, dummy_ext_data);
 }
 
 LiveTab* LiveTabContext::AddRestoredTab(

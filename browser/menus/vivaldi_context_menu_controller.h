@@ -89,12 +89,15 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
  private:
   void InitModel();
-  void PopulateModel(const Element& child, bool dark_text_color,
+  void PopulateModel(const Element& child,
+                     bool dark_text_color,
                      ui::SimpleMenuModel* menu_model);
-  ui::SimpleMenuModel* GetContainerModel(const Container& container, int id,
-      ui::SimpleMenuModel* menu_model);
+  ui::SimpleMenuModel* GetContainerModel(const Container& container,
+                                         int id,
+                                         ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
-  void SetIcon(int command_id, const std::string& icon,
+  void SetIcon(int command_id,
+               const std::string& icon,
                ui::SimpleMenuModel* menu_model);
   void LoadFavicon(int command_id, const std::string& url);
   void OnFaviconDataAvailable(

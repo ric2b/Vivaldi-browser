@@ -54,6 +54,9 @@ class ScopedRemoteUpdateNotes {
     notes_model_->RemoveObserver(observer_);
   }
 
+  ScopedRemoteUpdateNotes(const ScopedRemoteUpdateNotes&) = delete;
+  ScopedRemoteUpdateNotes& operator=(const ScopedRemoteUpdateNotes&) = delete;
+
   ~ScopedRemoteUpdateNotes() {
     // Notify UI intensive observers of NotesModel that all updates have been
     // applied, and that they may now be consumed.
@@ -65,8 +68,6 @@ class ScopedRemoteUpdateNotes {
   vivaldi::NotesModel* const notes_model_;
 
   vivaldi::NotesModelObserver* const observer_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedRemoteUpdateNotes);
 };
 
 std::string ComputeServerDefinedUniqueTagForDebugging(

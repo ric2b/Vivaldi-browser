@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_view.h"
+#include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
@@ -37,11 +38,12 @@ QRCodeGeneratorBubbleController* QRCodeGeneratorBubbleController::Get(
   return controller;
 }
 
-void QRCodeGeneratorBubbleController::ShowBubble(const GURL& url) {
+void QRCodeGeneratorBubbleController::ShowBubble(const GURL& url,
+                                                 bool show_back_button) {
   bubble_shown_ = true;
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
-  qrcode_generator_bubble_ =
-      browser->window()->ShowQRCodeGeneratorBubble(web_contents_, this, url);
+  qrcode_generator_bubble_ = browser->window()->ShowQRCodeGeneratorBubble(
+      web_contents_, this, url, show_back_button);
 
   UpdateIcon();
 }
@@ -68,6 +70,13 @@ void QRCodeGeneratorBubbleController::OnBubbleClosed() {
   }
 }
 
+void QRCodeGeneratorBubbleController::OnBackButtonPressed() {
+  sharing_hub::SharingHubBubbleController* controller =
+      sharing_hub::SharingHubBubbleController::CreateOrGetFromWebContents(
+          web_contents_);
+  controller->ShowBubble();
+}
+
 void QRCodeGeneratorBubbleController::UpdateIcon() {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
   // UpdateIcon() can be called during browser teardown.
@@ -89,6 +98,6 @@ QRCodeGeneratorBubbleController::QRCodeGeneratorBubbleController(
     content::WebContents* web_contents)
     : web_contents_(web_contents) {}
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(QRCodeGeneratorBubbleController)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(QRCodeGeneratorBubbleController);
 
 }  // namespace qrcode_generator

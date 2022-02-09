@@ -24,6 +24,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_timeouts.h"
+#include "base/test/with_feature_override.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -116,6 +117,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "pdf/pdf_features.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 #include "services/network/public/cpp/features.h"
@@ -339,7 +341,7 @@ class LeftMouseClick {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&LeftMouseClick::SendMouseUp, base::Unretained(this)),
-        base::TimeDelta::FromMilliseconds(duration_ms));
+        base::Milliseconds(duration_ms));
   }
 
   // Wait for click completed.
@@ -2349,7 +2351,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, CookieIsolation) {
   replace_host.SetHostStr("localhost");
   set_cookie_url = set_cookie_url.ReplaceComponents(replace_host);
 
-  ui_test_utils::NavigateToURL(browser(), set_cookie_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), set_cookie_url));
   ASSERT_TRUE(RunExtensionTest("platform_apps/web_view/cookie_isolation",
                                {.launch_as_platform_app = true}))
       << message_;
@@ -2369,7 +2371,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, CookieIsolation) {
 IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_PRE_StoragePersistence) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   // We don't care where the main browser is on this test.
-  ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
   ASSERT_TRUE(RunExtensionTest(
       "platform_apps/web_view/storage_persistence",
       {.custom_arg = "PRE_StoragePersistence", .launch_as_platform_app = true}))
@@ -2383,7 +2385,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_PRE_StoragePersistence) {
 IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_StoragePersistence) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   // We don't care where the main browser is on this test.
-  ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
 
   ASSERT_TRUE(RunExtensionTest(
       "platform_apps/web_view/storage_persistence",
@@ -2404,7 +2406,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, DOMStorageIsolation) {
   replace_host.SetHostStr("localhost");
   navigate_to_url = navigate_to_url.ReplaceComponents(replace_host);
 
-  ui_test_utils::NavigateToURL(browser(), navigate_to_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), navigate_to_url));
   ASSERT_TRUE(RunExtensionTest("platform_apps/web_view/dom_storage_isolation",
                                {.launch_as_platform_app = true}));
   // Verify that the browser tab's local/session storage does not have the same
@@ -2441,7 +2443,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, FindabilityIsolation) {
   replace_host.SetHostStr("localhost");
   navigate_to_url = navigate_to_url.ReplaceComponents(replace_host);
 
-  ui_test_utils::NavigateToURL(browser(), navigate_to_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), navigate_to_url));
   ASSERT_TRUE(RunExtensionTest("platform_apps/web_view/findability_isolation",
                                {.launch_as_platform_app = true}));
 }
@@ -2585,6 +2587,46 @@ IN_PROC_BROWSER_TEST_F(WebViewNewWindowTest, OpenURLFromTab_NewWindow_Abort) {
   // Verify that the new <webview> guest ends up at about:blank.
   EXPECT_EQ(GURL(url::kAboutBlankURL),
             new_guest_web_contents->GetLastCommittedURL());
+}
+
+// Verify that we handle gracefully having two webviews in the same
+// BrowsingInstance with COOP values that would normally make it impossible
+// (meaning outside of webviews special case) to group them together.
+// This is a regression test for https://crbug.com/1243711.
+IN_PROC_BROWSER_TEST_F(WebViewNewWindowTest,
+                       NewWindow_DifferentCoopStatesInRelatedWebviews) {
+  // Reusing testNewWindowAndUpdateOpener because it is a convenient way to
+  // obtain 2 webviews in the same BrowsingInstance. The javascript does
+  // nothing more than that.
+  TestHelper("testNewWindowAndUpdateOpener", "web_view/newwindow",
+             NEEDS_TEST_SERVER);
+  GetGuestViewManager()->WaitForNumGuestsCreated(2);
+
+  std::vector<content::WebContents*> guest_contents_list;
+  GetGuestViewManager()->GetGuestWebContentsList(&guest_contents_list);
+  ASSERT_EQ(2u, guest_contents_list.size());
+  content::WebContents* guest1 = guest_contents_list[0];
+  content::WebContents* guest2 = guest_contents_list[1];
+  EXPECT_TRUE(content::WaitForLoadStop(guest1));
+  EXPECT_TRUE(content::WaitForLoadStop(guest2));
+  ASSERT_NE(guest1, guest2);
+
+  // COOP headers are only served over HTTPS. Instantiate an HTTPS server.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  https_server.AddDefaultHandlers(GetChromeTestDataDir());
+  ASSERT_TRUE(https_server.Start());
+
+  // Navigate one of the <webview> to a COOP: Same-Origin page.
+  GURL coop_url(
+      https_server.GetURL("/set-header?"
+                          "Cross-Origin-Opener-Policy: same-origin"));
+
+  // We should not crash trying to load the COOP page.
+  EXPECT_TRUE(content::ExecJs(
+      guest2, content::JsReplace("location.href = $1", coop_url)));
+
+  EXPECT_TRUE(content::WaitForLoadStop(guest2));
 }
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuInspectElement) {
@@ -3831,8 +3873,16 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestFocusWhileFocused) {
   TestHelper("testFocusWhileFocused", "web_view/shim", NO_TEST_SERVER);
 }
 
-// TODO(crbug.com/776539): Disabled due to being flaky.
-IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_NestedGuestContainerBounds) {
+class WebViewTestWithUnseasonedOverride
+    : public base::test::WithFeatureOverride,
+      public WebViewTest {
+ public:
+  WebViewTestWithUnseasonedOverride()
+      : base::test::WithFeatureOverride(chrome_pdf::features::kPdfUnseasoned) {}
+};
+
+IN_PROC_BROWSER_TEST_P(WebViewTestWithUnseasonedOverride,
+                       NestedGuestContainerBounds) {
   TestHelper("testPDFInWebview", "web_view/shim", NO_TEST_SERVER);
 
   std::vector<content::WebContents*> guest_web_contents_list;
@@ -3855,7 +3905,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_NestedGuestContainerBounds) {
 
 // Test that context menu Back/Forward items in a MimeHandlerViewGuest affect
 // the embedder WebContents. See crbug.com/587355.
-IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuNavigationInMimeHandlerView) {
+IN_PROC_BROWSER_TEST_P(WebViewTestWithUnseasonedOverride,
+                       ContextMenuNavigationInMimeHandlerView) {
   TestHelper("testNavigateToPDFInWebview", "web_view/shim", NO_TEST_SERVER);
 
   std::vector<content::WebContents*> guest_web_contents_list;
@@ -3887,9 +3938,12 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuNavigationInMimeHandlerView) {
             web_view_contents->GetLastCommittedURL());
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDialogInPdf) {
+IN_PROC_BROWSER_TEST_P(WebViewTestWithUnseasonedOverride,
+                       Shim_TestDialogInPdf) {
   TestHelper("testDialogInPdf", "web_view/shim", NO_TEST_SERVER);
 }
+
+INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(WebViewTestWithUnseasonedOverride);
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestMailtoLink) {
   TestHelper("testMailtoLink", "web_view/shim", NEEDS_TEST_SERVER);
@@ -4566,7 +4620,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
 IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
                        DISABLED_NoFindInPageForUnattachedGuest) {
   GURL signin_url{"chrome://chrome-signin"};
-  ui_test_utils::NavigateToURL(browser(), signin_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), signin_url));
   auto* embedder_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   auto* attached_guest = GetGuestViewManager()->WaitForNextGuestCreated();

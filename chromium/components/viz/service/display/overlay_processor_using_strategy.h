@@ -121,6 +121,10 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   };
   using StrategyList = std::vector<std::unique_ptr<Strategy>>;
 
+  OverlayProcessorUsingStrategy(const OverlayProcessorUsingStrategy&) = delete;
+  OverlayProcessorUsingStrategy& operator=(
+      const OverlayProcessorUsingStrategy&) = delete;
+
   ~OverlayProcessorUsingStrategy() override;
 
   gfx::Rect GetPreviousFrameOverlaysBoundingRect() const final;
@@ -268,7 +272,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
 
   struct ProposedCandidateKeyHasher {
     std::size_t operator()(const ProposedCandidateKey& k) const {
-      return base::FastHash(base::as_bytes(base::make_span(&k, sizeof(k))));
+      return base::Hash(&k, sizeof(k));
     }
   };
 
@@ -291,8 +295,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   // can downscale without failing.
   float min_working_scale_ = 1.0f;
   float max_failed_scale_ = 0.0f;
-
-  DISALLOW_COPY_AND_ASSIGN(OverlayProcessorUsingStrategy);
 };
 
 }  // namespace viz

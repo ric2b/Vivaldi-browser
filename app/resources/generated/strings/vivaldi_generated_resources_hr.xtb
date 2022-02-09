@@ -24,9 +24,7 @@
 <translation id="159359590073980872">Predmemorija slike</translation>
 <translation id="1601560923496285236">Primijeni</translation>
 <translation id="1603914832182249871">(Privatno)</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskriptori datoteke</translation>
-<translation id="1706625117072057435">Razine povećanja</translation>
 <translation id="1708338024780164500">(Neaktivno)</translation>
 <translation id="1723824996674794290">&amp;Novi prozor</translation>
 <translation id="1729533290416704613">Upravlja i time koja se stranica prikazuje prilikom pretraživanja putem višenamjenskog okvira.</translation>
@@ -57,8 +55,6 @@
 <translation id="2445081178310039857">Obavezan je korijenski direktorij proširenja.</translation>
 <translation id="2470702053775288986">Onemogućena su nepodržana proširenja</translation>
 <translation id="2476578072172137802">Postavke web-lokacije</translation>
-<translation id="2482878487686419369">Obavijesti</translation>
-<translation id="2546283357679194313">Kolačići i podaci o web-lokacijama</translation>
 <translation id="2553440850688409052">Sakrij ovaj dodatak</translation>
 <translation id="26224892172169984">Ne dopusti nijednoj web-lokaciji rukovanje protokolima</translation>
 <translation id="2662876636500006917">Vivaldi web-trgovina</translation>
@@ -78,7 +74,6 @@
 <translation id="2972581237482394796">&amp;Vrati poništeno</translation>
 <translation id="3003623123441819449">CSS predmemorija</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3013291976881901233">MIDI uređaji</translation>
 <translation id="3021678814754966447">&amp;Pogledaj izvor okvira</translation>
 <translation id="3036546437875325427">Omogući Flash</translation>
 <translation id="3080207940057008665">Drugi program na vašem računalu dodao je temu koja može promijeniti način na koji radi Vivaldi.</translation>
@@ -99,7 +94,6 @@
 <translation id="3587482841069643663">Sve</translation>
 <translation id="3678156199662914018">Proširenje: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Zahtjev aplikacije <ph name="APP_NAME" /> za dijeljenje zaslona</translation>
-<translation id="3744111561329211289">Pozadinska sinkronizacija</translation>
 <translation id="3797900183766075808">&amp;Traži pojam "<ph name="SEARCH_TERMS" />" pomoću tražilice <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3800806661949714323">Prikaži sve (preporučeno)</translation>
 <translation id="3838085852053358637">Učitavanje proširenja nije uspjelo</translation>
@@ -165,9 +159,7 @@
 <translation id="5575473780076478375">Anonimno proširenje: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">Upravlja i time koja se stranica prikazuje kada se klikne gumb Početna.</translation>
 <translation id="563535393368633106">Pitaj prije omogućivanja pristupa (preporučeno)</translation>
-<translation id="5649053991847567735">Automatska preuzimanja</translation>
 <translation id="5677928146339483299">Blokirano</translation>
-<translation id="5689516760719285838">Lokacija</translation>
 <translation id="5707185214361380026">Učitavanje proširenja nije uspjelo:</translation>
 <translation id="5715711091495208045">Broker dodatka: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5759728514498647443">Dokumente koje šaljete za ispis putem aplikacije <ph name="APP_NAME" /> može čitati aplikacija <ph name="APP_NAME" />.</translation>
@@ -179,7 +171,6 @@
 <translation id="5979421442488174909">&amp;Prevedi na <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Brisanje podataka web-lokacija</translation>
 <translation id="6042308850641462728">Više</translation>
-<translation id="6059925163896151826">USB uređaji</translation>
 <translation id="6101226222197207147">Dodana je nova aplikacija (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetskom vezom upravlja proširenje</translation>
 <translation id="6169666352732958425">Emitiranje radne površine nije moguće.</translation>
@@ -218,7 +209,6 @@
 <translation id="7423098979219808738">Prvo pitaj</translation>
 <translation id="7427348830195639090">Pozadinska stranica: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Odabirom tog pisača sljedećem proširenju dajete dopuštenje za pristup svojem pisaču:</translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Završi proces</translation>
 <translation id="7576690715254076113">Spari</translation>
 <translation id="7629827748548208700">Kartica: <ph name="TAB_NAME" /></translation>
@@ -253,7 +243,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8032244173881942855">Emitiranje kartice nije moguće.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8261378640211443080">To proširenje nije navedeno u trgovini <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i možda je dodano bez vašeg znanja.</translation>
-<translation id="8270242299912238708">PDF dokumenti</translation>
 <translation id="8339059274628563283">Lokalno pohranjeni podaci web-lokacije <ph name="SITE" /></translation>
 <translation id="8351419472474436977">To proširenje preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>
 <translation id="8382913212082956454">Kopiraj &amp;adresu e-pošte</translation>
@@ -279,7 +268,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="9003647077635673607">Dopusti na svim web mjestima</translation>
 <translation id="9170848237812810038">&amp;Poništi</translation>
 <translation id="9215293857209265904">Dodano je proširenje "<ph name="EXTENSION_NAME" />"</translation>
-<translation id="9219103736887031265">Slike</translation>
 <translation id="93766956588638423">Popravi proširenje</translation>
 <translation id="994289308992179865">&amp;Petlja</translation>
 <translation id="998747458861718449">P&amp;rovjeri</translation>

@@ -24,6 +24,9 @@ class FileImplTest : public testing::Test {
  public:
   FileImplTest() = default;
 
+  FileImplTest(const FileImplTest&) = delete;
+  FileImplTest& operator=(const FileImplTest&) = delete;
+
   mojo::Remote<mojom::Directory> CreateTempDir() {
     return test_helper_.CreateTempDir();
   }
@@ -31,8 +34,6 @@ class FileImplTest : public testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
   DirectoryTestHelper test_helper_;
-
-  DISALLOW_COPY_AND_ASSIGN(FileImplTest);
 };
 
 TEST_F(FileImplTest, CreateWriteCloseRenameOpenRead) {
@@ -82,7 +83,7 @@ TEST_F(FileImplTest, CreateWriteCloseRenameOpenRead) {
     // Open my_file again.
     mojo::Remote<mojom::File> file;
     error = base::File::Error::FILE_ERROR_FAILED;
-    bool handled =
+    handled =
         directory->OpenFile("your_file", file.BindNewPipeAndPassReceiver(),
                             mojom::kFlagRead | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);

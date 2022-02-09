@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "chrome/browser/buildflags.h"
@@ -22,12 +23,12 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/webui/browser_command/browser_command_handler.h"
 #include "chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.h"
 #include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_pref_names.h"
-#include "chrome/browser/ui/webui/new_tab_page/promo_browser_command/promo_browser_command_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
 #include "chrome/browser/ui/webui/realbox/realbox_handler.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
@@ -49,6 +50,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
@@ -76,9 +78,7 @@ namespace {
 
 constexpr char kPrevNavigationTimePrefName[] = "NewTabPage.PrevNavigationTime";
 
-content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
-    Profile* profile,
-    const base::Time& navigation_start_time) {
+content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUINewTabPageHost);
 
@@ -91,13 +91,15 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
                              ->search_terms_data()
                              .GoogleBaseURLValue())
                         .spec());
-  source->AddDouble("navigationStartTime", navigation_start_time.ToJsTime());
 
   source->AddBoolean(
       "handleMostVisitedNavigationExplicitly",
       base::FeatureList::IsEnabled(
           ntp_features::kNtpHandleMostVisitedNavigationExplicitly));
 
+  source->AddBoolean(
+      "oneGoogleBarEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpOneGoogleBar));
   source->AddBoolean("shortcutsEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kNtpShortcuts));
   source->AddBoolean("logoEnabled",
@@ -105,8 +107,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
   source->AddBoolean(
       "middleSlotPromoEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpMiddleSlotPromo));
-  source->AddBoolean("modulesEnabled",
-                     base::FeatureList::IsEnabled(ntp_features::kModules));
   source->AddBoolean(
       "modulesDragAndDropEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpModulesDragAndDrop));
@@ -224,12 +224,32 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
       {"modulesDriveFilesLower", IDS_NTP_MODULES_DRIVE_FILES_LOWER},
       {"modulesDummyLower", IDS_NTP_MODULES_DUMMY_LOWER},
       {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_TITLE},
-      {"modulesPhotosTitle", IDS_NTP_MODULES_PHOTOS_TITLE},
       {"modulesDriveInfo", IDS_NTP_MODULES_DRIVE_INFO},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
       {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
       {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
-      {"modulesPhotosSentence", IDS_NTP_MODULES_PHOTOS_TITLE},
+      {"modulesPhotosInfo", IDS_NTP_MODULES_PHOTOS_INFO},
+      {"modulesPhotosSentence", IDS_NTP_MODULES_PHOTOS_MEMORIES_TITLE},
+      {"modulesPhotosTitle", IDS_NTP_MODULES_PHOTOS_TITLE},
+      {"modulesPhotosMemoriesDisable", IDS_NTP_MODULES_PHOTOS_MEMORIES_DISABLE},
+      {"modulesPhotosMemoriesDisabled",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_DISABLED},
+      {"modulesPhotosMemoriesHideToday",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_HIDE_TODAY},
+      {"modulesPhotosMemoriesHiddenToday",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_HIDDEN_TODAY},
+      {"modulesPhotosMemoriesExplore", IDS_NTP_MODULES_PHOTOS_MEMORIES_EXPLORE},
+      {"modulesPhotosMemoriesWelcomeTitle",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_TITLE},
+      {"modulesPhotosMemoriesWelcomeText",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_TEXT},
+      {"modulesPhotosMemoriesWelcomeButtonOptIn",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_BUTTON_OPT_IN},
+      {"modulesPhotosMemoriesWelcomeButtonOptOut",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_BUTTON_OPT_OUT},
+      {"modulesPhotosMemoriesWelcomeExample",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_EXAMPLE},
+      {"modulesPhotosNew", IDS_NTP_MODULES_PHOTOS_NEW},
       {"modulesTasksInfoTitle", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
       {"modulesTasksInfoClose", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
       {"modulesCartHeaderNew", IDS_NTP_MODULES_CART_HEADER_CHIP_NEW},
@@ -276,8 +296,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
   source->AddBoolean(
       "chromeCartModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpChromeCartModule));
-  source->AddBoolean("driveModuleEnabled",
-                     NewTabPageUI::IsDriveModuleEnabled(profile));
   source->AddBoolean(
       "photosModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpPhotosModule));
@@ -317,6 +335,13 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
   return source;
 }
 
+bool HasCredentials(Profile* profile) {
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  return
+      /* Can be null if Chrome signin is disabled. */ identity_manager &&
+      identity_manager->GetAccountsInCookieJar().signed_in_accounts.size() > 0;
+}
+
 }  // namespace
 
 NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
@@ -335,7 +360,7 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
       // for the unlikely case where the NewTabPageHandler is created before we
       // received the DidStartNavigation event.
       navigation_start_time_(base::Time::Now()) {
-  auto* source = CreateNewTabPageUiHtmlSource(profile_, navigation_start_time_);
+  auto* source = CreateNewTabPageUiHtmlSource(profile_);
   source->AddBoolean(
       "customBackgroundDisabledByPolicy",
       ntp_custom_background_service_->IsCustomBackgroundDisabledByPolicy());
@@ -378,9 +403,10 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
   ntp_custom_background_service_observation_.Observe(
       ntp_custom_background_service_);
 
-  // Populates the load time data with basic theme info.
+  // Populates the load time data with basic info.
   OnThemeChanged();
   OnCustomBackgroundImageUpdated();
+  OnLoad();
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(NewTabPageUI)
@@ -419,9 +445,10 @@ bool NewTabPageUI::IsDriveModuleEnabled(Profile* profile) {
   // TODO(https://crbug.com/1213351): Stop calling the private method
   // FindExtendedPrimaryAccountInfo().
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-  return identity_manager
-      ->FindExtendedPrimaryAccountInfo(signin::ConsentLevel::kSync)
-      .IsManaged();
+  return /* Can be null if Chrome signin is disabled. */ identity_manager &&
+         identity_manager
+             ->FindExtendedPrimaryAccountInfo(signin::ConsentLevel::kSync)
+             .IsManaged();
 }
 
 void NewTabPageUI::BindInterface(
@@ -441,7 +468,7 @@ void NewTabPageUI::BindInterface(
 }
 
 void NewTabPageUI::BindInterface(
-    mojo::PendingReceiver<promo_browser_command::mojom::CommandHandlerFactory>
+    mojo::PendingReceiver<browser_command::mojom::CommandHandlerFactory>
         pending_receiver) {
   if (browser_command_factory_receiver_.is_bound())
     browser_command_factory_receiver_.reset();
@@ -524,14 +551,14 @@ void NewTabPageUI::CreateCustomizeThemesHandler(
 }
 
 void NewTabPageUI::CreateBrowserCommandHandler(
-    mojo::PendingReceiver<promo_browser_command::mojom::CommandHandler>
+    mojo::PendingReceiver<browser_command::mojom::CommandHandler>
         pending_handler) {
-  using promo_browser_command::mojom::Command;
+  using browser_command::mojom::Command;
   std::vector<Command> supported_commands = {
       Command::kOpenSafetyCheck,
       Command::kOpenSafeBrowsingEnhancedProtectionSettings,
   };
-  promo_browser_command_handler_ = std::make_unique<PromoBrowserCommandHandler>(
+  promo_browser_command_handler_ = std::make_unique<BrowserCommandHandler>(
       std::move(pending_handler), profile_, supported_commands);
 }
 
@@ -577,8 +604,13 @@ void NewTabPageUI::OnCustomBackgroundImageUpdated() {
           .custom_background_url;
   url::EncodeURIComponent(custom_background_url.spec().c_str(),
                           custom_background_url.spec().size(), &encoded_url);
-  update->SetString("backgroundImageUrl",
-                    std::string(encoded_url.data(), encoded_url.length()));
+  update->SetString(
+      "backgroundImageUrl",
+      encoded_url.length() > 0
+          ? base::StrCat(
+                {"chrome-untrusted://new-tab-page/custom_background_image?url=",
+                 std::string(encoded_url.data(), encoded_url.length())})
+          : "");
   content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,
                                    std::move(update));
 }
@@ -596,21 +628,19 @@ void NewTabPageUI::DidStartNavigation(
   if (navigation_handle->IsInPrimaryMainFrame() &&
       navigation_handle->GetURL() == GURL(chrome::kChromeUINewTabPageURL)) {
     navigation_start_time_ = base::Time::Now();
-    std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
-    update->SetDoubleKey("navigationStartTime",
-                         navigation_start_time_.ToJsTime());
-    content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,
-                                     std::move(update));
+    OnLoad();
     auto prev_navigation_time =
         profile_->GetPrefs()->GetTime(kPrevNavigationTimePrefName);
     if (!prev_navigation_time.is_null()) {
       base::UmaHistogramCustomTimes(
           "NewTabPage.TimeSinceLastNTP",
-          navigation_start_time_ - prev_navigation_time,
-          base::TimeDelta::FromSeconds(1), base::TimeDelta::FromDays(1), 100);
+          navigation_start_time_ - prev_navigation_time, base::Seconds(1),
+          base::Days(1), 100);
     }
     profile_->GetPrefs()->SetTime(kPrevNavigationTimePrefName,
                                   navigation_start_time_);
+    base::UmaHistogramBoolean("NewTabPage.HasCredentials",
+                              HasCredentials(profile_));
   }
 }
 
@@ -632,6 +662,22 @@ void NewTabPageUI::OnTilesVisibilityPrefChanged() {
   if (most_visited_page_handler_) {
     most_visited_page_handler_->SetShortcutsVisible(IsShortcutsVisible());
   }
+}
+
+void NewTabPageUI::OnLoad() {
+  std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
+  update->SetDoubleKey("navigationStartTime",
+                       navigation_start_time_.ToJsTime());
+  // Only enable modules if account credentials are available as most modules
+  // won't have data to render otherwise.
+
+  update->SetBoolKey("modulesEnabled",
+                     base::FeatureList::IsEnabled(ntp_features::kModules) &&
+                         HasCredentials(profile_));
+  update->SetBoolKey("driveModuleEnabled",
+                     NewTabPageUI::IsDriveModuleEnabled(profile_));
+  content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,
+                                   std::move(update));
 }
 
 // static

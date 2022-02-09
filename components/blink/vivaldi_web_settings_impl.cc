@@ -26,4 +26,4 @@ void WebSettingsImpl::SetVivaldiShowContextMenuOnDoubleClick(bool value) {
   settings_->SetVivaldiShowContextMenuOnDoubleClick(value);
 }
 
-} // namespace blink
+}  // namespace blink

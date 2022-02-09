@@ -21,6 +21,10 @@
 
 class Profile;
 
+namespace base {
+class Location;
+}  // namespace base
+
 namespace apps {
 
 // An app publisher for crosapi web apps. This is a proxy publisher that lives
@@ -57,6 +61,15 @@ class WebAppsCrosapi : public KeyedService,
               int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
               apps::mojom::WindowInfoPtr window_info) override;
+  void LaunchAppWithIntent(const std::string& app_id,
+                           int32_t event_flags,
+                           apps::mojom::IntentPtr intent,
+                           apps::mojom::LaunchSource launch_source,
+                           apps::mojom::WindowInfoPtr window_info) override;
+  void LaunchAppWithFiles(const std::string& app_id,
+                          int32_t event_flags,
+                          apps::mojom::LaunchSource launch_source,
+                          apps::mojom::FilePathsPtr file_paths) override;
   void Uninstall(const std::string& app_id,
                  apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
@@ -67,9 +80,14 @@ class WebAppsCrosapi : public KeyedService,
                     GetMenuModelCallback callback) override;
   void PauseApp(const std::string& app_id) override;
   void UnpauseApp(const std::string& app_id) override;
+  void StopApp(const std::string& app_id) override;
   void OpenNativeSettings(const std::string& app_id) override;
   void SetWindowMode(const std::string& app_id,
                      apps::mojom::WindowMode window_mode) override;
+  void ExecuteContextMenuCommand(const std::string& app_id,
+                                 int command_id,
+                                 const std::string& shortcut_id,
+                                 int64_t display_id) override;
 
   // crosapi::mojom::AppPublisher overrides.
   void OnApps(std::vector<apps::mojom::AppPtr> deltas) override;
@@ -77,6 +95,8 @@ class WebAppsCrosapi : public KeyedService,
       mojo::PendingRemote<crosapi::mojom::AppController> controller) override;
   void OnCapabilityAccesses(
       std::vector<apps::mojom::CapabilityAccessPtr> deltas) override;
+
+  bool LogIfNotConnected(const base::Location& from_here);
 
   void OnCrosapiDisconnected();
   void OnControllerDisconnected();
@@ -88,10 +108,16 @@ class WebAppsCrosapi : public KeyedService,
       GetMenuModelCallback callback,
       crosapi::mojom::MenuItemsPtr crosapi_menu_items);
 
+  void OnLoadIcon(uint32_t icon_effects,
+                  int size_hint_in_dip,
+                  LoadIconCallback callback,
+                  apps::mojom::IconValuePtr icon_value);
+
   mojo::RemoteSet<apps::mojom::Subscriber> subscribers_;
   mojo::Receiver<crosapi::mojom::AppPublisher> receiver_{this};
   mojo::Remote<crosapi::mojom::AppController> controller_;
   Profile* const profile_;
+  bool should_notify_initialized_ = true;
   base::WeakPtrFactory<WebAppsCrosapi> weak_factory_{this};
 };
 

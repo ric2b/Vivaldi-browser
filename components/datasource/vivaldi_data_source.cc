@@ -2,33 +2,33 @@
 
 #include "components/datasource/vivaldi_data_source.h"
 
-#include <memory>
 #include <stddef.h>
+#include <memory>
 #include <string>
 
-#include "app/vivaldi_constants.h"
 #include "base/base64.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/datasource/css_mods_data_source.h"
-#include "components/datasource/local_image_data_source.h"
-#include "components/datasource/notes_attachment_data_source.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/url_request/url_request.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 
+#include "app/vivaldi_constants.h"
+#include "components/datasource/css_mods_data_source.h"
+#include "components/datasource/local_image_data_source.h"
+#include "components/datasource/notes_attachment_data_source.h"
+
 #if defined(OS_WIN)
 #include "components/datasource/desktop_data_source_win.h"
 #endif  // defined(OS_WIN)
 
-VivaldiDataSource::VivaldiDataSource(Profile* profile) :
-profile_(profile->GetOriginalProfile()) {
-
+VivaldiDataSource::VivaldiDataSource(Profile* profile)
+    : profile_(profile->GetOriginalProfile()) {
   std::vector<std::pair<PathType, std::unique_ptr<VivaldiDataClassHandler>>>
       handlers;
 #if defined(OS_WIN)
@@ -38,13 +38,12 @@ profile_(profile->GetOriginalProfile()) {
 #endif  // defined(OS_WIN)
   handlers.emplace_back(PathType::kLocalPath,
                         std::make_unique<LocalImageDataClassHandler>(
-                            VivaldiDataSourcesAPI::PATH_MAPPING_URL));
-  handlers.emplace_back(PathType::kThumbnail,
+                            VivaldiImageStore::kPathMappingUrl));
+  handlers.emplace_back(PathType::kImage,
                         std::make_unique<LocalImageDataClassHandler>(
-                            VivaldiDataSourcesAPI::THUMBNAIL_URL));
-  handlers.emplace_back(
-      PathType::kNotesAttachment,
-      std::make_unique<NotesAttachmentDataClassHandler>());
+                            VivaldiImageStore::kImageUrl));
+  handlers.emplace_back(PathType::kNotesAttachment,
+                        std::make_unique<NotesAttachmentDataClassHandler>());
   handlers.emplace_back(PathType::kCSSMod,
                         std::make_unique<CSSModsDataClassHandler>());
 
@@ -86,7 +85,7 @@ std::string VivaldiDataSource::GetMimeType(const std::string& path) {
 
 bool VivaldiDataSource::AllowCaching(const std::string& path) {
   absl::optional<PathType> type = vivaldi_data_url_utils::ParsePath(path);
-  return type == PathType::kLocalPath || type == PathType::kThumbnail;
+  return type == PathType::kLocalPath || type == PathType::kImage;
 }
 
 /*
@@ -94,11 +93,9 @@ bool VivaldiDataSource::AllowCaching(const std::string& path) {
  */
 
 VivaldiThumbDataSource::VivaldiThumbDataSource(Profile* profile)
-  : VivaldiDataSource(profile) {
-}
+    : VivaldiDataSource(profile) {}
 
-VivaldiThumbDataSource::~VivaldiThumbDataSource() {
-}
+VivaldiThumbDataSource::~VivaldiThumbDataSource() {}
 
 std::string VivaldiThumbDataSource::GetSource() {
   return vivaldi::kVivaldiThumbDataHost;

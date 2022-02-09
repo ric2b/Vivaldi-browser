@@ -19,7 +19,7 @@
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_paths.h" // nogncheck
+#include "chrome/common/chrome_paths.h"  // nogncheck
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -269,11 +269,10 @@ void AdverseAdFilterListService::LoadList(ListFailedCallback callback) {
 
 void AdverseAdFilterListService::LoadList(const base::FilePath& json_filename,
                                           ListFailedCallback callback) {
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
-      base::BindOnce(&AdverseAdFilterListService::LoadListOnIO,
-                     base::Unretained(this), json_filename,
-                     std::move(callback)));
+  base::PostTask(FROM_HERE, {content::BrowserThread::IO},
+                 base::BindOnce(&AdverseAdFilterListService::LoadListOnIO,
+                                base::Unretained(this), json_filename,
+                                std::move(callback)));
 }
 
 /*static*/
@@ -292,7 +291,7 @@ std::string* AdverseAdFilterListService::ReadFileToString(
 }
 
 void AdverseAdFilterListService::ComputeSHA256Sum(const void* data,
-                                               size_t length) {
+                                                  size_t length) {
   sha256_sum_ =
       crypto::SHA256HashString(base::StringPiece((const char*)data, length));
 }
@@ -388,8 +387,7 @@ void AdverseAdFilterListService::ClearSiteList() {
 void AdverseAdFilterListService::PostCallback(ListFailedCallback callback) {
   if (callback.is_null())
     return;
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                           std::move(callback));
+  base::PostTask(FROM_HERE, {content::BrowserThread::UI}, std::move(callback));
 }
 
 // static

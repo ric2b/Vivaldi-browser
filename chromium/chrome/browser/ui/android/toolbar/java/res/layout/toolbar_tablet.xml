@@ -14,7 +14,7 @@
     android:layout_width="match_parent"
     android:layout_height="@dimen/toolbar_height_no_shadow"
     android:layout_marginTop="@dimen/tab_strip_height"
-    android:background="@color/toolbar_background_primary"
+    android:background="?attr/default_bg_color_dynamic"
     android:paddingStart="@dimen/tablet_toolbar_start_padding" >
 
     <LinearLayout
@@ -60,6 +60,7 @@
             android:visibility="gone"
             app:tint="@color/default_icon_color_tint_list" />
 
+        <!-- Vivaldi: Margin changes-->
         <org.chromium.chrome.browser.omnibox.LocationBarTablet
             android:id="@+id/location_bar"
             android:layout_width="0dp"
@@ -68,7 +69,9 @@
             android:layout_gravity="center_vertical"
             android:background="@drawable/modern_toolbar_text_box_background"
             android:paddingStart="@dimen/location_bar_lateral_padding"
-            android:paddingEnd="@dimen/location_bar_lateral_padding" />
+            android:paddingEnd="@dimen/location_bar_lateral_padding"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"/>
 
         <ViewStub
             android:id="@+id/optional_button_stub"

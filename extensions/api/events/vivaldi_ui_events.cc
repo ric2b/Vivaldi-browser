@@ -12,11 +12,12 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
-#include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
+#include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
-#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
@@ -58,8 +59,8 @@ VivaldiBrowserWindow* FindMouseEventWindowFromView(
     bool ignore_native_children = false) {
   if (!root_view->host())
     return nullptr;
-  content::WebContents* web_contents =
-      root_view->host()->delegate()->GetAsWebContents();
+  content::WebContents* web_contents = content::WebContents::FromRenderViewHost(
+      content::RenderViewHostImpl::From(root_view->host()));
   if (!web_contents)
     return nullptr;
   // web_contents is not ourtermost content when the root_view corresponds
@@ -124,7 +125,7 @@ bool IsGestureAltMouseMove(const blink::WebMouseEvent& mouse_event) {
   return IsLoneAltKeyPressed(mouse_event.GetModifiers());
 }
 
-}  //namespace
+}  // namespace
 
 VivaldiUIEvents::MouseGestures::MouseGestures() = default;
 VivaldiUIEvents::MouseGestures::~MouseGestures() = default;
@@ -264,18 +265,18 @@ bool VivaldiUIEvents::FinishMouseOrWheelGesture(bool with_alt) {
     if (VivaldiBrowserWindow* window = FindMouseEventWindowFromId(window_id)) {
       gfx::PointF p =
           TransformToWindowUICoordinates(window, mouse_gestures_->initial_pos);
-      SendEventToUI(
-          window, tabs_private::OnMouseGesture::kEventName,
-          tabs_private::OnMouseGesture::Create(window_id, p.x(), p.y(),
-                                               mouse_gestures_->directions));
+      SendEventToUI(window, tabs_private::OnMouseGesture::kEventName,
+                    tabs_private::OnMouseGesture::Create(
+                        window_id, p.x(), p.y(), mouse_gestures_->directions));
     }
   }
   mouse_gestures_.reset();
   return after_gesture;
 }
 
-bool VivaldiUIEvents::CheckMouseMove(content::RenderWidgetHostViewBase* root_view,
-                                  const blink::WebMouseEvent& mouse_event) {
+bool VivaldiUIEvents::CheckMouseMove(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseEvent& mouse_event) {
   DCHECK_EQ(mouse_event.GetType(), blink::WebInputEvent::Type::kMouseMove);
   bool eat_event = false;
   if (!mouse_gestures_) {
@@ -511,7 +512,7 @@ bool VivaldiUIEvents::DoHandleKeyboardEvent(
   }
 
   content::WebContents* web_contents =
-      widget_host->delegate()->GetAsWebContents();
+      content::WebContentsImpl::FromRenderWidgetHostImpl(widget_host);
   if (!web_contents)
     return false;
   web_contents = web_contents->GetOutermostWebContents();
@@ -682,6 +683,7 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
 
 // static
 void VivaldiUIEvents::SendKeyboardShortcutEvent(
+    SessionID::id_type window_id,
     content::BrowserContext* browser_context,
     const content::NativeWebKeyboardEvent& event,
     bool is_auto_repeat) {
@@ -708,10 +710,10 @@ void VivaldiUIEvents::SendKeyboardShortcutEvent(
                                 shortcut_text) != exceptions.end();
   if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
       is_exception) {
-    ::vivaldi::BroadcastEvent(
-        tabs_private::OnKeyboardShortcut::kEventName,
-        tabs_private::OnKeyboardShortcut::Create(shortcut_text, is_auto_repeat),
-        browser_context);
+    ::vivaldi::BroadcastEvent(tabs_private::OnKeyboardShortcut::kEventName,
+                              tabs_private::OnKeyboardShortcut::Create(
+                                  window_id, shortcut_text, is_auto_repeat),
+                              browser_context);
   }
 }
 

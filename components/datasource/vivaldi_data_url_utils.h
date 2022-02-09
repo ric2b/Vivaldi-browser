@@ -3,10 +3,13 @@
 #ifndef COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_
 #define COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_
 
+#include <string>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_piece.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class FilePath;
@@ -16,7 +19,7 @@ namespace vivaldi_data_url_utils {
 
 enum class PathType {
   kLocalPath,
-  kThumbnail,
+  kImage,
   kCSSMod,
   kNotesAttachment,
 
@@ -43,7 +46,7 @@ std::string GetPathMimeType(base::StringPiece path);
 // mapping.
 bool isOldFormatThumbnailId(base::StringPiece id);
 
-bool IsBookmarkCapureUrl(base::StringPiece id);
+bool IsBookmarkCaptureUrl(base::StringPiece id);
 
 // Construct full vivaldi-data URL from the type and data.
 std::string MakeUrl(PathType type, base::StringPiece data);
@@ -54,17 +57,18 @@ constexpr const char* top_dir(PathType type) {
   return kTypeNames[static_cast<size_t>(type)];
 }
 
-// Read the given file into the vector. Return false when file does not exit
-// or is empty or on errors. The errors are logged. This should only be used
-// on threads that are allowed to block.
-bool ReadFileOnBlockingThread(const base::FilePath& file_path,
-                              std::vector<unsigned char>* buffer);
+// Limit the read size by `ReadFileOnBlockingThread()` to a big but sane limit
+// as the function should not be used to read DVD.iso files.
+constexpr int kMaxAllowedRead = 512 * 1024 * 1024;
 
-// A verssion of the above that returns null on error or empty or non-existent
-// file.
+// Read the given file. Return null when file does not exit or on errors. The
+// errors are logged. If `log_not_found` and `file_path` is not found, treat
+// that as an error and log as well. If the size to read exceds
+// `kMaxAllowedRead`, this will be logged an an error and null is returned.
 scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
-    const base::FilePath& file_path);
+    const base::FilePath& file_path,
+    bool log_not_found = true);
 
-}  // vivaldi_data_url_utils
+}  // namespace vivaldi_data_url_utils
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_

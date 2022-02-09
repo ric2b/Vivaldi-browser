@@ -35,6 +35,13 @@ namespace ash {
 
 namespace {
 
+gfx::ImageSkia GetIconImage() {
+  return gfx::CreateVectorIcon(
+      kShelfOverviewIcon,
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kButtonIconColor));
+}
+
 bool ShouldButtonBeVisible() {
   auto* shell = Shell::Get();
   SessionControllerImpl* session_controller = shell->session_controller();
@@ -70,11 +77,7 @@ OverviewButtonTray::OverviewButtonTray(Shelf* shelf)
     : TrayBackgroundView(shelf),
       icon_(new views::ImageView()),
       scoped_session_observer_(this) {
-  gfx::ImageSkia image = gfx::CreateVectorIcon(
-      kShelfOverviewIcon,
-      AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kButtonIconColor));
-  icon_->SetImage(image);
+  const gfx::ImageSkia image = GetIconImage();
   const int vertical_padding = (kTrayItemSize - image.height()) / 2;
   const int horizontal_padding = (kTrayItemSize - image.width()) / 2;
   icon_->SetBorder(views::CreateEmptyBorder(
@@ -222,6 +225,11 @@ void OverviewButtonTray::HandleLocaleChange() {}
 
 void OverviewButtonTray::HideBubbleWithView(const TrayBubbleView* bubble_view) {
   // This class has no bubbles to hide.
+}
+
+void OverviewButtonTray::OnThemeChanged() {
+  TrayBackgroundView::OnThemeChanged();
+  icon_->SetImage(GetIconImage());
 }
 
 void OverviewButtonTray::UpdateIconVisibility() {

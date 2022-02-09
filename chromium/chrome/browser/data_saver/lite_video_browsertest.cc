@@ -11,8 +11,11 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/lite_video/lite_video_decider.h"
 #include "chrome/browser/lite_video/lite_video_features.h"
 #include "chrome/browser/lite_video/lite_video_hint.h"
+#include "chrome/browser/lite_video/lite_video_keyed_service.h"
+#include "chrome/browser/lite_video/lite_video_keyed_service_factory.h"
 #include "chrome/browser/lite_video/lite_video_navigation_metrics.h"
 #include "chrome/browser/lite_video/lite_video_switches.h"
 #include "chrome/browser/lite_video/lite_video_user_blocklist.h"
@@ -101,6 +104,9 @@ class LiteVideoBrowserTest : public InProcessBrowserTest {
                                                        disabled_features);
   }
 
+  LiteVideoBrowserTest(const LiteVideoBrowserTest&) = delete;
+  LiteVideoBrowserTest& operator=(const LiteVideoBrowserTest&) = delete;
+
   ~LiteVideoBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -138,7 +144,7 @@ class LiteVideoBrowserTest : public InProcessBrowserTest {
                               segment_fetch_delay_before_end);
     RunMediaTestPage(
         has_subframe_video ? "multi_frame_mse_player.html" : "mse_player.html",
-        query_params, base::ASCIIToUTF16(media::kEnded));
+        query_params, base::ASCIIToUTF16(media::kEndedTitle));
   }
 
   // Runs a html page with a list of URL query parameters.
@@ -170,8 +176,6 @@ class LiteVideoBrowserTest : public InProcessBrowserTest {
   GURL media_url_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::HistogramTester histogram_tester_;
-
-  DISALLOW_COPY_AND_ASSIGN(LiteVideoBrowserTest);
 };
 // Fails occasionally on ChromeOS, MacOS, Win, Linux. http://crbug.com/1111570
 // Need to make tests more reliable but feature only targeted
@@ -697,6 +701,184 @@ IN_PROC_BROWSER_TEST_F(LiteVideoPrerenderBrowserTest,
       entry, ukm::builders::LiteVideo::kThrottlingResultName,
       static_cast<int>(
           lite_video::LiteVideoThrottleResult::kThrottleStoppedOnRebuffer));
+}
+
+class LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest
+    : public LiteVideoStopThrottlingOnPlaybackSeekBrowserTest {
+ public:
+  LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest()
+      : prerender_helper_(base::BindRepeating(
+            &LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest::
+                GetWebContents,
+            base::Unretained(this))) {}
+  ~LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest() override =
+      default;
+  LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest(
+      const LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest&) =
+      delete;
+
+  LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest& operator=(
+      const LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest&) =
+      delete;
+
+  void SetUp() override {
+    prerender_helper_.SetUp(&http_server_);
+    LiteVideoBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    LiteVideoStopThrottlingOnPlaybackSeekBrowserTest::SetUpOnMainThread();
+  }
+
+  content::test::PrerenderTestHelper& prerender_test_helper() {
+    return prerender_helper_;
+  }
+
+  content::WebContents* GetWebContents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+ private:
+  content::test::PrerenderTestHelper prerender_helper_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest,
+    ::testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(
+    LiteVideoStopThrottlingOnPlaybackSeekPrerenderBrowserTest,
+    PrerenderingShouldNotAffectPlaybackSeekTest) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  TestMSEPlayback("bear-vp9.webm", "2000", "2000", false);
+
+  // Load the media page in the prerender and the prerendering shouldn't
+  // affect the existing media playback seek test.
+  prerender_test_helper().AddPrerender(media_url());
+
+  RetryForHistogramUntilCountReached(histogram_tester(),
+                                     "Media.VideoHeight.Initial.MSE", 1);
+
+  histogram_tester().ExpectUniqueSample("LiteVideo.HintAgent.HasHint", true, 1);
+
+  // Trigger a media playback seek.
+  ASSERT_TRUE(
+      content::ExecJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      "document.querySelector('video').currentTime = 1"));
+
+  // Verify some responses were throttled and then throttling is stopped.
+  if (should_disable_lite_videos_on_seek()) {
+    RetryForHistogramUntilCountReached(
+        histogram_tester(), "LiteVideo.MediaPlayerSeek.StopThrottling", 1);
+  }
+
+  EXPECT_GE(1U, histogram_tester()
+                    .GetAllSamples("LiteVideo.URLLoader.ThrottleLatency")
+                    .size());
+  EXPECT_EQ(should_disable_lite_videos_on_seek() ? 1U : 0U,
+            histogram_tester()
+                .GetAllSamples("LiteVideo.MediaPlayerSeek.StopThrottling")
+                .size());
+  EXPECT_GE(
+      1U, histogram_tester()
+              .GetAllSamples("LiteVideo.NavigationMetrics.FrameRebufferMapSize")
+              .size());
+
+  // Close the tab to flush the UKM metrics.
+  browser()->tab_strip_model()->GetActiveWebContents()->Close();
+
+  auto entries =
+      ukm_recorder.GetEntriesByName(ukm::builders::LiteVideo::kEntryName);
+  ASSERT_EQ(1u, entries.size());
+  auto* entry = entries[0];
+  ukm_recorder.ExpectEntrySourceHasUrl(entry, media_url());
+  ukm_recorder.ExpectEntryMetric(
+      entry, ukm::builders::LiteVideo::kThrottlingStartDecisionName,
+      static_cast<int>(lite_video::LiteVideoDecision::kAllowed));
+  ukm_recorder.ExpectEntryMetric(
+      entry, ukm::builders::LiteVideo::kBlocklistReasonName,
+      static_cast<int>(lite_video::LiteVideoBlocklistReason::kUnknown));
+}
+
+class LiteVideoDeciderPrerenderBrowserTest : public LiteVideoBrowserTest {
+ public:
+  LiteVideoDeciderPrerenderBrowserTest()
+      : LiteVideoBrowserTest(true /*enable_lite_mode*/,
+                             true /*enable_lite_video_feature*/),
+        prerender_helper_(base::BindRepeating(
+            &LiteVideoDeciderPrerenderBrowserTest::GetWebContents,
+            base::Unretained(this))) {}
+  ~LiteVideoDeciderPrerenderBrowserTest() override = default;
+  LiteVideoDeciderPrerenderBrowserTest(
+      const LiteVideoDeciderPrerenderBrowserTest&) = delete;
+
+  LiteVideoDeciderPrerenderBrowserTest& operator=(
+      const LiteVideoDeciderPrerenderBrowserTest&) = delete;
+
+  void SetUp() override {
+    prerender_helper_.SetUp(&http_server_);
+    LiteVideoBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    LiteVideoBrowserTest::SetUpOnMainThread();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    LiteVideoBrowserTest::SetUpCommandLine(command_line);
+    command_line->RemoveSwitch(
+        lite_video::switches::kLiteVideoForceOverrideDecision);
+    command_line->RemoveSwitch(
+        lite_video::switches::kLiteVideoIgnoreNetworkConditions);
+  }
+
+  content::test::PrerenderTestHelper& prerender_test_helper() {
+    return prerender_helper_;
+  }
+
+  content::WebContents* GetWebContents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+  net::EmbeddedTestServer* http_server() { return &http_server_; }
+
+ private:
+  content::test::PrerenderTestHelper prerender_helper_;
+};
+
+IN_PROC_BROWSER_TEST_F(LiteVideoDeciderPrerenderBrowserTest,
+                       PrerenderingShouldNotRecordLiteVideoDecisionMetrics) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  TestMSEPlayback("bear-vp9.webm", "2700", "500", false);
+
+  // Set the network type to 4G network to test |is_in_primary_main_frame|
+  // behavior in LiteVideoDecider::CanApplyLiteVideo method.
+  Profile* profile =
+      Profile::FromBrowserContext(GetWebContents()->GetBrowserContext());
+  ASSERT_TRUE(profile);
+  lite_video::LiteVideoDecider* lite_video_decider =
+      LiteVideoKeyedServiceFactory::GetForProfile(profile)
+          ->lite_video_decider();
+  lite_video_decider->OnConnectionChanged(
+      network::mojom::ConnectionType::CONNECTION_4G);
+
+  // Load a test page in the prerender.
+  const int host_id = prerender_test_helper().AddPrerender(media_url());
+  content::RenderFrameHost* render_frame_host =
+      prerender_test_helper().GetPrerenderedMainFrameHost(host_id);
+  ASSERT_TRUE(render_frame_host);
+  histogram_tester().ExpectUniqueSample(
+      "LiteVideo.CanApplyLiteVideo.UserBlocklist.MainFrame",
+      lite_video::LiteVideoBlocklistReason::kAllowed, 0);
+
+  // Activate the prerendered page.
+  prerender_test_helper().NavigatePrimaryPage(media_url());
+  histogram_tester().ExpectUniqueSample(
+      "LiteVideo.CanApplyLiteVideo.UserBlocklist.MainFrame",
+      lite_video::LiteVideoBlocklistReason::kAllowed, 1);
 }
 
 }  // namespace

@@ -312,9 +312,10 @@ bool GraphicsLayer::PaintRecursively(
   return repainted;
 }
 
-void GraphicsLayer::PaintForTesting(const IntRect& interest_rect) {
+void GraphicsLayer::PaintForTesting(const IntRect& interest_rect,
+                                    bool record_debug_info) {
   Vector<PreCompositedLayerInfo> pre_composited_layers;
-  PaintController::CycleScope cycle_scope;
+  PaintController::CycleScope cycle_scope(record_debug_info);
   Paint(pre_composited_layers, PaintBenchmarkMode::kNormal, &cycle_scope,
         &interest_rect);
 }
@@ -357,6 +358,7 @@ void GraphicsLayer::Paint(Vector<PreCompositedLayerInfo>& pre_composited_layers,
   auto& paint_controller = GetPaintController();
   if (cycle_scope)
     cycle_scope->AddController(paint_controller);
+  paint_controller.RecordDebugInfo(*this);
 
   absl::optional<PaintChunkSubset> previous_chunks;
   if (ShouldCreateLayersAfterPaint())
@@ -375,7 +377,7 @@ void GraphicsLayer::Paint(Vector<PreCompositedLayerInfo>& pre_composited_layers,
     GraphicsContext context(paint_controller);
     DCHECK(layer_state_) << "No layer state for GraphicsLayer: " << DebugName();
     paint_controller.UpdateCurrentPaintChunkProperties(
-        nullptr, layer_state_->state.GetPropertyTreeState());
+        layer_state_->state.GetPropertyTreeState());
     // If this uses pre-CAP compositing, contents_opaque will be calculated by
     // CompositedLayerMapping; otherwise, it is calculated by PaintChunker.
     paint_controller.SetShouldComputeContentsOpaque(
@@ -412,8 +414,9 @@ void GraphicsLayer::Paint(Vector<PreCompositedLayerInfo>& pre_composited_layers,
     gfx::Size old_layer_size(raster_invalidator.LayerBounds());
     PropertyTreeState property_tree_state = GetPropertyTreeState().Unalias();
     EnsureRasterInvalidator().Generate(
-        raster_invalidation_function_, chunks, FloatPoint(layer_state_->offset),
-        IntSize(Size()), property_tree_state, this);
+        raster_invalidation_function_, chunks,
+        gfx::Vector2dF(layer_state_->offset.X(), layer_state_->offset.Y()),
+        Size(), property_tree_state, this->Id());
 
     absl::optional<RasterUnderInvalidationCheckingParams>
         raster_under_invalidation_params;
@@ -430,7 +433,8 @@ void GraphicsLayer::Paint(Vector<PreCompositedLayerInfo>& pre_composited_layers,
     if (raster_invalidated_ || !cc_display_item_list_ ||
         old_layer_size != Size() || raster_under_invalidation_params) {
       cc_display_item_list_ = PaintChunksToCcLayer::Convert(
-          chunks, property_tree_state, FloatPoint(layer_state_->offset),
+          chunks, property_tree_state,
+          gfx::Vector2dF(layer_state_->offset.X(), layer_state_->offset.Y()),
           cc::DisplayItemList::kTopLevelDisplayItemList,
           base::OptionalOrNullptr(raster_under_invalidation_params));
       raster_invalidated_ = false;
@@ -555,7 +559,7 @@ void GraphicsLayer::TrackRasterInvalidation(const DisplayItemClient& client,
   // directly, e.g. from SetContentsNeedsDisplay(), etc. Other raster
   // invalidations are tracked in RasterInvalidator.
   if (auto* tracking = GetRasterInvalidationTracking())
-    tracking->AddInvalidation(&client, client.DebugName(), rect, reason);
+    tracking->AddInvalidation(client.Id(), client.DebugName(), rect, reason);
 }
 
 String GraphicsLayer::DebugName(const cc::Layer* layer) const {
@@ -645,7 +649,7 @@ void GraphicsLayer::InvalidateContents() {
   }
 }
 
-void GraphicsLayer::InvalidateRaster(const IntRect& rect) {
+void GraphicsLayer::InvalidateRaster(const gfx::Rect& rect) {
   DCHECK(PaintsContentOrHitTest());
   raster_invalidated_ = true;
   CcLayer().SetNeedsDisplayRect(rect);

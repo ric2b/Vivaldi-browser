@@ -210,6 +210,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     virtual ~Delegate() {}
   };
 
+  URLRequest(const URLRequest&) = delete;
+  URLRequest& operator=(const URLRequest&) = delete;
+
   // If destroyed after Start() has been called but while IO is pending,
   // then the request will be effectively canceled and the delegate
   // will not have any more of its methods called.
@@ -683,8 +686,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   }
 
   // The number of bytes in the raw response body (before any decompression,
-  // etc.). This is only available after the final Read completes. Not available
-  // for FTP responses.
+  // etc.). This is only available after the final Read completes.
   int64_t received_response_content_length() const {
     return received_response_content_length_;
   }
@@ -774,6 +776,8 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     send_client_certs_ = send_client_certs;
   }
 
+  bool is_for_websockets() const { return is_for_websockets_; }
+
   void SetIdempotency(Idempotency idempotency) { idempotency_ = idempotency; }
   Idempotency GetIdempotency() const { return idempotency_; }
 
@@ -818,7 +822,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
              RequestPriority priority,
              Delegate* delegate,
              const URLRequestContext* context,
-             NetworkTrafficAnnotationTag traffic_annotation);
+             NetworkTrafficAnnotationTag traffic_annotation,
+             bool is_for_websockets,
+             absl::optional<uint32_t> net_log_source_id);
 
   // Resumes or blocks a request paused by the NetworkDelegate::OnBeforeRequest
   // handler. If |blocked| is true, the request is blocked and an error page is
@@ -937,6 +943,8 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // Notify... methods for this.
   Delegate* delegate_;
 
+  const bool is_for_websockets_;
+
   // Current error status of the job, as a net::Error code. When the job is
   // busy, it is ERR_IO_PENDING. When the job is idle (either completed, or
   // awaiting a call from the URLRequestDelegate before continuing the request),
@@ -1030,8 +1038,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   THREAD_CHECKER(thread_checker_);
 
   base::WeakPtrFactory<URLRequest> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(URLRequest);
 };
 
 }  // namespace net

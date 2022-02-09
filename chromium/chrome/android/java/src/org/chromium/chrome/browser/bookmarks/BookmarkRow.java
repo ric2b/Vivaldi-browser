@@ -65,6 +65,9 @@ public abstract class BookmarkRow
      */
     public BookmarkRow(Context context, AttributeSet attrs) {
         super(context, attrs);
+        if (BookmarkFeatures.isBookmarksVisualRefreshEnabled()) {
+            enableVisualRefresh();
+        }
     }
 
     /**

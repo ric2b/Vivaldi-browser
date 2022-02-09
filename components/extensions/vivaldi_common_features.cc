@@ -21,5 +21,4 @@ void SimpleFeature::set_vivaldi(bool flag) {
   is_vivaldi_feature_ = flag;
 }
 
-
 }  // namespace extensions

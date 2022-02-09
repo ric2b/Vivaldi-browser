@@ -12,7 +12,7 @@
 <translation id="2885378588091291677">Përgjegjësi i detyrave</translation>
 <translation id="3004507951429848293">Duke klikuar butonin 'Pranoj dhe përditësoj' po shprehni miratimin me &lt;a&gt;Kushtet e shërbimit&lt;/a&gt; të Vivaldit</translation>
 <translation id="335985608243443814">Shfletoj...</translation>
-<translation id="3485073444286678268">Është e pasaktë dosja e destinacionit. Lutemi të zgjidhni një tjetër.</translation>
+<translation id="3485073444286678268">Dosja e destinacionit është e pasaktë. Lutemi të zgjidhni një tjetër.</translation>
 <translation id="3642991949832251880">Gjithsesi, do dilni nga Vivaldi?</translation>
 <translation id="3784826321032465839">Instaloni Vivaldin</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
@@ -25,14 +25,15 @@
 <translation id="4619978527973181021">Pranoj dhe instaloj</translation>
 <translation id="479976146866774527">Instalon Vivaldin</translation>
 <translation id="5051728323101947360">Kthej Vivaldin më vete në aplikacion standard</translation>
-<translation id="5167047459440711824">Vërejtje: Vivaldi nuk e ndalon dot mosregjistrimin e historikut të shfletimit nga ana e shtesave. që Për ta çaktivizuar këtë shtesë në këndin privat, mos e zgjidhni si opsion.</translation>
+<translation id="5167047459440711824">Vërejtje: Vivaldi nuk e ndalon dot mosregjistrimin e historikut të shfletimit nga ana e shtesave. Për ta çaktivizuar këtë shtesën në këndin privat, mos e zgjidhni si opsion.</translation>
 <translation id="5247376421371319618">Pranoj dhe përditësoj</translation>
 <translation id="5288672417093782294">Shkoj te parametrat e njoftimeve të Vivaldit</translation>
 <translation id="5302048478445481009">Gjuha</translation>
 <translation id="5743878272102782872">Përgjegjësi i detyrave - Vivaldi</translation>
-<translation id="6569282126279967574">Ua! Vivaldi u bllokua. Të rihapet tani?</translation>
+<translation id="6569282126279967574">Ou! Vivaldi u bllokua. Doni ta rihapni?</translation>
 <translation id="694714344624446243">Instaluesi i Vivaldit</translation>
 <translation id="7658239707568436148">Anuloj</translation>
+<translation id="8031581238030785388">Aplikacionet e Vivaldit</translation>
 <translation id="8773751185824654197">Vëreni: Nëse Vivaldi instalohet ndërkohë që shfletuesi i internetit është ende në punë, dritarja do të mbyllet dhe rihapet</translation>
 <translation id="933060950687965486">Lloji i instalimit</translation>
 </translationbundle>

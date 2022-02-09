@@ -27,6 +27,10 @@ class MODULES_EXPORT InspectorAccessibilityAgent
  public:
   InspectorAccessibilityAgent(InspectedFrames*, InspectorDOMAgent*);
 
+  InspectorAccessibilityAgent(const InspectorAccessibilityAgent&) = delete;
+  InspectorAccessibilityAgent& operator=(const InspectorAccessibilityAgent&) =
+      delete;
+
   static void ProvideTo(LocalFrame* frame);
 
   // Base agent methods.
@@ -44,6 +48,7 @@ class MODULES_EXPORT InspectorAccessibilityAgent
       std::unique_ptr<protocol::Array<protocol::Accessibility::AXNode>>*)
       override;
   protocol::Response getFullAXTree(
+      protocol::Maybe<int> depth,
       protocol::Maybe<int> max_depth,
       protocol::Maybe<String> frame_id,
       std::unique_ptr<protocol::Array<protocol::Accessibility::AXNode>>*)
@@ -127,8 +132,6 @@ class MODULES_EXPORT InspectorAccessibilityAgent
   // The agent needs to keep AXContext because it enables caching of a11y nodes.
   HeapHashMap<WeakMember<Document>, std::unique_ptr<AXContext>>
       document_to_context_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(InspectorAccessibilityAgent);
 };
 
 }  // namespace blink

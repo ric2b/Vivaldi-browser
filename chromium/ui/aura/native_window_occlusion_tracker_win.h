@@ -16,6 +16,7 @@
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/timer/timer.h"
@@ -45,6 +46,11 @@ class AURA_EXPORT NativeWindowOcclusionTrackerWin
   static NativeWindowOcclusionTrackerWin* GetOrCreateInstance();
 
   static void DeleteInstanceForTesting();
+
+  NativeWindowOcclusionTrackerWin(const NativeWindowOcclusionTrackerWin&) =
+      delete;
+  NativeWindowOcclusionTrackerWin& operator=(
+      const NativeWindowOcclusionTrackerWin&) = delete;
 
   // Enables notifying the host of |window| via SetNativeWindowOcclusionState()
   // when the occlusion state has been computed.
@@ -86,11 +92,21 @@ class AURA_EXPORT NativeWindowOcclusionTrackerWin
     // thread.
     static void DeleteInstanceForTesting(base::WaitableEvent* done_event);
 
+    WindowOcclusionCalculator(const WindowOcclusionCalculator&) = delete;
+    WindowOcclusionCalculator& operator=(const WindowOcclusionCalculator&) =
+        delete;
+
     void EnableOcclusionTrackingForWindow(HWND hwnd);
     void DisableOcclusionTrackingForWindow(HWND hwnd);
 
+    // Forces a recalculation of occlusion
+    void ForceRecalculation();
+
     // If a window becomes visible, makes sure event hooks are registered.
     void HandleVisibilityChanged(bool visible);
+
+    // Special handling for when the device is going to sleep or waking up.
+    void HandleResumeSuspend();
 
    private:
     WindowOcclusionCalculator(
@@ -250,8 +266,6 @@ class AURA_EXPORT NativeWindowOcclusionTrackerWin
     SEQUENCE_CHECKER(sequence_checker_);
 
     base::WeakPtrFactory<WindowOcclusionCalculator> weak_factory_{this};
-
-    DISALLOW_COPY_AND_ASSIGN(WindowOcclusionCalculator);
   };
 
   NativeWindowOcclusionTrackerWin();
@@ -277,6 +291,12 @@ class AURA_EXPORT NativeWindowOcclusionTrackerWin
   // This is called when the display is put to sleep. If the display is sleeping
   // it marks app windows as occluded.
   void OnDisplayStateChanged(bool display_on) override;
+
+  // Called when the device resumes from sleep.
+  void OnResume() override;
+
+  // Called before the device goes to sleep.
+  void OnSuspend() override;
 
   // Marks all root windows as either occluded, or if hwnd IsIconic, hidden.
   void MarkNonIconicWindowsOccluded();
@@ -306,8 +326,6 @@ class AURA_EXPORT NativeWindowOcclusionTrackerWin
   bool display_on_ = true;
 
   base::WeakPtrFactory<NativeWindowOcclusionTrackerWin> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NativeWindowOcclusionTrackerWin);
 };
 
 }  // namespace aura

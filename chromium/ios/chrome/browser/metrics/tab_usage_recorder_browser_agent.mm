@@ -308,10 +308,14 @@ void TabUsageRecorderBrowserAgent::RendererTerminated(
       tab_usage_recorder::kRendererTerminationAliveRenderers,
       live_web_states_count);
 
+  UMA_HISTOGRAM_COUNTS_100(
+      tab_usage_recorder::kRendererTerminationTotalTabCount,
+      web_state_list_->count());
+
   // Clear |termination_timestamps_| of timestamps older than
   // |kSecondsBeforeRendererTermination| ago.
-  base::TimeDelta seconds_before = base::TimeDelta::FromSeconds(
-      tab_usage_recorder::kSecondsBeforeRendererTermination);
+  base::TimeDelta seconds_before =
+      base::Seconds(tab_usage_recorder::kSecondsBeforeRendererTermination);
   base::TimeTicks timestamp_boundary = now - seconds_before;
   while (termination_timestamps_.front() < timestamp_boundary) {
     termination_timestamps_.pop_front();

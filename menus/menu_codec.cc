@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "menus/menu_node.h"
 #include "menus/menu_model.h"
+#include "menus/menu_node.h"
 
 namespace menus {
 
@@ -37,8 +37,10 @@ bool MenuCodec::GetVersion(std::string* version, const base::Value& value) {
   return false;
 }
 
-bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
-                       const base::Value& value, bool is_bundle,
+bool MenuCodec::Decode(Menu_Node* root,
+                       Menu_Control* control,
+                       const base::Value& value,
+                       bool is_bundle,
                        const std::string& force_version) {
   if (!value.is_list()) {
     LOG(ERROR) << "Menu Codec: No list";
@@ -66,10 +68,10 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
         const std::string* action = menu.FindStringPath("action");
         const std::string* role = menu.FindStringPath("role");
         const absl::optional<bool> showShortcut =
-          menu.FindBoolPath("showshortcut");
+            menu.FindBoolPath("showshortcut");
         if (action && role) {
-          std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(*guid,
-              Menu_Node::GetNewId());
+          std::unique_ptr<Menu_Node> node =
+              std::make_unique<Menu_Node>(*guid, Menu_Node::GetNewId());
           node->SetType(Menu_Node::MENU);
           node->SetRole(*role);
           node->SetAction(*action);
@@ -94,8 +96,9 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
         }
       } else if (type && *type == "control") {
         const std::string* format = menu.FindStringPath("format");
-        const std::string* version = force_version.empty() ?
-          menu.FindStringPath("version") : &force_version;
+        const std::string* version = force_version.empty()
+                                         ? menu.FindStringPath("version")
+                                         : &force_version;
         const base::Value* deleted_list = menu.FindPath("deleted");
         if (format) {
           control->format = *format;
@@ -114,7 +117,8 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
 #if !defined(OFFICIAL_BUILD)
           if (is_bundle) {
             LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "
-                          "add: " << base::GenerateGUID();
+                          "add: "
+                       << base::GenerateGUID();
           } else {
             LOG(ERROR) << "Menu Codec: Developer - Missing in profile file, "
                           "remove that file.";
@@ -136,7 +140,8 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
   return true;
 }
 
-bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
+bool MenuCodec::DecodeNode(Menu_Node* parent,
+                           const base::Value& value,
                            bool is_bundle) {
   if (value.is_list()) {
     for (const auto& item : value.GetList()) {
@@ -159,7 +164,7 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
 #if defined(OFFICIAL_BUILD)
         return false;
 #else
-        return true;  // Do not stop parsing in devel mode.
+        return true;    // Do not stop parsing in devel mode.
 #endif
       }
       guids_[*guid] = true;
@@ -171,7 +176,8 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
 #if !defined(OFFICIAL_BUILD)
         if (is_bundle) {
           LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "
-                        "add: " << base::GenerateGUID();
+                        "add: "
+                     << base::GenerateGUID();
         } else {
           LOG(ERROR) << "Menu Codec: Developer - Missing in profile file, "
                         "remove that file.";
@@ -185,8 +191,8 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
         LOG(ERROR) << "Menu Codec: Action missing for " << *type;
         return false;
       }
-      std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(*guid,
-          Menu_Node::GetNewId());
+      std::unique_ptr<Menu_Node> node =
+          std::make_unique<Menu_Node>(*guid, Menu_Node::GetNewId());
       node->SetAction(action ? *action : "");
       if (origin == Menu_Node::BUNDLE)
         node->SetOrigin(Menu_Node::BUNDLE);
@@ -242,8 +248,8 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
         // An edge is not set for all containers.
         if (edge) {
           if (*edge != "above" && *edge != "below" && *edge != "off") {
-             LOG(ERROR) << "Menu Codec: Illegal container edge for " << action;
-             return false;
+            LOG(ERROR) << "Menu Codec: Illegal container edge for " << action;
+            return false;
           }
         }
         // The edge was defined after first official build so add a fallback.
@@ -251,16 +257,16 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
         node->SetContainerMode(*container_mode);
         node->SetType(Menu_Node::CONTAINER);
       } else {
-         LOG(ERROR) << "Menu Codec: Illegal type: " << type;
+        LOG(ERROR) << "Menu Codec: Illegal type: " << type;
         return false;
       }
       parent->Add(std::move(node));
     } else {
-       LOG(ERROR) << "Menu Codec: Type missing";
+      LOG(ERROR) << "Menu Codec: Type missing";
       return false;
     }
   } else {
-     LOG(ERROR) << "Menu Codec: Illegal category";
+    LOG(ERROR) << "Menu Codec: Illegal category";
     return false;
   }
   return true;
@@ -359,4 +365,4 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
   return dict;
 }
 
-}  // namespace vivaldi
+}  // namespace menus

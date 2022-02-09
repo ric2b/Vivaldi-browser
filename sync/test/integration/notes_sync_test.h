@@ -9,6 +9,8 @@ class NotesSyncTest : public SyncTest {
  public:
   explicit NotesSyncTest(TestType test_type);
   ~NotesSyncTest() override;
+  NotesSyncTest(const NotesSyncTest&) = delete;
+  NotesSyncTest& operator=(const NotesSyncTest&) = delete;
 
   void SetUp() override;
   void TearDown() override;
@@ -25,9 +27,6 @@ class NotesSyncTest : public SyncTest {
 
  protected:
   void WaitForDataModels(Profile* profile) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NotesSyncTest);
 };
 
 #endif  // SYNC_TEST_INTEGRATION_NOTES_SYNC_TEST_H_

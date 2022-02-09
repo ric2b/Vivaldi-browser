@@ -34,6 +34,9 @@ class PostalAddressTable {
   // happening to avoid thread-safety problems.
   virtual ~PostalAddressTable();
 
+  PostalAddressTable(const PostalAddressTable&) = delete;
+  PostalAddressTable& operator=(const PostalAddressTable&) = delete;
+
   PostalAddressID AddPostalAddress(AddPropertyObject row);
   bool UpdatePostalAddress(UpdatePropertyObject row);
   bool DeletePostalAddress(PostalAddressID postaladdress_id,
@@ -47,9 +50,6 @@ class PostalAddressTable {
  protected:
   virtual sql::Database& GetDB() = 0;
   bool CreatePostalAddressTable();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PostalAddressTable);
 };
 
 }  // namespace contact

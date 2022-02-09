@@ -10,6 +10,7 @@
 #include "components/request_filter/request_filter_manager_factory.h"
 #include "components/request_filter/request_filter_proxying_url_loader_factory.h"
 #include "components/request_filter/request_filter_proxying_websocket.h"
+#include "components/request_filter/request_filter_proxying_webtransport.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -17,6 +18,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/child_process_host.h"
+#include "net/cookies/site_for_cookies.h"
 
 using content::BrowserThread;
 using URLLoaderFactoryType =
@@ -169,7 +171,7 @@ void RequestFilterManager::ProxiedProxyWebSocket(
     int frame_id,
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
@@ -192,7 +194,7 @@ void RequestFilterManager::ProxyWebSocket(
     int frame_id,
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const absl::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
@@ -212,6 +214,43 @@ void RequestFilterManager::ProxyWebSocket(
       std::move(authentication_handler), std::move(header_client),
       has_extra_headers, process_id, frame_id, &request_id_generator_,
       &request_handler_, frame_origin, browser_context_, proxies_.get());
+}
+
+/*static*/
+void RequestFilterManager::ProxiedProxyWebTransport(
+    content::BrowserContext* context,
+    int process_id,
+    int frame_id,
+    const url::Origin& frame_origin,
+    const GURL& url,
+    content::ContentBrowserClient::WillCreateWebTransportCallback callback,
+    mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+        handshake_client,
+    absl::optional<network::mojom::WebTransportErrorPtr> error) {
+  if (error) {
+    std::move(callback).Run(std::move(handshake_client), std::move(error));
+    return;
+  }
+  auto* request_filter_manager =
+      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context);
+  request_filter_manager->ProxyWebTransport(process_id, frame_id, frame_origin,
+                                            url, std::move(callback),
+                                            std::move(handshake_client));
+}
+
+void RequestFilterManager::ProxyWebTransport(
+    int process_id,
+    int frame_id,
+    const url::Origin& frame_origin,
+    const GURL& url,
+    content::ContentBrowserClient::WillCreateWebTransportCallback callback,
+    mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+        handshake_client) {
+  StartWebRequestProxyingWebTransport(
+      browser_context_, process_id, frame_id, frame_origin, url,
+      std::move(handshake_client),
+      request_id_generator_.Generate(MSG_ROUTING_NONE, 0), &request_handler_,
+      *proxies_.get(), std::move(callback));
 }
 
 struct RequestFilterManager::RequestHandler::PendingRequest {
@@ -456,6 +495,15 @@ void RequestFilterManager::RequestHandler::MergeRequestHeaderChanges(
   // No point doing this if we're going to cancel anyway.
   if (pending_request->cancel_request)
     return;
+
+  // No point doing this if the proxying side doesn't care.
+  if (!pending_request->set_request_headers &&
+      !pending_request->removed_request_headers)
+    return;
+
+  // It's neither or both.
+  DCHECK(pending_request->set_request_headers &&
+         pending_request->removed_request_headers);
 
   net::HttpRequestHeaders* request_headers = pending_request->request_headers;
   net::HttpRequestHeaders original_headers = *request_headers;

@@ -9,11 +9,9 @@
 
 namespace vivaldi {
 
-void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {
-}
+void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {}
 
-void MigrateOldPlatformPrefs(PrefService* prefs) {
-}
+void MigrateOldPlatformPrefs(PrefService* prefs) {}
 
 base::Value GetPlatformComputedDefault(const std::string& path) {
   return base::Value();

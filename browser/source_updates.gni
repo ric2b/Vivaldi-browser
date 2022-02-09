@@ -1,3 +1,4 @@
+import ("//vivaldi/testing/testing.gni")
 
 update_target("//chrome/browser:browser") {
   sources += [
@@ -151,12 +152,14 @@ if (!is_android) {
     ]
   }
 
-  update_target("//chrome/test:unit_tests") {
-    sources += [
-      "//vivaldi/browser/stats_reporter_unittest.cc"
-    ]
-    if (is_win) {
-      sources -= [ "../browser/upgrade_detector/registry_monitor_unittest.cc" ]
+  if (vivaldi_build_tests) {
+    update_target("//chrome/test:unit_tests") {
+      sources += [
+        "//vivaldi/browser/stats_reporter_unittest.cc"
+      ]
+      if (is_win) {
+        sources -= [ "../browser/upgrade_detector/registry_monitor_unittest.cc" ]
+      }
     }
   }
 }

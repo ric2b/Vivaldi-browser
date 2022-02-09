@@ -11,8 +11,8 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -76,8 +76,8 @@ void OnUIProcessCrash(base::TerminationStatus status) {
 }  // namespace
 
 VivaldiUIWebContentsDelegate::VivaldiUIWebContentsDelegate(
-  VivaldiBrowserWindow* window)
-  : window_(window) {}
+    VivaldiBrowserWindow* window)
+    : window_(window) {}
 
 VivaldiUIWebContentsDelegate::~VivaldiUIWebContentsDelegate() = default;
 
@@ -87,21 +87,21 @@ void VivaldiUIWebContentsDelegate::Initialize() {
 }
 
 bool VivaldiUIWebContentsDelegate::HandleKeyboardEvent(
-  content::WebContents* source,
-  const content::NativeWebKeyboardEvent& event) {
+    content::WebContents* source,
+    const content::NativeWebKeyboardEvent& event) {
   return window_->HandleKeyboardEvent(event);
 }
 
 void VivaldiUIWebContentsDelegate::ContentsMouseEvent(
-  content::WebContents* source,
-  bool motion,
-  bool exited) {
+    content::WebContents* source,
+    bool motion,
+    bool exited) {
   window_->HandleMouseChange(motion);
 }
 
 bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
-  content::WebContents* source,
-  const blink::WebGestureEvent& event) {
+    content::WebContents* source,
+    const blink::WebGestureEvent& event) {
   // When called this means the user has attempted a gesture on the UI. We do
   // not allow that.
 #if defined(OS_MAC)
@@ -130,18 +130,18 @@ void VivaldiUIWebContentsDelegate::RunFileChooser(
 }
 
 void VivaldiUIWebContentsDelegate::NavigationStateChanged(
-  content::WebContents* source,
-  content::InvalidateTypes changed_flags) {
+    content::WebContents* source,
+    content::InvalidateTypes changed_flags) {
   if (changed_flags &
-    (content::INVALIDATE_TYPE_TAB | content::INVALIDATE_TYPE_TITLE)) {
+      (content::INVALIDATE_TYPE_TAB | content::INVALIDATE_TYPE_TITLE)) {
     window_->UpdateTitleBar();
   }
 }
 
 void VivaldiUIWebContentsDelegate::RequestMediaAccessPermission(
-  content::WebContents* web_contents,
-  const content::MediaStreamRequest& request,
-  content::MediaResponseCallback callback) {
+    content::WebContents* web_contents,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
   DCHECK_EQ(window_->web_contents(), web_contents);
   MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
       web_contents, request, std::move(callback), window_->extension());
@@ -160,9 +160,9 @@ bool VivaldiUIWebContentsDelegate::CheckMediaAccessPermission(
 // it. The implementation for webpages is in WebViewGuest.
 content::PictureInPictureResult
 VivaldiUIWebContentsDelegate::EnterPictureInPicture(
-  content::WebContents* web_contents,
-  const viz::SurfaceId& surface_id,
-  const gfx::Size& natural_size) {
+    content::WebContents* web_contents,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size) {
   return PictureInPictureWindowManager::GetInstance()->EnterPictureInPicture(
       web_contents, surface_id, natural_size);
 }
@@ -172,11 +172,10 @@ void VivaldiUIWebContentsDelegate::ExitPictureInPicture() {
 }
 
 void VivaldiUIWebContentsDelegate::PrintCrossProcessSubframe(
-  content::WebContents* web_contents,
-  const gfx::Rect& rect,
-  int document_cookie,
-  content::RenderFrameHost* subframe_host) const {
-
+    content::WebContents* web_contents,
+    const gfx::Rect& rect,
+    int document_cookie,
+    content::RenderFrameHost* subframe_host) const {
   // |web_contents| is the app-contents which we do not want to print.
   web_contents = content::WebContentsImpl::FromRenderFrameHostID(
       subframe_host->GetProcess()->GetID(), subframe_host->GetRoutingID());
@@ -203,8 +202,7 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
   if (window_->requested_alpha_enabled()) {
     VivaldiNativeAppWindowViews* window_views = window_->views();
     if (window_views && window_views->CanHaveAlphaEnabled()) {
-      content::RenderWidgetHostView* host_view =
-          render_frame_host->GetView();
+      content::RenderWidgetHostView* host_view = render_frame_host->GetView();
       DCHECK(host_view);
       host_view->SetBackgroundColor(SK_ColorTRANSPARENT);
     }
@@ -216,9 +214,9 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
   // just test all keys until we match the kVivaldiAppId host.
   if (window_->GetProfile()->IsOffTheRecord()) {
     PrefService* pref_service =
-      window_->GetProfile()->GetOriginalProfile()->GetPrefs();
+        window_->GetProfile()->GetOriginalProfile()->GetPrefs();
     const base::DictionaryValue* partition_dict =
-      pref_service->GetDictionary(prefs::kPartitionPerHostZoomLevels);
+        pref_service->GetDictionary(prefs::kPartitionPerHostZoomLevels);
     bool match = false;
     for (base::DictionaryValue::Iterator partition(*partition_dict);
          !partition.IsAtEnd() && !match; partition.Advance()) {
@@ -244,7 +242,7 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
                             window_->web_contents());
                     DCHECK(zoom_map);
                     zoom_map->SetZoomLevelForHost(::vivaldi::kVivaldiAppId,
-                      zoom_level.value());
+                                                  zoom_level.value());
                   }
                   break;
                 }
@@ -265,17 +263,17 @@ void VivaldiUIWebContentsDelegate::RenderViewHostChanged(
 }
 
 void VivaldiUIWebContentsDelegate::RenderProcessGone(
-  base::TerminationStatus status) {
+    base::TerminationStatus status) {
   if (status !=
-    base::TerminationStatus::TERMINATION_STATUS_NORMAL_TERMINATION &&
-    status != base::TerminationStatus::TERMINATION_STATUS_STILL_RUNNING) {
+          base::TerminationStatus::TERMINATION_STATUS_NORMAL_TERMINATION &&
+      status != base::TerminationStatus::TERMINATION_STATUS_STILL_RUNNING) {
     OnUIProcessCrash(status);
   }
 }
 
 bool VivaldiUIWebContentsDelegate::OnMessageReceived(
-  const IPC::Message& message,
-  content::RenderFrameHost* sender) {
+    const IPC::Message& message,
+    content::RenderFrameHost* sender) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(VivaldiUIWebContentsDelegate, message,
                                    sender)
@@ -287,7 +285,7 @@ bool VivaldiUIWebContentsDelegate::OnMessageReceived(
 }
 
 void VivaldiUIWebContentsDelegate::DidFinishNavigation(
-  content::NavigationHandle* navigation_handle) {
+    content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->HasCommitted()) {
     LOG(ERROR)
         << "VivaldiUIWebContentsDelegate::DidFinishNavigation: Failed to load "
@@ -301,8 +299,8 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
   // We need to resume the parser here as we do not use the app window
   // bindings.
   content::RenderFrameHostImpl* host =
-    static_cast<content::RenderFrameHostImpl*>(
-      navigation_handle->GetRenderFrameHost());
+      static_cast<content::RenderFrameHostImpl*>(
+          navigation_handle->GetRenderFrameHost());
   DCHECK(host);
   if (host->GetParent() == nullptr) {
     host->GetVivaldiFrameService()->ResumeParser();
@@ -313,8 +311,8 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
 }
 
 void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(
-  content::RenderFrameHost* sender,
-  const std::vector<extensions::DraggableRegion>& regions) {
+    content::RenderFrameHost* sender,
+    const std::vector<extensions::DraggableRegion>& regions) {
   // Only process events for the main frame.
   if (!sender->GetParent()) {
     window_->views()->UpdateDraggableRegions(regions);
@@ -322,8 +320,8 @@ void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(
 }
 
 void VivaldiUIWebContentsDelegate::DidFinishLoad(
-  content::RenderFrameHost* render_frame_host,
-  const GURL& validated_url) {
+    content::RenderFrameHost* render_frame_host,
+    const GURL& validated_url) {
   window_->UpdateTitleBar();
   window_->ForceShow();
 }

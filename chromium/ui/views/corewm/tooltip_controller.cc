@@ -26,8 +26,7 @@ namespace views {
 namespace corewm {
 namespace {
 
-constexpr auto kDefaultHideTooltipTimeoutInMs =
-    base::TimeDelta::FromSeconds(10);
+constexpr auto kDefaultHideTooltipTimeoutInMs = base::Seconds(10);
 
 // Returns true if |target| is a valid window to get the tooltip from.
 // |event_target| is the original target from the event and |target| the window
@@ -168,6 +167,11 @@ void TooltipController::UpdateTooltipFromKeyboard(const gfx::Rect& bounds,
   UpdateIfRequired(TooltipTrigger::kKeyboard);
 
   ResetWindowAtMousePressedIfNeeded(target, /* force_reset */ true);
+}
+
+bool TooltipController::IsTooltipSetFromKeyboard(aura::Window* target) {
+  return target && target == state_manager_->tooltip_parent_window() &&
+         state_manager_->tooltip_trigger() == TooltipTrigger::kKeyboard;
 }
 
 void TooltipController::SetHideTooltipTimeout(aura::Window* target,

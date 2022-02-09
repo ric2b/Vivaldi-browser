@@ -240,7 +240,7 @@ void FakeShillServiceClient::ClearProperties(
   base::ListValue result;
   for (const auto& name : names) {
     // Note: Shill does not send notifications when properties are cleared.
-    result.AppendBoolean(dict->RemoveKey(name));
+    result.Append(dict->RemoveKey(name));
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(result)));
@@ -304,7 +304,7 @@ void FakeShillServiceClient::Disconnect(const dbus::ObjectPath& service_path,
       base::BindOnce(&FakeShillServiceClient::SetProperty,
                      weak_ptr_factory_.GetWeakPtr(), service_path,
                      shill::kStateProperty, base::Value(shill::kStateIdle),
-                     base::DoNothing::Once(), std::move(error_callback)),
+                     base::DoNothing(), std::move(error_callback)),
       GetInteractiveDelay());
   std::move(callback).Run();
 }
@@ -380,16 +380,15 @@ void FakeShillServiceClient::GetEapPassphrase(
 
 void FakeShillServiceClient::RequestTrafficCounters(
     const dbus::ObjectPath& service_path,
-    ListValueCallback callback,
-    ErrorCallback error_callback) {
-  std::move(callback).Run(
-      base::Value::AsListValue(fake_traffic_counters_.Clone()));
+    DBusMethodCallback<base::Value> callback) {
+  std::move(callback).Run(fake_traffic_counters_.Clone());
 }
 
 void FakeShillServiceClient::ResetTrafficCounters(
     const dbus::ObjectPath& service_path,
     base::OnceClosure callback,
     ErrorCallback error_callback) {
+  fake_traffic_counters_.ClearList();
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(callback));
 }
 

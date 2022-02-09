@@ -20,7 +20,6 @@
 #import "ios/web/common/crw_web_view_content_view.h"
 #include "ios/web/common/features.h"
 #import "ios/web/common/uikit_ui_util.h"
-#import "ios/web/js_messaging/crw_js_injector.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #include "ios/web/navigation/block_universal_links_buildflags.h"
 #import "ios/web/navigation/crw_wk_navigation_states.h"
@@ -46,7 +45,6 @@
 #import "ios/web/test/fakes/crw_fake_back_forward_list.h"
 #import "ios/web/test/fakes/crw_fake_wk_frame_info.h"
 #import "ios/web/test/fakes/crw_fake_wk_navigation_action.h"
-#import "ios/web/test/fakes/crw_fake_wk_navigation_response.h"
 #include "ios/web/test/test_url_constants.h"
 #import "ios/web/test/web_test_with_web_controller.h"
 #import "ios/web/test/wk_web_view_crash_utils.h"
@@ -293,7 +291,6 @@ TEST_F(CRWWebControllerTest, WebViewCreatedAfterEnsureWebViewCreated) {
   [web_controller() removeWebView];
   WKWebView* web_view = [web_controller() ensureWebViewCreated];
   EXPECT_TRUE(web_view);
-  EXPECT_NSEQ(web_view, web_controller().jsInjector.webView);
   EXPECT_NSEQ(
       base::SysUTF8ToNSString(web_client->GetUserAgent(UserAgentType::MOBILE)),
       web_view.customUserAgent);
@@ -529,11 +526,12 @@ class CRWWebControllerResponseTest : public CRWWebControllerTest {
       BOOL for_main_frame,
       BOOL can_show_mime_type,
       WKNavigationResponsePolicy* out_policy) WARN_UNUSED_RESULT {
-    CRWFakeWKNavigationResponse* navigation_response =
-        [[CRWFakeWKNavigationResponse alloc] init];
-    navigation_response.response = response;
-    navigation_response.forMainFrame = for_main_frame;
-    navigation_response.canShowMIMEType = can_show_mime_type;
+    id navigation_response =
+        [OCMockObject mockForClass:[WKNavigationResponse class]];
+    OCMStub([navigation_response response]).andReturn(response);
+    OCMStub([navigation_response isForMainFrame]).andReturn(for_main_frame);
+    OCMStub([navigation_response canShowMIMEType])
+        .andReturn(can_show_mime_type);
 
     // Call decidePolicyForNavigationResponse and wait for decisionHandler's
     // callback.
@@ -975,13 +973,13 @@ TEST_F(CRWWebControllerPolicyDeciderTest, ClosedWebStateInShouldAllowRequest) {
 
     // WebStatePolicyDecider overrides
     void ShouldAllowRequest(NSURLRequest* request,
-                            const RequestInfo& request_info,
+                            RequestInfo request_info,
                             PolicyDecisionCallback callback) override {
       test_fixture->DestroyWebState();
       std::move(callback).Run(PolicyDecision::Allow());
     }
     void ShouldAllowResponse(NSURLResponse* response,
-                             bool for_main_frame,
+                             ResponseInfo response_info,
                              PolicyDecisionCallback callback) override {
       std::move(callback).Run(PolicyDecision::Allow());
     }
@@ -1132,6 +1130,9 @@ TEST_F(CRWWebControllerTitleTest, TitleChange) {
    public:
     TitleObserver() = default;
 
+    TitleObserver(const TitleObserver&) = delete;
+    TitleObserver& operator=(const TitleObserver&) = delete;
+
     // Returns number of times |TitleWasSet| was called.
     int title_change_count() { return title_change_count_; }
     // WebStateObserver overrides:
@@ -1140,8 +1141,6 @@ TEST_F(CRWWebControllerTitleTest, TitleChange) {
 
    private:
     int title_change_count_ = 0;
-
-    DISALLOW_COPY_AND_ASSIGN(TitleObserver);
   };
 
   TitleObserver observer;
@@ -1190,7 +1189,7 @@ class ScriptExecutionTest : public WebTestWithWebController {
     __block id script_result = nil;
     __block NSError* script_error = nil;
     __block bool script_executed = false;
-    [web_controller().jsInjector
+    [web_controller()
         executeUserJavaScript:java_script
             completionHandler:^(id local_result, NSError* local_error) {
               script_result = local_result;

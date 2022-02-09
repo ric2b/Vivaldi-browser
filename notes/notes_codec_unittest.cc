@@ -15,8 +15,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "notes/tests/notes_contenthelper.h"
 #include "note_load_details.h"
+#include "notes/tests/notes_contenthelper.h"
 #include "notes_model.h"
 #include "notes_storage.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -70,8 +70,7 @@ void AssertModelsEqual(NotesModel* expected, NotesModel* actual) {
 }  // namespace
 
 std::unique_ptr<NotesModel> CreateTestNotesModel() {
-  std::unique_ptr<NotesModel> model =
-      std::make_unique<NotesModel>(nullptr);
+  std::unique_ptr<NotesModel> model = std::make_unique<NotesModel>(nullptr);
   std::unique_ptr<NoteLoadDetails> details =
       std::make_unique<NoteLoadDetails>();
   model->DoneLoading(std::move(details));
@@ -102,8 +101,7 @@ class NotesCodecTest : public testing::Test {
     const NoteNode* note_node = model->main_node();
     model->AddNote(note_node, 0, kUrl1Title, GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
-    const NoteNode* folder1 =
-        model->AddFolder(note_node, 1, kFolder1Title);
+    const NoteNode* folder1 = model->AddFolder(note_node, 1, kFolder1Title);
     model->AddNote(folder1, 0, kUrl2Title, GURL(kUrl2Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
@@ -279,11 +277,9 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
 
   // add a few extra nodes to notes model and make sure IDs are still uniuqe.
   const NoteNode* notes_node = decoded_model->main_node();
-  decoded_model->AddNote(notes_node, 0, u"new url1",
-                         GURL("http://newurl1.com"),
+  decoded_model->AddNote(notes_node, 0, u"new url1", GURL("http://newurl1.com"),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
-  decoded_model->AddNote(notes_node, 0, u"new url2",
-                         GURL("http://newurl2.com"),
+  decoded_model->AddNote(notes_node, 0, u"new url2", GURL("http://newurl2.com"),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
 
   ExpectIDsUnique(decoded_model.get());
@@ -303,13 +299,12 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
   // Add a couple of more items to the decoded notes model and make sure
   // ID persistence is working properly.
   const NoteNode* notes_node = decoded_model->main_node();
-  decoded_model->AddNote(notes_node, notes_node->children().size(),
-                         kUrl3Title, GURL(kUrl3Url),
+  decoded_model->AddNote(notes_node, notes_node->children().size(), kUrl3Title,
+                         GURL(kUrl3Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
   const NoteNode* folder2_node = decoded_model->AddFolder(
       notes_node, notes_node->children().size(), kFolder2Title);
-  decoded_model->AddNote(folder2_node, 0, kUrl4Title,
-                         GURL(kUrl4Url),
+  decoded_model->AddNote(folder2_node, 0, kUrl4Title, GURL(kUrl4Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
 
   NotesCodec encoder2;

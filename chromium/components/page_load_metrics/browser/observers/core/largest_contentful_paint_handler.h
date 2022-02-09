@@ -88,6 +88,11 @@ class LargestContentfulPaintHandler {
   using FrameTreeNodeId = int;
   static void SetTestMode(bool enabled);
   LargestContentfulPaintHandler();
+
+  LargestContentfulPaintHandler(const LargestContentfulPaintHandler&) = delete;
+  LargestContentfulPaintHandler& operator=(
+      const LargestContentfulPaintHandler&) = delete;
+
   ~LargestContentfulPaintHandler();
 
   // Returns true if the out parameters are assigned values.
@@ -120,6 +125,10 @@ class LargestContentfulPaintHandler {
   const ContentfulPaintTimingInfo& SubframesLargestContentfulPaint() const {
     return subframe_contentful_paint_.MergeTextAndImageTiming();
   }
+  const ContentfulPaintTimingInfo& CrossSiteSubframesLargestContentfulPaint()
+      const {
+    return cross_site_subframe_contentful_paint_.MergeTextAndImageTiming();
+  }
   const ContentfulPaintTimingInfo& MainFrameLargestImagePaint() const {
     return main_frame_contentful_paint_.Image();
   }
@@ -141,6 +150,12 @@ class LargestContentfulPaintHandler {
           largest_contentful_paint,
       const absl::optional<base::TimeDelta>&
           first_input_or_scroll_notified_timestamp,
+      const base::TimeDelta& navigation_start_offset);
+  // RecordCrossSiteSubframeTiming updates
+  // `cross_site_subframe_contentful_paint_` with a new lcp candidate.
+  void RecordCrossSiteSubframeTiming(
+      const page_load_metrics::mojom::LargestContentfulPaintTiming&
+          largest_contentful_paint,
       const base::TimeDelta& navigation_start_offset);
   void RecordMainFrameTiming(
       const page_load_metrics::mojom::LargestContentfulPaintTiming&
@@ -167,6 +182,9 @@ class LargestContentfulPaintHandler {
   }
   ContentfulPaint main_frame_contentful_paint_;
   ContentfulPaint subframe_contentful_paint_;
+  // `cross_site_subframe_contentful_paint_` keeps track of the most plausible
+  // LCP candidate computed from the cross-site subframes.
+  ContentfulPaint cross_site_subframe_contentful_paint_;
 
   // Used for Telemetry to distinguish the LCP events from different
   // navigations.
@@ -179,7 +197,6 @@ class LargestContentfulPaintHandler {
   // Navigation start offsets for the most recently committed document in each
   // frame.
   std::map<FrameTreeNodeId, base::TimeDelta> subframe_navigation_start_offset_;
-  DISALLOW_COPY_AND_ASSIGN(LargestContentfulPaintHandler);
 };
 
 }  // namespace page_load_metrics

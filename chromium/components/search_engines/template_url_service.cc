@@ -248,6 +248,9 @@ class TemplateURLService::Scoper {
     ++service_->outstanding_scoper_handles_;
   }
 
+  Scoper(const Scoper&) = delete;
+  Scoper& operator=(const Scoper&) = delete;
+
   // When a Scoper is destroyed, the handle count is updated. If the handle
   // count is at zero, notify the observers that the model has changed if
   // service is loaded and model was mutated.
@@ -270,8 +273,6 @@ class TemplateURLService::Scoper {
  private:
   std::unique_ptr<KeywordWebDataService::BatchModeScoper> batch_mode_scoper_;
   TemplateURLService* service_;
-
-  DISALLOW_COPY_AND_ASSIGN(Scoper);
 };
 
 // TemplateURLService ---------------------------------------------------------
@@ -653,6 +654,17 @@ void TemplateURLService::ResetTemplateURL(TemplateURL* url,
   Update(url, TemplateURL(data));
 }
 
+void TemplateURLService::SetIsActiveTemplateURL(TemplateURL* url,
+                                                bool is_active) {
+  DCHECK(url);
+
+  TemplateURLData data(url->data());
+  data.is_active = is_active ? TemplateURLData::ActiveStatus::kTrue
+                             : TemplateURLData::ActiveStatus::kFalse;
+
+  Update(url, TemplateURL(data));
+}
+
 TemplateURL* TemplateURLService::CreatePlayAPISearchEngine(
     const std::u16string& title,
     const std::u16string& keyword,
@@ -1028,8 +1040,8 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
   // We've started syncing, so set our origin member to the base Sync value.
   // As we move through Sync Code, we may set this to increasingly specific
   // origins so we can tell what exactly caused a DSP change.
-  base::AutoReset<DefaultSearchChangeOrigin> change_origin(&dsp_change_origin_,
-      DSP_CHANGE_SYNC_UNINTENTIONAL);
+  base::AutoReset<DefaultSearchChangeOrigin> change_origin_unintentional(
+      &dsp_change_origin_, DSP_CHANGE_SYNC_UNINTENTIONAL);
 
   syncer::SyncChangeList new_changes;
   syncer::SyncError error;
@@ -1090,7 +1102,7 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
         LogSearchTemplateURLEvent(SYNC_UPDATE_CONVERTED_TO_ADD);
       }
 
-      base::AutoReset<DefaultSearchChangeOrigin> change_origin(
+      base::AutoReset<DefaultSearchChangeOrigin> change_origin_add(
           &dsp_change_origin_, DSP_CHANGE_SYNC_ADD);
       // Force the local ID to kInvalidTemplateURLID so we can add it.
       TemplateURLData data(turl->data());
@@ -1302,7 +1314,7 @@ std::string TemplateURLService::GetSessionToken() {
   }
 
   // Extend expiration time another 60 seconds.
-  token_expiration_time_ = current_time + base::TimeDelta::FromSeconds(60);
+  token_expiration_time_ = current_time + base::Seconds(60);
   return current_token_;
 }
 
@@ -1459,10 +1471,9 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
   if (reset_keyword || deduped) {
     if (reset_keyword)
       turl->ResetKeywordIfNecessary(search_terms_data, true);
-    syncer::SyncData sync_data = CreateSyncDataFromTemplateURL(*turl);
-    change_list->push_back(syncer::SyncChange(FROM_HERE,
-                                              syncer::SyncChange::ACTION_UPDATE,
-                                              sync_data));
+    syncer::SyncData updated_sync_data = CreateSyncDataFromTemplateURL(*turl);
+    change_list->push_back(syncer::SyncChange(
+        FROM_HERE, syncer::SyncChange::ACTION_UPDATE, updated_sync_data));
   } else if (turl->IsGoogleSearchURLWithReplaceableKeyword(search_terms_data)) {
     if (!existing_turl) {
       // We're adding a new TemplateURL that uses the Google base URL, so set
@@ -2047,10 +2058,10 @@ void TemplateURLService::MergeInSyncTemplateURL(
     if (conflicting_turl == GetDefaultSearchProvider() ||
         conflicting_turl->IsBetterThanEngineWithConflictingKeyword(sync_turl)) {
       ResetTemplateURLGUID(conflicting_turl, sync_turl->sync_guid());
-      syncer::SyncData sync_data =
+      syncer::SyncData updated_sync_data =
           CreateSyncDataFromTemplateURL(*conflicting_turl);
       change_list->push_back(syncer::SyncChange(
-          FROM_HERE, syncer::SyncChange::ACTION_UPDATE, sync_data));
+          FROM_HERE, syncer::SyncChange::ACTION_UPDATE, updated_sync_data));
       // Note that in this case we do not add the Sync TemplateURL to the
       // local model, since we've effectively "merged" it in by updating the
       // local conflicting entry with its sync_guid.

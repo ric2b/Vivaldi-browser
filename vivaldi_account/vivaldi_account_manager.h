@@ -32,7 +32,7 @@ class VivaldiAccountManager : public KeyedService,
     NONE = 0,
     NETWORK_ERROR = 1,
     SERVER_ERROR = 2,
-    INVALID_CREDENTIALS= 3
+    INVALID_CREDENTIALS = 3
   };
 
   // Keeps data about errors encountered during an attempt to communicate with
@@ -81,6 +81,8 @@ class VivaldiAccountManager : public KeyedService,
 
   explicit VivaldiAccountManager(Profile* profile);
   ~VivaldiAccountManager() override;
+  VivaldiAccountManager(const VivaldiAccountManager&) = delete;
+  VivaldiAccountManager& operator=(const VivaldiAccountManager&) = delete;
 
   // Attempts to log in to the vivaldi account server. If |save_password| is
   // true, the provided credentials will be saved to the password manager if the
@@ -181,8 +183,6 @@ class VivaldiAccountManager : public KeyedService,
 
   FetchError last_token_fetch_error_;
   FetchError last_account_info_fetch_error_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAccountManager);
 };
 
 }  // namespace vivaldi

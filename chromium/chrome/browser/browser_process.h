@@ -46,6 +46,10 @@ class WebRtcLogUploader;
 class IntranetRedirectDetector;
 #endif
 
+namespace breadcrumbs {
+class BreadcrumbPersistentStorageManager;
+}
+
 namespace network {
 class NetworkQualityTracker;
 class SharedURLLoaderFactory;
@@ -112,6 +116,10 @@ class TabManager;
 class BrowserProcess {
  public:
   BrowserProcess();
+
+  BrowserProcess(const BrowserProcess&) = delete;
+  BrowserProcess& operator=(const BrowserProcess&) = delete;
+
   virtual ~BrowserProcess();
 
   // Invoked when the user is logging out/shutting down. When logging off we may
@@ -269,8 +277,10 @@ class BrowserProcess {
 
   virtual BuildState* GetBuildState() = 0;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(BrowserProcess);
+  // Returns the BreadcrumbPersistentStorageManager writing breadcrumbs to disk,
+  // or nullptr if breadcrumbs logging is disabled.
+  virtual breadcrumbs::BreadcrumbPersistentStorageManager*
+  GetBreadcrumbPersistentStorageManager() = 0;
 };
 
 extern BrowserProcess* g_browser_process;

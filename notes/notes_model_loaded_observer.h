@@ -17,14 +17,14 @@ namespace vivaldi {
 class NotesModelLoadedObserver : public NotesModelObserver {
  public:
   explicit NotesModelLoadedObserver(Profile* profile);
+  NotesModelLoadedObserver(const NotesModelLoadedObserver&) = delete;
+  NotesModelLoadedObserver& operator=(const NotesModelLoadedObserver&) = delete;
 
  private:
   void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
   void NotesModelBeingDeleted(NotesModel* model) override;
 
   Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesModelLoadedObserver);
 };
 
 }  // namespace vivaldi

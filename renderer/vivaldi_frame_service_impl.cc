@@ -240,8 +240,11 @@ void VivaldiFrameServiceImpl::GetSpatialNavigationRects(
 
 void VivaldiFrameServiceImpl::GetFocusedElementInfo(
     GetFocusedElementInfoCallback callback) {
-  blink::WebLocalFrame* frame = render_frame_->GetWebFrame();
-
+  blink::WebLocalFrame* frame =
+      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
+  if (!frame) {
+    frame = render_frame_->GetWebFrame();
+  }
   if (!frame) {
     std::move(callback).Run("", "", false, "");
     return;

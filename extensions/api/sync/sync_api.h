@@ -41,8 +41,6 @@ class SyncEventRouter : public syncer::SyncServiceObserver {
 
  private:
   Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncEventRouter);
 };
 
 class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
@@ -88,8 +86,6 @@ class SyncStartFunction : public ExtensionFunction {
   ~SyncStartFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncStartFunction);
 };
 
 class SyncStopFunction : public ExtensionFunction {
@@ -101,8 +97,6 @@ class SyncStopFunction : public ExtensionFunction {
   ~SyncStopFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncStopFunction);
 };
 
 class SyncSetEncryptionPasswordFunction : public ExtensionFunction {
@@ -115,8 +109,6 @@ class SyncSetEncryptionPasswordFunction : public ExtensionFunction {
   ~SyncSetEncryptionPasswordFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncSetEncryptionPasswordFunction);
 };
 
 class SyncBackupEncryptionTokenFunction : public ExtensionFunction {
@@ -130,8 +122,6 @@ class SyncBackupEncryptionTokenFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
   void OnBackupDone(bool result);
-
-  DISALLOW_COPY_AND_ASSIGN(SyncBackupEncryptionTokenFunction);
 };
 
 class SyncRestoreEncryptionTokenFunction : public ExtensionFunction {
@@ -145,8 +135,6 @@ class SyncRestoreEncryptionTokenFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
   void OnRestoreDone(std::unique_ptr<std::string> token, bool result);
-
-  DISALLOW_COPY_AND_ASSIGN(SyncRestoreEncryptionTokenFunction);
 };
 
 class SyncGetDefaultSessionNameFunction : public ExtensionFunction {
@@ -161,8 +149,6 @@ class SyncGetDefaultSessionNameFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnGetDefaultSessionName(const std::string& session_name);
-
-  DISALLOW_COPY_AND_ASSIGN(SyncGetDefaultSessionNameFunction);
 };
 
 class SyncSetTypesFunction : public ExtensionFunction {
@@ -174,8 +160,6 @@ class SyncSetTypesFunction : public ExtensionFunction {
   ~SyncSetTypesFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncSetTypesFunction);
 };
 
 class SyncGetEngineStateFunction : public ExtensionFunction {
@@ -187,8 +171,6 @@ class SyncGetEngineStateFunction : public ExtensionFunction {
   ~SyncGetEngineStateFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncGetEngineStateFunction);
 };
 
 class SyncGetLastCycleStateFunction : public ExtensionFunction {
@@ -201,8 +183,6 @@ class SyncGetLastCycleStateFunction : public ExtensionFunction {
   ~SyncGetLastCycleStateFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncGetLastCycleStateFunction);
 };
 
 class SyncSetupCompleteFunction : public ExtensionFunction {
@@ -214,8 +194,6 @@ class SyncSetupCompleteFunction : public ExtensionFunction {
   ~SyncSetupCompleteFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncSetupCompleteFunction);
 };
 
 class SyncClearDataFunction : public ExtensionFunction {
@@ -227,9 +205,8 @@ class SyncClearDataFunction : public ExtensionFunction {
   ~SyncClearDataFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
 };
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SYNC_SYNC_API_H_

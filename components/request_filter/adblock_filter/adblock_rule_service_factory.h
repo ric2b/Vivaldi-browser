@@ -17,18 +17,18 @@ class RuleServiceFactory : public BrowserContextKeyedServiceFactory {
   static RuleServiceFactory* GetInstance();
 
  private:
-  friend struct base::DefaultSingletonTraits<RuleServiceFactory>;
+  friend base::DefaultSingletonTraits<RuleServiceFactory>;
 
   RuleServiceFactory();
   ~RuleServiceFactory() override;
+  RuleServiceFactory(const RuleServiceFactory&) = delete;
+  RuleServiceFactory& operator=(const RuleServiceFactory&) = delete;
 
   // BrowserContextKeyedBaseFactory methods:
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(RuleServiceFactory);
 };
 
 }  // namespace adblock_filter

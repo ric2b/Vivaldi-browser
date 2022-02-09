@@ -31,6 +31,10 @@ ShillIPConfigClient* g_instance = nullptr;
 class ShillIPConfigClientImpl : public ShillIPConfigClient {
  public:
   explicit ShillIPConfigClientImpl(dbus::Bus* bus) : bus_(bus) {}
+
+  ShillIPConfigClientImpl(const ShillIPConfigClientImpl&) = delete;
+  ShillIPConfigClientImpl& operator=(const ShillIPConfigClientImpl&) = delete;
+
   ~ShillIPConfigClientImpl() override = default;
 
   ////////////////////////////////////
@@ -81,8 +85,6 @@ class ShillIPConfigClientImpl : public ShillIPConfigClient {
 
   dbus::Bus* bus_;
   HelperMap helpers_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShillIPConfigClientImpl);
 };
 
 void ShillIPConfigClientImpl::GetProperties(
@@ -90,7 +92,10 @@ void ShillIPConfigClientImpl::GetProperties(
     DBusMethodCallback<base::Value> callback) {
   dbus::MethodCall method_call(shill::kFlimflamIPConfigInterface,
                                shill::kGetPropertiesFunction);
-  GetHelper(ipconfig_path)->CallValueMethod(&method_call, std::move(callback));
+  GetHelper(ipconfig_path)
+      ->CallValueMethod(&method_call,
+                        base::BindOnce(&ShillClientHelper::OnGetProperties,
+                                       ipconfig_path, std::move(callback)));
 }
 
 void ShillIPConfigClientImpl::SetProperty(const dbus::ObjectPath& ipconfig_path,

@@ -60,7 +60,7 @@
 #include "content/public/common/content_features.h"
 #include "net/base/filename_util.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/mojom/page/drag.mojom.h"
+#include "third_party/blink/public/mojom/drag/drag.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -73,6 +73,7 @@
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/custom_data_helper.h"
+#include "ui/base/clipboard/file_info.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
@@ -333,7 +334,23 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
   if (html_base_url.is_valid())
     drop_data->html_base_url = html_base_url;
 
+  // Only add FileContents if Filenames is empty to avoid duplicates
+  // (https://crbug.com/1251482). We prefer filenames since it supports multiple
+  // files and does not send all file data upfront.
   data.GetFilenames(&drop_data->filenames);
+  if (drop_data->filenames.empty()) {
+    base::FilePath filename;
+    std::string file_contents;
+    data.GetFileContents(&filename, &file_contents);
+    if (!filename.empty()) {
+      drop_data->file_contents = std::move(file_contents);
+      drop_data->file_contents_source_url =
+          GURL(ui::FilePathToFileURL(filename));
+      base::FilePath::StringType extension = filename.Extension();
+      if (!extension.empty())
+        drop_data->file_contents_filename_extension = extension.substr(1);
+    }
+  }
 
 #if defined(OS_WIN)
   // Get a list of virtual files for later retrieval when a drop is performed
@@ -513,6 +530,10 @@ void WebContentsViewAura::AsyncDropNavigationObserver::DidFinishNavigation(
 class WebContentsViewAura::AsyncDropTempFileDeleter {
  public:
   AsyncDropTempFileDeleter() = default;
+
+  AsyncDropTempFileDeleter(const AsyncDropTempFileDeleter&) = delete;
+  AsyncDropTempFileDeleter& operator=(const AsyncDropTempFileDeleter&) = delete;
+
   ~AsyncDropTempFileDeleter();
   void RegisterFile(const base::FilePath& path);
 
@@ -521,7 +542,6 @@ class WebContentsViewAura::AsyncDropTempFileDeleter {
   void DeleteFileAsync(const base::FilePath& path) const;
 
   std::vector<base::FilePath> scoped_files_to_delete_;
-  DISALLOW_COPY_AND_ASSIGN(AsyncDropTempFileDeleter);
 };
 
 WebContentsViewAura::AsyncDropTempFileDeleter::~AsyncDropTempFileDeleter() {
@@ -555,6 +575,9 @@ class WebContentsViewAura::WindowObserver
   explicit WindowObserver(WebContentsViewAura* view) : view_(view) {
     view_->window_->AddObserver(this);
   }
+
+  WindowObserver(const WindowObserver&) = delete;
+  WindowObserver& operator=(const WindowObserver&) = delete;
 
   ~WindowObserver() override {
     view_->window_->RemoveObserver(this);
@@ -687,8 +710,6 @@ class WebContentsViewAura::WindowObserver
   aura::Window* host_window_ = nullptr;
 
   std::unique_ptr<PendingWindowChanges> pending_window_changes_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowObserver);
 };
 
 // static
@@ -1551,9 +1572,12 @@ DragOperation WebContentsViewAura::OnPerformDrop(
 
 aura::client::DragDropDelegate::DropCallback
 WebContentsViewAura::GetDropCallback(const ui::DropTargetEvent& event) {
-  // TODO(crbug.com/1197522): Return drop callback.
-  NOTIMPLEMENTED();
-  return base::NullCallback();
+  if (web_contents_->ShouldIgnoreInputEvents())
+    return base::DoNothing();
+  base::ScopedClosureRunner drag_exit(base::BindOnce(
+      &WebContentsViewAura::CompleteDragExit, weak_ptr_factory_.GetWeakPtr()));
+  return base::BindOnce(&WebContentsViewAura::PerformDropOrExitDrag,
+                        weak_ptr_factory_.GetWeakPtr(), std::move(drag_exit));
 }
 
 void WebContentsViewAura::CompleteDrop(RenderWidgetHostImpl* target_rwh,
@@ -1573,6 +1597,22 @@ void WebContentsViewAura::CompleteDrop(RenderWidgetHostImpl* target_rwh,
         .Run(target_rwh, drop_data, client_pt, screen_pt, key_modifiers,
              /*drop_allowed=*/true);
   }
+}
+
+void WebContentsViewAura::PerformDropOrExitDrag(
+    base::ScopedClosureRunner exit_drag,
+    const ui::DropTargetEvent& event,
+    std::unique_ptr<ui::OSExchangeData> data,
+    ui::mojom::DragOperation& output_drag_op) {
+  web_contents_->GetInputEventRouter()
+      ->GetRenderWidgetHostAtPointAsynchronously(
+          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
+          event.location_f(),
+          base::BindOnce(&WebContentsViewAura::PerformDropCallback,
+                         weak_ptr_factory_.GetWeakPtr(), event,
+                         std::move(data)));
+  output_drag_op = current_drag_op_;
+  exit_drag.ReplaceClosure(base::DoNothing());
 }
 
 void WebContentsViewAura::RegisterDropCallbackForTesting(

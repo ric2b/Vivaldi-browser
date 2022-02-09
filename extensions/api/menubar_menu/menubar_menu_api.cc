@@ -6,22 +6,23 @@
 #include "base/base64.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
-#include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/browser/context_menu_params.h"
-#include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/tools/vivaldi_tools.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
+
+#include "browser/menus/vivaldi_menu_enums.h"
+#include "extensions/tools/vivaldi_tools.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
 
 // helper
 static bool IsBackgroundCommand(int command) {
-  switch(command) {
+  switch (command) {
     case IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB:
       return true;
     default:
@@ -83,9 +84,8 @@ static vivaldi::menubar_menu::EventState FlagToEventState(int flag) {
   return event_state;
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<
-    MenubarMenuAPI>>::DestructorAtExit g_menubar_menu =
-        LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<MenubarMenuAPI>>::
+    DestructorAtExit g_menubar_menu = LAZY_INSTANCE_INITIALIZER;
 
 MenubarMenuAPI::MenubarMenuAPI(content::BrowserContext* context) {}
 
@@ -93,7 +93,7 @@ MenubarMenuAPI::~MenubarMenuAPI() {}
 
 // static
 BrowserContextKeyedAPIFactory<MenubarMenuAPI>*
-		MenubarMenuAPI::GetFactoryInstance() {
+MenubarMenuAPI::GetFactoryInstance() {
   return g_menubar_menu.Pointer();
 }
 
@@ -101,14 +101,13 @@ BrowserContextKeyedAPIFactory<MenubarMenuAPI>*
 void MenubarMenuAPI::SendAction(content::BrowserContext* browser_context,
                                 int command,
                                 int event_state) {
-	vivaldi::menubar_menu::Action action;
+  vivaldi::menubar_menu::Action action;
   // Convert to api id before sending to JS.
-	action.id = command - IDC_VIV_MENU_FIRST - 1;
+  action.id = command - IDC_VIV_MENU_FIRST - 1;
   action.state = FlagToEventState(event_state);
-  ::vivaldi::BroadcastEvent(
-      vivaldi::menubar_menu::OnAction::kEventName,
-      vivaldi::menubar_menu::OnAction::Create(action),
-      browser_context);
+  ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnAction::kEventName,
+                            vivaldi::menubar_menu::OnAction::Create(action),
+                            browser_context);
 }
 
 // static
@@ -122,14 +121,14 @@ void MenubarMenuAPI::SendOpenBookmark(content::BrowserContext* browser_context,
   action.state = FlagToEventState(event_state);
   ::vivaldi::BroadcastEvent(
       vivaldi::menubar_menu::OnOpenBookmark::kEventName,
-      vivaldi::menubar_menu::OnOpenBookmark::Create(action),
-      browser_context);
+      vivaldi::menubar_menu::OnOpenBookmark::Create(action), browser_context);
 }
 
 // static
-void MenubarMenuAPI::SendBookmarkAction(content::BrowserContext* browser_context,
-                                        int64_t bookmark_id,
-                                        int command) {
+void MenubarMenuAPI::SendBookmarkAction(
+    content::BrowserContext* browser_context,
+    int64_t bookmark_id,
+    int command) {
   // Some commands will open a bookmark while the rest are managing actions. If
   // we have a disposition the bookmark should be opened.
   vivaldi::menubar_menu::Disposition disposition =
@@ -140,58 +139,52 @@ void MenubarMenuAPI::SendBookmarkAction(content::BrowserContext* browser_context
     action.disposition = disposition;
     action.background = IsBackgroundCommand(command);
     ::vivaldi::BroadcastEvent(
-      vivaldi::menubar_menu::OnOpenBookmark::kEventName,
-      vivaldi::menubar_menu::OnOpenBookmark::Create(action),
-      browser_context);
+        vivaldi::menubar_menu::OnOpenBookmark::kEventName,
+        vivaldi::menubar_menu::OnOpenBookmark::Create(action), browser_context);
   } else {
     vivaldi::menubar_menu::BookmarkAction action;
     action.id = std::to_string(bookmark_id);
     action.command = CommandToAction(command);
     ::vivaldi::BroadcastEvent(
-      vivaldi::menubar_menu::OnBookmarkAction::kEventName,
-      vivaldi::menubar_menu::OnBookmarkAction::Create(action),
-      browser_context);
+        vivaldi::menubar_menu::OnBookmarkAction::kEventName,
+        vivaldi::menubar_menu::OnBookmarkAction::Create(action),
+        browser_context);
   }
 }
 
 // static
-void MenubarMenuAPI::SendOpen(
-    content::BrowserContext* browser_context, int menu_id) {
-  ::vivaldi::BroadcastEvent(
-      vivaldi::menubar_menu::OnOpen::kEventName,
-      vivaldi::menubar_menu::OnOpen::Create(menu_id),
-      browser_context);
+void MenubarMenuAPI::SendOpen(content::BrowserContext* browser_context,
+                              int menu_id) {
+  ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnOpen::kEventName,
+                            vivaldi::menubar_menu::OnOpen::Create(menu_id),
+                            browser_context);
 }
 
 // static
-void MenubarMenuAPI::SendClose(
-    content::BrowserContext* browser_context) {
+void MenubarMenuAPI::SendClose(content::BrowserContext* browser_context) {
   ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnClose::kEventName,
                             vivaldi::menubar_menu::OnClose::Create(),
                             browser_context);
 }
 
 // static
-void MenubarMenuAPI::SendHover(
-    content::BrowserContext* browser_context,
-    const std::string& url) {
+void MenubarMenuAPI::SendHover(content::BrowserContext* browser_context,
+                               const std::string& url) {
   MenubarMenuAPI* api = GetFactoryInstance()->Get(browser_context);
   DCHECK(api);
   if (!api)
     return;
   if (api->hover_url_ != url) {
     api->hover_url_ = url;
-    ::vivaldi::BroadcastEvent(
-        vivaldi::menubar_menu::OnHover::kEventName,
-        vivaldi::menubar_menu::OnHover::Create(url),
-        browser_context);
+    ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnHover::kEventName,
+                              vivaldi::menubar_menu::OnHover::Create(url),
+                              browser_context);
   }
 }
 
 // static
-void MenubarMenuAPI::SendError(
-    content::BrowserContext* browser_context,
-    const std::string& text) {
+void MenubarMenuAPI::SendError(content::BrowserContext* browser_context,
+                               const std::string& text) {
   ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnError::kEventName,
                             vivaldi::menubar_menu::OnError::Create(text),
                             browser_context);
@@ -205,36 +198,37 @@ ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
   return RespondNow(Error("Not implemented on Mac"));
 }
 #else
-MenubarMenuShowFunction::MenubarMenuShowFunction()
-  :menuParams_(this) {
-  }
+MenubarMenuShowFunction::MenubarMenuShowFunction() : menuParams_(this) {}
 
 MenubarMenuShowFunction::~MenubarMenuShowFunction() = default;
 
 ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
-	using vivaldi::menubar_menu::Show::Params;
+  using vivaldi::menubar_menu::Show::Params;
   namespace Results = vivaldi::menubar_menu::Show::Results;
 
-  params_ = Params::Create(*args_);
+  params_ = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params_.get());
 
   // Set up needed information for the menu bar to request menus on demand.
   menuParams_.siblings.reserve(params_->properties.siblings.size());
-  for (const vivaldi::menubar_menu::Menu& m: params_->properties.siblings) {
+  for (const vivaldi::menubar_menu::Menu& m : params_->properties.siblings) {
     menuParams_.siblings.emplace_back();
     ::vivaldi::MenubarMenuEntry* entry = &menuParams_.siblings.back();
     entry->id = m.id;
     entry->rect = gfx::Rect(m.rect.x, m.rect.y, m.rect.width, m.rect.height);
   }
 
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-  if (web_contents) {
-    ::vivaldi::ConvertMenubarButtonRectToScreen(web_contents, menuParams_);
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params_->properties.window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
   }
+  ::vivaldi::ConvertMenubarButtonRectToScreen(window->web_contents(),
+                                              menuParams_);
 
   // We have not yet created any menu content. This will be done on a per menu
   // basis when and if the menu is needed.
-  std::string error = Open(params_->properties.id);
+  std::string error = Open(window->web_contents(), params_->properties.id);
   if (!error.empty()) {
     return RespondNow(Error(error));
   }
@@ -243,15 +237,11 @@ ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
   return RespondLater();
 }
 
-std::string MenubarMenuShowFunction::Open(int id) {
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-  if (!web_contents) {
-    return "No WebContents";
-  }
-
+std::string MenubarMenuShowFunction::Open(content::WebContents* web_contents,
+                                          int id) {
   // Range check
   bool match = false;
-  for (const ::vivaldi::MenubarMenuEntry& entry: menuParams_.siblings) {
+  for (const ::vivaldi::MenubarMenuEntry& entry : menuParams_.siblings) {
     if (entry.id == id) {
       match = true;
       break;
@@ -261,8 +251,8 @@ std::string MenubarMenuShowFunction::Open(int id) {
     return "Menu id out of range";
   }
 
-  menu_.reset(::vivaldi::CreateVivaldiMenubarMenu(web_contents, menuParams_,
-                                                  id));
+  menu_.reset(
+      ::vivaldi::CreateVivaldiMenubarMenu(web_contents, menuParams_, id));
   if (!menu_->CanShow()) {
     return "Can not show menu";
   }
@@ -279,7 +269,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
     const std::vector<Element>& list,
     ui::SimpleMenuModel* menu_model) {
   namespace menubar_menu = extensions::vivaldi::menubar_menu;
-  for (const Element& child: list) {
+  for (const Element& child : list) {
     if (child.item) {
       const Item& item = *child.item;
       int id = item.id + IDC_VIV_MENU_FIRST + 1;
@@ -301,8 +291,8 @@ std::string MenubarMenuShowFunction::PopulateModel(
           break;
         case menubar_menu::ITEM_TYPE_FOLDER: {
           // We create the SimpleMenuModel sub menu but do not populate it. That
-          // will be done in PopulateSubmodel() by the calling menu code when and
-          // if this sub menu will be shown to the user.
+          // will be done in PopulateSubmodel() by the calling menu code when
+          // and if this sub menu will be shown to the user.
           if (item.selected && *item.selected) {
             if (selected_menu_id_ != -1) {
               return "Only one menu item can be selected";
@@ -320,8 +310,8 @@ std::string MenubarMenuShowFunction::PopulateModel(
           return "Item type missing";
       }
       if (item.shortcut) {
-          id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
-              *item.shortcut, true);
+        id_to_accelerator_map_[id] =
+            ::vivaldi::ParseShortcut(*item.shortcut, true);
       }
       if (item.url && !item.url->empty()) {
         id_to_url_map_[id] = *item.url;
@@ -338,8 +328,8 @@ std::string MenubarMenuShowFunction::PopulateModel(
             std::string png_data;
             if (base::Base64Decode(*icon, &png_data)) {
               gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
-                reinterpret_cast<const unsigned char*>(png_data.c_str()),
-                png_data.length());
+                  reinterpret_cast<const unsigned char*>(png_data.c_str()),
+                  png_data.length());
               menu_model->SetIcon(menu_model->GetIndexOfCommandId(id),
                                   ui::ImageModel::FromImage(img));
             }
@@ -373,15 +363,15 @@ std::string MenubarMenuShowFunction::PopulateModel(
         switch (child.container->edge) {
           case vivaldi::menubar_menu::EDGE_ABOVE:
             bookmark_menu_container_->edge =
-              ::vivaldi::BookmarkMenuContainer::Above;
+                ::vivaldi::BookmarkMenuContainer::Above;
             break;
           case vivaldi::menubar_menu::EDGE_BELOW:
             bookmark_menu_container_->edge =
-              ::vivaldi::BookmarkMenuContainer::Below;
+                ::vivaldi::BookmarkMenuContainer::Below;
             break;
           default:
             bookmark_menu_container_->edge =
-              ::vivaldi::BookmarkMenuContainer::Off;
+                ::vivaldi::BookmarkMenuContainer::Off;
             break;
         };
         bookmark_menu_container_->siblings.reserve(1);
@@ -389,7 +379,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
         ::vivaldi::BookmarkMenuContainerEntry* sibling =
             &bookmark_menu_container_->siblings.back();
         if (!base::StringToInt64(child.container->id, &sibling->id) ||
-             sibling->id <= 0) {
+            sibling->id <= 0) {
           return "Illegal bookmark id";
         }
         sibling->offset = child.container->offset;
@@ -401,41 +391,41 @@ std::string MenubarMenuShowFunction::PopulateModel(
           case vivaldi::menubar_menu::SORT_FIELD_NONE:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NONE;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_FIELD_TITLE:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_TITLE;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_FIELD_URL:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_URL;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_FIELD_NICKNAME:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_FIELD_DESCRIPTION:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_FIELD_DATEADDED:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
-          break;
+            break;
         };
         switch (child.container->sort_order) {
           case vivaldi::menubar_menu::SORT_ORDER_NONE:
-             bookmark_menu_container_->sort_order =
+            bookmark_menu_container_->sort_order =
                 ::vivaldi::BookmarkSorter::ORDER_NONE;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_ORDER_ASCENDING:
-             bookmark_menu_container_->sort_order =
+            bookmark_menu_container_->sort_order =
                 ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
-          break;
+            break;
           case vivaldi::menubar_menu::SORT_ORDER_DESCENDING:
-             bookmark_menu_container_->sort_order =
+            bookmark_menu_container_->sort_order =
                 ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
-          break;
+            break;
         };
       } else {
         return "Unknown container element";
@@ -455,16 +445,17 @@ void MenubarMenuShowFunction::PopulateModel(int menu_id,
   using vivaldi::menubar_menu::Show::Params;
 
   ui::SimpleMenuModel* simple_menu_model = new ui::SimpleMenuModel(nullptr);
-  models_.push_back(base::WrapUnique(simple_menu_model)); // We own the model.
+  models_.push_back(base::WrapUnique(simple_menu_model));  // We own the model.
   *menu_model = simple_menu_model;
 
   std::vector<vivaldi::menubar_menu::Menu>& list = params_->properties.siblings;
-  for (const vivaldi::menubar_menu::Menu& sibling: list) {
+  for (const vivaldi::menubar_menu::Menu& sibling : list) {
     if (sibling.id == menu_id) {
-      std::string error = PopulateModel(params_.get(), sibling.id,
-          dark_text_color, sibling.children, simple_menu_model);
+      std::string error =
+          PopulateModel(params_.get(), sibling.id, dark_text_color,
+                        sibling.children, simple_menu_model);
       if (!error.empty()) {
-         MenubarMenuAPI::SendError(browser_context(), error);
+        MenubarMenuAPI::SendError(browser_context(), error);
       }
       break;
     }
@@ -472,15 +463,14 @@ void MenubarMenuShowFunction::PopulateModel(int menu_id,
 }
 
 // Called by menu code to populate a sub menu model of an existing menu model
-void MenubarMenuShowFunction::PopulateSubmodel(
-    int menu_id,
-    bool dark_text_color,
-    ui::MenuModel* menu_model) {
+void MenubarMenuShowFunction::PopulateSubmodel(int menu_id,
+                                               bool dark_text_color,
+                                               ui::MenuModel* menu_model) {
   using vivaldi::menubar_menu::Show::Params;
 
   // Avoids a static_cast and takes no time
   ui::SimpleMenuModel* simple_menu_model = nullptr;
-  for (std::unique_ptr<ui::SimpleMenuModel>& model: models_) {
+  for (std::unique_ptr<ui::SimpleMenuModel>& model : models_) {
     if (model.get() == menu_model) {
       simple_menu_model = model.get();
       break;
@@ -488,8 +478,9 @@ void MenubarMenuShowFunction::PopulateSubmodel(
   }
   DCHECK(simple_menu_model);
 
-  std::string error = PopulateModel(params_.get(), menu_id, dark_text_color,
-      *id_to_elementvector_map_[menu_id], simple_menu_model);
+  std::string error =
+      PopulateModel(params_.get(), menu_id, dark_text_color,
+                    *id_to_elementvector_map_[menu_id], simple_menu_model);
   if (!error.empty()) {
     MenubarMenuAPI::SendError(browser_context(), error);
   }
@@ -557,7 +548,7 @@ bool MenubarMenuShowFunction::IsItemPersistent(int id) {
 }
 
 bool MenubarMenuShowFunction::GetAccelerator(int id,
-    ui::Accelerator* accelerator) {
+                                             ui::Accelerator* accelerator) {
   std::map<int, ui::Accelerator>::iterator it = id_to_accelerator_map_.find(id);
   if (it == id_to_accelerator_map_.end()) {
     return false;
@@ -578,7 +569,7 @@ bool MenubarMenuShowFunction::GetUrl(int id, std::string* url) {
 }
 
 ::vivaldi::BookmarkMenuContainer*
-    MenubarMenuShowFunction::GetBookmarkMenuContainer() {
+MenubarMenuShowFunction::GetBookmarkMenuContainer() {
   return bookmark_menu_container_.get();
 }
 

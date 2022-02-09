@@ -22,7 +22,6 @@ namespace content {
 
 class RenderFrameHost;
 class RenderProcessHost;
-class RenderViewHostDelegate;
 class RenderWidgetHost;
 
 // A RenderViewHost is responsible for creating and talking to a RenderView
@@ -70,9 +69,6 @@ class CONTENT_EXPORT RenderViewHost {
   // change.
   virtual int GetRoutingID() = 0;
 
-  // Returns the main frame for this render view.
-  virtual RenderFrameHost* GetMainFrame() = 0;
-
   // Instructs the RenderView to send back updates to the preferred size.
   virtual void EnablePreferredSizeMode() = 0;
 
@@ -81,8 +77,6 @@ class CONTENT_EXPORT RenderViewHost {
   virtual void ExecutePluginActionAtLocation(
       const gfx::Point& location,
       blink::mojom::PluginActionType action) = 0;
-
-  virtual RenderViewHostDelegate* GetDelegate() = 0;
 
   // Returns true if the RenderView is active and has not crashed.
   virtual bool IsRenderViewLive() = 0;

@@ -7,6 +7,7 @@
 
 #include "ash/webui/shimless_rma/mojom/shimless_rma.mojom.h"
 #include "chromeos/dbus/rmad/rmad.pb.h"
+#include "chromeos/dbus/update_engine/update_engine.pb.h"
 #include "mojo/public/cpp/bindings/enum_traits.h"
 
 namespace mojo {
@@ -52,14 +53,13 @@ struct EnumTraits<
 };
 
 template <>
-struct EnumTraits<ash::shimless_rma::mojom::CalibrationComponent,
-                  rmad::CheckCalibrationState::CalibrationStatus::Component> {
-  static ash::shimless_rma::mojom::CalibrationComponent ToMojom(
-      rmad::CheckCalibrationState::CalibrationStatus::Component key_status);
+struct EnumTraits<ash::shimless_rma::mojom::OsUpdateOperation,
+                  update_engine::Operation> {
+  static ash::shimless_rma::mojom::OsUpdateOperation ToMojom(
+      update_engine::Operation operation);
 
-  static bool FromMojom(
-      ash::shimless_rma::mojom::CalibrationComponent input,
-      rmad::CheckCalibrationState::CalibrationStatus::Component* out);
+  static bool FromMojom(ash::shimless_rma::mojom::OsUpdateOperation input,
+                        update_engine::Operation* out);
 };
 
 template <>
@@ -88,6 +88,62 @@ class StructTraits<ash::shimless_rma::mojom::ComponentDataView,
 
   static bool Read(ash::shimless_rma::mojom::ComponentDataView data,
                    rmad::ComponentsRepairState_ComponentRepairStatus* out);
+};
+
+template <>
+struct EnumTraits<ash::shimless_rma::mojom::CalibrationSetupInstruction,
+                  rmad::CalibrationSetupInstruction> {
+  static ash::shimless_rma::mojom::CalibrationSetupInstruction ToMojom(
+      rmad::CalibrationSetupInstruction key_status);
+
+  static bool FromMojom(
+      ash::shimless_rma::mojom::CalibrationSetupInstruction input,
+      rmad::CalibrationSetupInstruction* out);
+};
+
+template <>
+struct EnumTraits<ash::shimless_rma::mojom::CalibrationOverallStatus,
+                  rmad::CalibrationOverallStatus> {
+  static ash::shimless_rma::mojom::CalibrationOverallStatus ToMojom(
+      rmad::CalibrationOverallStatus key_status);
+
+  static bool FromMojom(
+      ash::shimless_rma::mojom::CalibrationOverallStatus input,
+      rmad::CalibrationOverallStatus* out);
+};
+
+template <>
+struct EnumTraits<ash::shimless_rma::mojom::CalibrationStatus,
+                  rmad::CalibrationComponentStatus_CalibrationStatus> {
+  static ash::shimless_rma::mojom::CalibrationStatus ToMojom(
+      rmad::CalibrationComponentStatus_CalibrationStatus key_status);
+
+  static bool FromMojom(
+      ash::shimless_rma::mojom::CalibrationStatus input,
+      rmad::CalibrationComponentStatus_CalibrationStatus* out);
+};
+
+template <>
+class StructTraits<ash::shimless_rma::mojom::CalibrationComponentStatusDataView,
+                   rmad::CalibrationComponentStatus> {
+ public:
+  static rmad::RmadComponent component(
+      const rmad::CalibrationComponentStatus& component) {
+    return component.component();
+  }
+
+  static rmad::CalibrationComponentStatus_CalibrationStatus status(
+      const rmad::CalibrationComponentStatus& component) {
+    return component.status();
+  }
+
+  static double progress(const rmad::CalibrationComponentStatus& component) {
+    return component.progress();
+  }
+
+  static bool Read(
+      ash::shimless_rma::mojom::CalibrationComponentStatusDataView data,
+      rmad::CalibrationComponentStatus* out);
 };
 
 }  // namespace mojo

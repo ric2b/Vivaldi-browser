@@ -41,7 +41,7 @@ if (is_ios) {
   }
 }
 
-# To add a unit test to this target, make a "unit_test" source_set in your
+# To add a unit test to this target, make a "unit_tests" source_set in your
 # component(it's important to use a source_set instead of a static library or
 # no tests will run) and add a reference here.You can add more than one unit
 # test target if convenient.
@@ -54,6 +54,8 @@ test("components_unittests") {
 
   if (is_fuchsia) {
     additional_manifest_fragments = [
+      "//build/config/fuchsia/test/font_capabilities.test-cmx",
+
       # TODO(crbug.com/1185811): Figure out why jit_capabilities is needed.
       "//build/config/fuchsia/test/jit_capabilities.test-cmx",
     ]
@@ -117,6 +119,7 @@ test("components_unittests") {
     "//components/lens:unit_tests",
     "//components/leveldb_proto:unit_tests",
     "//components/lookalikes/core:unit_tests",
+    "//components/memory_pressure:unit_tests",
     "//components/metrics:unit_tests",
     "//components/metrics/demographics:unit_tests",
     "//components/navigation_metrics:unit_tests",
@@ -147,6 +150,7 @@ test("components_unittests") {
     "//components/reporting/storage:unit_tests",
     "//components/reporting/util:unit_tests",
     "//components/reputation/core:unit_tests",
+    "//components/safe_browsing/core/browser:safe_browsing_metrics_collector_unittest",
     "//components/safe_search_api:unit_tests",
     "//components/scheduling_metrics:unit_tests",
     "//components/search:unit_tests",
@@ -202,6 +206,7 @@ test("components_unittests") {
   if (toolkit_views) {
     deps += [
       "//components/fullscreen_control:unit_tests",
+      "//components/global_media_controls:unit_tests",
       "//components/media_message_center:unit_tests",
       "//components/ui_devtools:unit_tests",
     ]
@@ -334,6 +339,7 @@ test("components_unittests") {
       "//components/translate/content/browser:unit_tests",
       "//components/translate/content/renderer:unit_tests",
       "//components/ukm/content:unit_tests",
+      "//components/value_store:unit_tests",
       "//components/visitedlink/test:unit_tests",
       "//components/web_cache/browser:unit_tests",
       "//components/web_package:unit_tests",
@@ -466,6 +472,7 @@ test("components_unittests") {
       "//components/desks_storage:unit_tests",
       "//components/guest_os:unit_tests",
       "//components/metrics/structured:unit_tests",
+      "//components/metrics/structured/mojom:unit_tests",
       "//components/ownership:unit_tests",
       "//components/user_manager:unit_tests",
     ]
@@ -484,11 +491,17 @@ test("components_unittests") {
   }
 
   if (is_win) {
-    deps += [ "//components/browser_watcher:unit_tests" ]
+    deps += [
+      "//components/browser_watcher:unit_tests",
+      "//components/winhttp:unit_tests",
+    ]
   }
 
   if (enable_basic_printing) {
-    deps += [ "//components/services/print_compositor:unit_tests" ]
+    deps += [
+      "//components/printing/browser/print_to_pdf:unit_tests",
+      "//components/services/print_compositor:unit_tests",
+    ]
   }
   if (enable_print_preview) {
     deps += [ "//components/pwg_encoder:unit_tests" ]
@@ -553,6 +566,7 @@ test("components_unittests") {
 
 repack("components_tests_pak") {
   sources = [
+    "$root_gen_dir/components/arc/input_overlay_resources.pak",
     "$root_gen_dir/components/autofill/core/browser/autofill_address_rewriter_resources.pak",
     "$root_gen_dir/components/components_resources.pak",
     "$root_gen_dir/components/omnibox/resources/omnibox_pedal_synonyms_en-US.pak",
@@ -563,6 +577,7 @@ repack("components_tests_pak") {
 
   output = "$root_out_dir/components_tests_resources.pak"
   deps = [
+    "//components/arc/input_overlay/resources:resources_grit",
     "//components/autofill/core/browser:autofill_address_rewriter_resources",
     "//components/omnibox/resources:omnibox_pedal_synonyms",
     "//components/omnibox/resources:omnibox_resources",
@@ -881,6 +896,7 @@ if (is_android) {
       "//components/prefs/android:junit",
       "//components/query_tiles:query_tiles_junit_tests",
       "//components/signin/public/android:junit",
+      "//components/subresource_filter/android:junit",
       "//components/variations/android:components_variations_junit_tests",
       "//components/webapk/android/libs/client:junit",
       "//components/webapps/browser/android:junit",

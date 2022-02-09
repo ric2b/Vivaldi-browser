@@ -15,6 +15,11 @@ class Profile;
 class ChromeTabRestoreServiceClient : public sessions::TabRestoreServiceClient {
  public:
   explicit ChromeTabRestoreServiceClient(Profile* profile);
+
+  ChromeTabRestoreServiceClient(const ChromeTabRestoreServiceClient&) = delete;
+  ChromeTabRestoreServiceClient& operator=(
+      const ChromeTabRestoreServiceClient&) = delete;
+
   ~ChromeTabRestoreServiceClient() override;
 
  private:
@@ -43,8 +48,6 @@ class ChromeTabRestoreServiceClient : public sessions::TabRestoreServiceClient {
       sessions::LiveTab* tab) override;
 
   Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeTabRestoreServiceClient);
 };
 
 #endif  // CHROME_BROWSER_SESSIONS_CHROME_TAB_RESTORE_SERVICE_CLIENT_H_

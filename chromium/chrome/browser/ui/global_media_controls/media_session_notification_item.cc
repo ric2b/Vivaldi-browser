@@ -32,8 +32,7 @@ MediaSessionNotificationItem::Source GetSource(const std::string& name) {
 }
 
 // How long to wait (in milliseconds) for a new media session to begin.
-constexpr base::TimeDelta kFreezeTimerDelay =
-    base::TimeDelta::FromMilliseconds(2500);
+constexpr base::TimeDelta kFreezeTimerDelay = base::Milliseconds(2500);
 
 // The minimum size in px that the media session artwork can be to be displayed
 // in the notification.
@@ -71,8 +70,10 @@ void MediaSessionNotificationItem::MediaSessionInfoChanged(
   MaybeUnfreeze();
   MaybeHideOrShowNotification();
 
-  if (view_ && !frozen_)
+  if (view_ && !frozen_) {
     view_->UpdateWithMediaSessionInfo(session_info_);
+    view_->UpdateWithMuteStatus(session_info_->muted);
+  }
 }
 
 void MediaSessionNotificationItem::MediaSessionMetadataChanged(
@@ -153,6 +154,7 @@ void MediaSessionNotificationItem::SetView(
     view_->UpdateWithMediaSessionInfo(session_info_);
     view_->UpdateWithMediaMetadata(session_metadata_);
     view_->UpdateWithMediaActions(session_actions_);
+    view_->UpdateWithMuteStatus(session_info_->muted);
 
     if (session_position_.has_value())
       view_->UpdateWithMediaPosition(*session_position_);
@@ -194,6 +196,11 @@ void MediaSessionNotificationItem::Raise() {
     return;
 
   media_controller_remote_->Raise();
+}
+
+void MediaSessionNotificationItem::SetMute(bool mute) {
+  if (!frozen_)
+    media_controller_remote_->SetMute(mute);
 }
 
 void MediaSessionNotificationItem::SetController(
@@ -310,6 +317,7 @@ void MediaSessionNotificationItem::Unfreeze() {
     view_->UpdateWithMediaSessionInfo(session_info_);
     view_->UpdateWithMediaMetadata(session_metadata_);
     view_->UpdateWithMediaActions(session_actions_);
+    view_->UpdateWithMuteStatus(session_info_->muted);
 
     if (session_position_.has_value())
       view_->UpdateWithMediaPosition(*session_position_);

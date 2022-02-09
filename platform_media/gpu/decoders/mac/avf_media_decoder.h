@@ -69,6 +69,8 @@ class AVFMediaDecoder {
   // |client| must outlive AVFMediaDecoder.
   explicit AVFMediaDecoder(AVFMediaDecoderClient* client);
   ~AVFMediaDecoder();
+  AVFMediaDecoder(const AVFMediaDecoder&) = delete;
+  AVFMediaDecoder& operator=(const AVFMediaDecoder&) = delete;
 
   void Initialize(ipc_data_source::Info source_info, InitializeCallback cb);
   void Seek(const base::TimeDelta& time, SeekCallback seek_cb);
@@ -198,8 +200,6 @@ class AVFMediaDecoder {
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<AVFMediaDecoder> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AVFMediaDecoder);
 };
 
 }  // namespace media

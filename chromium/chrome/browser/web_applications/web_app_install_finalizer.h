@@ -11,11 +11,11 @@
 
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/web_applications/components/web_app_chromeos_data.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_system_web_app_data.h"
-#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
+#include "chrome/browser/web_applications/web_app_chromeos_data.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_system_web_app_data.h"
+#include "chrome/browser/web_applications/web_application_info.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -27,13 +27,15 @@ enum class WebappUninstallSource;
 
 namespace web_app {
 
-class AppRegistryController;
+class WebAppSyncBridge;
 class FileHandlersPermissionHelper;
 class WebAppUiManager;
 class WebApp;
 class WebAppIconManager;
 class WebAppPolicyManager;
 class WebAppRegistrar;
+class WebAppUninstallCommitTask;
+enum class WebAppUninstallCommitTaskResult;
 
 // An finalizer for the installation process, represents the last step.
 // Takes WebApplicationInfo as input, writes data to disk (e.g icons, shortcuts)
@@ -54,6 +56,7 @@ class WebAppInstallFinalizer {
     webapps::WebappInstallSource install_source =
         webapps::WebappInstallSource::COUNT;
     bool locally_installed = true;
+    bool overwrite_existing_manifest_fields = true;
 
     absl::optional<WebAppChromeOsData> chromeos_data;
     absl::optional<WebAppSystemWebAppData> system_web_app_data;
@@ -132,7 +135,7 @@ class WebAppInstallFinalizer {
 
   void SetSubsystems(WebAppRegistrar* registrar,
                      WebAppUiManager* ui_manager,
-                     AppRegistryController* registry_controller,
+                     WebAppSyncBridge* sync_bridge,
                      OsIntegrationManager* os_integration_manager);
 
   virtual void SetRemoveSourceCallbackForTesting(
@@ -148,8 +151,7 @@ class WebAppInstallFinalizer {
 
   // FileHandlersPermissionHelper uses these getters.
   WebAppRegistrar& registrar() const { return *registrar_; }
-
-  AppRegistryController& registry_controller() { return *registry_controller_; }
+  WebAppSyncBridge& sync_bridge() { return *sync_bridge_; }
   OsIntegrationManager& os_integration_manager() {
     return *os_integration_manager_;
   }
@@ -161,12 +163,17 @@ class WebAppInstallFinalizer {
                                              Source::Type source,
                                              UninstallWebAppCallback callback);
 
-  void OnSyncUninstallOsHooksUninstall(AppId app_id, OsHooksResults);
+  void OnSyncUninstallOsHooksUninstall(AppId app_id, OsHooksErrors);
   void OnSyncUninstallAppDataDeleted(AppId app_id, bool success);
   // Sync uninstall only finishes once both the hooks are uninstalled
   // (OnSyncUninstallOsHooksUninstall) and app data is deleted
   // (OnSyncUninstallAppDataDeleted).
   void MaybeFinishSyncUninstall(AppId app_id);
+  void OnNonSyncUninstallComplete(
+      AppId app_id,
+      webapps::WebappUninstallSource uninstall_source,
+      UninstallWebAppCallback callback,
+      WebAppUninstallCommitTaskResult result);
 
   void SetWebAppManifestFieldsAndWriteData(
       const WebApplicationInfo& web_app_info,
@@ -178,11 +185,6 @@ class WebAppInstallFinalizer {
       std::unique_ptr<WebApp> web_app,
       bool success);
 
-  void OnIconsDataDeletedAndWebAppUninstalled(
-      const AppId& app_id,
-      webapps::WebappUninstallSource uninstall_source,
-      UninstallWebAppCallback callback,
-      bool success);
   void OnDatabaseCommitCompletedForInstall(InstallFinalizedCallback callback,
                                            AppId app_id,
                                            bool success);
@@ -198,13 +200,8 @@ class WebAppInstallFinalizer {
       const WebApplicationInfo& web_app_info,
       bool success);
 
-  void OnUninstallOsHooks(const AppId& app_id,
-                          webapps::WebappUninstallSource uninstall_source,
-                          UninstallWebAppCallback callback,
-                          OsHooksResults os_hooks_info);
-
   WebAppRegistrar* registrar_ = nullptr;
-  AppRegistryController* registry_controller_ = nullptr;
+  WebAppSyncBridge* sync_bridge_ = nullptr;
   WebAppUiManager* ui_manager_ = nullptr;
   OsIntegrationManager* os_integration_manager_ = nullptr;
 
@@ -224,6 +221,9 @@ class WebAppInstallFinalizer {
   };
   base::flat_map<AppId, std::unique_ptr<SyncUninstallState>>
       pending_sync_uninstalls_;
+
+  base::flat_map<AppId, std::unique_ptr<WebAppUninstallCommitTask>>
+      pending_non_sync_uninstalls_;
 
   base::RepeatingCallback<void(const AppId& app_id)>
       install_source_removed_callback_for_testing_;

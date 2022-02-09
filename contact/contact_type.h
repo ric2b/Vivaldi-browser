@@ -185,6 +185,8 @@ class ContactQueryResults {
 
   ContactQueryResults();
   ~ContactQueryResults();
+  ContactQueryResults(const ContactQueryResults&) = delete;
+  ContactQueryResults& operator=(const ContactQueryResults&) = delete;
 
   size_t size() const { return results_.size(); }
   bool empty() const { return results_.empty(); }
@@ -217,28 +219,26 @@ class ContactQueryResults {
   // The ordered list of results. The pointers inside this are owned by this
   // QueryResults object.
   ContactResultVector results_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContactQueryResults);
 };
 
 struct ContactResults {
  public:
   ContactResults() = default;
+  ContactResults(const ContactResults&) = delete;
+  ContactResults& operator=(const ContactResults&) = delete;
+
   bool success;
   ContactRow contact;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContactResults);
 };
 
 class CreateContactsResult {
  public:
   CreateContactsResult() = default;
+  CreateContactsResult(const CreateContactsResult&) = delete;
+  CreateContactsResult& operator=(const CreateContactsResult&) = delete;
+
   int number_failed;
   int number_success;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CreateContactsResult);
 };
 
 }  // namespace contact

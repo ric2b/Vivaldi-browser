@@ -13,11 +13,14 @@ static_library("app_helper") {
 static_library("helper") {
   deps = [
     "//content/public/browser:browser",
+    "//chrome/common:buildflags",
   ]
   public_deps = [
     "//vivaldi/renderer/mojo:frame_host_service",
   ]
   sources = [
+    "file_selection_options.cc",
+    "file_selection_options.h",
     "vivaldi_frame_host_service_impl.cc",
     "vivaldi_frame_host_service_impl.h",
     "vivaldi_frame_observer.cc",

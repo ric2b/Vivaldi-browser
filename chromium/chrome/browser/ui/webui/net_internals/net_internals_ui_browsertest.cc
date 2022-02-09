@@ -118,13 +118,17 @@ class NetInternalsTest::MessageHandler : public content::WebUIMessageHandler {
  public:
   explicit MessageHandler(NetInternalsTest* net_internals_test);
 
+  MessageHandler(const MessageHandler&) = delete;
+  MessageHandler& operator=(const MessageHandler&) = delete;
+
  private:
   void RegisterMessages() override;
 
-  void RegisterMessage(const std::string& message,
-                       const content::WebUI::MessageCallback& handler);
+  void RegisterMessage(
+      const std::string& message,
+      const content::WebUI::DeprecatedMessageCallback& handler);
 
-  void HandleMessage(const content::WebUI::MessageCallback& handler,
+  void HandleMessage(const content::WebUI::DeprecatedMessageCallback& handler,
                      const base::ListValue* data);
 
   // Runs NetInternalsTest.callback with the given value.
@@ -152,8 +156,6 @@ class NetInternalsTest::MessageHandler : public content::WebUIMessageHandler {
       net::NetworkIsolationKey::CreateTransient()};
 
   base::WeakPtrFactory<MessageHandler> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(MessageHandler);
 };
 
 NetInternalsTest::MessageHandler::MessageHandler(
@@ -176,15 +178,15 @@ void NetInternalsTest::MessageHandler::RegisterMessages() {
 
 void NetInternalsTest::MessageHandler::RegisterMessage(
     const std::string& message,
-    const content::WebUI::MessageCallback& handler) {
-  web_ui()->RegisterMessageCallback(
+    const content::WebUI::DeprecatedMessageCallback& handler) {
+  web_ui()->RegisterDeprecatedMessageCallback(
       message,
       base::BindRepeating(&NetInternalsTest::MessageHandler::HandleMessage,
                           weak_factory_.GetWeakPtr(), handler));
 }
 
 void NetInternalsTest::MessageHandler::HandleMessage(
-    const content::WebUI::MessageCallback& handler,
+    const content::WebUI::DeprecatedMessageCallback& handler,
     const base::ListValue* data) {
   // The handler might run a nested loop to wait for something.
   base::CurrentThread::ScopedNestableTaskAllower nestable_task_allower;

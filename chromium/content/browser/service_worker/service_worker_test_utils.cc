@@ -65,6 +65,10 @@ class FakeNavigationClient : public mojom::NavigationClient {
   explicit FakeNavigationClient(
       ReceivedProviderInfoCallback on_received_callback)
       : on_received_callback_(std::move(on_received_callback)) {}
+
+  FakeNavigationClient(const FakeNavigationClient&) = delete;
+  FakeNavigationClient& operator=(const FakeNavigationClient&) = delete;
+
   ~FakeNavigationClient() override = default;
 
  private:
@@ -108,8 +112,6 @@ class FakeNavigationClient : public mojom::NavigationClient {
   }
 
   ReceivedProviderInfoCallback on_received_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeNavigationClient);
 };
 
 class ResourceWriter {
@@ -274,7 +276,7 @@ ServiceWorkerContainerHostAndInfo::~ServiceWorkerContainerHostAndInfo() =
     default;
 
 base::WeakPtr<ServiceWorkerContainerHost> CreateContainerHostForWindow(
-    int process_id,
+    const GlobalRenderFrameHostId& render_frame_host_id,
     bool is_parent_frame_secure,
     base::WeakPtr<ServiceWorkerContextCore> context,
     ServiceWorkerRemoteContainerEndpoint* output_endpoint) {
@@ -292,9 +294,8 @@ base::WeakPtr<ServiceWorkerContainerHost> CreateContainerHostForWindow(
   // In production code this is called from NavigationRequest in the browser
   // process right before navigation commit.
   container_host->OnBeginNavigationCommit(
-      GlobalRenderFrameHostId(process_id, 1 /* route_id */),
-      network::CrossOriginEmbedderPolicy(), std::move(reporter),
-      ukm::kInvalidSourceId);
+      render_frame_host_id, network::CrossOriginEmbedderPolicy(),
+      std::move(reporter), ukm::kInvalidSourceId);
   return container_host;
 }
 

@@ -25,7 +25,7 @@ class DataRequestHandler;
  * http://blog.jaredsinclair.com/post/149892449150/implementing-avassetresourceloaderdelegate-a
  **/
 
-@interface DataSourceLoader : NSObject<AVAssetResourceLoaderDelegate> {
+@interface DataSourceLoader : NSObject <AVAssetResourceLoaderDelegate> {
  @private
   scoped_refptr<media::DataRequestHandler> handler_;
 }
@@ -37,7 +37,8 @@ class DataRequestHandler;
     shouldWaitForLoadingOfRequestedResource:
         (AVAssetResourceLoadingRequest*)loadingRequest;
 
-  // Invoked to inform the delegate that a prior loading request has been cancelled
+// Invoked to inform the delegate that a prior loading request has been
+// cancelled
 - (void)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     didCancelLoadingRequest:(AVAssetResourceLoadingRequest*)loadingRequest;
 

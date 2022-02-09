@@ -37,6 +37,8 @@ class AVFMediaReader {
   // |queue| passed to the constructor.
   explicit AVFMediaReader(dispatch_queue_t queue);
   ~AVFMediaReader();
+  AVFMediaReader(const AVFMediaReader&) = delete;
+  AVFMediaReader& operator=(const AVFMediaReader&) = delete;
 
   bool Initialize(base::scoped_nsobject<AVAsset> asset);
 
@@ -66,14 +68,13 @@ class AVFMediaReader {
   struct StreamReader {
     StreamReader();
     ~StreamReader();
+    StreamReader(const StreamReader&) = delete;
+    StreamReader& operator=(const StreamReader&) = delete;
 
     base::scoped_nsobject<AVAssetReader> asset_reader;
     base::scoped_nsobject<AVAssetReaderTrackOutput> output;
     base::TimeDelta expected_next_timestamp;
     bool end_of_stream = false;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(StreamReader);
   };
 
   bool CalculateBitrate();
@@ -92,8 +93,6 @@ class AVFMediaReader {
   gfx::Size video_coded_size_;
 
   dispatch_queue_t queue_;
-
-  DISALLOW_COPY_AND_ASSIGN(AVFMediaReader);
 };
 
 }  // namespace media

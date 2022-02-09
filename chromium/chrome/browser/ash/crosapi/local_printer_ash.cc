@@ -18,6 +18,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/values.h"
+#include "chrome/browser/ash/printing/ppd_provider_factory.h"
+#include "chrome/browser/ash/printing/print_management/printing_manager.h"
+#include "chrome/browser/ash/printing/print_management/printing_manager_factory.h"
+#include "chrome/browser/ash/printing/printer_setup_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/printing/cups_print_job.h"
@@ -26,13 +30,10 @@
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/history/print_job_info.pb.h"
-#include "chrome/browser/chromeos/printing/ppd_provider_factory.h"
-#include "chrome/browser/chromeos/printing/print_management/printing_manager.h"
-#include "chrome/browser/chromeos/printing/print_management/printing_manager_factory.h"
 #include "chrome/browser/chromeos/printing/print_server.h"
 #include "chrome/browser/chromeos/printing/print_servers_manager.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
-#include "chrome/browser/chromeos/printing/printer_setup_util.h"
+#include "chrome/browser/printing/prefs_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
@@ -40,7 +41,6 @@
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
 #include "chromeos/printing/ppd_provider.h"
 #include "components/prefs/pref_service.h"
-#include "components/printing/browser/prefs_util.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -284,7 +284,7 @@ void LocalPrinterAsh::GetCapability(const std::string& printer_id,
   std::unique_ptr<chromeos::PrinterConfigurer> printer_configurer =
       CreatePrinterConfigurer(profile);
   chromeos::PrinterConfigurer* ptr = printer_configurer.get();
-  printing::SetUpPrinter(
+  ash::printing::SetUpPrinter(
       printers_manager, ptr, *printer,
       base::BindOnce(OnSetUpPrinter, std::move(printer_configurer),
                      profile->GetPrefs(), *printer)
@@ -361,7 +361,7 @@ void LocalPrinterAsh::CancelPrintJob(const std::string& printer_id,
                                      CancelPrintJobCallback callback) {
   Profile* profile = GetProfile();
   DCHECK(profile);
-  chromeos::printing::print_management::PrintingManagerFactory::GetForProfile(
+  ash::printing::print_management::PrintingManagerFactory::GetForProfile(
       profile)
       ->CancelPrintJob(
           chromeos::CupsPrintJob::CreateUniqueId(printer_id, job_id),
@@ -455,6 +455,13 @@ void LocalPrinterAsh::GetPolicies(GetPoliciesCallback callback) {
         static_cast<printing::mojom::PinModeRestriction>(
             prefs->GetInteger(prefs::kPrintingPinDefault));
 
+  if (prefs->HasPrefPath(prefs::kPrintPdfAsImageDefault)) {
+    policies->default_print_pdf_as_image =
+        prefs->GetBoolean(prefs::kPrintPdfAsImageDefault)
+            ? mojom::Policies::OptionalBool::kTrue
+            : mojom::Policies::OptionalBool::kFalse;
+  }
+
   std::move(callback).Run(std::move(policies));
 }
 
@@ -530,7 +537,7 @@ void LocalPrinterAsh::AddPrintJobObserver(
 
 scoped_refptr<chromeos::PpdProvider> LocalPrinterAsh::CreatePpdProvider(
     Profile* profile) {
-  return chromeos::CreatePpdProvider(profile);
+  return ash::CreatePpdProvider(profile);
 }
 
 std::unique_ptr<chromeos::PrinterConfigurer>

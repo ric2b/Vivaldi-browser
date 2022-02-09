@@ -18,6 +18,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
@@ -32,6 +33,9 @@ import org.chromium.ui.widget.ViewRectProvider;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
 /**
  * The main coordinator for the Tab Switcher Action Menu, responsible for creating the popup menu
  * (popup window) in general and building a list of menu items.
@@ -42,12 +46,13 @@ public class TabSwitcherActionMenuCoordinator {
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({MenuItemType.DIVIDER, MenuItemType.CLOSE_TAB, MenuItemType.NEW_TAB,
-            MenuItemType.NEW_INCOGNITO_TAB})
+            MenuItemType.NEW_INCOGNITO_TAB, MenuItemType.VIVALDI_CREATE_TAB_STACK})
     public @interface MenuItemType {
         int DIVIDER = 0;
         int CLOSE_TAB = 1;
         int NEW_TAB = 2;
         int NEW_INCOGNITO_TAB = 3;
+        int VIVALDI_CREATE_TAB_STACK = 4; // Vivaldi
     }
 
     /**
@@ -143,6 +148,8 @@ public class TabSwitcherActionMenuCoordinator {
         itemList.add(buildListItemByMenuItemType(MenuItemType.DIVIDER));
         itemList.add(buildListItemByMenuItemType(MenuItemType.NEW_TAB));
         itemList.add(buildListItemByMenuItemType(MenuItemType.NEW_INCOGNITO_TAB));
+        if (SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", true))
+            itemList.add(buildListItemByMenuItemType(MenuItemType.VIVALDI_CREATE_TAB_STACK));
         return itemList;
     }
 
@@ -155,7 +162,11 @@ public class TabSwitcherActionMenuCoordinator {
                         R.string.menu_new_tab, R.id.new_tab_menu_id, R.drawable.new_tab_icon);
             case MenuItemType.NEW_INCOGNITO_TAB:
                 return buildMenuListItem(R.string.menu_new_incognito_tab,
-                        R.id.new_incognito_tab_menu_id, R.drawable.incognito_simple);
+                        R.id.new_incognito_tab_menu_id, R.drawable.incognito_simple,
+                        IncognitoUtils.isIncognitoModeEnabled());
+            case MenuItemType.VIVALDI_CREATE_TAB_STACK:
+                return buildMenuListItem(R.string.tabs_menu_create_new_tab_stack,
+                        R.id.vivaldi_create_new_tab_stack, R.drawable.new_tab_icon);
             case MenuItemType.DIVIDER:
             default:
                 return buildMenuDivider();

@@ -42,12 +42,12 @@
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_disposition.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
+#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/dom_timer_coordinator.h"
-#include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/console_logger.h"
@@ -228,9 +228,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) {
     return false;
   }
-  virtual mojom::blink::V8CacheOptions GetV8CacheOptions() const {
-    return mojom::blink::V8CacheOptions::kDefault;
-  }
+  virtual mojom::blink::V8CacheOptions GetV8CacheOptions() const;
 
   void DispatchErrorEvent(ErrorEvent*, SanitizeScriptErrors);
 
@@ -334,21 +332,26 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   // Report-To endpoints, via ReportPermissionsPolicyViolation(), if the feature
   // is disabled. The optional ConsoleMessage will be sent to the console if
   // present, or else a default message will be used instead.
+  bool IsFeatureEnabled(mojom::blink::PermissionsPolicyFeature) const;
   bool IsFeatureEnabled(
       mojom::blink::PermissionsPolicyFeature,
-      ReportOptions report_on_failure = ReportOptions::kDoNotReport,
-      const String& message = g_empty_string) const;
+      ReportOptions report_option = ReportOptions::kDoNotReport,
+      const String& message = g_empty_string);
+
+  bool IsFeatureEnabled(mojom::blink::DocumentPolicyFeature) const;
+  bool IsFeatureEnabled(mojom::blink::DocumentPolicyFeature,
+                        PolicyValue threshold_value) const;
   bool IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature,
       ReportOptions report_option = ReportOptions::kDoNotReport,
       const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const;
+      const String& source_file = g_empty_string);
   bool IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature,
       PolicyValue threshold_value,
       ReportOptions report_option = ReportOptions::kDoNotReport,
       const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const;
+      const String& source_file = g_empty_string);
 
   // Report policy violations is delegated to Document because in order
   // to both remain const qualified and output console message, needs
@@ -459,10 +462,12 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
 
  private:
   // ConsoleLogger implementation.
-  void AddConsoleMessageImpl(mojom::ConsoleMessageSource,
-                             mojom::ConsoleMessageLevel,
-                             const String& message,
-                             bool discard_duplicates) override;
+  void AddConsoleMessageImpl(
+      mojom::blink::ConsoleMessageSource,
+      mojom::blink::ConsoleMessageLevel,
+      const String& message,
+      bool discard_duplicates,
+      absl::optional<mojom::ConsoleMessageCategory> category) override;
   virtual void AddConsoleMessageImpl(ConsoleMessage*,
                                      bool discard_duplicates) = 0;
 

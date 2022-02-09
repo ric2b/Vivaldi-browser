@@ -31,6 +31,6 @@ class PWAMenuController {
   Browser* browser_;
 };
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif  //  BROWSER_MENUS_DEVELOPERTOOLS_MENU_CONTROLLER_H_

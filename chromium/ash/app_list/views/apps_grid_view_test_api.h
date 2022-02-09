@@ -5,6 +5,8 @@
 #ifndef ASH_APP_LIST_VIEWS_APPS_GRID_VIEW_TEST_API_H_
 #define ASH_APP_LIST_VIEWS_APPS_GRID_VIEW_TEST_API_H_
 
+#include <string>
+
 #include "ash/app_list/views/apps_grid_view.h"
 #include "base/macros.h"
 
@@ -26,6 +28,10 @@ namespace test {
 class AppsGridViewTestApi {
  public:
   explicit AppsGridViewTestApi(AppsGridView* view);
+
+  AppsGridViewTestApi(const AppsGridViewTestApi&) = delete;
+  AppsGridViewTestApi& operator=(const AppsGridViewTestApi&) = delete;
+
   ~AppsGridViewTestApi();
 
   views::View* GetViewAtModelIndex(int index) const;
@@ -39,13 +45,16 @@ class AppsGridViewTestApi {
 
   void PressItemAt(int index);
 
-  int TilesPerPage() const;
+  int TilesPerPage(int page) const;
 
   int AppsOnPage(int page) const;
 
   AppListItemView* GetViewAtIndex(GridIndex index) const;
 
   AppListItemView* GetViewAtVisualIndex(int page, int slot) const;
+
+  // Returns the name of the item specified by the grid location.
+  const std::string& GetNameAtVisualIndex(int page, int slot) const;
 
   // Returns tile bounds for item in the provided grid `slot` and `page`.
   // Item slot indicates the index of the item in the apps grid.
@@ -68,8 +77,6 @@ class AppsGridViewTestApi {
 
  private:
   AppsGridView* view_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppsGridViewTestApi);
 };
 
 }  // namespace test

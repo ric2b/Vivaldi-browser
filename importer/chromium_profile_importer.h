@@ -25,6 +25,9 @@ class ChromiumProfileImporter {
  public:
   ChromiumProfileImporter();
   ~ChromiumProfileImporter();
+  ChromiumProfileImporter(const ChromiumProfileImporter&) = delete;
+  ChromiumProfileImporter& operator=(const ChromiumProfileImporter&) = delete;
+
   void DetectChromiumProfiles(std::vector<importer::SourceProfile>* profiles);
 
  private:
@@ -32,8 +35,6 @@ class ChromiumProfileImporter {
   void ReadProfiles(std::vector<importer::ChromeProfileInfo>* cp,
                     base::FilePath profileDirectory);
   std::vector<ChromiumProfile> chromeProfiles;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromiumProfileImporter);
 };
 
 #endif  // IMPORTER_CHROMIUM_PROFILE_IMPORTER_H_

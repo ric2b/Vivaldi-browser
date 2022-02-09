@@ -51,6 +51,10 @@ class HIDDetectionScreen : public BaseScreen,
 
   HIDDetectionScreen(HIDDetectionView* view,
                      const ScreenExitCallback& exit_callback);
+
+  HIDDetectionScreen(const HIDDetectionScreen&) = delete;
+  HIDDetectionScreen& operator=(const HIDDetectionScreen&) = delete;
+
   ~HIDDetectionScreen() override;
 
   static std::string GetResultString(Result result);
@@ -115,21 +119,6 @@ class HIDDetectionScreen : public BaseScreen,
   void CleanupOnExit();
 
   bool ShouldEnableContinueButton();
-
-  // Types of dialog leaving scenarios for UMA metric.
-  enum ContinueScenarioType {
-    // Only pointing device detected, user pressed 'Continue'.
-    POINTING_DEVICE_ONLY_DETECTED,
-
-    // Only keyboard detected, user pressed 'Continue'.
-    KEYBOARD_DEVICE_ONLY_DETECTED,
-
-    // All devices detected.
-    All_DEVICES_DETECTED,
-
-    // Must be last enum element.
-    CONTINUE_SCENARIO_TYPE_SIZE
-  };
 
   void InitializeAdapter(scoped_refptr<device::BluetoothAdapter> adapter);
 
@@ -272,8 +261,6 @@ class HIDDetectionScreen : public BaseScreen,
   bool devices_enumerated_ = false;
 
   base::WeakPtrFactory<HIDDetectionScreen> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(HIDDetectionScreen);
 };
 
 }  // namespace ash

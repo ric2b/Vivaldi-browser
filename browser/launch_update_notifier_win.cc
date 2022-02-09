@@ -36,12 +36,6 @@ namespace vivaldi {
 
 namespace {
 
-// Do not start the update checker immediately at the browser startup to present
-// the user with an update notification if any after some delay. This also runs
-// the check when the browser should be mostly idle.
-constexpr base::TimeDelta kLaunchUpdateCheckDelay =
-    base::TimeDelta::FromSeconds(15);
-
 constexpr base::TimeDelta kStandaloneCheckPeriod =
 #ifdef OFFICIAL_BUILD
     base::TimeDelta::FromDays(1)
@@ -56,6 +50,7 @@ void StartUpdateNotifierIfEnabled() {
   // can kill the notifier and try with a new value of --vuu.
   base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
   cmdline.AppendSwitch(vivaldi_update_notifier::kLaunchIfEnabled);
+  cmdline.AppendSwitch(vivaldi_update_notifier::kBrowserStartup);
   LaunchNotifierProcess(cmdline);
 }
 
@@ -72,12 +67,15 @@ scoped_refptr<base::SingleThreadTaskRunner> GetStandaloneAutoUpdateSequence() {
       {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
-void LaunchStandaloneAutoUpdateCheck() {
+void LaunchStandaloneAutoUpdateCheck(bool first_time) {
   DLOG(INFO) << "Starting standalone update check";
   base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
 
-  // Pretend that we are called from a scheduler to run the background check.
-  cmdline.AppendSwitch(vivaldi_update_notifier::kFromScheduler);
+  // Notify that this an automatic check invoked from the browser.
+  cmdline.AppendSwitch(vivaldi_update_notifier::kAutoCheck);
+  if (first_time) {
+    cmdline.AppendSwitch(vivaldi_update_notifier::kBrowserStartup);
+  }
   LaunchNotifierProcess(cmdline);
 }
 
@@ -85,8 +83,8 @@ void DoStartStandaloneAutoUpdateCheck() {
   base::RepeatingTimer& timer = GetStandaloneAutoUpdateTimer();
   timer.Stop();
   timer.Start(FROM_HERE, kStandaloneCheckPeriod,
-              base::BindRepeating(&LaunchStandaloneAutoUpdateCheck));
-  LaunchStandaloneAutoUpdateCheck();
+              base::BindRepeating(&LaunchStandaloneAutoUpdateCheck, false));
+  LaunchStandaloneAutoUpdateCheck(true);
 }
 
 void DoStopStandaloneUpdateCheck() {
@@ -97,10 +95,9 @@ void DoStopStandaloneUpdateCheck() {
   SendQuitUpdateNotifier(base::FilePath(), /*global=*/false);
 }
 
-void StartStandaloneAutoUpdateCheck(base::TimeDelta initial_delay) {
-  GetStandaloneAutoUpdateSequence()->PostDelayedTask(
-      FROM_HERE, base::BindOnce(&DoStartStandaloneAutoUpdateCheck),
-      initial_delay);
+void StartStandaloneAutoUpdateCheck() {
+  GetStandaloneAutoUpdateSequence()->PostTask(
+      FROM_HERE, base::BindOnce(&DoStartStandaloneAutoUpdateCheck));
 }
 
 }  // namespace
@@ -126,7 +123,7 @@ void LaunchUpdateNotifier(Profile* profile) {
 
   if (IsStandaloneBrowser()) {
     if (IsStandaloneAutoUpdateEnabled()) {
-      StartStandaloneAutoUpdateCheck(kLaunchUpdateCheckDelay);
+      StartStandaloneAutoUpdateCheck();
     }
     return;
   }
@@ -134,11 +131,10 @@ void LaunchUpdateNotifier(Profile* profile) {
   // Ensure that the old obsolete preference is removed from the profile.
   profile->GetPrefs()->ClearPref(vivaldiprefs::kAutoUpdateEnabled);
 
-  base::ThreadPool::PostDelayedTask(
-      FROM_HERE,
-      {base::WithBaseSyncPrimitives(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&StartUpdateNotifierIfEnabled), kLaunchUpdateCheckDelay);
+  base::ThreadPool::PostTask(FROM_HERE,
+                             {base::WithBaseSyncPrimitives(),
+                              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+                             base::BindOnce(&StartUpdateNotifierIfEnabled));
 }
 
 void DisableStandaloneAutoUpdate() {
@@ -154,7 +150,7 @@ void EnableStandaloneAutoUpdate() {
   DCHECK(IsStandaloneBrowser());
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetBoolean(vivaldiprefs::kVivaldiAutoUpdateStandalone, true);
-  StartStandaloneAutoUpdateCheck(base::TimeDelta());
+  StartStandaloneAutoUpdateCheck();
   DLOG(INFO) << "Enabled standalone update notifier";
 }
 

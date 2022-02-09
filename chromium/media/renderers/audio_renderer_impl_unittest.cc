@@ -58,7 +58,7 @@ struct OutputFrames {
 }  // namespace
 
 // Constants to specify the type of audio data used.
-constexpr AudioCodec kCodec = kCodecVorbis;
+constexpr AudioCodec kCodec = AudioCodec::kVorbis;
 constexpr SampleFormat kSampleFormat = kSampleFormatPlanarF32;
 constexpr ChannelLayout kChannelLayout = CHANNEL_LAYOUT_STEREO;
 constexpr int kChannels = 2;
@@ -136,8 +136,11 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
                             base::Unretained(this)),
         &media_log_, nullptr);
     renderer_->tick_clock_ = &tick_clock_;
-    tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
+    tick_clock_.Advance(base::Seconds(1));
   }
+
+  AudioRendererImplTest(const AudioRendererImplTest&) = delete;
+  AudioRendererImplTest& operator=(const AudioRendererImplTest&) = delete;
 
   ~AudioRendererImplTest() override {
     SCOPED_TRACE("~AudioRendererImplTest()");
@@ -251,9 +254,10 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
     hardware_params_.Reset(AudioParameters::AUDIO_BITSTREAM_EAC3,
                            kChannelLayout, kOutputSamplesPerSecond, 512);
     sink_ = base::MakeRefCounted<FakeAudioRendererSink>(hardware_params_);
-    AudioDecoderConfig audio_config(
-        kCodecAC3, kSampleFormatEac3, kChannelLayout, kInputSamplesPerSecond,
-        EmptyExtraData(), EncryptionScheme::kUnencrypted);
+    AudioDecoderConfig audio_config(AudioCodec::kAC3, kSampleFormatEac3,
+                                    kChannelLayout, kInputSamplesPerSecond,
+                                    EmptyExtraData(),
+                                    EncryptionScheme::kUnencrypted);
     demuxer_stream_.set_audio_decoder_config(audio_config);
 
     ConfigureDemuxerStream(true);
@@ -594,8 +598,6 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
   bool expected_init_result_;
   bool enter_pending_decoder_init_;
   bool ended_;
-
-  DISALLOW_COPY_AND_ASSIGN(AudioRendererImplTest);
 };
 
 TEST_F(AudioRendererImplTest, Initialize_Successful) {
@@ -649,7 +651,7 @@ TEST_F(AudioRendererImplTest, SignalConfigChange) {
   // Force config change to simulate detected change from decoder stream. Expect
   // that RendererClient to be signaled with the new config.
   const AudioDecoderConfig kValidAudioConfig(
-      kCodecVorbis, kSampleFormatPlanarF32, CHANNEL_LAYOUT_STEREO, 44100,
+      AudioCodec::kVorbis, kSampleFormatPlanarF32, CHANNEL_LAYOUT_STEREO, 44100,
       EmptyExtraData(), EncryptionScheme::kUnencrypted);
   EXPECT_TRUE(kValidAudioConfig.IsValidConfig());
   EXPECT_CALL(*this, OnAudioConfigChange(DecoderConfigEq(kValidAudioConfig)));
@@ -923,7 +925,7 @@ TEST_F(AudioRendererImplTest, ChannelMask_DownmixDiscreteLayout) {
   int audio_channels = 9;
 
   AudioDecoderConfig audio_config(
-      kCodecOpus, kSampleFormat, CHANNEL_LAYOUT_DISCRETE,
+      AudioCodec::kOpus, kSampleFormat, CHANNEL_LAYOUT_DISCRETE,
       kInputSamplesPerSecond, EmptyExtraData(), EncryptionScheme::kUnencrypted);
   audio_config.SetChannelsForDiscrete(audio_channels);
   demuxer_stream_.set_audio_decoder_config(audio_config);
@@ -976,8 +978,7 @@ TEST_F(AudioRendererImplTest, PendingRead_Flush) {
   FlushDuringPendingRead();
 
   // Preroll again to a different timestamp and verify it completed normally.
-  const base::TimeDelta seek_timestamp =
-      base::TimeDelta::FromMilliseconds(1000);
+  const base::TimeDelta seek_timestamp = base::Milliseconds(1000);
   Preroll(seek_timestamp, seek_timestamp, PIPELINE_OK);
 }
 
@@ -1095,8 +1096,8 @@ TEST_F(AudioRendererImplTest, RenderingDelayedForEarlyStartTime) {
   // through the desired output buffer; this allows for maximum test coverage.
   const double kBuffers = 4.5;
   const base::TimeDelta first_timestamp =
-      base::TimeDelta::FromSecondsD(hardware_params_.frames_per_buffer() *
-                                    kBuffers / hardware_params_.sample_rate());
+      base::Seconds(hardware_params_.frames_per_buffer() * kBuffers /
+                    hardware_params_.sample_rate());
 
   Preroll(base::TimeDelta(), first_timestamp, PIPELINE_OK);
   StartTicking();
@@ -1278,8 +1279,7 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
 
   // Consume some more audio data.
   frames_to_consume = frames_buffered();
-  tick_clock_.Advance(
-      base::TimeDelta::FromSecondsD(1.0 / kOutputSamplesPerSecond));
+  tick_clock_.Advance(base::Seconds(1.0 / kOutputSamplesPerSecond));
   EXPECT_TRUE(ConsumeBufferedData(frames_to_consume));
 
   // Time should change now that the audio hardware has called back.
@@ -1314,7 +1314,7 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
 
   // Advancing once more will exceed the amount of played out frames finally.
   const base::TimeDelta kOneSample =
-      base::TimeDelta::FromSecondsD(1.0 / kOutputSamplesPerSecond);
+      base::Seconds(1.0 / kOutputSamplesPerSecond);
   base::TimeTicks current_time = tick_clock_.NowTicks();
   tick_clock_.Advance(kOneSample);
   EXPECT_EQ(current_time, CurrentMediaWallClockTime(&is_time_moving));
@@ -1324,7 +1324,7 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
   DeliverRemainingAudio();
 
   // Elapse a lot of time between StopTicking() and the next Render() call.
-  const base::TimeDelta kOneSecond = base::TimeDelta::FromSeconds(1);
+  const base::TimeDelta kOneSecond = base::Seconds(1);
   tick_clock_.Advance(kOneSecond);
   StartTicking();
 
@@ -1334,8 +1334,8 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
 
   // Consume some buffered data with a small delay.
   uint32_t delay_frames = 500;
-  base::TimeDelta delay_time = base::TimeDelta::FromMicroseconds(
-      std::round(delay_frames * kOutputMicrosPerFrame));
+  base::TimeDelta delay_time =
+      base::Microseconds(std::round(delay_frames * kOutputMicrosPerFrame));
 
   frames_to_consume.value = frames_buffered().value / 16;
   EXPECT_TRUE(ConsumeBufferedData(frames_to_consume, delay_time));

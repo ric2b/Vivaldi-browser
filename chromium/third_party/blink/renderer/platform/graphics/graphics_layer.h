@@ -213,7 +213,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
     needs_check_raster_invalidation_ = true;
   }
 
-  void PaintForTesting(const IntRect& interest_rect);
+  void PaintForTesting(const IntRect& interest_rect, bool record_debug_info);
 
   void SetShouldCreateLayersAfterPaint(bool);
   bool ShouldCreateLayersAfterPaint() const {
@@ -259,7 +259,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   void SetContentsTo(scoped_refptr<cc::Layer>);
 
   RasterInvalidator& EnsureRasterInvalidator();
-  void InvalidateRaster(const IntRect&);
+  void InvalidateRaster(const gfx::Rect&);
 
   GraphicsLayerClient& client_;
 

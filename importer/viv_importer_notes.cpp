@@ -23,8 +23,10 @@
 
 class OperaNotesReader : public OperaAdrFileReader {
  public:
-  OperaNotesReader() {}
-  ~OperaNotesReader() override {}
+  OperaNotesReader() = default;
+  ~OperaNotesReader() override = default;
+  OperaNotesReader(const OperaNotesReader&) = delete;
+  OperaNotesReader& operator=(const OperaNotesReader&) = delete;
 
   void AddNote(const std::vector<std::u16string>& current_folder,
                const base::DictionaryValue& entries,
@@ -40,8 +42,6 @@ class OperaNotesReader : public OperaAdrFileReader {
  private:
   std::vector<std::u16string> current_folder;
   std::vector<ImportedNotesEntry> notes;
-
-  DISALLOW_COPY_AND_ASSIGN(OperaNotesReader);
 };
 
 void OperaNotesReader::HandleEntry(const std::string& category,

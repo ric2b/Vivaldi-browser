@@ -9,7 +9,7 @@ using content::BrowserThread;
 namespace settings {
 
 void ImportDataHandler::ImportItemFailed(importer::ImportItem item,
-  const std::string& error) {
+                                         const std::string& error) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // NOTE(pettern@vivaldi.com): We don't use this code, so this

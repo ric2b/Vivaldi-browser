@@ -57,8 +57,6 @@ class AutoUpdateCheckForUpdatesFunction : public ExtensionFunction {
   void DeliverResult();
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateCheckForUpdatesFunction);
 };
 
 class AutoUpdateIsUpdateNotifierEnabledFunction : public ExtensionFunction {
@@ -72,8 +70,6 @@ class AutoUpdateIsUpdateNotifierEnabledFunction : public ExtensionFunction {
   void DeliverResult(bool enabled);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateIsUpdateNotifierEnabledFunction);
 };
 
 class AutoUpdateEnableUpdateNotifierFunction : public ExtensionFunction {
@@ -87,8 +83,6 @@ class AutoUpdateEnableUpdateNotifierFunction : public ExtensionFunction {
   void DeliverResult(bool success);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateEnableUpdateNotifierFunction);
 };
 
 class AutoUpdateDisableUpdateNotifierFunction : public ExtensionFunction {
@@ -102,8 +96,6 @@ class AutoUpdateDisableUpdateNotifierFunction : public ExtensionFunction {
   void DeliverResult(bool success);
 
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateDisableUpdateNotifierFunction);
 };
 
 class AutoUpdateInstallUpdateAndRestartFunction : public ExtensionFunction {
@@ -115,8 +107,6 @@ class AutoUpdateInstallUpdateAndRestartFunction : public ExtensionFunction {
  private:
   ~AutoUpdateInstallUpdateAndRestartFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateInstallUpdateAndRestartFunction);
 };
 
 class AutoUpdateGetAutoInstallUpdatesFunction : public ExtensionFunction {
@@ -128,8 +118,6 @@ class AutoUpdateGetAutoInstallUpdatesFunction : public ExtensionFunction {
  private:
   ~AutoUpdateGetAutoInstallUpdatesFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateGetAutoInstallUpdatesFunction);
 };
 
 class AutoUpdateSetAutoInstallUpdatesFunction : public ExtensionFunction {
@@ -141,8 +129,6 @@ class AutoUpdateSetAutoInstallUpdatesFunction : public ExtensionFunction {
  private:
   ~AutoUpdateSetAutoInstallUpdatesFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateSetAutoInstallUpdatesFunction);
 };
 
 class AutoUpdateGetLastCheckTimeFunction : public ExtensionFunction {
@@ -154,8 +140,6 @@ class AutoUpdateGetLastCheckTimeFunction : public ExtensionFunction {
  private:
   ~AutoUpdateGetLastCheckTimeFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateGetLastCheckTimeFunction);
 };
 
 class AutoUpdateGetUpdateStatusFunction : public ExtensionFunction {
@@ -173,8 +157,6 @@ class AutoUpdateGetUpdateStatusFunction : public ExtensionFunction {
  private:
   ~AutoUpdateGetUpdateStatusFunction() override = default;
   ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateGetUpdateStatusFunction);
 };
 
 class AutoUpdateHasAutoUpdatesFunction : public ExtensionFunction {
@@ -188,8 +170,6 @@ class AutoUpdateHasAutoUpdatesFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   bool HasAutoUpdates();
-
-  DISALLOW_COPY_AND_ASSIGN(AutoUpdateHasAutoUpdatesFunction);
 };
 
 }  // namespace extensions

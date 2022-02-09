@@ -37,7 +37,7 @@
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/web_contents.h"
@@ -83,6 +83,9 @@ class EnableViaDialogFlow : public ExtensionEnableFlowDelegate {
         extension_id_(extension_id),
         callback_(std::move(callback)) {}
 
+  EnableViaDialogFlow(const EnableViaDialogFlow&) = delete;
+  EnableViaDialogFlow& operator=(const EnableViaDialogFlow&) = delete;
+
   ~EnableViaDialogFlow() override {}
 
   void Run() {
@@ -111,8 +114,6 @@ class EnableViaDialogFlow : public ExtensionEnableFlowDelegate {
   std::string extension_id_;
   base::OnceClosure callback_;
   std::unique_ptr<ExtensionEnableFlow> flow_;
-
-  DISALLOW_COPY_AND_ASSIGN(EnableViaDialogFlow);
 };
 
 const Extension* GetExtension(Profile* profile,

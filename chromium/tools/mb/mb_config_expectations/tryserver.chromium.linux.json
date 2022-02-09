@@ -17,7 +17,7 @@
       "is_chromecast": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -28,7 +28,18 @@
       "is_chromecast": true,
       "is_component_build": false,
       "is_debug": false,
+      "symbol_level": 0,
+      "use_goma": true
+    }
+  },
+  "cast_shell_linux_arm64": {
+    "gn_args": {
+      "dcheck_always_on": false,
+      "is_chromecast": true,
+      "is_component_build": false,
+      "is_debug": false,
       "symbol_level": 1,
+      "target_cpu": "arm64",
       "use_goma": true
     }
   },
@@ -48,7 +59,7 @@
       "is_chromecast": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_cpu": "arm64",
       "target_os": "fuchsia",
       "use_goma": true
@@ -88,7 +99,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_cpu": "arm64",
       "target_os": "fuchsia",
       "use_goma": true
@@ -100,7 +111,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_cpu": "arm64",
       "target_os": "fuchsia",
       "use_goma": true
@@ -121,7 +132,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_os": "fuchsia",
       "use_goma": true
     }
@@ -133,7 +144,7 @@
       "is_chromecast": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_os": "fuchsia",
       "use_goma": true
     }
@@ -144,7 +155,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_cpu": "arm64",
       "target_os": "fuchsia",
       "use_goma": true
@@ -156,7 +167,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_os": "fuchsia",
       "use_goma": true
     }
@@ -167,7 +178,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_os": "fuchsia",
       "use_goma": true
     }
@@ -180,6 +191,7 @@
       "is_component_build": false,
       "is_debug": false,
       "ozone_platform": "headless",
+      "ozone_platform_x11": false,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_bundled_weston": true,
@@ -196,6 +208,7 @@
       "is_component_build": false,
       "is_debug": false,
       "ozone_platform": "headless",
+      "ozone_platform_x11": false,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_bundled_weston": true,
@@ -207,7 +220,6 @@
   "gpu-fyi-try-linux-amd-rel": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -215,6 +227,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -233,7 +246,6 @@
   "gpu-fyi-try-linux-intel-exp": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -241,6 +253,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -249,7 +262,6 @@
   "gpu-fyi-try-linux-intel-rel": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -257,6 +269,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -279,7 +292,6 @@
   "gpu-fyi-try-linux-intel-skv": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -287,6 +299,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -294,13 +307,13 @@
   },
   "gpu-fyi-try-linux-nvidia-dbg": {
     "gn_args": {
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": true,
       "is_debug": true,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -319,7 +332,6 @@
   "gpu-fyi-try-linux-nvidia-exp": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -327,6 +339,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -335,7 +348,6 @@
   "gpu-fyi-try-linux-nvidia-rel": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -343,6 +355,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -351,7 +364,6 @@
   "gpu-fyi-try-linux-nvidia-skv": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -359,6 +371,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -367,7 +380,6 @@
   "gpu-fyi-try-linux-nvidia-tsn": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -375,6 +387,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "is_tsan": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
@@ -399,7 +412,7 @@
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -409,7 +422,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -419,7 +432,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -429,7 +442,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -439,7 +452,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -450,7 +463,7 @@
       "enable_autofill_assistant_api": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -484,7 +497,7 @@
       "is_component_build": false,
       "is_debug": false,
       "is_tsan": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -518,7 +531,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -536,7 +549,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -546,7 +559,7 @@
       "dcheck_always_on": false,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -556,7 +569,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -567,7 +580,7 @@
       "extended_tracing_enabled": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -626,7 +639,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -643,7 +656,7 @@
       "optimize_for_fuzzing": true,
       "pdf_enable_xfa": true,
       "proprietary_codecs": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true,
       "use_libfuzzer": true
     }
@@ -657,7 +670,7 @@
       "is_debug": false,
       "mbi_mode": "per_render_process_host",
       "proprietary_codecs": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -670,7 +683,7 @@
       "is_debug": false,
       "mbi_mode": "per_site_instance",
       "proprietary_codecs": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -693,7 +706,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true,
       "use_perfetto_client_library": true
     }
@@ -716,12 +729,14 @@
   "linux-rel-orchestrator": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
+      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "dcheck_always_on": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 0,
+      "use_clang_coverage": true,
       "use_dummy_lastchange": true,
       "use_goma": true
     }
@@ -738,7 +753,8 @@
       "symbol_level": 0,
       "use_clang_coverage": true,
       "use_dummy_lastchange": true,
-      "use_rbe": true
+      "use_rbe": true,
+      "use_remoteexec": true
     }
   },
   "linux-rel-rts": {
@@ -775,7 +791,24 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
+      "use_goma": true
+    }
+  },
+  "linux-wayland-rel": {
+    "gn_args": {
+      "blink_enable_generated_code_formatting": false,
+      "dcheck_always_on": true,
+      "ffmpeg_branding": "Chrome",
+      "is_component_build": false,
+      "is_debug": false,
+      "ozone_auto_platforms": false,
+      "ozone_platform": "wayland",
+      "ozone_platform_wayland": true,
+      "proprietary_codecs": true,
+      "symbol_level": 0,
+      "use_bundled_weston": true,
+      "use_dummy_lastchange": true,
       "use_goma": true
     }
   },
@@ -795,7 +828,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -805,7 +838,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -815,7 +848,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -852,6 +885,18 @@
       "use_goma": true
     }
   },
+  "linux_chromium_asan_rel_ng_rts": {
+    "gn_args": {
+      "blink_enable_generated_code_formatting": false,
+      "dcheck_always_on": true,
+      "is_asan": true,
+      "is_component_build": false,
+      "is_debug": false,
+      "is_lsan": true,
+      "symbol_level": 1,
+      "use_goma": true
+    }
+  },
   "linux_chromium_cfi_rel_ng": {
     "gn_args": {
       "dcheck_always_on": true,
@@ -873,7 +918,7 @@
       "is_component_build": false,
       "is_debug": false,
       "is_lsan": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "target_os": "chromeos",
       "use_goma": true
     }
@@ -895,7 +940,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -905,7 +950,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -932,7 +977,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -968,6 +1013,18 @@
       "use_goma": true
     }
   },
+  "linux_chromium_tsan_rel_ng_rts": {
+    "gn_args": {
+      "blink_enable_generated_code_formatting": false,
+      "dcheck_always_on": true,
+      "enable_nacl": false,
+      "is_component_build": false,
+      "is_debug": false,
+      "is_tsan": true,
+      "symbol_level": 1,
+      "use_goma": true
+    }
+  },
   "linux_chromium_ubsan_rel_ng": {
     "gn_args": {
       "dcheck_always_on": false,
@@ -986,7 +1043,7 @@
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -996,7 +1053,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -1006,7 +1063,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   },
@@ -1026,7 +1083,6 @@
   "linux_optional_gpu_tests_rel": {
     "gn_args": {
       "blink_enable_generated_code_formatting": false,
-      "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
       "enable_nacl": false,
@@ -1034,6 +1090,7 @@
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
       "is_debug": false,
+      "is_gpu_fyi_bot": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_goma": true
@@ -1054,7 +1111,7 @@
       "enable_vr": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true,
       "use_ozone": true
     }
@@ -1065,7 +1122,7 @@
       "dcheck_always_on": true,
       "is_component_build": false,
       "is_debug": false,
-      "symbol_level": 1,
+      "symbol_level": 0,
       "use_goma": true
     }
   }

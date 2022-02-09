@@ -50,6 +50,21 @@ namespace {
 // dense layout.
 constexpr int kDenseLayoutHeightThreshold = 600;
 
+// The preferred search box height.
+constexpr int kSearchBoxHeight = 48;
+
+// The preferred search box height when the vertical app list contents space
+// is condensed - normally `kSearchBoxHeight` would be used.
+constexpr int kSearchBoxHeightForDenseLayout = 40;
+
+// The top search box margin (measured from the app list view top bound) when
+// app list view is in peeking/half state on non-apps page.
+constexpr int kDefaultSearchBoxTopMarginInPeekingState = 24;
+
+// The top search box margin (measured from the app list view top bound) when
+// app list view is in peeking state on the apps page.
+constexpr int kSearchBoxTopMarginInPeekingAppsPage = 84;
+
 // The range of app list transition progress in which the expand arrow'
 // opacity changes from 0 to 1.
 constexpr float kExpandArrowOpacityStartProgress = 0.61;
@@ -62,12 +77,11 @@ constexpr float kSearchBoxOpacityStartProgress = 0.11f;
 constexpr float kSearchBoxOpacityEndProgress = 1.0f;
 
 // Duration for page transition.
-constexpr base::TimeDelta kPageTransitionDuration =
-    base::TimeDelta::FromMilliseconds(250);
+constexpr base::TimeDelta kPageTransitionDuration = base::Milliseconds(250);
 
 // Duration for overscroll page transition.
 constexpr base::TimeDelta kOverscrollPageTransitionDuration =
-    base::TimeDelta::FromMilliseconds(50);
+    base::Milliseconds(50);
 
 // Calculates opacity value for the current app list progress.
 // |progress| - The target app list view progress - a value in [0.0, 2.0]
@@ -94,6 +108,13 @@ ContentsView::ContentsView(AppListView* app_list_view)
 
 ContentsView::~ContentsView() {
   pagination_model_.RemoveObserver(this);
+}
+
+// static
+int ContentsView::GetPeekingSearchBoxTopMarginOnPage(AppListState page) {
+  return page == AppListState::kStateApps
+             ? kSearchBoxTopMarginInPeekingAppsPage
+             : kDefaultSearchBoxTopMarginInPeekingState;
 }
 
 void ContentsView::Init(AppListModel* model) {
@@ -263,15 +284,10 @@ int ContentsView::NumLauncherPages() const {
   return pagination_model_.total_pages();
 }
 
-const AppListConfig& ContentsView::GetAppListConfig() const {
-  return app_list_view_->GetAppListConfig();
-}
-
 gfx::Size ContentsView::AdjustSearchBoxSizeToFitMargins(
     const gfx::Size& preferred_size) const {
-  const int padded_width =
-      GetContentsBounds().width() -
-      2 * GetAppListConfig().GetIdealHorizontalMargin(GetContentsBounds());
+  const int padded_width = GetContentsBounds().width() -
+                           2 * apps_container_view_->GetIdealHorizontalMargin();
   return gfx::Size(
       base::clamp(padded_width, kSearchBarMinWidth, preferred_size.width()),
       preferred_size.height());
@@ -383,10 +399,9 @@ void ContentsView::InitializeSearchBoxAnimation(AppListState current_state,
   if (!search_box->GetWidget())
     return;
 
-  search_box->UpdateLayout(
-      1.f, current_state, GetSearchBoxSize(current_state).height(),
-      target_state, GetSearchBoxSize(target_state).height());
-  search_box->UpdateBackground(1.f, current_state, target_state);
+  search_box->UpdateLayout(target_state,
+                           GetSearchBoxSize(target_state).height());
+  search_box->UpdateBackground(target_state);
 
   gfx::Rect target_bounds = GetSearchBoxBounds(target_state);
   target_bounds = search_box->GetViewBoundsForSearchBoxContentsBounds(
@@ -442,8 +457,8 @@ void ContentsView::UpdateExpandArrowBehavior(AppListViewState target_state) {
   // Allow ChromeVox to focus the expand arrow only when peeking launcher.
   expand_arrow_view_->GetViewAccessibility().OverrideIsIgnored(
       !expand_arrow_enabled);
-  expand_arrow_view_->GetViewAccessibility().NotifyAccessibilityEvent(
-      ax::mojom::Event::kTreeChanged);
+  expand_arrow_view_->NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged,
+                                               true);
 
   expand_arrow_view_->MaybeEnableHintingAnimation(expand_arrow_enabled);
 }
@@ -496,14 +511,6 @@ void ContentsView::UpdateSearchBoxVisibility(AppListState current_state) {
   }
 }
 
-PaginationModel* ContentsView::GetAppsPaginationModel() {
-  return apps_container_view_->apps_grid_view()->pagination_model();
-}
-
-void ContentsView::ShowFolderContent(AppListFolderItem* item) {
-  apps_container_view_->ShowActiveFolder(item);
-}
-
 AppListPage* ContentsView::GetPageView(int index) const {
   DCHECK_GT(static_cast<int>(app_list_pages_.size()), index);
   return app_list_pages_[index];
@@ -554,10 +561,9 @@ gfx::Size ContentsView::GetSearchBoxSize(AppListState state) const {
   // height is less than 600 dip - the goal is to increase the amount of space
   // available to the apps grid.
   if (GetContentsBounds().height() < kDenseLayoutHeightThreshold) {
-    preferred_size.set_height(
-        GetAppListConfig().search_box_height_for_dense_layout());
+    preferred_size.set_height(kSearchBoxHeightForDenseLayout);
   } else {
-    preferred_size.set_height(GetAppListConfig().search_box_height());
+    preferred_size.set_height(kSearchBoxHeight);
   }
 
   return AdjustSearchBoxSizeToFitMargins(preferred_size);
@@ -654,9 +660,8 @@ void ContentsView::Layout() {
       GetStateForPageIndex(pagination_model_.selected_page());
   SearchBoxView* const search_box = GetSearchBoxView();
   const int search_box_height = GetSearchBoxSize(current_state).height();
-  search_box->UpdateLayout(1.f, current_state, search_box_height, current_state,
-                           search_box_height);
-  search_box->UpdateBackground(1.f, current_state, current_state);
+  search_box->UpdateLayout(current_state, search_box_height);
+  search_box->UpdateBackground(current_state);
 
   // Reset the transform which can be set through animation
   search_box->GetWidget()->GetLayer()->SetTransform(gfx::Transform());
@@ -942,14 +947,9 @@ gfx::Rect ContentsView::ConvertRectToWidgetWithoutTransform(
 int ContentsView::GetSearchBoxTopForViewState(
     AppListState state,
     AppListViewState view_state) const {
-  AppListPage* page = GetPageView(GetPageIndexForState(state));
-  absl::optional<int> value_for_page = page->GetSearchBoxTop(view_state);
-  if (value_for_page.has_value())
-    return value_for_page.value();
-
   switch (view_state) {
     case AppListViewState::kClosed:
-      return GetAppListConfig().search_box_closed_top_padding();
+      return 0;
     case AppListViewState::kFullscreenAllApps:
     case AppListViewState::kFullscreenSearch:
       return apps_container_view_
@@ -958,11 +958,8 @@ int ContentsView::GetSearchBoxTopForViewState(
           .top();
     case AppListViewState::kPeeking:
     case AppListViewState::kHalf:
-      return GetAppListConfig().search_box_peeking_top_padding();
+      return GetPeekingSearchBoxTopMarginOnPage(state);
   }
-
-  NOTREACHED();
-  return GetAppListConfig().search_box_fullscreen_top_padding();
 }
 
 }  // namespace ash

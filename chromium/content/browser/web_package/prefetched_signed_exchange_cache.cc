@@ -28,6 +28,7 @@
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/constants.h"
+#include "services/network/public/cpp/corb/corb_api.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
@@ -142,6 +143,11 @@ class RedirectResponseURLLoader : public network::mojom::URLLoader {
                                    false /* is_fallback_redirect */),
                                std::move(response_head));
   }
+
+  RedirectResponseURLLoader(const RedirectResponseURLLoader&) = delete;
+  RedirectResponseURLLoader& operator=(const RedirectResponseURLLoader&) =
+      delete;
+
   ~RedirectResponseURLLoader() override {}
 
  private:
@@ -167,8 +173,6 @@ class RedirectResponseURLLoader : public network::mojom::URLLoader {
   }
 
   mojo::Remote<network::mojom::URLLoaderClient> client_;
-
-  DISALLOW_COPY_AND_ASSIGN(RedirectResponseURLLoader);
 };
 
 // A URLLoader which returns the inner response of signed exchange.
@@ -214,7 +218,7 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
 
     if (network::cors::ShouldCheckCors(request.url, request.request_initiator,
                                        request.mode)) {
-      const auto error_status = network::cors::CheckAccess(
+      const auto error_status = network::cors::CheckAccessAndReportMetrics(
           request.url,
           GetHeaderString(
               *response_,
@@ -235,6 +239,10 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
             &InnerResponseURLLoader::OnCrossOriginReadBlockingCheckComplete,
             base::Unretained(this)));
   }
+
+  InnerResponseURLLoader(const InnerResponseURLLoader&) = delete;
+  InnerResponseURLLoader& operator=(const InnerResponseURLLoader&) = delete;
+
   ~InnerResponseURLLoader() override {}
 
  private:
@@ -266,7 +274,7 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
     }
 
     // Send sanitized response.
-    network::CrossOriginReadBlocking::SanitizeBlockedResponse(response_.get());
+    network::corb::SanitizeBlockedResponseHeaders(*response_);
     client_->OnReceiveResponse(std::move(response_));
 
     // Send an empty response's body.
@@ -378,8 +386,6 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
   std::unique_ptr<CrossOriginReadBlockingChecker> corb_checker_;
 
   base::WeakPtrFactory<InnerResponseURLLoader> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(InnerResponseURLLoader);
 };
 
 // A URLLoaderFactory which handles a signed exchange subresource request from
@@ -398,6 +404,12 @@ class SubresourceSignedExchangeURLLoaderFactory
         &SubresourceSignedExchangeURLLoaderFactory::OnMojoDisconnect,
         base::Unretained(this)));
   }
+
+  SubresourceSignedExchangeURLLoaderFactory(
+      const SubresourceSignedExchangeURLLoaderFactory&) = delete;
+  SubresourceSignedExchangeURLLoaderFactory& operator=(
+      const SubresourceSignedExchangeURLLoaderFactory&) = delete;
+
   ~SubresourceSignedExchangeURLLoaderFactory() override {}
 
   // network::mojom::URLLoaderFactory implementation.
@@ -449,8 +461,6 @@ class SubresourceSignedExchangeURLLoaderFactory
   std::unique_ptr<const PrefetchedSignedExchangeCacheEntry> entry_;
   const url::Origin request_initiator_origin_lock_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
-
-  DISALLOW_COPY_AND_ASSIGN(SubresourceSignedExchangeURLLoaderFactory);
 };
 
 // A NavigationLoaderInterceptor which handles a request which matches the
@@ -463,6 +473,11 @@ class PrefetchedNavigationLoaderInterceptor
       std::unique_ptr<const PrefetchedSignedExchangeCacheEntry> exchange,
       std::vector<blink::mojom::PrefetchedSignedExchangeInfoPtr> info_list)
       : exchange_(std::move(exchange)), info_list_(std::move(info_list)) {}
+
+  PrefetchedNavigationLoaderInterceptor(
+      const PrefetchedNavigationLoaderInterceptor&) = delete;
+  PrefetchedNavigationLoaderInterceptor& operator=(
+      const PrefetchedNavigationLoaderInterceptor&) = delete;
 
   ~PrefetchedNavigationLoaderInterceptor() override {}
 
@@ -555,8 +570,6 @@ class PrefetchedNavigationLoaderInterceptor
 
   base::WeakPtrFactory<PrefetchedNavigationLoaderInterceptor> weak_factory_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(PrefetchedNavigationLoaderInterceptor);
 };
 
 bool CanStoreEntry(const PrefetchedSignedExchangeCacheEntry& entry) {
@@ -592,7 +605,7 @@ bool CanUseEntry(const PrefetchedSignedExchangeCacheEntry& entry,
   if (outer_response->headers->GetCurrentAge(outer_response->request_time,
                                              outer_response->response_time,
                                              verification_time) <
-      base::TimeDelta::FromMinutes(net::HttpCache::kPrefetchReuseMins)) {
+      base::Minutes(net::HttpCache::kPrefetchReuseMins)) {
     return true;
   }
   // We use the prefetched entry when we don't need the validation.

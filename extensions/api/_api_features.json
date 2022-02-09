@@ -119,7 +119,7 @@
   "pipPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:pipPrivate" ],
-    "extension_types": ["hosted_app", "extension", "legacy_packaged_app"],
+    "extension_types": ["extension"],
     "contexts": [ "blessed_extension", "content_script", "unblessed_extension" ]
   },
   "prefs": {
@@ -152,6 +152,12 @@
     "dependencies": [ "permission:sync" ],
     "contexts": [ "blessed_extension" ]
   },
+  "themePrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:themePrivate" ],
+    "extension_types": [ "platform_app", "extension" ],
+    "contexts": [ "blessed_extension", "content_script", "unblessed_extension" ]
+  },
   "tabsPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:tabsPrivate" ],
@@ -168,6 +174,11 @@
       "chrome://game/*"
     ]
   }],
+   "translateHistory": {
+    "vivaldi": true,
+    "dependencies": [ "permission:translateHistory" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "utilities": {
     "vivaldi": true,
     "dependencies": [ "permission:utilities" ],

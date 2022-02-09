@@ -3,7 +3,7 @@
 #include "components/page_actions/page_actions_tab_helper.h"
 
 namespace page_actions {
-WEB_CONTENTS_USER_DATA_KEY_IMPL(TabHelper)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(TabHelper);
 
 TabHelper::TabHelper(content::WebContents* web_contents) {}
 TabHelper::~TabHelper() = default;

@@ -1,5 +1,4 @@
 // Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved.
-
 [
   {
     "namespace": "utilities",
@@ -9,10 +8,10 @@
     },
     "types": [
       {
-        "id":  "Color",
-        "type":  "object",
-        "description":  "Object defining an RGB color.",
-        "properties":  {
+        "id": "Color",
+        "type": "object",
+        "description": "Object defining an RGB color.",
+        "properties": {
           "red": {
             "type": "integer",
             "name": "red",
@@ -31,10 +30,363 @@
         }
       },
       {
-        "id": "BroadcastAction",
+        "id": "PopupWindow",
+        "type": "object",
+        "description": "PopupWindow in vivaldi/vivapp/src/stores/PopupWindowStore.js",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "UUID identifying the popup."
+          },
+          "windowBounds": {
+            "type": "object",
+            "description": "Size and position of window.",
+            "properties": {
+              "height": {
+                "type": "number",
+                "description": "Height."
+              },
+              "width": {
+                "type": "number",
+                "description": "Width."
+              },
+              "left": {
+                "type": "number",
+                "optional": true,
+                "description": "Left screen position."
+              },
+              "top": {
+                "type": "number",
+                "optional": true,
+                "description": "Top screen position."
+              },
+              "minHeight": {
+                "type": "number",
+                "optional": true,
+                "description": "Minimum height."
+              },
+              "minWidth": {
+                "type": "number",
+                "optional": true,
+                "description": "Minimum width of window.."
+              }
+            }
+          },
+          "ownerWindowId": {
+            "type": "number",
+            "description": "WindowId of owner browser."
+          },
+          "acceptOrBlockCallback": {
+            "type": "function",
+            "parameters": [
+              {
+                "name": "windowId",
+                "type": "integer",
+                "description": "windowId of the window accepting the popup."
+              }
+            ]
+          },
+          "incognito": {
+            "type": "boolean",
+            "description": "Popup is incognito."
+          }
+        }
+      },
+      {
+        "id": "CalendarBroadcastMessage",
         "type": "string",
-        "description": "Identifies broadcast type.",
-        "enum": [ "open", "minimizeAll" ]
+        "enum": [
+          "startListeners",
+          "stopListeners",
+          "loadData"
+        ],
+        "description": "Calendar broadcast message between windows"
+      },
+      {
+        "id": "WindowState",
+        "type": "string",
+        "description": "The state of this browser window.",
+        "enum": [
+          {
+            "name": "normal",
+            "description": "Normal window state (i.e. not minimized, maximized, or fullscreen)."
+          },
+          {
+            "name": "minimized",
+            "description": "Minimized window state."
+          },
+          {
+            "name": "maximized",
+            "description": "Maximized window state."
+          },
+          {
+            "name": "fullscreen",
+            "description": "Fullscreen window state."
+          }
+        ]
+      },
+      {
+        "id": "WindowType",
+        "type": "string",
+        "enum": [
+          "normal",
+          "popup",
+          "settings"
+        ],
+        "description": "Type of window. normal is a browser-window."
+      },
+      {
+        "id": "WindowRestoreState",
+        "type": "string",
+        "enum": [
+          "normal",
+          "minimized",
+          "maximized"
+        ],
+        "description": "State of window after going out of fullscreen."
+      },
+      {
+        "id": "WindowRestoreStateFromFullscreen",
+        "type": "string",
+        "enum": [
+          "normal",
+          "minimized",
+          "maximized",
+          "fullscreen"
+        ],
+        "description": "State of window after going out of html-fullscreen."
+      },
+      {
+        "id": "StatusbarMode",
+        "type": "string",
+        "enum": [
+          "on",
+          "off",
+          "overlay"
+        ],
+        "description": "Statusbar view setting. 'on' | 'off' | 'overlay' (StatusBarDisplayValues from gen/prefs/prefNames.js)"
+      },
+      {
+        "id": "WindowProperties",
+        "type": "object",
+        "description": "Type WindowState in ./stores/WindowStore.js",
+        "properties": {
+          "type": {
+            "$ref": "WindowType"
+          },
+          "state": {
+            "$ref": "WindowState",
+            "optional": true
+          },
+          "restoreStateFullscreen": {
+            "$ref": "WindowRestoreState"
+          },
+          "restoreStateHtml5Fullscreen": {
+            "$ref": "WindowRestoreStateFromFullscreen"
+          },
+          "nativeDecorations": {
+            "type": "boolean",
+            "description": "Window is uses native window-controls."
+          },
+          "incognito": {
+            "type": "boolean",
+            "description": "Window is incognito."
+          },
+          "guest": {
+            "type": "boolean",
+            "description": "Window is guest."
+          },
+          "fullscreenMenubarShown": {
+            "type": "boolean",
+            "description": "Window has menubar in fullscreen."
+          },
+          "html5FullScreen": {
+            "type": "boolean",
+            "description": "Window is fullscreened through htmlelement.requestFullScreen."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Window is active."
+          },
+          "minimalUI": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Window is incognito."
+          },
+          "visibleUI": {
+            "type": "object",
+            "properties": {
+              "bookmarksBar": {
+                "type": "boolean",
+                "description": "Showing bookmarksbar."
+              },
+              "addressBar": {
+                "type": "boolean",
+                "description": "Showing addressbar."
+              },
+              "panelToggle": {
+                "type": "boolean",
+                "description": "Showing panel-toggle."
+              },
+              "tabs": {
+                "type": "boolean",
+                "description": "Showing tabs."
+              },
+              "statusBar": {
+                "$ref": "StatusbarMode"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "BroadcastAction",
+        "type": "object",
+        "description": "Identifies broadcast type. Only one property should be used.",
+        "properties": {
+          "minimizeAll": {
+            "description": "Minimize all windows.",
+            "type": "boolean",
+            "optional": true
+          },
+          "open": {
+            "description": "Open urls in other window.",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "winId": {
+                "type": "number",
+                "description": "Id of the window where urls are opened."
+              },
+              "prompt": {
+                "type": "boolean",
+                "description": "Show confirm open bookmark dialog."
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Urls to open."
+              }
+            }
+          },
+          "showSettingsWindow": {
+            "description": "Show the settingswindow.",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "settingsCategory": {
+                "type": "string",
+                "description": "String with settings to show on the form: category&query. ie. all&languages",
+                "optional": true
+              }
+            }
+          },
+          "popupStoreChanged": {
+            "description": "A popupStore has changed state.",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "windowId": {
+                "type": "number",
+                "description": ""
+              },
+              "popupWindows": {
+                "type": "array",
+                "description": "Popupwindows owned by |windowId|.",
+                "items": {
+                  "$ref": "PopupWindow"
+                }
+              }
+            }
+          },
+          "handlePopupWindow": {
+            "description": "Accept or reject a popup window event.",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "windowId": {
+                "type": "number",
+                "description": "The windowId of the window that accepts a popup. The tab will be accepted into the tabstrip."
+              },
+              "popupId": {
+                "type": "string",
+                "description": "Unique ID for a popupwindow."
+              }
+            }
+          },
+          "calendar": {
+            "description": "Control data handling and turning on/off change listeners.",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "message": {
+                "$ref": "CalendarBroadcastMessage",
+                "type": "string",
+                "description": "The control message to pass."
+              }
+            }
+          },
+          "translate": {
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "winId": {
+                "type": "number",
+                "description": "The window where translation takes place."
+              },
+              "lang": {
+                "type": "string",
+                "description": "Language of text to be translated."
+              },
+              "text": {
+                "type": "string",
+                "description": "Text to be translated."
+              }
+            }
+          },
+          "windowActiveStateChanged": {
+            "optional": true,
+            "description": "A window has changed active state.",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "number",
+                "description": "Identifier for the window owning the state."
+              },
+              "activated": {
+                "type": "boolean",
+                "description": "Window is active."
+              }
+            }
+          },
+          "windowAdded": {
+            "optional": true,
+            "description": "A window has been added.",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "number",
+                "description": "Identifier for the window being added."
+              },
+              "windowState": {
+                "$ref": "WindowProperties"
+              }
+            }
+          },
+          "windowRemoved": {
+            "optional": true,
+            "description": "A window has been removed.",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "number",
+                "description": "Identifier for the window being removed."
+              }
+            }
+          }
+        }
       },
       {
         "id": "DialogName",
@@ -202,28 +554,96 @@
         ]
       },
       {
+        "id": "SelectFileOptions",
+        "type": "object",
+        "description": "Option object for selectFile.",
+        "properties": {
+          "windowId": {
+            "type": "integer",
+            "description": "Id of the window to show the file selection dialog against."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the file select dialog."
+          },
+          "type": {
+            "$ref": "SelectFileDialogType",
+            "description": "Type of file select dialog, defaults to 'file'."
+          },
+          "accepts": {
+            "type": "array",
+            "description": "Extensions to filter file names on.",
+            "optional": true,
+            "items": {
+              "$ref": "FileExtension"
+            }
+          },
+          "defaultPath": {
+            "type": "string",
+            "description": "The file's default path and name.",
+            "optional": true
+          }
+        }
+      },
+      {
         "id": "SelectLocalImageParams",
         "type": "object",
         "description": "Option object for selectLocalImage.",
         "properties": {
+          "windowId": {
+            "type": "integer",
+            "description": "Id of the window to show the file selection dialog against."
+          },
           "title": {
             "type": "string",
             "description": "Title for the file selection dialog."
           },
-          "preferencePath": {
+          "profileImage": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Store the image path as the path for a custom profile avatar."
+          },
+          "themeId": {
             "type": "string",
-              "optional": true,
-              "description": "The preference where to place the result."
+            "optional": true,
+            "description": "The id of theme to store the background image in."
           },
           "thumbnailBookmarkId": {
             "type": "string",
             "optional": true,
             "description": "The bookmark id where to store the selected local path."
-          },
-          "setPathInPrefs": {
-            "type": "boolean",
+          }
+        }
+      },
+      {
+        "id": "StoreImageOptions",
+        "type": "object",
+        "description": "Option object for storeImage.",
+        "properties": {
+          "url": {
+            "type": "string",
             "optional": true,
-            "description": "If true, set the actual path in the given |preferencesPath| and do not create a mapping."
+            "description": "The URL to read the data from. Currently only the file URL is supported."
+          },
+          "data": {
+            "type": "binary",
+            "optional": true,
+            "description": "The image data."
+          },
+          "mimeType": {
+            "type": "string",
+            "optional": true,
+            "description": "The type of the image."
+          },
+          "themeId": {
+            "type": "string",
+            "optional": true,
+            "description": "The id of theme to store the image as theme background."
+          },
+          "thumbnailBookmarkId": {
+            "type": "string",
+            "optional": true,
+            "description": "The bookmark id where to store the image as a thumbnail."
           }
         }
       },
@@ -391,6 +811,15 @@
         }
       },
       {
+        "name": "generateGUID",
+        "type": "function",
+        "description": "Generate new GUID string.",
+        "parameters": [],
+        "returns": {
+          "type": "string"
+        }
+      },
+      {
         "name": "getUrlFragments",
         "type": "function",
         "description": "Splits given URL. Returns UrlFragments including top level domain which is eTLD aware.",
@@ -433,28 +862,8 @@
         "description": "Select a single file and returns the file name.",
         "parameters": [
           {
-            "name": "title",
-            "type": "string",
-            "description": "Title of the file select dialog.",
-            "optional": true
-          },
-          {
-            "name": "accepts",
-            "type": "array",
-            "description": "Extensions to filter file names on.",
-            "optional": true,
-            "items": { "$ref": "FileExtension" }
-          },
-          {
-            "name": "defaultPath",
-            "type": "string",
-            "description": "The file's default path and name.",
-            "optional": true
-          },
-          {
-            "name": "type",
-            "$ref": "SelectFileDialogType",
-            "description": "Type of file select dialog, defaults to 'file'."
+            "name": "options",
+            "$ref": "SelectFileOptions"
           }
         ],
         "returns_async": {
@@ -462,7 +871,7 @@
           "parameters": [
             {
               "type": "string",
-              "description": "Full path to the selected file.",
+              "description": "Full path to the selected file or empty string on error or cancellation.",
               "name": "path"
             }
           ]
@@ -485,7 +894,28 @@
             {
               "name": "success",
               "type": "boolean",
-              "description": "True when an image path was selected and successfully stored."
+              "description": "True if the image was selected and successfully stored, false on errors or cancellations."
+            }
+          ]
+        }
+      },
+      {
+        "name": "storeImage",
+        "type": "function",
+        "description": "Save image from a memory blob to image store and put its URL to preferences or bookmarks.",
+        "parameters": [
+          {
+            "name": "options",
+            "$ref": "StoreImageOptions"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean"
             }
           ]
         }
@@ -675,7 +1105,12 @@
         "name": "launchNetworkSettings",
         "type": "function",
         "description": "Launch network settings.",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "parameters": [
@@ -700,8 +1135,7 @@
         "returns_async": {
           "name": "callback",
           "optional": true,
-          "parameters": [
-          ]
+          "parameters": []
         }
       },
       {
@@ -727,18 +1161,15 @@
         "description": "Broadcast a message to all windows. Works from regular to private windows as well.",
         "parameters": [
           {
-            "type": "any",
+            "$ref": "BroadcastAction",
             "name": "message",
             "description": "The message to send."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       },
       {
         "name": "setDefaultContentSettings",
@@ -821,7 +1252,12 @@
         "name": "openTaskManager",
         "type": "function",
         "description": "Opens Vivaldi task manager dialog.",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "parameters": []
@@ -871,7 +1307,9 @@
           {
             "name": "urls",
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         ],
         "returns_async": {
@@ -1223,6 +1661,22 @@
         }
       },
       {
+        "name": "getMOAuthClientId",
+        "type": "function",
+        "description": "Returns MS OAuth API client id.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's MS OAuth API client id."
+            }
+          ]
+        }
+      },
+      {
         "name": "getCommandLineValue",
         "type": "function",
         "description": "Gets the command line value for the given named argument.",
@@ -1361,7 +1815,7 @@
         "description": "Test.",
         "parameters": [
           {
-            "type": "any",
+            "$ref": "BroadcastAction",
             "name": "message",
             "description": "The message to receive."
           }

@@ -36,6 +36,8 @@ class IPCMediaPipeline : public platform_media::mojom::Pipeline {
  public:
   IPCMediaPipeline();
   ~IPCMediaPipeline() override;
+  IPCMediaPipeline(const IPCMediaPipeline&) = delete;
+  IPCMediaPipeline& operator=(const IPCMediaPipeline&) = delete;
 
   static MEDIA_EXPORT void CreateFactory(mojo::GenericPendingReceiver receiver);
 
@@ -106,8 +108,6 @@ class IPCMediaPipeline : public platform_media::mojom::Pipeline {
   IPCDecodingBuffer ipc_decoding_buffers_[kPlatformStreamTypeCount];
 
   base::WeakPtrFactory<IPCMediaPipeline> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(IPCMediaPipeline);
 };
 
 }  // namespace media

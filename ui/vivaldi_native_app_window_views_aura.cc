@@ -35,10 +35,13 @@ class VivaldiWindowEasyResizeWindowTargeter
  public:
   VivaldiWindowEasyResizeWindowTargeter(const gfx::Insets& insets,
                                         VivaldiBrowserWindow* window)
-      : wm::EasyResizeWindowTargeter(insets, insets),
-        window_(window) {}
+      : wm::EasyResizeWindowTargeter(insets, insets), window_(window) {}
 
   ~VivaldiWindowEasyResizeWindowTargeter() override = default;
+  VivaldiWindowEasyResizeWindowTargeter(
+      const VivaldiWindowEasyResizeWindowTargeter&) = delete;
+  VivaldiWindowEasyResizeWindowTargeter& operator=(
+      const VivaldiWindowEasyResizeWindowTargeter&) = delete;
 
  protected:
   // aura::WindowTargeter:
@@ -58,8 +61,6 @@ class VivaldiWindowEasyResizeWindowTargeter
 
  private:
   VivaldiBrowserWindow* window_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiWindowEasyResizeWindowTargeter);
 };
 
 }  // namespace
@@ -104,11 +105,11 @@ void VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(
 
 std::unique_ptr<views::NonClientFrameView>
 VivaldiNativeAppWindowViewsAura::CreateNonClientFrameView(
-      views::Widget* widget) {
+    views::Widget* widget) {
   if (!is_frameless())
     return views::WidgetDelegateView::CreateNonClientFrameView(widget);
 
-  std::unique_ptr <VivaldiWindowFrameViewAura> frame =
+  std::unique_ptr<VivaldiWindowFrameViewAura> frame =
       std::make_unique<VivaldiWindowFrameViewAura>(this);
 
   // Install an easy resize window targeter, which ensures that the root window

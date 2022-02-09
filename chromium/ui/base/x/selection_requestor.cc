@@ -55,8 +55,7 @@ bool SelectionRequestor::PerformBlockingConvertSelection(
     std::vector<uint8_t>* out_data,
     x11::Atom* out_type) {
   base::TimeTicks timeout =
-      base::TimeTicks::Now() +
-      base::TimeDelta::FromMilliseconds(kRequestTimeoutMs);
+      base::TimeTicks::Now() + base::Milliseconds(kRequestTimeoutMs);
   Request request(selection, target, timeout);
   requests_.push_back(&request);
   if (current_request_index_ == (requests_.size() - 1))
@@ -134,8 +133,8 @@ void SelectionRequestor::OnSelectionNotify(
     request->data_sent_incrementally = true;
     request->out_data.clear();
     request->out_type = x11::Atom::None;
-    request->timeout = base::TimeTicks::Now() +
-                       base::TimeDelta::FromMilliseconds(kRequestTimeoutMs);
+    request->timeout =
+        base::TimeTicks::Now() + base::Milliseconds(kRequestTimeoutMs);
   } else {
     CompleteRequest(current_request_index_, success);
   }
@@ -173,8 +172,8 @@ void SelectionRequestor::OnPropertyEvent(
   // Delete the property to tell the selection owner to send the next chunk.
   x11::DeleteProperty(x_window_, x_property_);
 
-  request->timeout = base::TimeTicks::Now() +
-                     base::TimeDelta::FromMilliseconds(kRequestTimeoutMs);
+  request->timeout =
+      base::TimeTicks::Now() + base::Milliseconds(kRequestTimeoutMs);
 
   if (!out_data->size())
     CompleteRequest(current_request_index_, true);
@@ -209,7 +208,7 @@ void SelectionRequestor::ConvertSelectionForCurrentRequest() {
   Request* request = GetCurrentRequest();
   if (request) {
     x11::Connection::Get()->ConvertSelection({
-        .requestor = static_cast<x11::Window>(x_window_),
+        .requestor = x_window_,
         .selection = request->selection,
         .target = request->target,
         .property = x_property_,

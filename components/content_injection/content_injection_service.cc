@@ -5,4 +5,4 @@
 namespace content_injection {
 Service::Service() = default;
 Service::~Service() = default;
-}
+}  // namespace content_injection

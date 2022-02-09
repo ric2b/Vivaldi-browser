@@ -80,14 +80,15 @@ public class TabbedModeTabPersistencePolicy implements TabPersistencePolicy {
      *            tabbed mode files at startup.
      * @param tabMergingEnabled Whether tab merging operation should be done for multi-window/
      *            instance feature in general.
+     * @param maxSelectors Maximum number of tab model selectors.
      */
-    public TabbedModeTabPersistencePolicy(
-            int selectorIndex, boolean mergeTabsOnStartup, boolean tabMergingEnabled) {
+    public TabbedModeTabPersistencePolicy(int selectorIndex, boolean mergeTabsOnStartup,
+            boolean tabMergingEnabled, int maxSelectors) {
         mSelectorIndex = selectorIndex;
         mOtherSelectorIndex = selectorIndex == 0 ? 1 : 0;
         mMergeTabsOnStartup = mergeTabsOnStartup;
         mTabMergingEnabled = tabMergingEnabled;
-        mMaxSelectors = TabWindowManagerSingleton.getInstance().getMaxSimultaneousSelectors();
+        mMaxSelectors = maxSelectors;
     }
 
     @Override
@@ -374,7 +375,7 @@ public class TabbedModeTabPersistencePolicy implements TabPersistencePolicy {
             try {
                 stream = new DataInputStream(
                         new BufferedInputStream(new FileInputStream(metadataFile)));
-                TabPersistentStore.readSavedStateFile(stream, null, tabIds, false);
+                TabPersistentStore.readSavedStateFile(stream, null, tabIds);
             } catch (Exception e) {
                 Log.e(TAG, "Unable to read state for " + metadataFile.getName() + ": " + e);
             } finally {

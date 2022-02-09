@@ -65,7 +65,8 @@ class ResultSinkClient(object):
            test_log,
            test_file,
            artifacts=None,
-           failure_reason=None):
+           failure_reason=None,
+           html_artifact=None):
     """Uploads the test result to the ResultSink server.
 
     This assumes that the rdb stream has been called already and that
@@ -80,6 +81,9 @@ class ResultSinkClient(object):
       artifacts: An optional dict of artifacts to attach to the test.
       failure_reason: An optional string with the reason why the test failed.
           Should be None if the test did not fail.
+      html_artifact: An optional html-formatted string to prepend to the test's
+          log. Useful to encode click-able URL links in the test log, since that
+          won't be formatted in the test_log.
 
     Returns:
       N/A
@@ -100,20 +104,24 @@ class ResultSinkClient(object):
             },
             {
                 # Status before getting mapped to result_db statuses.
-                'key': 'android_test_runner_status',
+                'key': 'raw_status',
                 'value': status,
             }
         ],
         'testId':
         test_id,
+        'testMetadata': {
+            'name': test_id,
+        }
     }
 
     artifacts = artifacts or {}
+    tr['summaryHtml'] = html_artifact if html_artifact else ''
     if test_log:
       # Upload the original log without any modifications.
       b64_log = six.ensure_str(base64.b64encode(six.ensure_binary(test_log)))
       artifacts.update({'Test Log': {'contents': b64_log}})
-      tr['summaryHtml'] = '<text-artifact artifact-id="Test Log" />'
+      tr['summaryHtml'] += '<text-artifact artifact-id="Test Log" />'
     if artifacts:
       tr['artifacts'] = artifacts
     if failure_reason:
@@ -128,12 +136,9 @@ class ResultSinkClient(object):
       tr['duration'] = '%.9fs' % float(duration / 1000.0)
 
     if test_file and str(test_file).startswith('//'):
-      tr['testMetadata'] = {
-          'name': test_id,
-          'location': {
-              'file_name': test_file,
-              'repo': 'https://chromium.googlesource.com/chromium/src',
-          }
+      tr['testMetadata']['location'] = {
+          'file_name': test_file,
+          'repo': 'https://chromium.googlesource.com/chromium/src',
       }
 
     res = requests.post(url=self.test_results_url,

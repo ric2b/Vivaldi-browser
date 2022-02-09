@@ -57,6 +57,12 @@ bool LayoutNGSVGText::CreatesNewFormattingContext() const {
   return true;
 }
 
+void LayoutNGSVGText::UpdateFromStyle() {
+  NOT_DESTROYED();
+  LayoutNGBlockFlowMixin<LayoutSVGBlock>::UpdateFromStyle();
+  SetHasNonVisibleOverflow(false);
+}
+
 bool LayoutNGSVGText::IsChildAllowed(LayoutObject* child,
                                      const ComputedStyle&) const {
   NOT_DESTROYED();
@@ -97,6 +103,23 @@ void LayoutNGSVGText::UpdateFont() {
   }
 }
 
+void LayoutNGSVGText::UpdateTransformAffectsVectorEffect() {
+  if (StyleRef().VectorEffect() == EVectorEffect::kNonScalingStroke) {
+    SetTransformAffectsVectorEffect(true);
+    return;
+  }
+
+  SetTransformAffectsVectorEffect(false);
+  for (LayoutObject* descendant = FirstChild(); descendant;
+       descendant = descendant->NextInPreOrder(this)) {
+    if (descendant->IsSVGInline() && descendant->StyleRef().VectorEffect() ==
+                                         EVectorEffect::kNonScalingStroke) {
+      SetTransformAffectsVectorEffect(true);
+      break;
+    }
+  }
+}
+
 void LayoutNGSVGText::Paint(const PaintInfo& paint_info) const {
   if (paint_info.phase != PaintPhase::kForeground &&
       paint_info.phase != PaintPhase::kForcedColorsModeBackplate &&
@@ -133,7 +156,7 @@ void LayoutNGSVGText::UpdateBlockLayout(bool relayout_children) {
   // scale factor has changed, then recompute the on-screen font size. Since
   // the computation of layout attributes uses the text metrics, we need to
   // update them before updating the layout attributes.
-  if (needs_text_metrics_update_) {
+  if (needs_text_metrics_update_ || needs_transform_update_) {
     // Recompute the transform before updating font and corresponding
     // metrics. At this point our bounding box may be incorrect, so
     // any box relative transforms will be incorrect. Since the scaled
@@ -147,6 +170,7 @@ void LayoutNGSVGText::UpdateBlockLayout(bool relayout_children) {
     }
 
     UpdateFont();
+    SetNeedsCollectInlines(true);
     needs_text_metrics_update_ = false;
   }
 
@@ -155,10 +179,15 @@ void LayoutNGSVGText::UpdateBlockLayout(bool relayout_children) {
   UpdateNGBlockLayout();
   needs_update_bounding_box_ = true;
 
-  const bool bounds_changed = old_boundaries != ObjectBoundingBox();
+  FloatRect boundaries = ObjectBoundingBox();
+  const bool bounds_changed = old_boundaries != boundaries;
   // If our bounds changed, notify the parents.
   if (UpdateTransformAfterLayout(bounds_changed) || bounds_changed)
     SetNeedsBoundariesUpdate();
+  if (bounds_changed)
+    SetSize(LayoutSize(boundaries.MaxX(), boundaries.MaxY()));
+
+  UpdateTransformAffectsVectorEffect();
 }
 
 bool LayoutNGSVGText::IsObjectBoundingBoxValid() const {
@@ -183,7 +212,7 @@ FloatRect LayoutNGSVGText::ObjectBoundingBox() const {
           continue;
         // Do not use item.RectInContainerFragment() in order to avoid
         // precision loss.
-        bbox.Unite(item.ObjectBoundingBox());
+        bbox.Unite(item.ObjectBoundingBox(*fragment.Items()));
       }
     }
     bounding_box_ = bbox;
@@ -207,6 +236,17 @@ FloatRect LayoutNGSVGText::VisualRectInLocalSVGCoordinates() const {
   if (box.IsEmpty())
     return FloatRect();
   return SVGLayoutSupport::ComputeVisualRectForText(*this, box);
+}
+
+void LayoutNGSVGText::AbsoluteQuads(Vector<FloatQuad>& quads,
+                                    MapCoordinatesFlags mode) const {
+  NOT_DESTROYED();
+  quads.push_back(LocalToAbsoluteQuad(StrokeBoundingBox(), mode));
+}
+
+FloatRect LayoutNGSVGText::LocalBoundingBoxRectForAccessibility() const {
+  NOT_DESTROYED();
+  return StrokeBoundingBox();
 }
 
 bool LayoutNGSVGText::NodeAtPoint(HitTestResult& result,

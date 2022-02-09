@@ -10,7 +10,7 @@ import './strings.m.js';
 
 import {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
-import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -25,9 +25,7 @@ export interface ProfilePickerAppElement {
   };
 }
 
-const ProfilePickerAppElementBase =
-    mixinBehaviors([I18nBehavior], NavigationMixin(PolymerElement)) as
-    {new (): PolymerElement & I18nBehavior & NavigationMixinInterface};
+const ProfilePickerAppElementBase = I18nMixin(NavigationMixin(PolymerElement));
 
 export class ProfilePickerAppElement extends ProfilePickerAppElementBase {
   static get is() {
@@ -84,7 +82,7 @@ export class ProfilePickerAppElement extends ProfilePickerAppElementBase {
         this.$.viewManager.switchView('mainView', 'fade-in', 'no-animation');
       }
       // TODO(https://crbug.com/1237418): Add support for ForceSignin on Lacros.
-      this.manageProfilesBrowserProxy_.loadSignInProfileCreationFlow(null);
+      this.manageProfilesBrowserProxy_.loadSignInProfileCreationFlow(null, '');
       return;
     }
 
